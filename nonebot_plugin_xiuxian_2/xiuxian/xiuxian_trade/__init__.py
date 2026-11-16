@@ -2051,12 +2051,15 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
-    if not amount_str.isdigit():
+    try:
+        amount = int(amount_str) if amount_str.isdigit() else None
+    except ValueError:
+        amount = None
+    if amount is None:
         msg = "请输入正确的灵石数量！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    amount = int(amount_str)
     if amount <= 0:
         msg = "存入数量必须大于0！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2089,7 +2092,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "stone_insufficient": "灵石不足，存入失败。",
             "stored_cap_exceeded": "鬼市账户已达存储上限。",
             "amount_capped": "单次存入数量过大。",
-        }.get(result.status) or result_failure("鬼市存入", result)
+        }.get(result.status) or result_failure("鬼市存入", result, subjects={str(user_id): "本人账户"})
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
@@ -2117,12 +2120,15 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
-    if not amount_str.isdigit():
+    try:
+        amount = int(amount_str) if amount_str.isdigit() else None
+    except ValueError:
+        amount = None
+    if amount is None:
         msg = "请输入正确的灵石数量！"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
-    amount = int(amount_str)
     if amount <= 0:
         msg = "取出数量必须大于0！"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2151,7 +2157,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             "weekend_closed": "鬼市取灵石功能仅在周六和周日开放！",
             "stored_insufficient": "鬼市账户余额不足。",
             "amount_capped": "单次取出数量过大。",
-        }.get(result.status) or result_failure("鬼市取出", result)
+        }.get(result.status) or result_failure("鬼市取出", result, subjects={str(user_id): "本人账户"})
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()

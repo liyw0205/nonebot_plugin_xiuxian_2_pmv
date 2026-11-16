@@ -289,6 +289,8 @@ REASONS = {
     "infiltrate_write_rejected": "潜入次数记录保存失败，请联系管理员核对洞府记录。",
     "intrude_write_rejected": "洞府防守结算保存失败，请联系管理员核对本次被潜入记录。",
     "stone_write_rejected": "灵石账户保存失败，请联系管理员核对账户记录。",
+    "guishi_balance_write_rejected": "鬼市余额保存失败，本次存取已撤销，请联系管理员核对鬼市账户。",
+    "guishi_receipt_write_rejected": "鬼市存取回执保存失败，本次存取已撤销，请联系管理员核对回执。",
     "gift_send_limit_write_rejected": "赠送额度保存失败，本次赠送已撤销，请联系管理员核对额度记录。",
     "gift_receive_limit_write_rejected": "接收额度保存失败，本次赠送已撤销，请联系管理员核对额度记录。",
     "gift_receipt_write_rejected": "赠送回执保存失败，本次赠送已撤销，请联系管理员核对回执记录。",

@@ -7,6 +7,9 @@ import unittest
 
 
 class GuishiParameterDispatchTests(unittest.TestCase):
+    def test_amount_order_boundaries_and_transfer_rollback(self):
+        self.check_group("market-guishi-boundaries", 7, {"success": 7})
+
     def test_cutoff_failure_cleanup_and_pending_convergence(self):
         self.check_group("market-guishi-cutoff-recovery", 1, {"success": 1})
 

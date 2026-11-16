@@ -15,6 +15,8 @@ class GuishiDepositResult:
     user_id: str
     amount: int = 0
     stored_balance: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def operation_type(self) -> str:
@@ -140,29 +142,49 @@ class GuishiDepositSqlRepository:
 
             if wallet < amount:
                 return GuishiDepositResult("stone_insufficient", user_id, amount, stored_balance)
-            charged = uow.execute(
-                "UPDATE user_xiuxian "
-                "SET stone=xiuxian_int_store(?,'stone','actor') "
-                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
-                (bind_sqlite_param(wallet - amount, exact=True), user_id, bind_sqlite_param(wallet, exact=True)),
-            )
-            if charged.rowcount != 1:
-                raise DomainError("stone_write_rejected", "Guishi deposit wallet write rejected", {"reason": "stone_write_rejected", "subject": user_id})
-            saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
-            if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != wallet - amount:
-                raise DomainError("stone_write_rejected", "Guishi deposit wallet did not persist exactly", {"reason": "stone_write_rejected", "subject": user_id})
             new_balance = stored_balance + amount
-            uow.execute(
-                "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
-                "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
-                "stored_stone=excluded.stored_stone",
-                (user_id, new_balance),
-            )
-            uow.execute(
-                "INSERT INTO trade_guishi_deposit_operations("
-                "operation_id,payload,user_id,amount,stored_balance) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
-                (operation_id, payload, user_id, amount, new_balance),
-            )
+            try:
+                with uow.savepoint("deposit_transfer"):
+                    charged = uow.execute(
+                        "UPDATE user_xiuxian "
+                        "SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                        (bind_sqlite_param(wallet - amount, exact=True), user_id, bind_sqlite_param(wallet, exact=True)),
+                    )
+                    if charged.rowcount != 1:
+                        raise DomainError("stone_write_rejected", "Guishi deposit wallet write rejected")
+                    balance = uow.execute(
+                        "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
+                        "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
+                        "stored_stone=excluded.stored_stone",
+                        (user_id, new_balance),
+                    )
+                    if balance.rowcount != 1:
+                        raise DomainError("guishi_balance_write_rejected", "Guishi deposit balance write rejected")
+                    receipt = uow.execute(
+                        "INSERT INTO trade_guishi_deposit_operations("
+                        "operation_id,payload,user_id,amount,stored_balance) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, user_id, amount, new_balance),
+                    )
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,user_id,amount,stored_balance FROM trade_guishi_deposit_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if receipt.rowcount != 1 or saved_receipt != dict(payload=payload, user_id=user_id, amount=amount, stored_balance=new_balance):
+                        raise DomainError("guishi_receipt_write_rejected", "Guishi deposit receipt did not persist exactly")
+                    # Validate final projections after all writes, including receipt triggers.
+                    saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != wallet - amount:
+                        raise DomainError("stone_write_rejected", "Guishi deposit wallet did not persist exactly")
+                    saved = uow.query_one("SELECT stored_stone FROM guishi_trade.guishi_info WHERE user_id=?", (user_id,))
+                    if saved is None or require_exact_integer(saved["stored_stone"], field="stored_stone", subject=user_id) != new_balance:
+                        raise DomainError("guishi_balance_write_rejected", "Guishi deposit balance did not persist exactly")
+            except DomainError as exc:
+                return GuishiDepositResult(
+                    "state_changed", user_id, amount, stored_balance,
+                    reason=exc.details.get("reason") or exc.code,
+                    subject=exc.details.get("subject") or user_id,
+                )
             return GuishiDepositResult("completed", user_id, amount, new_balance)
 
 

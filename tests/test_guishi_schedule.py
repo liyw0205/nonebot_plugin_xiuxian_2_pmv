@@ -292,6 +292,54 @@ def test_window_rejection_keeps_its_state_across_message_adapters(onebot, markdo
         assert "鬼市摆摊" in rendered and "mqqapi://aio/inlinecmd" in rendered
 
 
+@pytest.mark.parametrize("action", ("deposit", "withdraw"))
+@pytest.mark.parametrize("reason", ("guishi_balance_write_rejected", "guishi_receipt_write_rejected"))
+@pytest.mark.parametrize(
+    ("onebot", "markdown", "send_fails"),
+    ((True, True, False), (False, False, False), (False, True, False), (False, True, True)),
+)
+def test_transfer_rejection_keeps_reason_subject_and_rollback_reply(action, reason, onebot, markdown, send_fails):
+    from nonebot_plugin_xiuxian_2.features.trade.guishi_deposit_repository import GuishiDepositResult
+    from nonebot_plugin_xiuxian_2.features.trade.guishi_withdraw_repository import GuishiWithdrawResult
+    cls = GuishiDepositResult if action == "deposit" else GuishiWithdrawResult
+    result = cls("state_changed", "900001", amount=100, reason=reason, subject="900001")
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id="transfer", get_user_id=lambda: "900001")
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, "check_user", return_value=(True, {"user_id": "900001"}, "")
+    ), patch.object(trade.trade_application, f"guishi_{action}", return_value=result), patch.object(
+        trade, "record_trade_event"
+    ) as recorded, patch.object(trade, "handle_send", captured):
+        with pytest.raises(FinishedException):
+            asyncio.run(getattr(trade, f"guishi_{action}_")(
+                object(), event, SimpleNamespace(extract_plain_text=lambda: "100")))
+        recorded.assert_not_called()
+    reply = captured.call_args.args[2]
+    expected = "鬼市余额保存失败" if reason == "guishi_balance_write_rejected" else "鬼市存取回执保存失败"
+    assert expected in reply and "本人账户" in reply and "本次存取已撤销" in reply
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+    config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
+                             at_sender=False, message_optimization=False, img=False)
+    plain = AsyncMock()
+    md = AsyncMock(side_effect=RuntimeError("send failed") if send_fails else None)
+    with patch.object(utils, "XiuConfig", return_value=config), patch.object(
+        utils, "get_chat_scene", return_value="group"
+    ), patch.object(utils, "is_group_event", return_value=True), patch.object(
+        utils, "get_real_id_async", new=AsyncMock(return_value="")
+    ), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", md):
+        asyncio.run(utils.handle_send(bot, event, reply, **captured.call_args.kwargs))
+    if onebot or not markdown or send_fails:
+        plain.assert_awaited_once()
+        assert plain.call_args.kwargs["message"] == reply
+    else:
+        plain.assert_not_awaited()
+        md.assert_awaited_once()
+        rendered = md.call_args.args[2]
+        assert expected in rendered and "本人账户" in rendered and "本次存取已撤销" in rendered
+        command = "鬼市存灵石" if action == "deposit" else "鬼市取灵石"
+        assert command in rendered and "mqqapi://aio/inlinecmd" in rendered
+
+
 @pytest.mark.parametrize(
     ("onebot", "markdown", "send_fails"),
     ((True, True, False), (False, False, False), (False, True, False), (False, True, True)),

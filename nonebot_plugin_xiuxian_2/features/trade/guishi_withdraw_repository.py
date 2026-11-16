@@ -20,6 +20,7 @@ class GuishiWithdrawResult:
     actual_amount: int = 0
     stored_balance: int = 0
     reason: str = ""
+    subject: str = ""
 
     @property
     def operation_type(self) -> str:
@@ -147,8 +148,9 @@ class GuishiWithdrawSqlRepository:
 
             fee = withdrawal_fee(effective_balance, amount)
             actual_amount = amount - fee
+            new_balance = effective_balance - amount
             try:
-                with uow.savepoint("withdraw_credit"):
+                with uow.savepoint("withdraw_transfer"):
                     credited = uow.execute(
                         "UPDATE user_xiuxian "
                         "SET stone=xiuxian_int_store(?,'stone','actor') "
@@ -157,24 +159,42 @@ class GuishiWithdrawSqlRepository:
                     )
                     if credited.rowcount != 1:
                         raise DomainError("stone_write_rejected", "withdraw player credit count mismatch")
+                    balance = uow.execute(
+                        "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
+                        "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
+                        "stored_stone=excluded.stored_stone",
+                        (user_id, new_balance),
+                    )
+                    if balance.rowcount != 1:
+                        raise DomainError("guishi_balance_write_rejected", "Guishi withdraw balance write rejected")
+                    receipt = uow.execute(
+                        "INSERT INTO trade_guishi_withdraw_operations("
+                        "operation_id,payload,user_id,amount,fee,actual_amount,stored_balance) "
+                        "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
+                        (operation_id, payload, user_id, amount, fee, actual_amount, new_balance),
+                    )
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,user_id,amount,fee,actual_amount,stored_balance "
+                        "FROM trade_guishi_withdraw_operations WHERE operation_id=?", (operation_id,),
+                    )
+                    if receipt.rowcount != 1 or saved_receipt != dict(
+                        payload=payload, user_id=user_id, amount=amount, fee=fee,
+                        actual_amount=actual_amount, stored_balance=new_balance,
+                    ):
+                        raise DomainError("guishi_receipt_write_rejected", "Guishi withdraw receipt did not persist exactly")
+                    # Validate final projections after all writes, including receipt triggers.
                     saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
                     if saved is None or require_exact_integer(saved["stone"], field="stone", subject=user_id) != wallet + actual_amount:
                         raise DomainError("stone_write_rejected", "withdraw player credit did not persist exactly")
+                    saved = uow.query_one("SELECT stored_stone FROM guishi_trade.guishi_info WHERE user_id=?", (user_id,))
+                    if saved is None or require_exact_integer(saved["stored_stone"], field="stored_stone", subject=user_id) != new_balance:
+                        raise DomainError("guishi_balance_write_rejected", "Guishi withdraw balance did not persist exactly")
             except DomainError as exc:
-                return GuishiWithdrawResult("state_changed", user_id, amount, reason=exc.code)
-            new_balance = effective_balance - amount
-            uow.execute(
-                "INSERT INTO guishi_trade.guishi_info(user_id,stored_stone,items) "
-                "VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),'{}') ON CONFLICT(user_id) DO UPDATE SET "
-                "stored_stone=excluded.stored_stone",
-                (user_id, new_balance),
-            )
-            uow.execute(
-                "INSERT INTO trade_guishi_withdraw_operations("
-                "operation_id,payload,user_id,amount,fee,actual_amount,stored_balance) "
-                "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
-                (operation_id, payload, user_id, amount, fee, actual_amount, new_balance),
-            )
+                return GuishiWithdrawResult(
+                    "state_changed", user_id, amount, stored_balance=effective_balance,
+                    reason=exc.details.get("reason") or exc.code,
+                    subject=exc.details.get("subject") or user_id,
+                )
             return GuishiWithdrawResult(
                 "completed", user_id, amount, fee, actual_amount, new_balance
             )
