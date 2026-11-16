@@ -5,6 +5,8 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
 from nonebot_plugin_xiuxian_2.features.trade.guishi_listing_fill import (
@@ -324,7 +326,8 @@ class GuishiListingFillTests(unittest.TestCase):
             created_at="2026-03-05 20:00:00",
         )
         self._order("stall", user_id="seller", item_type="baitan", price=20, quantity=5)
-        application = TradeApplication(self.game_database, self.trade_database)
+        application = TradeApplication(self.game_database, self.trade_database,
+                                       clock=SimpleNamespace(now=lambda: datetime(2026, 3, 5, 23, tzinfo=timezone.utc)))
 
         results = application.guishi_fill_standing_qiugou(baitan_order_id="stall")
 

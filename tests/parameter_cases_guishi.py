@@ -39,6 +39,8 @@ def setup(probe):
 def register(case):
     from tests.parameter_cases_guishi_recovery import register as register_recovery
     register_recovery(case)
+    from tests.parameter_cases_guishi_cutoff import register as register_cutoff
+    register_cutoff(case)
 
     @case("guishi-concurrent-command-reservations", "鬼市摆摊", "同消息并发/不同消息库存竞争",
           "两条真实matcher同时进入handler，10件库存", "同消息只预留一次，不同消息串行扣完剩余库存，不超卖或重复统计",

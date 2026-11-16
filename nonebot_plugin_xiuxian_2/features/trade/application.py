@@ -96,7 +96,10 @@ class TradeApplication(LegacyApplication):
             self.game_database, self.trade_database
         )
         self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database, clock=self.clock)
-        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database, player_database=player_database)
+        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(
+            self.trade_database, player_database=player_database, clock=self.clock,
+            business_timezone=self.business_timezone,
+        )
         self.guishi_immediate_match_repository = GuishiImmediateMatchRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -512,6 +515,10 @@ class TradeApplication(LegacyApplication):
         try:
             if request["status"] != "pending":
                 raise GuishiMatchFailure("request_status_invalid", str(order_id), "")
+            expired = self.guishi_order_match_repository.pending_order_expiry(str(order_id))
+            if expired:
+                raise GuishiMatchFailure(expired, str(order_id) if request['order_type'] == 'qiugou' else '',
+                                         str(order_id) if request['order_type'] == 'baitan' else '')
             if request["order_type"] == "baitan":
                 matches = self.guishi_listing_fill_service.fill(baitan_order_id=str(order_id))
             elif request["order_type"] == "qiugou":

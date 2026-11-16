@@ -5,8 +5,11 @@ from ...core.errors import DomainError
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from datetime import timezone, tzinfo
+from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_lifecycle import DEFAULT_GUISHI_TIMEZONE, baitan_deadline, qiugou_deadline, business_time, parse_created_at
 
 
 @dataclass(frozen=True)
@@ -33,9 +36,37 @@ class GuishiMatchResult:
 class GuishiOrderMatchSqlRepository:
     """Match one Guishi buy/sell pair in a single trade-db transaction."""
 
-    def __init__(self, trade_database: str | Path, *, player_database: str | Path | None = None) -> None:
+    def __init__(self, trade_database: str | Path, *, player_database: str | Path | None = None,
+                 clock: Any | None = None, business_timezone: tzinfo = DEFAULT_GUISHI_TIMEZONE) -> None:
         self.trade_database = str(trade_database)
         self.player_database = str(player_database) if player_database is not None else None
+        self.clock = clock
+        self.business_timezone = business_timezone
+
+    def _expired(self, uow: DatabaseUnitOfWork, order_id: str, order_type: str) -> bool:
+        if self.clock is None:
+            return False
+        if uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='guishi_order_create_operations'") is None:
+            return False
+        row = uow.query_one("SELECT MAX(created_at) AS created_at FROM guishi_order_create_operations "
+                            "WHERE order_id=? AND order_type IN (?,?)",
+                            (order_id, order_type, "求购" if order_type == "qiugou" else "摆摊"))
+        anchor = parse_created_at(row['created_at'])
+        if anchor is None:
+            return False
+        created = business_time(anchor, self.business_timezone)
+        deadline = qiugou_deadline(created) if order_type == "qiugou" else baitan_deadline(created)
+        return business_time(self.clock.now(), timezone.utc) >= deadline.astimezone(timezone.utc)
+
+    def pending_order_expiry(self, order_id: str) -> str | None:
+        with DatabaseUnitOfWork(self.trade_database, read_only=True) as uow:
+            row = uow.query_one("SELECT item_type FROM guishi_item WHERE id=?", (order_id,))
+            if row is None:
+                return None
+            if row['item_type'] not in {'qiugou', '求购', 'baitan', '摆摊'}:
+                return None
+            kind = "qiugou" if row['item_type'] in {'qiugou', '求购'} else "baitan"
+            return f"{kind}_expired" if self._expired(uow, order_id, kind) else None
 
     @staticmethod
     def _statistics(uow, user_id, keys, quantity, amount):
@@ -152,6 +183,10 @@ class GuishiOrderMatchSqlRepository:
                 return GuishiMatchResult("qiugou_invalid", qiugou_order_id, baitan_order_id)
             if str(baitan["item_type"]) not in {"baitan", "摆摊"}:
                 return GuishiMatchResult("baitan_invalid", qiugou_order_id, baitan_order_id)
+            if self._expired(uow, qiugou_order_id, "qiugou"):
+                return GuishiMatchResult("qiugou_expired", qiugou_order_id, baitan_order_id)
+            if self._expired(uow, baitan_order_id, "baitan"):
+                return GuishiMatchResult("baitan_expired", qiugou_order_id, baitan_order_id)
 
             buyer_id = str(qiugou["user_id"])
             seller_id = str(baitan["user_id"])

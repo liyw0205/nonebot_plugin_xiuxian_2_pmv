@@ -274,6 +274,19 @@ pending/complete及实际statistics。故意注入的异常有精确类型/trace
 不关闭普通参数探针的异常监测。`test_trade_guishi_immediate_match.py` 另覆盖迁移
 路由/幂等、旧回执零额外写、统计故障回滚、完成标记/原因记录失败与大整数统计；
 实际调度事件和OneBot/QQ失败消息短合同在既有 `test_guishi_schedule.py` 中执行。
+
+撮合恢复和常规sweep均接应用注入的UTC时钟与业务时区。pending入口先判断自身
+订单截止；每对真实成交事务内再判断双方截止，防止第一对提交后时钟跨08:00、或
+未过期新单消费清理失败留下的旧单。截止仍沿原创建回执锚点：求购创建次日08:00、
+摆摊本轮08:00；已到点分别返回 `qiugou_expired` / `baitan_expired`，保留pending
+与具体双订单，不改资产或成交统计，不冒充无匹配完成。历史缺失/非法锚点仍不猜测
+到期，旧成功成交回执先回放，截止后不重复结算；纯仓储未注入时钟的旧API保持兼容。
+到期任务或玩家取消真正删除订单后，下一次恢复将pending标complete，不重退资产。
+`market-guishi-cutoff-recovery` 真实链验证07:59摆摊创建后中断、08:00重放拒绝撮合、
+取消回执trigger失败产生实际EVENT_JOB_ERROR且整单回滚、解除故障退款退物、自动
+撮合收敛pending和同消息/两任务重复零额外写；三库完整性与零成交统计均核对。
+`test_trade_guishi_match_deadline.py` 另覆盖首对已提交后的跨界、双方过期、空候选、
+显式UTC时区与历史成功回放；过期原因也进入OneBot/QQ Markdown/降级短合同。
 `tests/test_guishi_business_time.py` 验证历史 UTC/ISO 锚点、本地日期/月年边界、凌晨摊位、
 本地周末、UTC显式配置、Web真实请求、创建时钟故障回滚和同到期竞争只退款一次。
 `tests/test_guishi_schedule.py` 覆盖本地窗口/周末边界、已知失败、实际调度和真实

@@ -415,17 +415,18 @@ def test_actual_scheduler_resumes_partial_pending_before_sweep_and_preserves_fai
 
 
 @pytest.mark.parametrize("onebot,markdown,send_fails", ((True, True, False), (False, True, False), (False, True, True)))
-def test_immediate_partial_failure_reason_survives_message_adapters(onebot, markdown, send_fails):
+@pytest.mark.parametrize("reason", ("operation_conflict", "baitan_expired"))
+def test_immediate_partial_failure_reason_survives_message_adapters(onebot, markdown, send_fails, reason):
     from nonebot_plugin_xiuxian_2.features.trade.guishi_immediate_match import GuishiImmediateMatchResult, GuishiMatchFailure
     fill = GuishiMatchResult("matched", "buy1", "sell", buyer_id="buyer", seller_id="seller",
                             item_name="灵草", quantity=1, amount=20, statistics_recorded=True)
-    failure = GuishiMatchFailure("operation_conflict", "buy2", "sell", matches=[fill])
+    failure = GuishiMatchFailure(reason, "buy2", "sell", matches=[fill])
     with patch.object(trade.trade_application, "guishi_resume_immediate_match",
                       return_value=GuishiImmediateMatchResult("pending", (fill,), failure)), \
             patch.object(trade, "_sql_message", return_value=SimpleNamespace(get_user_info_with_id=lambda _: None)), \
             patch.object(trade, "record_trade_event"):
         reply = "成功摆摊！摊位ID：sell\n" + trade._resume_guishi_match_reply("sell")
-    assert all(value in reply for value in ("成功摆摊", "x1", "未完成", "operation_conflict", "buy2", "sell"))
+    assert all(value in reply for value in ("成功摆摊", "x1", "未完成", reason, "buy2", "sell"))
     bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
     event = SimpleNamespace(get_user_id=lambda: "seller")
     config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
@@ -438,7 +439,7 @@ def test_immediate_partial_failure_reason_survives_message_adapters(onebot, mark
             patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", md):
         asyncio.run(utils.handle_send(bot, event, reply, md_type="交易", k1="信息", v1="鬼市信息"))
     rendered = plain.call_args.kwargs['message'] if onebot or send_fails else md.call_args.args[2]
-    assert all(value in rendered for value in ("未完成", "operation_conflict", "buy2", "sell", "x1"))
+    assert all(value in rendered for value in ("未完成", reason, "buy2", "sell", "x1"))
     if not onebot and not send_fails:
         assert "mqqapi://aio/inlinecmd" in rendered
 
