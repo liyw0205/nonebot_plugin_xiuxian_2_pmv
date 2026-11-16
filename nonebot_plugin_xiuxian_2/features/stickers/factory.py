@@ -14,10 +14,11 @@ def build_sticker_application(
     *,
     open_url: Callable[[Request, int], Any] | None = None,
     thread_starter: Callable[[Callable[[], None]], None] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> StickerApplication:
     data_root = Path(root) if root is not None else get_paths().data / "stickers"
     repository = StickerRepository(data_root, open_url=open_url)
-    return StickerApplication(repository, thread_starter=thread_starter)
+    return StickerApplication(repository, thread_starter=thread_starter, clock=clock)
 
 
 __all__ = ["build_sticker_application"]

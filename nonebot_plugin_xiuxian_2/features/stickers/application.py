@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
 
 from .repository import StickerRepository, _safe_pack_id
+from .schemas import INSTALL_JOB_RETENTION_SECONDS, MAX_RETAINED_INSTALL_JOBS
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,11 +22,46 @@ class StickerApplication:
         repository: StickerRepository,
         *,
         thread_starter: Callable[[Callable[[], None]], None] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._repository = repository
         self._thread_starter = thread_starter or self._start_daemon_thread
+        self._clock = clock or time.monotonic
         self._jobs: dict[str, dict[str, Any]] = {}
+        self._job_finished_at: dict[str, float] = {}
+        self._job_finished_order: dict[str, int] = {}
+        self._completion_sequence = 0
         self._jobs_lock = threading.Lock()
+
+    def _prune_terminal_jobs_locked(self) -> None:
+        now = self._clock()
+        terminal_ids = [
+            job_id
+            for job_id, job in self._jobs.items()
+            if job.get("status") in {"complete", "error"}
+        ]
+        cutoff = now - INSTALL_JOB_RETENTION_SECONDS
+        for job_id in terminal_ids:
+            finished_at = self._job_finished_at.get(job_id, now)
+            if finished_at <= cutoff:
+                self._jobs.pop(job_id, None)
+                self._job_finished_at.pop(job_id, None)
+                self._job_finished_order.pop(job_id, None)
+
+        retained = [
+            (
+                self._job_finished_at.get(job_id, now),
+                self._job_finished_order.get(job_id, 0),
+                job_id,
+            )
+            for job_id, job in self._jobs.items()
+            if job.get("status") in {"complete", "error"}
+        ]
+        retained.sort()
+        for _finished_at, _order, job_id in retained[:-MAX_RETAINED_INSTALL_JOBS]:
+            self._jobs.pop(job_id, None)
+            self._job_finished_at.pop(job_id, None)
+            self._job_finished_order.pop(job_id, None)
 
     @staticmethod
     def _start_daemon_thread(target: Callable[[], None]) -> None:
@@ -39,6 +76,7 @@ class StickerApplication:
         if not selected_id:
             raise RuntimeError("无效表情包 ID")
         with self._jobs_lock:
+            self._prune_terminal_jobs_locked()
             for job in self._jobs.values():
                 if job.get("status") == "running" and job.get("pack_id") == selected_id:
                     return dict(job)
@@ -59,6 +97,12 @@ class StickerApplication:
                 current = self._jobs.get(job_id)
                 if current is not None:
                     current.update(state)
+                    if current.get("status") in {"complete", "error"}:
+                        if job_id not in self._job_finished_at:
+                            self._completion_sequence += 1
+                            self._job_finished_at[job_id] = self._clock()
+                            self._job_finished_order[job_id] = self._completion_sequence
+                        self._prune_terminal_jobs_locked()
 
         def run() -> None:
             try:
@@ -92,6 +136,7 @@ class StickerApplication:
 
     def install_status(self, job_id: str) -> dict[str, Any] | None:
         with self._jobs_lock:
+            self._prune_terminal_jobs_locked()
             job = self._jobs.get(str(job_id or ""))
             return dict(job) if job else None
 

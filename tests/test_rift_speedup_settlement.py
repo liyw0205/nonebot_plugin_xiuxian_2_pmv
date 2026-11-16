@@ -1,7 +1,10 @@
+import asyncio
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import nonebot
 
@@ -16,6 +19,34 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
         source = Path("nonebot_plugin_xiuxian_2/xiuxian/xiuxian_rift/__init__.py").read_text(encoding="utf-8")
         handler = source[source.index("async def _use_rift_speedup"):]
         self.assertIn("rift_application.speedup(", handler)
+
+    def test_handler_keeps_authoritative_rejection_when_payload_has_status(self):
+        rift_module = __import__(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift",
+            fromlist=["_use_rift_speedup"],
+        )
+        bot = SimpleNamespace(self_id="bot")
+        event = SimpleNamespace(message_id="speedup-rejection")
+        outcome = SimpleNamespace(
+            status="item_missing",
+            ok=False,
+            data={"status": "stale-payload-status", "reason": "item_missing"},
+        )
+        send = AsyncMock()
+
+        async def run():
+            with (
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(rift_module, "rift_application", SimpleNamespace(speedup=lambda **_: outcome)),
+                patch.object(rift_module, "handle_send", new=send),
+            ):
+                await rift_module._use_rift_speedup(bot, event, 20012, 50, "50%")
+
+        asyncio.run(run())
+        send.assert_awaited_once()
+        self.assertEqual(send.await_args.args[2], "加速券数量不足，请重新查看背包。")
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.database = Path(self.temp_dir.name) / "game.db"

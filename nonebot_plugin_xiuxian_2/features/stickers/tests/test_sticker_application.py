@@ -10,12 +10,14 @@ from urllib.request import Request
 
 import pytest
 
+from ..application import StickerApplication
 from ..factory import build_sticker_application
 from ..repository import (
     MAX_STICKER_ARCHIVE_BYTES,
     MAX_STICKER_ARCHIVE_MEMBERS,
     StickerRepository,
 )
+from ..schemas import INSTALL_JOB_RETENTION_SECONDS, MAX_RETAINED_INSTALL_JOBS
 
 
 class FakeResponse:
@@ -251,14 +253,69 @@ def test_archive_download_byte_limit_is_enforced(tmp_path: Path):
 
 
 def test_application_deduplicates_running_jobs():
-    from ..application import StickerApplication
-
     app = StickerApplication(StickerRepository("/unused"), thread_starter=lambda target: None)
     first = app.start_install("memes")
     second = app.start_install("memes")
 
     assert first["job_id"] == second["job_id"]
     assert app.install_status(first["job_id"])["status"] == "running"
+
+
+def test_completed_install_jobs_expire_after_retention(tmp_path: Path):
+    archive = make_zip(("memes/1.webp", b"image"))
+    responses, _ = make_remote(archive)
+    now = [100.0]
+    app = build_sticker_application(
+        tmp_path / "stickers",
+        open_url=FakeRemote(responses),
+        thread_starter=lambda target: target(),
+        clock=lambda: now[0],
+    )
+
+    started = app.start_install("memes")
+    assert app.install_status(started["job_id"])["status"] == "complete"
+
+    now[0] += INSTALL_JOB_RETENTION_SECONDS + 1
+    assert app.install_status(started["job_id"]) is None
+
+
+def test_failed_install_jobs_expire_after_retention():
+    class Repository:
+        def install_pack(self, pack_id, *, force, progress):
+            raise RuntimeError("remote failure")
+
+    now = [100.0]
+    app = StickerApplication(
+        Repository(),
+        thread_starter=lambda target: target(),
+        clock=lambda: now[0],
+    )
+
+    started = app.start_install("memes")
+    assert app.install_status(started["job_id"])["status"] == "error"
+
+    now[0] += INSTALL_JOB_RETENTION_SECONDS + 1
+    assert app.install_status(started["job_id"]) is None
+
+
+def test_completed_install_jobs_are_bounded_by_retained_job_limit():
+    class Repository:
+        def install_pack(self, pack_id, *, force, progress):
+            return {"packs": [{"id": pack_id, "name": pack_id}]}
+
+    app = StickerApplication(
+        Repository(),
+        thread_starter=lambda target: target(),
+        clock=lambda: 100.0,
+    )
+
+    job_ids = []
+    for index in range(MAX_RETAINED_INSTALL_JOBS + 1):
+        job_ids.append(app.start_install(f"pack-{index}")["job_id"])
+
+    assert len(app._jobs) == MAX_RETAINED_INSTALL_JOBS
+    assert app.install_status(job_ids[0]) is None
+    assert app.install_status(job_ids[-1])["status"] == "complete"
 
 
 def test_download_archive_rejects_oversize_content_length(tmp_path: Path):

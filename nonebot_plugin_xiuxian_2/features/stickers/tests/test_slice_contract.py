@@ -33,6 +33,11 @@ SCHEMA_NAMES = (
     "STICKERS_RELEASE_TAG",
 )
 
+JOB_SCHEMA_NAMES = (
+    "INSTALL_JOB_RETENTION_SECONDS",
+    "MAX_RETAINED_INSTALL_JOBS",
+)
+
 # These schema names reach the repository under the private spelling the module
 # has always used, so the single-source check cannot compare equal names.
 ALIASED = (
@@ -48,6 +53,11 @@ ALIASED = (
 class StickerSliceContractTests(unittest.TestCase):
     def test_download_contract_has_one_home(self) -> None:
         assert_contract_is_single_source(self, schemas, ((repository, SCHEMA_NAMES),))
+        assert_contract_is_single_source(
+            self,
+            schemas,
+            ((application, JOB_SCHEMA_NAMES),),
+        )
         for private, public in ALIASED:
             self.assertIs(getattr(repository, private), getattr(schemas, public))
 
@@ -115,7 +125,7 @@ class StickerSliceContractTests(unittest.TestCase):
         repository_root = Path(__file__).resolve().parents[4]
         text = (repository_root / "docs" / "features" / "stickers.md").read_text(encoding="utf-8")
         self.assertIn(FEATURE.title, text)
-        for name in SCHEMA_NAMES:
+        for name in (*SCHEMA_NAMES, *JOB_SCHEMA_NAMES):
             self.assertIn(name, text, name)
 
 

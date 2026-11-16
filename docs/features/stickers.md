@@ -29,7 +29,7 @@
 
 ## 定时任务
 
-无任务，`jobs.py` 声明 `JOBS = ()`，`features/scheduler` 与 `xiuxian/xiuxian_scheduler` 对贴纸零命中。安装进度只存在于 `StickerApplication._jobs` 这个进程内 dict 加 `_jobs_lock`，进程重启即丢失，且当前没有淘汰策略，这是一个已知的内存增长边界；贴纸文件本身也没有过期回收，只靠上面那套同步清理。
+无任务，`jobs.py` 声明 `JOBS = ()`，`features/scheduler` 与 `xiuxian/xiuxian_scheduler` 对贴纸零命中。安装进度只存在于 `StickerApplication._jobs` 这个进程内 dict 加 `_jobs_lock`，进程重启即丢失。成功/失败终态按 `INSTALL_JOB_RETENTION_SECONDS` 保留，并由 `MAX_RETAINED_INSTALL_JOBS` 限制数量；运行中的任务不因终态回收被删除。贴纸文件本身也没有过期回收，只靠上面那套同步清理。
 
 ## 配置项
 
