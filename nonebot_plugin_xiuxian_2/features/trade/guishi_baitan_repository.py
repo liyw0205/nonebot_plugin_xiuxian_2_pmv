@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 from .guishi_operation_replay import order_receipts
+from .guishi_immediate_match import enqueue_immediate_match
 
 
 class OrderIdGenerator(Protocol):
@@ -74,6 +75,7 @@ class GuishiBaitanSqlRepository:
         max_orders: int,
         creation_open: bool = True,
         cap_to_stock: bool = False,
+        immediate_match: bool = False,
     ) -> GuishiBaitanCreateResult:
         operation_id = str(operation_id or "").strip()
         user_id = str(user_id).strip()
@@ -179,6 +181,9 @@ class GuishiBaitanSqlRepository:
                     "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (operation_id, payload, order_id, "baitan", quantity, created_at),
                 )
+            if immediate_match:
+                enqueue_immediate_match(uow, order_id=order_id, order_type="baitan", user_id=user_id,
+                                        table="guishi_trade.guishi_immediate_match_requests")
             uow.execute("RELEASE SAVEPOINT guishi_create")
             return GuishiBaitanCreateResult("created", order_id, quantity)
 

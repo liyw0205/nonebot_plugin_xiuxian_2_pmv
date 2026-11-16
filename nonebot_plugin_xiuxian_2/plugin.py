@@ -141,6 +141,8 @@ from .features.trade.migrations import (
     apply_trade_guishi_match,
     apply_trade_guishi_expired_cleanup,
     apply_trade_guishi_take_item,
+    apply_trade_guishi_immediate_match,
+    apply_trade_guishi_match_statistics,
     apply_trade_xianshi_listing,
     apply_trade_xianshi_plan_listing,
     apply_trade_xianshi_removal,
@@ -601,6 +603,8 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("trade.012", "xianshi_removal_operations", apply_trade_xianshi_removal),
         Migration("trade.013", "xianshi_operations", apply_trade_xianshi_purchase),
         Migration("trade.014", "xianshi_watchlist", apply_trade_xianshi_watch),
+        Migration("trade.015", "guishi_immediate_match_requests", apply_trade_guishi_immediate_match),
+        Migration("trade.016", "guishi_match_statistics", apply_trade_guishi_match_statistics),
         Migration("training.001", "training_event_operations", apply_training_event_operations),
         Migration("training.002", "training_event_player_schema", apply_training_event_player),
         Migration("training.003", "training_purchase_operations", apply_training_purchase_operations),
@@ -662,6 +666,8 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "trade.006",
         "trade.007",
         "trade.008",
+        "trade.015",
+        "trade.016",
         "auction.004",
         "auction.006",
         "auction.008",
@@ -710,6 +716,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     {
+        "trade.016",
         "legacy.admin.003",
         "legacy.admin.005",
         "arena.006",
@@ -786,7 +793,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "boss.006",
     }
 )
-_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "auction.004"})
+_TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "trade.015", "auction.004"})
 _IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart.009", "impart.011", "impart.012", "impart_pk.004"})
 _MESSAGE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "message.001"})
 
@@ -1346,6 +1353,7 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
             "trade": TradeApplication(
                 str(context.database.path("game_db")),
                 str(context.database.path("trade_db")),
+                player_database=str(context.database.path("player_db")),
                 clock=context.clock,
                 business_timezone=getattr(scheduler_bridge(), "timezone", None),
                 ids=context.ids,

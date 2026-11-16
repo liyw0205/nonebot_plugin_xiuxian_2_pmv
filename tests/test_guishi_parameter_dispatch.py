@@ -7,6 +7,9 @@ import unittest
 
 
 class GuishiParameterDispatchTests(unittest.TestCase):
+    def test_immediate_match_failure_and_restart_recovery(self):
+        self.check_group("market-guishi-recovery", 2, {"success": 2})
+
     def test_creation_replay_and_partial_cancellation_lifecycle(self):
         self.check_group("market-guishi-lifecycle", 5, {"success": 5})
 

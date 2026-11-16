@@ -2,6 +2,42 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 鬼市即时撮合失败与中断恢复（develop checkpoint）
+
+起点develop `9cae5edd`，CI `43959625150` 单次核验 completed/success，复用绿基线，
+不watch或本地全量。沿现有goal只处理创建已提交后的即时撮合：真实SQLite复现冲突/无效
+类型伪正常、首对已成交后下一对失败、异常中断与同消息/实际调度恢复。创建回执
+增加持久pending/完成及具体失败原因/订单定位；旧回执不猜测重启一次撮合。每对
+成交维持原事务与价格规则，部分成功如实回复，重复不多扣资产或统计；失败不能
+回复全部完成，未知异常保留日志定位及原异常链，正常NoneBot流程异常透传。
+包含迁移隔离验证、真实命令参数/重建应用/两库与统计重读、OneBot/QQ消息短合同、
+受影响回归与发布门禁。仅项目venv/共享锁/有界检查，保护用户JSON删除，goal及
+辅助文件不入提交；不访问线上数据库、不改部署/环境、不重启、不发真实消息。
+验证代码及时白名单推develop，完整批次通过前不合main或发布。
+
+首轮真实仓储红回归确认永久成交回执冲突被当无匹配，第一对已成交后第二对无效
+结果仍正常返回。现明确区分正常竞争与冲突/非法类型；创建与pending同事务，新
+求购/摆摊首次和同消息重试均恢复该单，complete或无pending的历史回执不另启撮合。
+自动任务先恢复pending，具体失败进入EVENT_JOB_ERROR，不让另一operation ID绕过
+冲突。每对成交将六列买卖统计与资产/订单/永久回执一并提交，回放不重复统计。
+trade.015仅trade DB、trade.016仅player DB，旧迁移与结果缺字段兼容；缺迁移
+schema_missing零成交写，业务错误保留reason/subject和双订单，未知存储错误保留原
+异常与traceback。失败原因再写失败保留原业务错误及关联异常，完成写失败仍pending。
+RAISE(IGNORE)拒绝统计/完成更新也显式失败，不伪装完成。部分提交如实回复，不宣称
+整批回滚；跨库WAL断电原子性、创建统计崩溃补记和真机QQ均未宣称已解决。
+
+新增两条market-guishi-recovery真实dispatch/DI/handler：买单创建后异常、重建应用/
+同消息恢复和零额外重放；摆摊首对成交/次对冲突、保留原因及恢复第二对。三库实际
+余额/库存/回执/pending/complete/statistics重读，两种实际APScheduler失败与恢复，
+OneBot/QQ Markdown蓝字/降级短合同通过。新增场景曾被预期注入异常监测及裸连接
+integrity_check缺数值函数挡住；仅精确断言注入异常，改用真实UoW完整性检查，不
+关闭正常探针异常监测。受影响13模块142 passed/6subtests；最终新增IGNORE回归后
+相关72 passed/2subtests，与前组重叠不累计。源码质量246 passed；architecture含
+inventory、受影响编译、diff通过。仅白名单develop提交推送，精确SHA CI另核；总
+goal仍active。下一相关完整目标限撮合恢复跨08:00截止/清理失败后的状态判断与取消
+恢复，先证实是否存在过期订单继续成交，不扩性能或全仓审计。用户JSON删除和发布
+blocker不变，本地goal/辅助资料不提交。
+
 ## 鬼市创建与收摊生命周期（develop checkpoint）
 
 继续既有goal，起点develop `2f17b57f`。该SHA CI43954272571已核验completed/success，

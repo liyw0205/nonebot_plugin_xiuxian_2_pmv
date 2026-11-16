@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from datetime import tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from .._legacy_application import LegacyApplication
-from ...core.errors import ValidationError
+from ...core.errors import DomainError, ValidationError
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
@@ -24,6 +25,7 @@ from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_qiugou_expiry import GuishiQiugouExpiryService
 from .guishi_listing_fill import GuishiListingFillService
+from .guishi_immediate_match import GuishiImmediateMatchRepository, GuishiImmediateMatchResult, GuishiMatchFailure
 from .guishi_order_status import GuishiOrderStatusService
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .guishi_query_repository import GuishiQueryRepository, GuishiQuerySqlRepository
@@ -43,6 +45,7 @@ class TradeApplication(LegacyApplication):
         trade_database: str | Path,
         *,
         repository: TradeFeatureRepository | None = None,
+        player_database: str | Path | None = None,
         clock: Any | None = None,
         business_timezone: tzinfo | str | None = None,
         ids: Any | None = None,
@@ -93,7 +96,8 @@ class TradeApplication(LegacyApplication):
             self.game_database, self.trade_database
         )
         self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database, clock=self.clock)
-        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
+        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database, player_database=player_database)
+        self.guishi_immediate_match_repository = GuishiImmediateMatchRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
         )
@@ -406,6 +410,7 @@ class TradeApplication(LegacyApplication):
         price: int,
         quantity: int,
         max_orders: int,
+        immediate_match: bool = False,
     ):
         return self.guishi_qiugou_repository.create(
             operation_id=operation_id,
@@ -415,6 +420,7 @@ class TradeApplication(LegacyApplication):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+            immediate_match=immediate_match,
         )
 
     def guishi_baitan(
@@ -429,6 +435,7 @@ class TradeApplication(LegacyApplication):
         max_orders: int,
         creation_open: bool = True,
         cap_to_stock: bool = False,
+        immediate_match: bool = False,
     ):
         return self.guishi_baitan_repository.create(
             operation_id=operation_id,
@@ -440,6 +447,7 @@ class TradeApplication(LegacyApplication):
             max_orders=max_orders,
             creation_open=creation_open,
             cap_to_stock=cap_to_stock,
+            immediate_match=immediate_match,
         )
 
     def guishi_cancel_qiugou(
@@ -494,6 +502,33 @@ class TradeApplication(LegacyApplication):
         """Match a freshly listed stall against the buy orders it can satisfy."""
 
         return self.guishi_listing_fill_service.fill(baitan_order_id=baitan_order_id)
+
+    def guishi_resume_immediate_match(self, *, order_id: str) -> GuishiImmediateMatchResult:
+        request = self.guishi_immediate_match_repository.get(str(order_id))
+        if request is None:
+            return GuishiImmediateMatchResult("legacy")
+        if request["status"] == "complete":
+            return GuishiImmediateMatchResult("complete")
+        try:
+            if request["status"] != "pending":
+                raise GuishiMatchFailure("request_status_invalid", str(order_id), "")
+            if request["order_type"] == "baitan":
+                matches = self.guishi_listing_fill_service.fill(baitan_order_id=str(order_id))
+            elif request["order_type"] == "qiugou":
+                matches = self.guishi_listing_fill_service.fill_buy(qiugou_order_id=str(order_id))
+            else:
+                raise GuishiMatchFailure("order_type_invalid", str(order_id), "")
+        except GuishiMatchFailure as exc:
+            try:
+                self.guishi_immediate_match_repository.finish(str(order_id), exc)
+            except (sqlite3.Error, OSError, DomainError) as persistence_error:
+                raise exc from persistence_error
+            return GuishiImmediateMatchResult("pending", tuple(exc.matches), exc)
+        self.guishi_immediate_match_repository.finish(str(order_id))
+        return GuishiImmediateMatchResult("complete", tuple(matches))
+
+    def guishi_pending_immediate_matches(self):
+        return self.guishi_immediate_match_repository.pending()
 
     def guishi_expire_qiugou(self, *, user_id: str | None = None, now: Any | None = None):
         """Cancel buy orders whose deadline passed and refund their frozen stones."""

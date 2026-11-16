@@ -10,6 +10,7 @@ from typing import Any, Protocol
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 from .guishi_operation_replay import order_receipts
+from .guishi_immediate_match import enqueue_immediate_match
 
 
 class OrderIdGenerator(Protocol):
@@ -73,6 +74,7 @@ class GuishiQiugouSqlRepository:
         price: int,
         quantity: int,
         max_orders: int,
+        immediate_match: bool = False,
     ) -> GuishiQiugouCreateResult:
         operation_id = str(operation_id or "").strip()
         user_id = str(user_id)
@@ -169,6 +171,8 @@ class GuishiQiugouSqlRepository:
                     "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (operation_id, payload, order_id, "qiugou", total_cost, self.clock.now().isoformat()),
                 )
+            if immediate_match:
+                enqueue_immediate_match(uow, order_id=order_id, order_type="qiugou", user_id=user_id)
             uow.execute("RELEASE SAVEPOINT guishi_create")
             return GuishiQiugouCreateResult("created", order_id, total_cost)
 

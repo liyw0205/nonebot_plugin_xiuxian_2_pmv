@@ -29,6 +29,13 @@ from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.plugin import shutdown, startup
 
 
+@pytest.fixture(autouse=True)
+def isolate_pending_requests():
+    # Legacy callback contracts own no database; recovery is tested with SQLite below.
+    with patch.object(trade.trade_application, "guishi_pending_immediate_matches", return_value=[]):
+        yield
+
+
 BUSINESS_TZ = ZoneInfo("Asia/Shanghai")
 
 
@@ -333,3 +340,112 @@ def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdow
         rendered = md.call_args.args[2]
         assert "inventory_full" in rendered and "1002" in rendered
         assert "鬼市收摊" in rendered and "mqqapi://aio/inlinecmd" in rendered
+
+
+@pytest.mark.parametrize("failure_kind", ("conflict", "exception"))
+def test_actual_scheduler_resumes_partial_pending_before_sweep_and_preserves_failure(failure_kind):
+    from tests.test_trade_guishi_immediate_match import GuishiImmediateMatchTests
+    from nonebot_plugin_xiuxian_2.features.trade.guishi_immediate_match import GuishiMatchFailure
+
+    async def run():
+        database = GuishiImmediateMatchTests()
+        database.setUp()
+        scheduler = AsyncIOScheduler(timezone=BUSINESS_TZ)
+        try:
+            created = database.create()
+            database.seed_counterpart("first", "baitan", price=10)
+            database.seed_counterpart("second", "baitan", price=20)
+            conflict = f"guishi-match:{created.order_id}:second"
+            if failure_kind == "conflict":
+                database.write(database.trade, "INSERT INTO guishi_match_operations(operation_id,payload,result) VALUES(?,?,?)",
+                               (conflict, '["bad","pair"]', '{}'))
+            else:
+                database.write(database.trade, "CREATE TRIGGER fail_second BEFORE UPDATE ON guishi_info "
+                               "WHEN NEW.user_id='seller' AND NEW.stored_stone>10 "
+                               "BEGIN SELECT RAISE(ABORT,'second settlement fault'); END")
+
+            async def execute():
+                outcome = asyncio.get_running_loop().create_future()
+                listener = lambda event: outcome.set_result(event) if not outcome.done() else None
+                scheduler.add_listener(listener, EVENT_JOB_ERROR | EVENT_JOB_EXECUTED)
+                try:
+                    scheduler.add_job(trade.auto_guishi_transactions_job, "date")
+                    return await asyncio.wait_for(outcome, timeout=3)
+                finally:
+                    scheduler.remove_listener(listener)
+
+            scheduler.start()
+            manager = SimpleNamespace(get_user_info_with_id=lambda _: None)
+            sweep = AsyncMock(wraps=trade.process_guishi_transactions)
+            with patch.object(trade, "trade_application", database.app), patch.object(trade, "_sql_message", return_value=manager), \
+                    patch.object(trade, "record_trade_event"), patch.object(trade, "process_guishi_transactions", sweep):
+                event = await execute()
+                assert event.code == EVENT_JOB_ERROR
+                if failure_kind == "conflict":
+                    assert isinstance(event.exception, GuishiMatchFailure)
+                    assert event.exception.reason == "operation_conflict" and event.exception.baitan_order_id == "second"
+                else:
+                    import sqlite3
+                    assert isinstance(event.exception, sqlite3.IntegrityError)
+                    assert str(event.exception) == "second settlement fault"
+                assert event.traceback
+                sweep.assert_not_awaited()
+                assert database.app.guishi_get_account("seller")[0] == 10
+                assert database.query(database.player, 'SELECT "鬼市售出次数" FROM statistics WHERE user_id=\'seller\'') == [(1,)]
+                if failure_kind == "conflict":
+                    database.write(database.trade, "DELETE FROM guishi_match_operations WHERE operation_id=?", (conflict,))
+                else:
+                    database.write(database.trade, "DROP TRIGGER fail_second")
+                with patch.object(trade, "trade_application", database.restart()):
+                    event = await execute()
+                    assert event.code == EVENT_JOB_EXECUTED
+                    assert database.app.guishi_get_account("seller")[0] == 30
+                    assert not database.app.guishi_pending_immediate_matches()
+                    before = database.state()
+                    assert (await execute()).code == EVENT_JOB_EXECUTED
+                    assert before == database.state()
+            assert database.query(database.player, 'SELECT "鬼市售出次数","鬼市售出数量" '
+                                  "FROM statistics WHERE user_id='seller'") == [(2, 2)]
+        finally:
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+            database.tearDown()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("onebot,markdown,send_fails", ((True, True, False), (False, True, False), (False, True, True)))
+def test_immediate_partial_failure_reason_survives_message_adapters(onebot, markdown, send_fails):
+    from nonebot_plugin_xiuxian_2.features.trade.guishi_immediate_match import GuishiImmediateMatchResult, GuishiMatchFailure
+    fill = GuishiMatchResult("matched", "buy1", "sell", buyer_id="buyer", seller_id="seller",
+                            item_name="灵草", quantity=1, amount=20, statistics_recorded=True)
+    failure = GuishiMatchFailure("operation_conflict", "buy2", "sell", matches=[fill])
+    with patch.object(trade.trade_application, "guishi_resume_immediate_match",
+                      return_value=GuishiImmediateMatchResult("pending", (fill,), failure)), \
+            patch.object(trade, "_sql_message", return_value=SimpleNamespace(get_user_info_with_id=lambda _: None)), \
+            patch.object(trade, "record_trade_event"):
+        reply = "成功摆摊！摊位ID：sell\n" + trade._resume_guishi_match_reply("sell")
+    assert all(value in reply for value in ("成功摆摊", "x1", "未完成", "operation_conflict", "buy2", "sell"))
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+    event = SimpleNamespace(get_user_id=lambda: "seller")
+    config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
+                             at_sender=False, message_optimization=False, img=False)
+    plain = AsyncMock()
+    md = AsyncMock(side_effect=RuntimeError("send failed") if send_fails else None)
+    with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), \
+            patch.object(utils, "is_group_event", return_value=True), \
+            patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), \
+            patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", md):
+        asyncio.run(utils.handle_send(bot, event, reply, md_type="交易", k1="信息", v1="鬼市信息"))
+    rendered = plain.call_args.kwargs['message'] if onebot or send_fails else md.call_args.args[2]
+    assert all(value in rendered for value in ("未完成", "operation_conflict", "buy2", "sell", "x1"))
+    if not onebot and not send_fails:
+        assert "mqqapi://aio/inlinecmd" in rendered
+
+
+def test_immediate_match_normal_nonebot_flow_exception_is_not_wrapped():
+    failure = FinishedException()
+    with patch.object(trade.trade_application, "guishi_resume_immediate_match", side_effect=failure):
+        with pytest.raises(FinishedException) as caught:
+            trade._resume_guishi_match_reply("sell")
+    assert caught.value is failure

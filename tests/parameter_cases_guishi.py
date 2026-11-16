@@ -12,6 +12,8 @@ def state(probe):
         "SELECT * FROM guishi_item ORDER BY id",
         "SELECT * FROM guishi_order_create_operations ORDER BY operation_id",
         "SELECT * FROM guishi_order_cancel_operations ORDER BY operation_id",
+        "SELECT * FROM guishi_immediate_match_requests ORDER BY order_id",
+        "SELECT * FROM guishi_match_operations ORDER BY operation_id",
     )) + (
         probe.rows(probe.context.paths.game_db, "SELECT * FROM back ORDER BY user_id,goods_id"),
         probe.rows(probe.context.paths.player_db, "SELECT * FROM statistics ORDER BY user_id"),
@@ -29,11 +31,15 @@ def setup(probe):
     module = trade_module()
     clock = FixedClock(datetime(2026, 11, 21, 13, tzinfo=timezone.utc))
     application = TradeApplication(probe.context.paths.game_db, probe.context.paths.trade_db,
-                                   clock=clock, business_timezone=module._trade_scheduler_timezone())
+                                   clock=clock, business_timezone=module._trade_scheduler_timezone(),
+                                   player_database=probe.context.paths.player_db)
     return module, clock, application
 
 
 def register(case):
+    from tests.parameter_cases_guishi_recovery import register as register_recovery
+    register_recovery(case)
+
     @case("guishi-concurrent-command-reservations", "鬼市摆摊", "同消息并发/不同消息库存竞争",
           "两条真实matcher同时进入handler，10件库存", "同消息只预留一次，不同消息串行扣完剩余库存，不超卖或重复统计",
           group="market-guishi-lifecycle")

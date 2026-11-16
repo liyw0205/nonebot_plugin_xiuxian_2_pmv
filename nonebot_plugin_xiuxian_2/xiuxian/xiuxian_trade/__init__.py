@@ -70,6 +70,7 @@ from .transaction_service import (
 from .auction_jobs import run_auction_job
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
+from ...features.trade.guishi_immediate_match import GuishiImmediateMatchResult, GuishiMatchFailure
 from ...features.trade.xianshi_history_view import render_xianshi_trades
 from ...features.trade.xianshi_market_application import XianshiMarketApplication
 from ...features.trade.xianshi_market_schemas import (
@@ -155,6 +156,7 @@ trade_application = TradeApplication(
     clock=runtime_clock,
     ids=runtime_ids,
     business_timezone=_trade_scheduler_timezone(),
+    player_database=get_paths().player_db,
 )
 
 
@@ -637,18 +639,67 @@ def _guishi_baitan_closed_message(now):
 
 def _record_guishi_match_event(result, buyer_name, seller_name):
     """Record the shared Guishi trade statistics for one matched buy/sell pair."""
+    if result.status == "duplicate":
+        return
+    recorded = getattr(result, "statistics_recorded", False)
     record_trade_event(
         result.buyer_id,
         "鬼市成交",
         f"购得{result.item_name}x{result.quantity}，花费{number_to(result.amount)}灵石，卖家:{seller_name}",
-        {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
+        None if recorded else {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
     )
     record_trade_event(
         result.seller_id,
         "鬼市成交",
         f"售出{result.item_name}x{result.quantity}，收入{number_to(result.amount)}灵石，买家:{buyer_name}",
-        {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
+        None if recorded else {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
     )
+
+
+def _guishi_match_lines(matches):
+    lines = []
+    for fill in matches:
+        buyer = _sql_message().get_user_info_with_id(fill.buyer_id)
+        seller = _sql_message().get_user_info_with_id(fill.seller_id)
+        buyer_name = buyer['user_name'] if buyer else fill.buyer_id
+        seller_name = seller['user_name'] if seller else fill.seller_id
+        lines.append(f"{buyer_name} 从 {seller_name} 购得 {fill.item_name} x{fill.quantity}，"
+                     f"共 {number_to(fill.amount)} 灵石。")
+        _record_guishi_match_event(fill, buyer_name, seller_name)
+    return "\n".join(lines)
+
+
+def _resume_guishi_match_reply(order_id):
+    diagnostic = ""
+    try:
+        result = trade_application.guishi_resume_immediate_match(order_id=order_id)
+    except (MatcherException, ProcessException):
+        raise
+    except GuishiMatchFailure as exc:
+        result = GuishiImmediateMatchResult("pending", tuple(exc.matches), exc)
+        diagnostic = "\n失败原因记录未完成；" + report_exception("鬼市撮合记录", exc)
+    except DomainError as exc:
+        return (f"\n即时撮合未完成；订单 {order_id} 已创建，请查询账户。"
+                f"原因：{exc.details.get('reason') or exc.code}；主体：{exc.details.get('subject', '')}。\n"
+                + report_exception("鬼市即时撮合", exc))
+    except Exception as exc:
+        return (f"\n即时撮合未完成；订单 {order_id} 已创建，部分成交可能已提交，请先查询账户。"
+                "恢复后可用同一消息重试。\n"
+                + report_exception("鬼市即时撮合", exc))
+    try:
+        text = _guishi_match_lines(result.matches)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        text = "成交结果已提交，成交记录展示未完成，请查询鬼市账户。\n" + report_exception("鬼市成交记录", exc)
+    if text:
+        text = "\n☆------求购成交------☆\n" + text + "\n成交灵石与物品已进入鬼市账户。"
+    if result.failure:
+        failure = result.failure
+        text += (f"\n即时撮合未完成；已成交部分已结算，待处理请求已保留。"
+                 f"原因：{failure.reason}；主体：{failure.subject}；求购订单：{failure.qiugou_order_id}；"
+                 f"摆摊订单：{failure.baitan_order_id}。可用同一消息或定时任务重试。")
+    return text + diagnostic
 
 
 def _auction_queue_operation_id(event, action, user_id, item_id):
@@ -2176,6 +2227,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price=price,
         quantity=quantity,
         max_orders=MAX_QIUGOU_ORDERS,
+        immediate_match=True,
     )
     if result.status == "limit_reached":
         msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"
@@ -2206,7 +2258,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         )
     
     # 立即尝试进行交易匹配，避免等待调度器
-    transaction_result_msg = await process_guishi_transactions(user_id=user_id) if result.applied else ""
+    transaction_result_msg = _resume_guishi_match_reply(order_id)
     await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     if transaction_result_msg:
         await handle_send(bot, event, transaction_result_msg) # 发送交易结果
@@ -2323,6 +2375,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         max_orders=MAX_BAITAN_ORDERS,
         creation_open=creation_open,
         cap_to_stock=True,
+        immediate_match=True,
     )
     if result.status == "market_closed":
         msg = _guishi_baitan_closed_message(now)
@@ -2348,25 +2401,6 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"
 
-    # 摆摊即撮合：立刻匹配能接受该价格的求购订单，成交结果当场回到卖家手里。
-    fill_results = trade_application.guishi_fill_standing_qiugou(
-        baitan_order_id=order_id
-    ) if result.applied else []
-    if fill_results:
-        msg += "\n☆------求购成交------☆\n"
-        seller_name = (user_info or {}).get('user_name') or user_id
-        for fill in fill_results:
-            buyer_info = _sql_message().get_user_info_with_id(fill.buyer_id)
-            buyer_name = buyer_info['user_name'] if buyer_info else fill.buyer_id
-            execution_price = fill.amount // fill.quantity if fill.quantity else 0
-            msg += (
-                f"{buyer_name} 购得 {fill.item_name} x{fill.quantity}，"
-                f"单价 {number_to(execution_price)} 灵石，共 {number_to(fill.amount)} 灵石\n"
-            )
-            _record_guishi_match_event(fill, buyer_name, seller_name)
-        msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
-
-    msg += f"⚠️ 请在本轮{GUISHI_BAITAN_END_HOUR}点结束前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
     if result.applied:
         record_trade_event(
             user_id,
@@ -2374,6 +2408,8 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
             {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
         )
+    msg += _resume_guishi_match_reply(order_id)
+    msg += f"\n⚠️ 请在本轮{GUISHI_BAITAN_END_HOUR}点结束前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
     
     await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_baitan.finish()
@@ -2759,6 +2795,11 @@ async def process_guishi_transactions(user_id: str = None) -> str:
 async def auto_guishi_transactions_job():
     """定时鬼市自动交易匹配"""
     logger.info("执行鬼市自动交易匹配任务...")
+    for request in trade_application.guishi_pending_immediate_matches():
+        result = trade_application.guishi_resume_immediate_match(order_id=request['order_id'])
+        _guishi_match_lines(result.matches)
+        if result.failure:
+            raise result.failure
     await process_guishi_transactions()
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, require_exact_integer
+from ...core.numeric import require_exact_integer
+from ...core.errors import DomainError
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -22,6 +23,7 @@ class GuishiMatchResult:
     qiugou_completed: bool = False
     baitan_completed: bool = False
     price_refund: int = 0
+    statistics_recorded: bool = False
 
     @property
     def matched(self) -> bool:
@@ -31,8 +33,25 @@ class GuishiMatchResult:
 class GuishiOrderMatchSqlRepository:
     """Match one Guishi buy/sell pair in a single trade-db transaction."""
 
-    def __init__(self, trade_database: str | Path) -> None:
+    def __init__(self, trade_database: str | Path, *, player_database: str | Path | None = None) -> None:
         self.trade_database = str(trade_database)
+        self.player_database = str(player_database) if player_database is not None else None
+
+    @staticmethod
+    def _statistics(uow, user_id, keys, quantity, amount):
+        uow.execute("INSERT OR IGNORE INTO guishi_player.statistics(user_id) VALUES(?)", (user_id,))
+        columns = ",".join(f'"{key}"' for key in keys)
+        previous = uow.query_one(f"SELECT {columns} FROM guishi_player.statistics WHERE user_id=?", (user_id,))
+        if previous is None:
+            raise DomainError("statistics_write_rejected", "Guishi statistics insert was rejected",
+                              {"reason": "statistics_write_rejected", "subject": user_id})
+        values = [require_exact_integer(previous[key] or 0, field=key, subject=user_id) + delta
+                  for key, delta in zip(keys, (1, quantity, amount))]
+        assignments = ",".join(f'"{key}"=xiuxian_int_store(?)' for key in keys)
+        written = uow.execute(f"UPDATE guishi_player.statistics SET {assignments} WHERE user_id=?", (*values, user_id))
+        if written.rowcount != 1:
+            raise DomainError("statistics_write_rejected", "Guishi statistics update was rejected",
+                              {"reason": "statistics_write_rejected", "subject": user_id})
 
     @staticmethod
     def _payload(qiugou_order_id: str, baitan_order_id: str) -> str:
@@ -214,7 +233,21 @@ class GuishiOrderMatchSqlRepository:
                 qiugou_completed,
                 baitan_completed,
                 price_refund,
+                self.player_database is not None,
             )
+            if self.player_database is not None:
+                if not Path(self.player_database).is_file():
+                    raise DomainError("schema_missing", "Guishi statistics database is missing",
+                                      {"reason": "schema_missing", "subject": "guishi_match_statistics"})
+                uow.attach_database(self.player_database, "guishi_player")
+                columns = {row['name'] for row in uow.query_all('PRAGMA guishi_player.table_info(statistics)')}
+                required = {"user_id", "鬼市购买次数", "鬼市购买数量", "鬼市消费灵石",
+                            "鬼市售出次数", "鬼市售出数量", "鬼市收入灵石"}
+                if not required <= columns:
+                    raise DomainError("schema_missing", "Guishi statistics migration is missing",
+                                      {"reason": "schema_missing", "subject": "guishi_match_statistics"})
+                self._statistics(uow, buyer_id, ("鬼市购买次数", "鬼市购买数量", "鬼市消费灵石"), quantity, amount)
+                self._statistics(uow, seller_id, ("鬼市售出次数", "鬼市售出数量", "鬼市收入灵石"), quantity, amount)
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_match_operations(operation_id,payload,result) "

@@ -78,6 +78,30 @@ def apply_trade_guishi_take_item(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_trade_guishi_immediate_match(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE TABLE IF NOT EXISTS guishi_immediate_match_requests ("
+        "order_id TEXT PRIMARY KEY,order_type TEXT NOT NULL,user_id TEXT NOT NULL,"
+        "status TEXT NOT NULL DEFAULT 'pending',reason TEXT NOT NULL DEFAULT '',"
+        "subject TEXT NOT NULL DEFAULT '',"
+        "qiugou_order_id TEXT NOT NULL DEFAULT '',baitan_order_id TEXT NOT NULL DEFAULT '')"
+    )
+
+
+GUISHI_MATCH_STATISTICS = (
+    "鬼市购买次数", "鬼市购买数量", "鬼市消费灵石",
+    "鬼市售出次数", "鬼市售出数量", "鬼市收入灵石",
+)
+
+
+def apply_trade_guishi_match_statistics(uow: DatabaseUnitOfWork) -> None:
+    uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
+    columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(statistics)").fetchall()}
+    for column in GUISHI_MATCH_STATISTICS:
+        if column not in columns:
+            uow.execute(f'ALTER TABLE statistics ADD COLUMN "{column}" INTEGER DEFAULT 0')
+
+
 def apply_trade_xianshi_listing(uow: DatabaseUnitOfWork) -> None:
     uow.execute(
         "CREATE TABLE IF NOT EXISTS xianshi_listing_operations ("
@@ -208,6 +232,8 @@ __all__ = [
     "apply_trade_guishi_match",
     "apply_trade_guishi_expired_cleanup",
     "apply_trade_guishi_take_item",
+    "apply_trade_guishi_immediate_match",
+    "apply_trade_guishi_match_statistics",
     "apply_trade_xianshi_listing",
     "apply_trade_xianshi_plan_listing",
     "apply_trade_xianshi_removal",
