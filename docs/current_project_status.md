@@ -24,6 +24,9 @@ NewAPI 自动签到、体力恢复和宗门不活跃维护；失败保留 traceb
 operation ID、道具扣减、回执和回复文本。未运行全量测试、真实 QQ/OneBot WebSocket、
 生产库或线上服务，未部署、未重启、未发送真实消息。
 
+白名单普通提交 `c29bb71d` 已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
+冻结清单缺失仍是独立 blocker，不能以本轮定时任务或 G1 focused 通过替代。
+
 本 checkpoint 仅允许在受影响门禁完成后普通提交并推送 `develop`；`.codex-goal.md`、
 用户删除和其他未列入白名单的本地状态不得提交。Phase 2 冻结清单缺失仍是独立 blocker，
 不能通过改 hash、删断言或恢复用户文件伪造通过；未合入 `main`，未创建 Release。
