@@ -26,6 +26,7 @@ case ${1:-} in
             cd "$root"
             tests=(
                 tests/test_core_rank_indexes.py
+                nonebot_plugin_xiuxian_2/features/info/tests/test_player_attribute_application.py
                 tests/test_info_user_lazy_reader.py
                 tests/test_info_profile_reuse.py
             )

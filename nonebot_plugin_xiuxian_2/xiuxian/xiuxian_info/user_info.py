@@ -63,8 +63,10 @@ async def get_user_xiuxian_info(user_id, *, user_info=None):
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
-    # 统一属性口径
-    final_attr = get_player_attributes(user_id)
+    user_buff_data = UserBuffDate(user_id)
+
+    # 统一属性口径；动态属性和信息展示共享本次命令的只读 Buff 快照。
+    final_attr = get_player_attributes(user_id, buff_data_provider=user_buff_data)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
@@ -133,7 +135,6 @@ async def get_user_xiuxian_info(user_id, *, user_info=None):
         apprentice_info += f"等{len(apprentice_names)}人"
     relationship_info = f"道侣：{partner_info}；师父：{mentor_info}；徒弟：{apprentice_info}"
 
-    user_buff_data = UserBuffDate(user_id)
     user_main_buff_date = user_buff_data.get_user_main_buff_data()
     user_sub_buff_date = user_buff_data.get_user_sub_buff_data()
     user_sec_buff_date = user_buff_data.get_user_sec_buff_data()

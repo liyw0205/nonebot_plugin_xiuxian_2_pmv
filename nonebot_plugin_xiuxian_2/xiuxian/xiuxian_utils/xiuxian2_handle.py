@@ -4331,6 +4331,7 @@ def get_final_attributes(
     accessory_provider=None,
     tianti_provider=None,
     base_provider=None,
+    buff_data_provider=None,
 ) -> dict | None:
     """获取buff加成后的最终属性（统一口径）"""
     base_provider = base_provider or get_base_attributes
@@ -4341,7 +4342,7 @@ def get_final_attributes(
     # buff数据
     item_provider = item_provider or items.get_data_by_item_id
     if buff_info_provider is None:
-        user_buff = UserBuffDate(user_id)
+        user_buff = buff_data_provider or UserBuffDate(user_id)
         buff_info = user_buff.BuffInfo or {}
 
         main = user_buff.get_user_main_buff_data() or {}

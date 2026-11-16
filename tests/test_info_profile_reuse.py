@@ -57,7 +57,9 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(user_info, "get_user_profile") as get_profile,
             patch.object(user_info, "_sql_message", return_value=manager),
-            patch.object(user_info, "get_player_attributes", return_value={"final_atk": 30}),
+            patch.object(
+                user_info, "get_player_attributes", return_value={"final_atk": 30}
+            ) as player_attributes,
             patch.object(user_info, "OtherSet", return_value=levels),
             patch.object(user_info, "UserBuffDate", return_value=buff),
             patch.object(user_info, "load_partner", return_value={}),
@@ -73,6 +75,7 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             detail, text = await user_info.get_user_xiuxian_info("u-1", user_info=profile)
 
         get_profile.assert_not_called()
+        player_attributes.assert_called_once_with("u-1", buff_data_provider=buff)
         self.assertEqual(detail["道号"], "测试道友")
         self.assertIn("修为排行: 第1位", text)
 
