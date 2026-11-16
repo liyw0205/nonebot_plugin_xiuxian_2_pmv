@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
@@ -19,6 +20,7 @@ except RuntimeError:
 from nonebot.exception import FinishedException
 
 from nonebot_plugin_xiuxian_2.compatibility.legacy_jobs import _TARGETS
+from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
 from nonebot_plugin_xiuxian_2.features.world_events.application import DemonEventLifecycleApplication
 from nonebot_plugin_xiuxian_2.features.world_events.event_state import read_event_state
 from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
@@ -26,6 +28,7 @@ from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
     apply_world_events_player,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import shutdown, startup
 from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_world_events as world_events
 
 
@@ -82,6 +85,29 @@ def test_demon_jobs_are_declared_and_registered_on_live_scheduler() -> None:
         "spirit_vein_schedule_job",
     )
     assert real_scheduler.get_job("spirit_vein_schedule") is not None
+
+
+def test_runtime_startup_activates_world_event_jobs() -> None:
+    async def run() -> None:
+        with tempfile.TemporaryDirectory(prefix="world-event-startup-") as directory:
+            state, _readiness, context, lifecycle = await startup(
+                build_runtime_context(data_dir=directory, legacy_startup=False)
+            )
+            try:
+                assert state.phase.value in {"ready", "not_ready"}
+                assert {job.id for job in context.jobs.list()} >= {
+                    "demon_invasion_schedule",
+                    "demon_invasion_refresh_schedule",
+                    "spirit_vein_schedule",
+                }
+                real_scheduler = getattr(world_events.scheduler, "_scheduler", world_events.scheduler)
+                assert real_scheduler.get_job("demon_invasion_schedule") is not None
+                assert real_scheduler.get_job("demon_invasion_refresh_schedule") is not None
+                assert real_scheduler.get_job("spirit_vein_schedule") is not None
+            finally:
+                await shutdown(lifecycle)
+
+    asyncio.run(run())
 
 
 def test_demon_schedule_drives_isolated_sqlite_state_and_replays(tmp_path) -> None:
@@ -247,3 +273,45 @@ def test_schedule_failure_is_propagated_instead_of_logged_as_success() -> None:
     ):
         with pytest.raises(RuntimeError, match="db unavailable"):
             asyncio.run(world_events.demon_invasion_schedule_job())
+
+
+def test_demon_start_rejects_persisted_transition_failure() -> None:
+    failed = SimpleNamespace(status="schema_missing", state=None)
+    with patch.object(world_events, "_current_period", return_value="2026-11-17"), patch.object(
+        world_events, "_load_state", return_value={"status": "idle"}
+    ), patch.object(world_events.demon_event_lifecycle_application, "replay", return_value=None), patch.object(
+        world_events.demon_event_lifecycle_application, "transition", return_value=failed
+    ):
+        with pytest.raises(RuntimeError, match="schema_missing"):
+            world_events._start_auto_demon_invasion()
+
+
+def test_demon_finish_and_wave_refresh_reject_persisted_transition_failures() -> None:
+    active = _active_state()
+    failed = SimpleNamespace(status="state_changed", state=active, refreshed_realms=())
+    with patch.object(world_events, "_load_state", return_value=active), patch.object(
+        world_events.demon_event_lifecycle_application, "replay", return_value=None
+    ), patch.object(world_events.demon_event_lifecycle_application, "transition", return_value=failed):
+        with pytest.raises(RuntimeError, match="state_changed"):
+            world_events._finish_auto_demon_invasion()
+
+    defeated = _active_state()
+    defeated["bosses"]["练气境"]["boss_hp"] = 0
+    with patch.object(world_events, "_ensure_daily_state", return_value=defeated), patch.object(
+        world_events, "_event_now", return_value=_utc(11, 30)
+    ), patch.object(world_events, "_create_demon_boss", return_value={"wave": 2, "boss_hp": 100}), patch.object(
+        world_events.demon_wave_refresh_application, "replay", return_value=None
+    ), patch.object(world_events.demon_wave_refresh_application, "refresh", return_value=failed):
+        with pytest.raises(RuntimeError, match="state_changed"):
+            world_events._refresh_defeated_demon_bosses()
+
+
+def test_spirit_vein_scheduler_rejects_persisted_transition_failure() -> None:
+    failed = SimpleNamespace(status="schema_missing", state={"status": "finished"})
+    with patch.object(world_events, "_now", return_value=_utc(10, 30)), patch.object(
+        world_events, "_ensure_spirit_vein_state", return_value={"status": "finished"}
+    ), patch.object(world_events.spirit_vein_lifecycle_application, "replay", return_value=None), patch.object(
+        world_events.spirit_vein_lifecycle_application, "transition", return_value=failed
+    ), patch.object(world_events.runtime_random, "random", return_value=0.0):
+        with pytest.raises(RuntimeError, match="schema_missing"):
+            world_events._try_start_auto_spirit_vein()

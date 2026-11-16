@@ -387,6 +387,15 @@ def _event_id(period: str) -> str:
     return f"demon_invasion:{period}"
 
 
+def _require_transition_applied(result, operation_id: str) -> None:
+    """Do not let a persisted transition failure look like a successful job."""
+    status = str(getattr(result, "status", ""))
+    if status != "applied":
+        raise RuntimeError(
+            f"世界事件状态变更失败：operation_id={operation_id} status={status or 'unknown'}"
+        )
+
+
 def _spirit_vein_event_id(started_at: datetime) -> str:
     return f"spirit_vein:{started_at.strftime('%Y%m%d%H%M')}"
 
@@ -529,6 +538,7 @@ def _ensure_spirit_vein_state(now: datetime | None = None) -> dict:
             state,
             target,
         )
+        _require_transition_applied(result, operation_id)
         state = result.state or state
     return state
 
@@ -618,13 +628,16 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
         state,
         target,
     )
+    if result.status not in {"applied", "already_active", "not_triggered"}:
+        raise RuntimeError(
+            f"灵脉自动触发状态变更失败：operation_id={operation_id} "
+            f"status={getattr(result, 'status', 'unknown')}"
+        )
     state = result.state or state
     if result.action == "auto_skip":
         return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
     if result.action == "auto_miss":
         return state, "天降灵脉触发检查完成，本次未开启。"
-    if result.status != "applied":
-        return state, "灵脉自动触发未执行：本期状态冲突。"
     return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
 
 
@@ -695,6 +708,7 @@ def _ensure_daily_state() -> dict:
                 return replay.state or state
             target = _build_active_state(period)
             result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", state, target)
+            _require_transition_applied(result, operation_id)
             return result.state or state
     elif state.get("status") == "active" and not is_manual:
         operation_id = f"demon-lifecycle:auto-finish:{state.get('event_id')}"
@@ -706,6 +720,7 @@ def _ensure_daily_state() -> dict:
         target["status"] = "finished"
         target["last_result"] = "今日魔修入侵已于22:00结束。"
         result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+        _require_transition_applied(result, operation_id)
         return result.state or state
     return state
 
@@ -1012,6 +1027,7 @@ def _start_auto_demon_invasion() -> dict:
     expected = _load_state()
     target = _build_active_state(period)
     result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", expected, target)
+    _require_transition_applied(result, operation_id)
     return result.state or expected
 
 
@@ -1029,6 +1045,7 @@ def _finish_auto_demon_invasion() -> tuple[dict, bool]:
     target["status"] = "finished"
     target["last_result"] = "今日魔修入侵已于22:00结束。"
     result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+    _require_transition_applied(result, operation_id)
     return result.state or state, result.status == "applied"
 
 
@@ -1051,6 +1068,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     result = demon_wave_refresh_application.refresh(
         operation_id, EVENT_KEY, state, next_bosses, last_result
     )
+    _require_transition_applied(result, operation_id)
     return result.state or state, list(result.refreshed_realms)
 
 
