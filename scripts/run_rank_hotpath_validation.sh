@@ -11,7 +11,7 @@ if [[ ! -x "$PYTHON" ]]; then
 fi
 
 usage() {
-    printf 'usage: %s correctness FIXTURE SMOKE_REPORT | performance FIXTURE REPORT\n' "$0" >&2
+    printf 'usage: %s correctness FIXTURE SMOKE_REPORT | performance FIXTURE REPORT | profile FIXTURE REPORT\n' "$0" >&2
 }
 
 case ${1:-} in
@@ -24,10 +24,15 @@ case ${1:-} in
             fixture=$3
             report=$4
             cd "$root"
-            "$python" -m pytest -q \
-                tests/test_core_rank_indexes.py \
-                tests/test_info_user_lazy_reader.py \
-                tests/test_info_frozen_command_owner.py::InfoFrozenCommandOwnerTests::test_text_and_image_handlers_share_the_same_projection
+            tests=(
+                tests/test_core_rank_indexes.py
+                tests/test_info_user_lazy_reader.py
+                tests/test_info_profile_reuse.py
+            )
+            if [[ -f docs/refactor_phase2_legacy_path_items.json ]]; then
+                tests+=(tests/test_info_frozen_command_owner.py::InfoFrozenCommandOwnerTests::test_text_and_image_handlers_share_the_same_projection)
+            fi
+            "$python" -m pytest -q "${tests[@]}"
             "$python" "$root/scripts/rank_hotpath_probe.py" \
                 --fixture "$fixture" --report "$report" --smoke
         ' _ "$ROOT" "$PYTHON" "$2" "$3"
@@ -35,6 +40,10 @@ case ${1:-} in
     performance)
         [[ $# -eq 3 ]] || { usage; exit 2; }
         exec flock -w 600 "$LOCK" "$PYTHON" "$ROOT/scripts/rank_hotpath_probe.py" --fixture "$2" --report "$3"
+        ;;
+    profile)
+        [[ $# -eq 3 ]] || { usage; exit 2; }
+        exec flock -w 600 "$LOCK" "$PYTHON" "$ROOT/scripts/rank_hotpath_probe.py" --fixture "$2" --report "$3" --profile-reuse
         ;;
     *)
         usage

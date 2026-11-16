@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import importlib
 import json
 import math
 import os
@@ -209,6 +210,163 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
     }
 
 
+async def _run_profile_variant(
+    probe,
+    entry,
+    game,
+    snapshot,
+    info_module,
+    profile_repository,
+    uow_module,
+    *,
+    legacy: bool,
+) -> dict:
+    """Compare the live command with and without reusing check_user's profile."""
+    snapshot.restore()
+    manager_type = type(game)
+    original_info = info_module.get_user_xiuxian_info
+    original_profile = profile_repository.PlayerProfileSqlRepository.get_user_profile
+    original_uow_execute = uow_module.DatabaseUnitOfWork.execute
+    original_manager_read = manager_type._read_query
+    counters = {
+        "profile_reads": 0,
+        "profile_sql": [],
+        "uow_execute": 0,
+        "manager_read": 0,
+    }
+
+    def traced_profile(repository, user_id):
+        counters["profile_reads"] += 1
+        return original_profile(repository, user_id)
+
+    def traced_uow_execute(unit, sql, params=()):
+        counters["uow_execute"] += 1
+        normalized = " ".join(str(sql).split())
+        if "FROM user_xiuxian" in normalized:
+            counters["profile_sql"].append(normalized)
+        return original_uow_execute(unit, sql, params)
+
+    def traced_manager_read(self, sql, params=None, **kwargs):
+        counters["manager_read"] += 1
+        return original_manager_read(self, sql, params, **kwargs)
+
+    if legacy:
+        async def legacy_info(user_id, *, user_info=None):
+            return await original_info(user_id)
+
+        info_module.get_user_xiuxian_info = legacy_info
+    profile_repository.PlayerProfileSqlRepository.get_user_profile = traced_profile
+    uow_module.DatabaseUnitOfWork.execute = traced_uow_execute
+    manager_type._read_query = traced_manager_read
+    samples = []
+    try:
+        for number in range(1, REQUESTS + 1):
+            before = {
+                "profile_reads": counters["profile_reads"],
+                "uow_execute": counters["uow_execute"],
+                "manager_read": counters["manager_read"],
+            }
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                    "profile_reads": counters["profile_reads"] - before["profile_reads"],
+                    "uow_execute": counters["uow_execute"] - before["uow_execute"],
+                    "manager_read": counters["manager_read"] - before["manager_read"],
+                }
+            )
+    finally:
+        info_module.get_user_xiuxian_info = original_info
+        profile_repository.PlayerProfileSqlRepository.get_user_profile = original_profile
+        uow_module.DatabaseUnitOfWork.execute = original_uow_execute
+        manager_type._read_query = original_manager_read
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_forced_duplicate_profile_read" if legacy else "after_reuse_checked_profile",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "profile_reads": sum(item["profile_reads"] for item in samples),
+        "uow_execute": sum(item["uow_execute"] for item in samples),
+        "manager_read": sum(item["manager_read"] for item in samples),
+        "profile_sql": counters["profile_sql"],
+    }
+
+
+async def _profile_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        _, managers = await probe.prepare(seed=False)
+        game = managers[0]
+        if game.conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)).fetchone() is None:
+            raise SystemExit("fixture is missing required actor user_id=900001")
+        entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+        snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+        info_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_info.user_info"
+        )
+        profile_repository = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.features.info.profile_repository"
+        )
+        uow_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.infrastructure.database.uow"
+        )
+        data_dir = fixture / "data" / "xiuxian"
+        result = {
+            "command": COMMAND,
+            "entry": "live matcher/handler via tests.command_probe.run_case",
+            "fixture": str(fixture),
+            "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+            "pragma": {
+                name: game.conn.execute(f"PRAGMA {name}").fetchone()[0]
+                for name in ("journal_mode", "synchronous", "cache_size")
+            },
+            "database_files_before": {
+                name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+                for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+            },
+        }
+        result["before"] = await _run_profile_variant(
+            probe, entry, game, snapshot, info_module, profile_repository, uow_module, legacy=True
+        )
+        result["after"] = await _run_profile_variant(
+            probe, entry, game, snapshot, info_module, profile_repository, uow_module, legacy=False
+        )
+        snapshot.restore()
+        result["database_files_after"] = {
+            name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+            for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+        }
+        result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+        report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return result
+
+
 async def _probe(args: argparse.Namespace) -> dict:
     fixture = args.fixture.resolve()
     report = args.report.resolve()
@@ -260,29 +418,48 @@ async def _smoke(args: argparse.Namespace) -> dict:
         if game.conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)).fetchone() is None:
             raise SystemExit("fixture is missing required actor user_id=900001")
         entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+        image_entry = next(
+            item for item in probe.inventory() if item["command"] == "我的修仙信息图片版"
+        )
         snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
-        try:
+        cases = []
+        for number, label, case_entry, input_text in (
+            (1, "text", entry, COMMAND),
+            (2, "alias", entry, "我的存档"),
+            (3, "image", image_entry, "我的修仙信息图片版"),
+        ):
+            snapshot.restore()
             result = await probe.run_case(
-                entry,
+                case_entry,
                 "missing",
-                1,
+                number,
                 actor="900001",
-                input_text=COMMAND,
+                input_text=input_text,
                 timeout=8,
             )
-        finally:
-            snapshot.restore()
+            cases.append(
+                {
+                    "label": label,
+                    "command": input_text,
+                    "status": result.get("status"),
+                    "reply_bytes": len("".join(result.get("replies") or []).encode("utf-8")),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                }
+            )
+        snapshot.restore()
         payload = {
             "command": COMMAND,
             "entry": "live matcher/handler via tests.command_probe.run_case",
             "fixture": str(fixture),
-            "status": result.get("status"),
-            "reply_bytes": len("".join(result.get("replies") or []).encode("utf-8")),
-            "errors": result.get("errors", []),
-            "blocked": result.get("blocked", []),
+            "status": "pass" if all(
+                case["status"] == "pass" and not case["errors"] and not case["blocked"]
+                for case in cases
+            ) else "exception",
+            "cases": cases,
         }
         report.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        if payload["status"] != "pass" or payload["errors"] or payload["blocked"]:
+        if payload["status"] != "pass":
             raise RuntimeError(f"rank hotpath smoke failed: {json.dumps(payload, ensure_ascii=False)}")
         return payload
 
@@ -292,10 +469,17 @@ def main() -> int:
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--smoke", action="store_true", help="run one live command without performance sampling")
+    parser.add_argument("--profile-reuse", action="store_true", help="compare duplicate versus reused profile reads")
     args = parser.parse_args()
-    result = asyncio.run(_smoke(args) if args.smoke else _probe(args))
+    if args.smoke and args.profile_reuse:
+        parser.error("--smoke and --profile-reuse cannot be combined")
+    result = asyncio.run(
+        _smoke(args) if args.smoke else _profile_probe(args) if args.profile_reuse else _probe(args)
+    )
     if args.smoke:
         print(json.dumps(result, ensure_ascii=False))
+    elif args.profile_reuse:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     else:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     return 0

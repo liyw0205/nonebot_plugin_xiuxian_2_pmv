@@ -43,9 +43,15 @@ def _sql_message():
         _sql_message_instance = XiuxianDateManage()
     return _sql_message_instance
 
-async def get_user_xiuxian_info(user_id):
-    """获取用户修仙信息的公共函数"""
-    user_info = get_user_profile(user_id)
+async def get_user_xiuxian_info(user_id, *, user_info=None):
+    """获取用户修仙信息的公共函数。
+
+    Command handlers already load and validate the effective profile in
+    ``check_user``. Reuse that snapshot when it belongs to the same user;
+    standalone callers keep the historical read-through behavior.
+    """
+    if user_info is None or str(user_info.get("user_id")) != str(user_id):
+        user_info = get_user_profile(user_id)
     user_name = user_info['user_name']
 
     user_num = user_info['id']
@@ -247,7 +253,9 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
 
-    detail_map, text_msg = await get_user_xiuxian_info(user_info["user_id"])
+    detail_map, text_msg = await get_user_xiuxian_info(
+        user_info["user_id"], user_info=user_info
+    )
 
     if XiuConfig().user_info_image:
         await xiuxian_message_img_(bot, event)
@@ -411,7 +419,9 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message_img.finish()
     
-    detail_map, _ = await get_user_xiuxian_info(user_info['user_id'])
+    detail_map, _ = await get_user_xiuxian_info(
+        user_info['user_id'], user_info=user_info
+    )
     equipped_title_name = detail_map.get("称号", "")
     if equipped_title_name == "无":
         equipped_title_name = ""
