@@ -51,7 +51,20 @@
 
 ## 定时任务
 
-本切片不新增任务；魔修生命周期与波次刷新仍由现有 scheduler 触发，状态事务由 feature application/repository 管理；灵脉调度仍走兼容路径。
+本切片不新增任务；魔修生命周期与波次刷新仍由现有 scheduler 触发，状态事务由
+feature application/repository 管理；灵脉调度仍走兼容路径。
+
+- `demon_invasion_schedule` 在每日 `18:00` 开启、`22:00` 结束，窗口为
+  `[18:00, 22:00)`；`demon_invasion_refresh_schedule` 在 `18:30` 至 `21:30`
+  每小时检查已击退境界。两个任务由 `compatibility/legacy_jobs.py` 显式指向
+  `xiuxian_world_events`，经延迟 scheduler bridge 在组合根 `jobs` 阶段激活，启动后可在
+  live APScheduler job 表中看到稳定 ID。
+- 业务日期、活动窗口、跨午夜 period、波次槽位和 cron 回调统一使用 APScheduler 的
+  `scheduler.timezone`（默认 `Asia/Shanghai`），不直接使用 UTC 小时。活动状态仍写入
+  `player_db.world_event_state`，生命周期回执由 `world_events.004` 保证幂等和回滚。
+- 调度回调或 legacy 启动失败保留原异常和 traceback；不会记录“完成”或把失败吞成空状态。
+  真实驱动启动会通过 `Lifecycle.raise_startup_error()` 终止未就绪启动；隔离测试环境若缺少
+  资源，必须明确记录为 `not_ready`，不能宣称任务业务已实跑。
 
 ## 配置项
 
@@ -65,6 +78,11 @@
 
 - `python -m unittest nonebot_plugin_xiuxian_2.features.world_events.tests.test_world_events_application -q`
 - `python -m unittest tests.test_demon_claim_service tests.test_source_quality -q`
+- `python -m pytest tests/test_demon_scheduler.py -q`：任务声明/bridge 注册、隔离启动
+  加载、隔离 SQLite 生命周期回调、`Asia/Shanghai` 窗口边界、跨午夜 period、持久状态和
+  `讨伐魔修` handler 判定；灵脉槽位按本地业务日期生成，并确认调度异常向上透传。
+- `python -m pytest tests/test_scheduled_job_failure_visibility.py -q`：审计同类定时任务
+  的异常/失败结果不得被捕获后伪报成功。
 - 使用隔离数据目录重复提交相同操作号，仓储调用次数应保持为一次。
 
 ## 灰度开关、回滚和已知限制

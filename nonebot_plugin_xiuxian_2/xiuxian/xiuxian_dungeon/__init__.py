@@ -1040,8 +1040,10 @@ async def expire_pending_team_invites():
         result = await team_invite_expiry_worker.run()
         if result.status not in {"ok", "busy"} or result.failures or result.notification_failures:
             logger.warning(f"副本邀请过期扫描: {result}")
+            raise RuntimeError(f"副本邀请过期扫描返回失败状态: {result}")
     except Exception as exc:
         logger.exception(f"副本邀请过期扫描失败: {exc}")
+        raise
 
 
 @scheduler.scheduled_job(

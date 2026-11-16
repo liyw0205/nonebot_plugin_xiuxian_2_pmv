@@ -59,6 +59,28 @@ class RiftSpeedupSqlRepository:
             current = json.loads(str(entry["rift_data"]))
             current_cd = {"type": int(cd["type"]), "create_time": cd["create_time"], "scheduled_time": cd["scheduled_time"]}
             current_duration = int(entry["duration"])
+            if expected_snapshot is None:
+                # The production command intentionally uses the database as its
+                # snapshot.  Still reject a split cooldown projection instead
+                # of consuming an item while silently overwriting it.
+                try:
+                    scheduled_duration = int(cd["scheduled_time"])
+                except (TypeError, ValueError):
+                    return RiftSpeedupResult(
+                        "state_changed",
+                        current_duration,
+                        current,
+                        cd["create_time"],
+                        reason="rift_duration_invalid",
+                    )
+                if scheduled_duration != current_duration:
+                    return RiftSpeedupResult(
+                        "state_changed",
+                        current_duration,
+                        current,
+                        cd["create_time"],
+                        reason="rift_duration_changed",
+                    )
             if current_duration != int(current.get("time", 0)) or (
                 expected_snapshot is not None
                 and (current != expected_rift or current_cd != expected_cd)

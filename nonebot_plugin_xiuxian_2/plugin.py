@@ -1001,6 +1001,15 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
     context.jobs = JobRegistry()
     context.readiness = readiness
 
+    # Keep the declared compatibility inventory visible even when an earlier
+    # startup phase fails.  Actual APScheduler registration still waits for
+    # the jobs phase below, after repositories and migrations are ready.
+    for feature in registry.features:
+        if feature.key != LEGACY_SCHEDULER_FEATURE.key:
+            continue
+        for job in feature.jobs:
+            context.jobs.register_manifest(job, handler=legacy_job_handler(job.id))
+
     migration_runner = MigrationRunner(build_migrations(), clock=context.clock)
     context.migrations = migration_runner
 

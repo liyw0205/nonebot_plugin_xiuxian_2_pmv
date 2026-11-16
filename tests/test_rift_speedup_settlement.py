@@ -10,6 +10,10 @@ import nonebot
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.rift.application import RiftApplication
+from nonebot_plugin_xiuxian_2.features.rift.migrations import apply_rift_speedup_operations
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftSpeedupService
 from tests.test_db_backend import db_backend
 
@@ -46,6 +50,98 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
         asyncio.run(run())
         send.assert_awaited_once()
         self.assertEqual(send.await_args.args[2], "加速券数量不足，请重新查看背包。")
+
+    def test_item_handler_parameter_chain_preserves_normal_and_big_speedup_ratios(self):
+        rift_module = __import__(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift",
+            fromlist=["use_rift_speedup", "use_rift_big_speedup"],
+        )
+        bot = SimpleNamespace(self_id="bot")
+        calls = []
+
+        def speedup(**kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                status="item_missing",
+                ok=False,
+                data={"status": "stale-payload-status"},
+            )
+
+        async def run():
+            with (
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(rift_module, "rift_application", SimpleNamespace(speedup=speedup)),
+                patch.object(rift_module, "handle_send", new=AsyncMock()),
+            ):
+                await rift_module.use_rift_speedup(bot, SimpleNamespace(message_id="normal"), 20012, 1)
+                await rift_module.use_rift_big_speedup(bot, SimpleNamespace(message_id="big"), 20013, 1)
+
+        asyncio.run(run())
+        self.assertEqual(
+            [(call["item_id"], call["remaining_ratio"]) for call in calls],
+            [(20012, 50), (20013, 10)],
+        )
+
+    def test_real_application_handler_persists_normal_and_big_speedup_operations(self):
+        rift_module = __import__(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift",
+            fromlist=["use_rift_speedup", "use_rift_big_speedup"],
+        )
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_platform_schema(uow)
+            apply_rift_speedup_operations(uow)
+
+        application = RiftApplication(self.database, Path(self.temp_dir.name) / "player.db")
+        bot = SimpleNamespace(self_id="bot")
+        replies = []
+
+        async def capture_reply(*args, **kwargs):
+            replies.append((args, kwargs))
+
+        async def run():
+            with (
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(
+                    rift_module,
+                    "check_user",
+                    return_value=(True, {"user_id": "u"}, ""),
+                ),
+                patch.object(rift_module, "rift_application", application),
+                patch.object(rift_module, "save_rift_data"),
+                patch.object(rift_module, "handle_send", new=capture_reply),
+            ):
+                await rift_module.use_rift_speedup(
+                    bot, SimpleNamespace(message_id="normal-real"), 20012, 1
+                )
+                await rift_module.use_rift_big_speedup(
+                    bot, SimpleNamespace(message_id="big-real"), 20013, 1
+                )
+
+        asyncio.run(run())
+        self.assertEqual(len(replies), 2)
+        self.assertIn("减少50%", replies[0][0][2])
+        self.assertIn("减少90%", replies[1][0][2])
+        with db_backend.connection(self.database) as conn:
+            operations = conn.execute(
+                "SELECT operation_id,payload,new_time FROM rift_speedup_operations "
+                "ORDER BY operation_id"
+            ).fetchall()
+            self.assertEqual(
+                [(row[0], json.loads(row[1])[-1], row[2]) for row in operations],
+                [
+                    ("rift-speedup:big-real:u", 10, 3),
+                    ("rift-speedup:normal-real:u", 50, 30),
+                ],
+            )
+            self.assertEqual(
+                [tuple(row) for row in
+                    conn.execute(
+                        "SELECT goods_id,goods_num FROM back "
+                        "WHERE user_id='u' ORDER BY goods_id"
+                    ).fetchall()],
+                [(20012, 0), (20013, 0)],
+            )
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

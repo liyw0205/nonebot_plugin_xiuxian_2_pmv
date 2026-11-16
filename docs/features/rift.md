@@ -19,6 +19,8 @@ NoneBot handler 预滚；资产、探索次数、统计和奖励结算经 `RiftA
 探索次数、统计、秘境状态和旧格式 operation payload；异常回滚两库。默认 handler 不走旧
 `RiftDemonTokenBattleSettlementService`，该 service 保留给兼容对照。其他裂隙兼容边界仍需分片迁移。
 加速默认经 `RiftSpeedupSqlRepository` 原子消耗加速券、缩短秘境与冷却时间，并保留旧 payload replay；
+生产入口以 `rift_entries.duration`、JSON `time` 与 `user_cd.scheduled_time` 三者一致为前置，
+任一缺失、非法或漂移都以 `rift_duration_invalid`/`rift_duration_changed` 拒绝且不扣道具、不写回执；
 缺少 `rift.004` 时返回 `schema_missing`，请求不建表。世界生成使用稳定 operation ID、递增 revision 与旧 payload replay；
 缺少 `rift.005` 时拒绝生成，generation/current-world/bootstrap 请求路径均不建表。
 真实 facade 不再导入或惰性构造 `RiftSpeedupService`；旧 service 仅保留在显式 compatibility repository。

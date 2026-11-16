@@ -2,6 +2,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 import time
+from zoneinfo import ZoneInfo
 
 from nonebot import require
 from nonebot.log import logger
@@ -244,8 +245,30 @@ def _now() -> datetime:
     return runtime_clock.now()
 
 
+def _event_timezone():
+    """Return the APScheduler timezone used for event business windows."""
+    configured = getattr(scheduler, "timezone", None)
+    if configured is None:
+        return timezone.utc
+    if isinstance(configured, str):
+        try:
+            return ZoneInfo(configured)
+        except (KeyError, ValueError):
+            logger.warning("世界事件调度器时区无效，回退 UTC：{}", configured)
+            return timezone.utc
+    return configured
+
+
+def _event_now(value: datetime | None = None) -> datetime:
+    """Project the runtime clock into the scheduler's business timezone."""
+    value = value or _now()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(_event_timezone())
+
+
 def _current_period() -> str:
-    return _now().strftime("%Y-%m-%d")
+    return _event_now().strftime("%Y-%m-%d")
 
 
 def _format_time(value: datetime) -> str:
@@ -429,7 +452,7 @@ def _create_all_bosses() -> dict:
 
 def _build_active_state(period: str | None = None, manual: bool = False) -> dict:
     period = period or _current_period()
-    now = _now()
+    now = _event_now()
     return {
         "active": 1,
         "status": "active",
@@ -475,7 +498,7 @@ def _build_spirit_vein_state(
 
 
 def _is_auto_window(now: datetime | None = None) -> bool:
-    now = now or _now()
+    now = _event_now(now)
     return EVENT_START_HOUR <= now.hour < EVENT_END_HOUR
 
 
@@ -563,7 +586,9 @@ def _build_spirit_vein_message(state: dict) -> str:
 def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     now = _now()
     state = _ensure_spirit_vein_state(now)
-    slot = now.strftime("%Y%m%d%H30")
+    # The trigger fires in the scheduler's business timezone, while the
+    # persisted wall-clock timestamps remain the historical UTC frame.
+    slot = _event_now(now).strftime("%Y%m%d%H30")
     operation_id = f"spirit-vein:auto-trigger:{slot}"
     replay = spirit_vein_lifecycle_application.replay(operation_id)
     if replay is not None:
@@ -1012,7 +1037,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     if state.get("status") != "active":
         return state, []
 
-    slot = _now().strftime("%Y%m%d%H30")
+    slot = _event_now().strftime("%Y%m%d%H30")
     operation_id = f"demon-wave-refresh:{state.get('event_id')}:{slot}"
     replay = demon_wave_refresh_application.replay(operation_id)
     if replay is not None:
@@ -1039,7 +1064,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     misfire_grace_time=300,
 )
 async def demon_invasion_schedule_job():
-    now = _now()
+    now = _event_now()
     with _state_lock:
         if now.hour == EVENT_START_HOUR:
             state = _start_auto_demon_invasion()

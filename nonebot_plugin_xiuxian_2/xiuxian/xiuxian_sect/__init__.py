@@ -424,6 +424,7 @@ async def auto_handle_inactive_sect_owners():
     maintenance_key = (
         f"{maintenance_checked_at.date().isoformat()}:T{maintenance_slot:02d}"
     )
+    failures = []
     
     try:
         all_sects = sect_application.list_sects_with_member_count()
@@ -611,12 +612,16 @@ async def auto_handle_inactive_sect_owners():
                 
             except Exception as e:
                 logger.error(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
+                failures.append(e)
                 continue
                 
     except Exception as e:
         logger.error(f"定时任务执行出错：{str(e)}")
+        failures.append(e)
     finally:
         logger.info("✅ 宗门状态检测处理完成")
+    if failures:
+        raise RuntimeError(f"宗门状态检测失败：{len(failures)} 个宗门处理异常") from failures[0]
 
 @sect_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

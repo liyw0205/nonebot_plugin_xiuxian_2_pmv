@@ -77,7 +77,7 @@ def limit_all_stamina_():
         updated = int(result.get("updated", 0) or 0)
     except Exception as e:
         logger.opt(exception=e).warning("体力恢复定时任务执行失败，当前批次已回滚，后续恢复已停止")
-        return
+        raise
 
     elapsed = time.monotonic() - started_at
     if elapsed >= 10:

@@ -184,7 +184,8 @@ async def auto_harvest_scheduled():
                 await check_and_harvest(enabled_user.user_id)
 
     except Exception as e:
-        logger.warning(f"自动收取任务出错: {e}")
+        logger.exception(f"自动收取任务出错: {e}")
+        raise
 
 
 async def check_and_harvest(user_id):
