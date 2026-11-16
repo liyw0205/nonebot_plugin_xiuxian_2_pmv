@@ -2,6 +2,29 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 调度桥激活失败后的重试（develop checkpoint）
+
+鬼市时间链已提交推送 `d8ecefe1`，精确 SHA CI `43945040484` 全绿：6154 项
+unittest、54 项定时 pytest，编译、architecture、inventory 和 diff 门禁均通过。
+继续定时任务伪正常审计时发现 `DeferredScheduler.activate` 在逐个注册前就设置
+active 并清空 pending；中途 `add_job` 失败后，同进程重试会直接返回，剩余任务
+可能未注册却不再报错。两项 bridge 回归先失败，隔离真实 runtime 又复现第二次启动
+变为 READY、魔修/灵脉仍缺失。现逐条成功后才移除 pending，全部注册成功后才设 active。
+
+中途失败与同 ID 外部任务冲突保留原异常；已注册任务不覆盖、不重复，失败与剩余
+声明不丢失，恢复期间新增声明也等待注册。故障持续两次时 jobs/not_ready、原异常
+实例及 traceback 均保留，恢复后 ready。独立 APScheduler 已实际触发恢复后的魔修
+回调，隔离迁移库写入 active/18:00 状态、唯一 lifecycle 回执，integrity_check=ok。
+该链使用无 NoneBot driver 的维护 runtime，不冒充真实驱动或 QQ 连接。首轮组合因
+旧启动测试缓存已删除临时资源路径而失败，现显式隔离 driver，不改业务断言。
+
+bridge、魔修、启动错误透传与同类任务组合 **33 passed**；鬼市注册/消息短合同另
+**30 passed**。architecture（含 inventory）、受影响编译与 diff 均通过；本轮按白名单
+普通提交/推送 develop，交付仍要求精确 SHA CI 通过。复用既有结算、参数/OneBot/QQ
+绿证据。本轮限激活恢复契约，
+不扩展性能或玩法，仅项目 venv、共享锁、有界定向门禁，不访问线上库、不重启、不
+发送真实消息；本地目标与用户冻结清单删除不入提交，保持 develop、不合 main。
+
 ## 鬼市到期与周末完整时间链（develop checkpoint）
 
 本轮起点 `develop/origin/develop=d3fe7ce8`；该基线 CI `43940906913` 全绿，含
@@ -28,8 +51,8 @@ UTC；到期/信息展示先把已有创建锚点投影到业务日期，保留�
 同瞬间 UTC/Asia/Shanghai 实际请求与到期并发竞争两项也分别通过。统计有重叠不累计。
 包括创建时钟故障整事务回滚、部分成交到期只退未成交额、历史锚点零改写与缺锚点零写。
 OneBot 文本、QQ Markdown 蓝字和发送失败降级短合同复用受影响组；没有真实 QQ。
-architecture（含 inventory）、受影响源码/测试编译和 diff 门禁均通过；待白名单交付
-与精确提交 SHA 的 CI 核验。
+architecture（含 inventory）、受影响源码/测试编译和 diff 门禁均通过；白名单已提交
+推送 `d8ecefe1`，精确 SHA CI `43945040484` 全绿（6154 项 unittest、54 项定时 pytest）。
 
 G2 尚未完成：创建消息 replay/payload 冲突、真实命令并发、部分成交后玩家取消、
 收摊和其他玩家功能组继续待验。保留用户冻结 JSON 删除与 Phase 2 blocker，本地目标

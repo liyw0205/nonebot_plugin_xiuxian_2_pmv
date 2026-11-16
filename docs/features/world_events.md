@@ -65,6 +65,8 @@ feature application/repository 管理；灵脉调度仍走兼容路径。
 - 调度回调或 legacy 启动失败保留原异常和 traceback；不会记录“完成”或把失败吞成空状态。
   真实驱动启动会通过 `Lifecycle.raise_startup_error()` 终止未就绪启动；隔离测试环境若缺少
   资源，必须明确记录为 `not_ready`，不能宣称任务业务已实跑。
+- bridge 中途注册失败后保留失败及剩余声明，不提前标记 active；同进程持续重试仍为
+  jobs/not_ready。恢复后注册魔修与灵脉任务，已成功任务不重复，避免“就绪但缺任务”。
 
 ## 配置项
 
@@ -81,6 +83,7 @@ feature application/repository 管理；灵脉调度仍走兼容路径。
 - `python -m pytest tests/test_demon_scheduler.py -q`：任务声明/bridge 注册、隔离启动
   加载、隔离 SQLite 生命周期回调、`Asia/Shanghai` 窗口边界、跨午夜 period、持久状态和
   `讨伐魔修` handler 判定；灵脉槽位按本地业务日期生成，并确认调度异常向上透传。
+  另覆盖注册故障连续重试、恢复后实际触发及隔离 SQLite 状态/回执/完整性。
 - `python -m pytest tests/test_scheduled_job_failure_visibility.py -q`：审计同类定时任务
   的异常/失败结果不得被捕获后伪报成功。
 - 使用隔离数据目录重复提交相同操作号，仓储调用次数应保持为一次。

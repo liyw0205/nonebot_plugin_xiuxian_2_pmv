@@ -72,11 +72,11 @@ class DeferredScheduler:
     def activate(self) -> None:
         if self._active:
             return
+        # Retain the failed declaration and its successors for startup retry.
+        while self._pending:
+            self._register(self._pending[0])
+            self._pending.pop(0)
         self._active = True
-        pending = tuple(self._pending)
-        self._pending.clear()
-        for item in pending:
-            self._register(item)
 
     def _register(self, pending: _PendingJob):
         job_id = pending.job_id

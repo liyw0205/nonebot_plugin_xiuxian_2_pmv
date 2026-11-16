@@ -23,6 +23,11 @@
 当作完成。当前已对傀儡收取、副本邀请扫描、NewAPI 自动签到、体力恢复和宗门维护保留异常
 透传回归。可恢复的单条业务跳过仍记录具体状态，但批次存在失败时任务整体失败。
 
+调度桥只在全部声明注册成功后标记 active。中途注册失败原样抛出异常，已成功注册的
+任务保留，失败声明及尚未处理的声明继续 pending；同进程启动重试只处理剩余任务，
+不能以一次失败后的空列表伪报就绪。既有同 ID 外部任务冲突仍拒绝，不覆盖原任务。
+故障持续时 lifecycle 的 jobs 阶段保持 not_ready；恢复并完整注册后才允许 ready。
+
 ## 定时任务
 
 任务 ID 清单见 `compatibility/legacy_manifest.py`，禁止通过模块导入新增未声明任务。
@@ -38,6 +43,11 @@
 ## 测试与手工验收
 
 启动两次任务清单不重复，`/api/v1/scheduler` 返回稳定 ID，旧调度测试保持通过。
+`tests/architecture/test_scheduler_bridge.py` 覆盖部分注册故障、持续故障、恢复期间新增声明
+与既有任务冲突；`tests/test_demon_scheduler.py` 用独立 APScheduler 和隔离 runtime
+验证 jobs 阶段连续失败保留原 traceback，恢复后魔修/灵脉完整注册、已成功任务不重复，
+再实际触发恢复的魔修任务并核对 SQLite 活动状态、生命周期回执和 integrity_check。
+该链使用无 NoneBot driver 的维护 runtime，不发送消息；驱动异常透传另有回归。
 
 ## 灰度开关、回滚和已知限制
 

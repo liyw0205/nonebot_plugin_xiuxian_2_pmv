@@ -22,7 +22,8 @@ except RuntimeError:
 from nonebot.exception import FinishedException
 
 from nonebot_plugin_xiuxian_2.compatibility.legacy_jobs import _TARGETS
-from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
+from nonebot_plugin_xiuxian_2.bootstrap import LifecyclePhase, build_runtime_context
+from nonebot_plugin_xiuxian_2.compatibility.scheduler import DeferredScheduler
 from nonebot_plugin_xiuxian_2.features.world_events.application import DemonEventLifecycleApplication
 from nonebot_plugin_xiuxian_2.features.world_events.attack_application import DemonAttackApplication
 from nonebot_plugin_xiuxian_2.features.world_events.event_state import read_event_state
@@ -31,6 +32,7 @@ from nonebot_plugin_xiuxian_2.features.world_events.migrations import (
     apply_world_events_player,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.paths import configure_paths, get_paths
 from nonebot_plugin_xiuxian_2.plugin import shutdown, startup
 from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_world_events as world_events
 
@@ -116,6 +118,106 @@ def test_runtime_startup_activates_world_event_jobs() -> None:
                 assert real_scheduler.get_job("spirit_vein_schedule") is not None
             finally:
                 await shutdown(lifecycle)
+
+    asyncio.run(run())
+
+
+def test_runtime_registration_failure_stays_not_ready_until_all_jobs_recover(tmp_path):
+    async def run():
+        scheduler = AsyncIOScheduler(timezone=EVENT_TZ)
+        bridge = DeferredScheduler(scheduler)
+        bridge.add_job(lambda: None, "cron", year=2099, id="registered-before-failure")
+        bridge.add_job(
+            world_events.demon_invasion_schedule_job, "cron", year=2099,
+            hour="18,22", id="demon_invasion_schedule",
+        )
+        bridge.add_job(world_events.spirit_vein_schedule_job, "cron", year=2099, id="spirit_vein_schedule")
+        original = RuntimeError("isolated scheduler registration unavailable")
+        failed = True
+        attempts = []
+        add_job = scheduler.add_job
+
+        def reject_demon(function, *args, **kwargs):
+            attempts.append(kwargs["id"])
+            if failed and kwargs["id"] == "demon_invasion_schedule":
+                raise original
+            return add_job(function, *args, **kwargs)
+
+        previous_data = get_paths().data
+        lifecycle = None
+        try:
+            with patch.object(scheduler, "add_job", side_effect=reject_demon), patch(
+                "nonebot_plugin_xiuxian_2.compatibility.scheduler._bridge", bridge
+            ), patch(
+                "nonebot.get_driver", side_effect=ValueError("isolated maintenance runtime")
+            ):
+                state, readiness, context, lifecycle = await startup(
+                    build_runtime_context(data_dir=tmp_path, settings={}, legacy_startup=False)
+                )
+                for index in range(2):
+                    if index:
+                        state = await lifecycle.start()
+                    assert state.phase is LifecyclePhase.NOT_READY
+                    assert state.failed_phase is LifecyclePhase.JOBS
+                    assert not readiness.report().checks["jobs"]
+                    assert state.error_type == "RuntimeError"
+                    assert "reject_demon" in state.error_traceback
+                    with pytest.raises(RuntimeError) as raised:
+                        lifecycle.raise_startup_error()
+                    assert raised.value is original
+                    assert scheduler.get_job("demon_invasion_schedule") is None
+                    assert scheduler.get_job("spirit_vein_schedule") is None
+
+                failed = False
+                state = await lifecycle.start()
+                assert state.phase is LifecyclePhase.READY, state.error
+                assert readiness.is_ready()
+                assert bridge.active and not bridge.pending_ids
+                assert attempts.count("registered-before-failure") == 1
+                assert attempts.count("demon_invasion_schedule") == 3
+                assert attempts.count("spirit_vein_schedule") == 1
+                assert scheduler.get_job("demon_invasion_schedule").func is world_events.demon_invasion_schedule_job
+                assert scheduler.get_job("spirit_vein_schedule").func is world_events.spirit_vein_schedule_job
+                assert {job.id for job in context.jobs.list()} >= {"demon_invasion_schedule", "spirit_vein_schedule"}
+
+                database = context.database.path("player_db")
+
+                class SqlStateManager:
+                    def get_fields(self, event_key, table):
+                        assert table == world_events.EVENT_TABLE
+                        with DatabaseUnitOfWork(database, read_only=True) as uow:
+                            return read_event_state(uow, event_key) or {}
+
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    assert read_event_state(uow, world_events.EVENT_KEY) is None
+                outcome = asyncio.get_running_loop().create_future()
+
+                def completed(event):
+                    if event.job_id == "demon_invasion_schedule" and not outcome.done():
+                        outcome.set_result(event)
+
+                scheduler.add_listener(completed, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+                with patch.object(world_events, "scheduler", bridge), patch.object(
+                    world_events, "_now", return_value=_utc(10)
+                ), patch.object(world_events, "_player_data_manager", return_value=SqlStateManager()), patch.object(
+                    world_events, "demon_event_lifecycle_application", DemonEventLifecycleApplication(database)
+                ), patch.object(world_events, "_create_all_bosses", return_value={"练气境": {"wave": 1, "boss_hp": 100}}):
+                    scheduler.modify_job("demon_invasion_schedule", next_run_time=datetime.now(timezone.utc))
+                    scheduler.start()
+                    event = await asyncio.wait_for(outcome, timeout=3)
+                    assert event.code == EVENT_JOB_EXECUTED, event.exception
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    state = read_event_state(uow, world_events.EVENT_KEY)
+                    assert state["status"] == "active"
+                    assert state["started_at"] == "2026-11-17 18:00:00"
+                    assert uow.query_one("SELECT COUNT(*) AS n FROM demon_event_lifecycle_operations")["n"] == 1
+                    assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        finally:
+            if scheduler.running:
+                scheduler.shutdown(wait=False)
+            if lifecycle is not None:
+                await shutdown(lifecycle)
+            configure_paths(previous_data)
 
     asyncio.run(run())
 
