@@ -83,11 +83,11 @@ class InfoFrozenCommandOwnerTests(unittest.TestCase):
         ]
         image_handler = source[source.index("async def xiuxian_message_img_("):]
         self.assertIn(
-            "get_user_xiuxian_info(\n        user_info[\"user_id\"], user_info=user_info\n    )",
+            "get_user_xiuxian_info(\n        user_info[\"user_id\"], user_info=user_info, equipped_title_id=title_id\n    )",
             text_handler,
         )
         self.assertIn(
-            "get_user_xiuxian_info(\n        user_info['user_id'], user_info=user_info\n    )",
+            "get_user_xiuxian_info(\n        user_info['user_id'], user_info=user_info, equipped_title_id=title_id\n    )",
             image_handler,
         )
         self.assertIn("get_user_profile(user_id)", source)
