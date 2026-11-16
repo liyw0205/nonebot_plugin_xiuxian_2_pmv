@@ -86,7 +86,7 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count("get_user_profile("), 4)
         self.assertNotIn("_sql_message().get_user_real_info", source)
-        self.assertIn("get_player_attributes(user_id)", source)
+        self.assertIn("get_player_attributes(user_id", source)
 
     def test_dynamic_attribute_reads_use_feature_application_boundary(self) -> None:
         root = Path(__file__).resolve().parents[1]

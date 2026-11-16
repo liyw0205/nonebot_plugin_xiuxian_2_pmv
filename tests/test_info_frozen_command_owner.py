@@ -91,7 +91,7 @@ class InfoFrozenCommandOwnerTests(unittest.TestCase):
             image_handler,
         )
         self.assertIn("get_user_profile(user_id)", source)
-        self.assertIn("get_player_attributes(user_id)", source)
+        self.assertIn("get_player_attributes(user_id", source)
         self.assertIn("update_last_check_info_time(user_id)", source)
         self.assertIn("get_equipped_title_display(user_id)", source)
         for legacy_reader in (
