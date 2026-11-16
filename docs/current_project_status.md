@@ -5,7 +5,7 @@
 ## 定时任务伪正常与魔修入侵时区修复（develop checkpoint）
 
 2026-11-17 优先处理定时任务“日志失败但调度器收到成功”的问题，不扩展性能优化。
-现状基线为 `develop`/`origin/develop=fbbb8b63`；工作区保留用户删除的
+现状基线为 `develop`/`origin/develop=0d3d8146`；工作区保留用户删除的
 `docs/refactor_phase2_legacy_path_items.json`，不恢复、不提交。根因是 APScheduler 使用
 `Asia/Shanghai` 而 `SystemClock` 提供 UTC：魔修开启、结束、业务日期、波次槽位和
 `讨伐魔修` 状态判断原先直接读取 UTC 小时，导致本地有效窗口被判为未开启。
