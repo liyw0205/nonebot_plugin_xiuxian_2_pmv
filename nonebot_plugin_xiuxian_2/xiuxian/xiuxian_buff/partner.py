@@ -1413,7 +1413,8 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
-    bound_days = (runtime_clock.now() - datetime.strptime(bind_time, '%Y-%m-%d %H:%M:%S')).days
+    bind_at = _parse_datetime(bind_time)
+    bound_days = (runtime_clock.now() - bind_at).days if bind_at is not None else 0
     affection_level = get_affection_level(affection)
     partner_user_info = _sql_message().get_user_info_with_id(partner_user_id)
     msg = f"""**我的道侣**
