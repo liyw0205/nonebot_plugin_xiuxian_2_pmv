@@ -105,6 +105,24 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
         self.assertEqual((replay.status, replay.order_id, replay.total_cost), ("duplicate", "legacy-order", 60))
         self.assertEqual(self.state(), (99, 0, 1))
 
+    def test_message_identity_reads_old_payload_ids_without_rewriting_receipts(self) -> None:
+        first = self.create("guishi-order:qiugou:opaque:message:buyer:1003:20:3")
+        replay = self.create("guishi-order:qiugou:opaque:message:buyer")
+        conflict = self.create("guishi-order:qiugou:opaque:message:buyer", price=21)
+        self.assertEqual((replay.status, replay.order_id), ("duplicate", first.order_id))
+        self.assertEqual(conflict.status, "operation_conflict")
+        self.assertEqual(self.state(), (39, 1, 1))
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.assertEqual(uow.query_one("SELECT operation_id FROM guishi_order_create_operations")["operation_id"],
+                             "guishi-order:qiugou:opaque:message:buyer:1003:20:3")
+
+    def test_ambiguous_historical_message_receipts_fail_closed(self) -> None:
+        self.create("guishi-order:qiugou:message:buyer:1003:20:3")
+        self.create("guishi-order:qiugou:message:buyer:1003:1:1", price=1, quantity=1)
+        before = self.state()
+        self.assertEqual(self.create("guishi-order:qiugou:message:buyer").status, "operation_conflict")
+        self.assertEqual(self.state(), before)
+
     def test_limit_and_balance_rejections_do_not_mutate(self) -> None:
         first = self.create("first", price=20, quantity=3)
         limited = self.create("limit", price=1, quantity=1, max_orders=1)
@@ -124,6 +142,20 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.create("rollback")
         self.assertEqual(self.state(), (99, 0, 0))
+
+    def test_charge_cas_rejection_rolls_back_insert_and_trigger_changes(self) -> None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "CREATE TRIGGER race_charge AFTER INSERT ON guishi_item "
+                "BEGIN UPDATE guishi_info SET stored_stone=0 WHERE user_id=NEW.user_id; END"
+            )
+        result = self.create("cas-rejected")
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(self.state(), (99, 0, 0))
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute("DROP TRIGGER race_charge")
+        self.assertEqual(self.create("cas-rejected").status, "created")
+        self.assertEqual(self.state(), (39, 1, 1))
 
     def test_application_default_uses_feature_owned_repository(self) -> None:
         result = TradeApplication(self.database, self.database).guishi_qiugou(

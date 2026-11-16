@@ -283,3 +283,53 @@ def test_window_rejection_keeps_its_state_across_message_adapters(onebot, markdo
         rendered = markdown_send.call_args.args[2]
         assert "下次可摆摊时间" in rendered
         assert "鬼市摆摊" in rendered and "mqqapi://aio/inlinecmd" in rendered
+
+
+@pytest.mark.parametrize(
+    ("onebot", "markdown", "send_fails"),
+    ((True, True, False), (False, False, False), (False, True, False), (False, True, True)),
+)
+def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdown, send_fails):
+    orders = [
+        {"id": "1001", "user_id": "seller", "item_name": "herb"},
+        {"id": "1002", "user_id": "seller", "item_name": "herb"},
+    ]
+    results = [
+        GuishiOrderCancelResult("cancelled", "1001", "baitan", "seller", item_name="herb", refunded_quantity=2),
+        GuishiOrderCancelResult("inventory_full", "1002", "baitan", "seller"),
+    ]
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id="close", get_user_id=lambda: "seller")
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, "check_user", return_value=(True, {"user_id": "seller"}, "")
+    ), patch.object(trade.trade_application, "guishi_get_orders", side_effect=[orders, orders[1:]]), patch.object(
+        trade.items, "get_data_by_item_name", return_value=(1001, {"type": "药材"})
+    ), patch.object(trade.trade_application, "guishi_cancel_baitan", side_effect=results), patch.object(
+        trade, "record_trade_event"
+    ) as recorded, patch.object(trade, "handle_send", captured):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_shoutan_(object(), event, None))
+        assert recorded.call_count == 1
+        assert recorded.call_args.args[3]["鬼市收摊退回物品"] == 2
+    reply = captured.call_args.args[2]
+    assert "本次取消1条" in reply and "剩余1条" in reply
+    assert "inventory_full" in reply and "1002" in reply
+    assert "所有摆摊订单已取消" not in reply
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+    config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
+                             at_sender=False, message_optimization=False, img=False)
+    plain = AsyncMock()
+    md = AsyncMock(side_effect=RuntimeError("send failed") if send_fails else None)
+    with patch.object(utils, "XiuConfig", return_value=config), patch.object(
+        utils, "get_chat_scene", return_value="group"
+    ), patch.object(utils, "is_group_event", return_value=True), patch.object(
+        utils, "get_real_id_async", new=AsyncMock(return_value="")
+    ), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", md):
+        asyncio.run(utils.handle_send(bot, event, reply, **captured.call_args.kwargs))
+    if onebot or not markdown or send_fails:
+        plain.assert_awaited_once()
+        assert plain.call_args.kwargs["message"] == reply
+    else:
+        rendered = md.call_args.args[2]
+        assert "inventory_full" in rendered and "1002" in rendered
+        assert "鬼市收摊" in rendered and "mqqapi://aio/inlinecmd" in rendered

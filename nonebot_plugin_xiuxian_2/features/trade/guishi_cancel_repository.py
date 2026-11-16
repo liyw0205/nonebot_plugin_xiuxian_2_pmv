@@ -7,6 +7,7 @@ from typing import Any
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_operation_replay import order_receipts
 
 
 @dataclass(frozen=True)
@@ -73,12 +74,10 @@ class GuishiOrderCancelSqlRepository:
     ) -> GuishiOrderCancelResult | None:
         if not operation_id:
             return None
-        previous = uow.query_one(
-            "SELECT payload,order_id,order_type,user_id,goods_id,item_name,goods_type,"
-            f"refunded_quantity,refunded_stone FROM {table_name} "
-            "WHERE operation_id=?",
-            (operation_id,),
-        )
+        receipts = order_receipts(uow, table_name, operation_id, legacy_parts=1)
+        if len(receipts) > 1:
+            return GuishiOrderCancelResult("operation_conflict", "", order_type=order_type)
+        previous = receipts[0] if receipts else None
         if previous is None:
             return None
         if str(previous["payload"]) != payload or str(previous["order_type"]) != order_type:

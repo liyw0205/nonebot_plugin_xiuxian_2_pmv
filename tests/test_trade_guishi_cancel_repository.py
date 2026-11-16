@@ -132,6 +132,21 @@ class GuishiCancelRepositoryTests(unittest.TestCase):
         self.assertEqual(int(balance["stored_stone"]), 10)
         self.assertIsNotNone(order)
 
+    def test_old_message_cancel_receipt_replays_and_rejects_another_order(self) -> None:
+        first = self.repository.cancel_qiugou(
+            operation_id="guishi-cancel:qiugou:message:buyer:q1", user_id="buyer", order_id="q1",
+        )
+        replay = self.repository.cancel_qiugou(
+            operation_id="guishi-cancel:qiugou:message:buyer", user_id="buyer", order_id="q1",
+        )
+        conflict = self.repository.cancel_qiugou(
+            operation_id="guishi-cancel:qiugou:message:buyer", user_id="buyer", order_id="b1",
+        )
+        self.assertEqual((first.status, replay.status, conflict.status), ("cancelled", "duplicate", "operation_conflict"))
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            self.assertEqual(uow.query_one("SELECT stored_stone FROM guishi_info WHERE user_id='buyer'")["stored_stone"], 40)
+            self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM guishi_order_cancel_operations")["n"], 1)
+
     def test_baitan_refunds_inventory_and_replays(self) -> None:
         first = self.repository.cancel_baitan(
             operation_id="cancel-b1",

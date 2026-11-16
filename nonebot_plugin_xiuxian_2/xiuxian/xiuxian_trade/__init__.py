@@ -591,7 +591,7 @@ def _guishi_order_operation_id(event, order_type, user_id, item_id, price, quant
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
-        return f"guishi-order:{order_type}:{event_id}:{user_id}:{item_id}:{price}:{quantity}"
+        return f"guishi-order:{order_type}:{event_id}:{user_id}"
     return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{runtime_ids.new_id()}"
 
 
@@ -600,12 +600,39 @@ def _guishi_cancel_operation_id(event, order_type, user_id, order_id):
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
+        if order_type == "qiugou":
+            return f"guishi-cancel:{order_type}:{event_id}:{user_id}"
         return f"guishi-cancel:{order_type}:{event_id}:{user_id}:{order_id}"
     return f"guishi-cancel:{order_type}:{user_id}:{order_id}:{runtime_ids.new_id()}"
 
 
 def _guishi_expired_operation_id(order_id):
     return f"guishi-expire:baitan:{str(order_id).strip()}"
+
+
+def _guishi_order_failure(action, result, order_id=""):
+    messages = {
+        "order_missing": "订单不存在，可能已成交或取消。",
+        "not_owner": "该订单不属于您，不能取消。",
+        "not_qiugou": "该订单不是求购订单。",
+        "not_baitan": "该订单不是摆摊订单。",
+        "item_missing": "物品资料缺失，订单已保留，请联系管理员。",
+        "inventory_full": "背包容量不足，订单已保留，请腾出空间后重试。",
+        "operation_conflict": "同一请求已用于不同内容，请使用新消息操作。",
+        "state_changed": "订单或账户状态已变化，请重新查询后重试。",
+    }
+    text = result_failure(action, result, messages=messages)
+    subject = f"；订单：{order_id}" if order_id else ""
+    return f"{text}（原因：{result.status}{subject}）"
+
+
+def _guishi_baitan_closed_message(now):
+    next_start = now.replace(hour=GUISHI_BAITAN_START_HOUR, minute=0, second=0, microsecond=0)
+    hours, minutes = divmod(int((next_start - now).total_seconds()) // 60, 60)
+    return (
+        f"鬼市摆摊时间：每天{GUISHI_BAITAN_START_HOUR}:00-次日{GUISHI_BAITAN_END_HOUR}:00\n"
+        f"下次可摆摊时间：{next_start.strftime('%m月%d日 %H:%M')}（{hours}小时{minutes}分钟后）"
+    )
 
 
 def _record_guishi_match_event(result, buyer_name, seller_name):
@@ -2159,7 +2186,8 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
     if not result.created:
-        raise RuntimeError(f"unexpected guishi qiugou status: {result.status}")
+        await handle_send(bot, event, _guishi_order_failure("鬼市求购", result))
+        await guishi_qiugou.finish()
     order_id = result.order_id
     
     msg = f"成功发布求购订单！\n"
@@ -2169,15 +2197,16 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"订单ID：{order_id}\n"
     msg += f"♻️ 次日{GUISHI_BAITAN_END_HOUR}点自动取消订单，并退还未购得物品的灵石！"
-    record_trade_event(
-        user_id,
-        "鬼市求购",
-        f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(result.total_cost)}灵石，订单ID:{order_id}",
-        {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": result.total_cost}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市求购",
+            f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(result.total_cost)}灵石，订单ID:{order_id}",
+            {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": result.total_cost}
+        )
     
     # 立即尝试进行交易匹配，避免等待调度器
-    transaction_result_msg = await process_guishi_transactions(user_id=user_id)
+    transaction_result_msg = await process_guishi_transactions(user_id=user_id) if result.applied else ""
     await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     if transaction_result_msg:
         await handle_send(bot, event, transaction_result_msg) # 发送交易结果
@@ -2208,18 +2237,19 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         order_id=order_id,
     )
     if not result.cancelled:
-        msg = f"未找到您的ID为 {order_id} 的求购订单！"
+        msg = _guishi_order_failure("鬼市取消求购", result, order_id)
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
 
     msg = f"成功取消求购订单（ID:{order_id}）！\n"
     msg += f"已退还 {number_to(result.refunded_stone)} 灵石到您的鬼市账户。"
-    record_trade_event(
-        user_id,
-        "鬼市取消求购",
-        f"取消求购订单ID:{order_id}，退还{number_to(result.refunded_stone)}灵石",
-        {"鬼市取消求购次数": 1, "鬼市求购退还灵石": result.refunded_stone}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市取消求购",
+            f"取消求购订单ID:{order_id}，退还{number_to(result.refunded_stone)}灵石",
+            {"鬼市取消求购次数": 1, "鬼市求购退还灵石": result.refunded_stone}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_cancel_qiugou.finish()
 
@@ -2232,33 +2262,16 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_baitan.finish()
     
-    # 检查摆摊时间
     now = _trade_business_now()
     current_hour = now.hour
-    
-    # 判断是否在允许摆摊的时间段 (20:00-23:59 或 00:00-07:59)
-    if not (GUISHI_BAITAN_START_HOUR <= current_hour <= 23 or 0 <= current_hour < GUISHI_BAITAN_END_HOUR):
-        # 计算下一次摆摊开始时间
-        next_start_time = now.replace(minute=0, second=0, microsecond=0)
-        if current_hour >= GUISHI_BAITAN_END_HOUR: # 如果当前时间已经过了早上结束时间
-            next_start_time = next_start_time.replace(hour=GUISHI_BAITAN_START_HOUR) # 今天晚上开始
-            if current_hour >= GUISHI_BAITAN_START_HOUR: # 如果已经过了晚上开始时间，则是明晚
-                 next_start_time += timedelta(days=1)
-        else: # 如果当前时间在早上结束时间之前 (即0-7点)
-            next_start_time = next_start_time.replace(hour=GUISHI_BAITAN_START_HOUR) # 今天晚上开始
-        
-        # 计算距离下次开始的时间
-        time_left = next_start_time - now
-        hours = time_left.total_seconds() // 3600
-        minutes = (time_left.total_seconds() % 3600) // 60
-        
-        msg = f"鬼市摆摊时间：每天{GUISHI_BAITAN_START_HOUR}:00-次日{GUISHI_BAITAN_END_HOUR}:00\n"
-        msg += f"下次可摆摊时间：{next_start_time.strftime('%m月%d日 %H:%M')}（{int(hours)}小时{int(minutes)}分钟后）"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_baitan.finish()
+    creation_open = current_hour >= GUISHI_BAITAN_START_HOUR or current_hour < GUISHI_BAITAN_END_HOUR
     
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
+
+    if not args and not creation_open:
+        await handle_send(bot, event, _guishi_baitan_closed_message(now), md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_baitan.finish()
     
     if len(args) < 2 or len(args) > 3:
         msg = "指令格式：鬼市摆摊 物品名称 价格 [数量]\n数量不填默认为1"
@@ -2279,25 +2292,10 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
-    # 检查订单数量限制
-    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
-    
-    if baitan_orders and len(baitan_orders) >= MAX_BAITAN_ORDERS:
-        msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_baitan.finish()
-    
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        return
-    
-    # 检查用户背包中可交易的物品数量
-    goods_num = _sql_message().goods_num(str(user_info['user_id']), goods_id)
-    if goods_num <= 0:
-        msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     
@@ -2313,9 +2311,6 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
-    if quantity > goods_num: # 实际可上架数量不能超过背包现有数量
-        quantity = goods_num
-        
     result = trade_application.guishi_baitan(
         operation_id=_guishi_order_operation_id(
             event, "baitan", user_id, goods_id, price, quantity
@@ -2326,7 +2321,13 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price=price,
         quantity=quantity,
         max_orders=MAX_BAITAN_ORDERS,
+        creation_open=creation_open,
+        cap_to_stock=True,
     )
+    if result.status == "market_closed":
+        msg = _guishi_baitan_closed_message(now)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_baitan.finish()
     if result.status == "limit_reached":
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2336,8 +2337,10 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     if not result.created:
-        raise RuntimeError(f"unexpected guishi baitan status: {result.status}")
+        await handle_send(bot, event, _guishi_order_failure("鬼市摆摊", result))
+        await guishi_baitan.finish()
     order_id = result.order_id
+    quantity = result.quantity
     
     msg = f"成功摆摊！\n"
     msg += f"物品：{item_name}\n"
@@ -2348,7 +2351,7 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     # 摆摊即撮合：立刻匹配能接受该价格的求购订单，成交结果当场回到卖家手里。
     fill_results = trade_application.guishi_fill_standing_qiugou(
         baitan_order_id=order_id
-    )
+    ) if result.applied else []
     if fill_results:
         msg += "\n☆------求购成交------☆\n"
         seller_name = (user_info or {}).get('user_name') or user_id
@@ -2364,12 +2367,13 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
 
     msg += f"⚠️ 请在本轮{GUISHI_BAITAN_END_HOUR}点结束前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
-    record_trade_event(
-        user_id,
-        "鬼市摆摊",
-        f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
-        {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市摆摊",
+            f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
+            {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
+        )
     
     await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_baitan.finish()
@@ -2396,26 +2400,37 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 取消所有摆摊订单
     total_refunded_items = 0
     refunded_items_summary = {} # 统计退还的物品
+    applied_orders = 0
+    failures = []
     
     for order in baitan_orders:
         _, item_info = items.get_data_by_item_name(order['item_name'])
         if not item_info:
-            logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
+            failures.append(_guishi_order_failure(
+                "鬼市收摊", SimpleNamespace(status="item_missing"), order["id"]
+            ))
             continue
-        result = trade_application.guishi_cancel_baitan(
-            operation_id=_guishi_cancel_operation_id(
-                event, "baitan", user_id, order["id"]
-            ),
-            user_id=user_id,
-            order_id=order["id"],
-            goods_type=item_info["type"],
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-        if result.status == "inventory_full":
-            logger.warning(f"鬼市摆摊订单 {order['id']} 退回失败：背包已满")
+        try:
+            result = trade_application.guishi_cancel_baitan(
+                operation_id=_guishi_cancel_operation_id(
+                    event, "baitan", user_id, order["id"]
+                ),
+                user_id=user_id,
+                order_id=order["id"],
+                goods_type=item_info["type"],
+                max_goods_num=XiuConfig().max_goods_num,
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            failures.append(f"订单 {order['id']}：{report_exception('鬼市收摊', exc, event=event)}")
             continue
         if not result.cancelled:
+            failures.append(_guishi_order_failure("鬼市收摊", result, order["id"]))
             continue
+        if not result.applied:
+            continue
+        applied_orders += 1
         if result.refunded_quantity:
             refunded_items_summary[result.item_name] = (
                 refunded_items_summary.get(result.item_name, 0)
@@ -2426,15 +2441,23 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if total_refunded_items > 0:
         refund_msg = "\n已退回物品：" + "\n".join([f"{name} x{count}" for name, count in refunded_items_summary.items()])
     else:
-        refund_msg = "\n所有摆摊物品均已售出，没有物品退回。"
-        
-    msg = f"成功收摊！所有摆摊订单已取消。{refund_msg}"
-    record_trade_event(
-        user_id,
-        "鬼市收摊",
-        f"取消{len(baitan_orders)}条摆摊订单，退回{total_refunded_items}件物品",
-        {"鬼市收摊次数": 1, "鬼市收摊退回物品": total_refunded_items}
-    )
+        refund_msg = "\n本次没有物品退回。"
+
+    remaining = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan") or []
+    if failures or remaining:
+        msg = f"本次取消{applied_orders}条摆摊订单，当前剩余{len(remaining)}条。"
+    else:
+        msg = "成功收摊！所有摆摊订单已取消。"
+    msg += refund_msg
+    if failures:
+        msg += "\n未完成订单：\n" + "\n".join(failures)
+    if applied_orders:
+        record_trade_event(
+            user_id,
+            "鬼市收摊",
+            f"取消{applied_orders}条摆摊订单，退回{total_refunded_items}件物品，剩余{len(remaining)}条",
+            {"鬼市收摊次数": 1, "鬼市收摊退回物品": total_refunded_items}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="收摊", v1="鬼市收摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_shoutan.finish()
 

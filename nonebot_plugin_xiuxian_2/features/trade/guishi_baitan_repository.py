@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_operation_replay import order_receipts
 
 
 class OrderIdGenerator(Protocol):
@@ -71,6 +72,8 @@ class GuishiBaitanSqlRepository:
         price: int,
         quantity: int,
         max_orders: int,
+        creation_open: bool = True,
+        cap_to_stock: bool = False,
     ) -> GuishiBaitanCreateResult:
         operation_id = str(operation_id or "").strip()
         user_id = str(user_id).strip()
@@ -84,11 +87,12 @@ class GuishiBaitanSqlRepository:
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.trade_database, "guishi_trade")
             if operation_id:
-                previous = uow.query_one(
-                    "SELECT payload,order_id,order_type,amount "
-                    "FROM guishi_trade.guishi_order_create_operations WHERE operation_id=?",
-                    (operation_id,),
+                receipts = order_receipts(
+                    uow, "guishi_trade.guishi_order_create_operations", operation_id, legacy_parts=3,
                 )
+                if len(receipts) > 1:
+                    return GuishiBaitanCreateResult("operation_conflict", quantity=quantity)
+                previous = receipts[0] if receipts else None
                 if previous is not None:
                     if (
                         str(previous["payload"]) != payload
@@ -98,6 +102,9 @@ class GuishiBaitanSqlRepository:
                     return GuishiBaitanCreateResult(
                         "duplicate", str(previous["order_id"]), int(previous["amount"])
                     )
+
+            if not creation_open:
+                return GuishiBaitanCreateResult("market_closed", quantity=quantity)
 
             count = uow.query_one(
                 "SELECT COUNT(*) AS count FROM guishi_trade.guishi_item "
@@ -113,10 +120,14 @@ class GuishiBaitanSqlRepository:
                 "FROM back WHERE user_id=? AND goods_id=?",
                 (user_id, item_id),
             )
-            if inventory is None or int(inventory["goods_num"]) - int(inventory["state"]) < quantity:
+            available = int(inventory["goods_num"]) - int(inventory["state"]) if inventory else 0
+            if cap_to_stock and available > 0:
+                quantity = min(quantity, available)
+            if available < quantity:
                 return GuishiBaitanCreateResult("stock_insufficient", quantity=quantity)
 
             created_at = self.clock.now().isoformat()
+            uow.execute("SAVEPOINT guishi_create")
             updated = uow.execute(
                 "UPDATE back SET goods_num=goods_num-?, "
                 "bind_num=MIN(COALESCE(bind_num,0),goods_num-?), update_time=? "
@@ -132,6 +143,8 @@ class GuishiBaitanSqlRepository:
                 ),
             )
             if updated.rowcount != 1:
+                uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                uow.execute("RELEASE SAVEPOINT guishi_create")
                 return GuishiBaitanCreateResult("state_changed", quantity=quantity)
 
             order_id = ""
@@ -166,6 +179,7 @@ class GuishiBaitanSqlRepository:
                     "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (operation_id, payload, order_id, "baitan", quantity, created_at),
                 )
+            uow.execute("RELEASE SAVEPOINT guishi_create")
             return GuishiBaitanCreateResult("created", order_id, quantity)
 
 

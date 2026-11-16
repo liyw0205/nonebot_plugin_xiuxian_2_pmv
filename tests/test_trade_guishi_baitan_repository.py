@@ -130,6 +130,52 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
             self.create("rollback")
         self.assertEqual(self.state(), (8, 2, 0))
 
+    def test_inventory_cas_rejection_rolls_back_trigger_changes(self) -> None:
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            uow.execute(
+                "CREATE TRIGGER race_inventory BEFORE UPDATE ON back "
+                "BEGIN UPDATE back SET bind_num=0 WHERE user_id=OLD.user_id AND goods_id=OLD.goods_id; "
+                "SELECT RAISE(IGNORE); END"
+            )
+        self.assertEqual(self.create("cas-rejected").status, "state_changed")
+        self.assertEqual(self.state(), (8, 2, 0))
+        with DatabaseUnitOfWork(self.game_database) as uow:
+            uow.execute("DROP TRIGGER race_inventory")
+        result = self.create("cas-rejected")
+        replay = self.create("cas-rejected")
+        self.assertEqual((result.status, replay.status), ("created", "duplicate"))
+        self.assertEqual(self.state(), (4, 2, 2))
+
+    def test_old_message_receipt_replays_when_closed_and_out_of_inventory(self) -> None:
+        first = self.create("guishi-order:baitan:message:seller:1001:20:7", quantity=7)
+        replay = self.repository.create(
+            operation_id="guishi-order:baitan:message:seller", user_id="seller", item_id=1001,
+            item_name="灵草", price=20, quantity=7, max_orders=10, creation_open=False,
+            cap_to_stock=True,
+        )
+        self.assertEqual((replay.status, replay.order_id, replay.quantity), ("duplicate", first.order_id, 7))
+        self.assertEqual(self.state(), (1, 1, 2))
+
+    def test_cap_keeps_requested_payload_and_returns_committed_quantity(self) -> None:
+        args = dict(operation_id="guishi-order:baitan:message:seller", user_id="seller",
+                    item_id=1001, item_name="灵草", price=20, quantity=10, max_orders=1,
+                    cap_to_stock=True)
+        first = self.repository.create(**args)
+        replay = self.repository.create(**args, creation_open=False)
+        self.assertEqual((first.status, first.quantity, replay.status, replay.quantity), ("created", 7, "duplicate", 7))
+        self.assertEqual(self.state(), (1, 1, 2))
+        args["quantity"] = 9
+        self.assertEqual(self.repository.create(**args).status, "operation_conflict")
+
+    def test_legacy_capped_receipt_does_not_guess_missing_requested_quantity(self) -> None:
+        first = self.create("guishi-order:baitan:message:seller:1001:20:4", quantity=4)
+        result = self.repository.create(
+            operation_id="guishi-order:baitan:message:seller", user_id="seller", item_id=1001,
+            item_name="灵草", price=20, quantity=7, max_orders=10, cap_to_stock=True,
+        )
+        self.assertEqual((first.status, result.status), ("created", "operation_conflict"))
+        self.assertEqual(self.state(), (4, 2, 2))
+
     def test_order_id_conflict_retries(self) -> None:
         with DatabaseUnitOfWork(self.trade_database) as uow:
             uow.execute(

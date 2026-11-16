@@ -39,6 +39,9 @@ async def listing(probe):
 
 
 def register(case):
+    from tests.parameter_cases_guishi import register as register_guishi
+    register_guishi(case)
+
     @case("bank-subcommands-success", "灵庄", "存灵石 金额 → 取灵石 金额 → 信息/结算", "真实启动银行迁移，1000000灵石无银行账户",
           "存1000/取400、真实钱包与银行余额/回执一致，重放不重复", group="market-parameters")
     async def bank_chain(probe):

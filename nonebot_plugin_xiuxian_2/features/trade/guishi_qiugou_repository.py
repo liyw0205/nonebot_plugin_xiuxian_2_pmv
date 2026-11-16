@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_operation_replay import order_receipts
 
 
 class OrderIdGenerator(Protocol):
@@ -85,11 +86,12 @@ class GuishiQiugouSqlRepository:
 
         with DatabaseUnitOfWork(self.trade_database, immediate=True) as uow:
             if operation_id:
-                previous = uow.query_one(
-                    "SELECT payload,order_id,order_type,amount "
-                    "FROM guishi_order_create_operations WHERE operation_id=?",
-                    (operation_id,),
+                receipts = order_receipts(
+                    uow, "guishi_order_create_operations", operation_id, legacy_parts=3,
                 )
+                if len(receipts) > 1:
+                    return GuishiQiugouCreateResult("operation_conflict", total_cost=total_cost)
+                previous = receipts[0] if receipts else None
                 if previous is not None:
                     if (
                         str(previous["payload"]) != payload
@@ -118,6 +120,7 @@ class GuishiQiugouSqlRepository:
             if balance is None or as_int_like(balance["stored_stone"]) < total_cost:
                 return GuishiQiugouCreateResult("stone_insufficient", total_cost=total_cost)
 
+            uow.execute("SAVEPOINT guishi_create")
             order_id = ""
             for _ in range(20):
                 candidate = str(self.order_ids.new_id()).strip()
@@ -157,6 +160,8 @@ class GuishiQiugouSqlRepository:
                 (total_cost, user_id, total_cost),
             )
             if charged.rowcount != 1:
+                uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                uow.execute("RELEASE SAVEPOINT guishi_create")
                 return GuishiQiugouCreateResult("state_changed", total_cost=total_cost)
             if operation_id:
                 uow.execute(
@@ -164,6 +169,7 @@ class GuishiQiugouSqlRepository:
                     "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (operation_id, payload, order_id, "qiugou", total_cost, self.clock.now().isoformat()),
                 )
+            uow.execute("RELEASE SAVEPOINT guishi_create")
             return GuishiQiugouCreateResult("created", order_id, total_cost)
 
 

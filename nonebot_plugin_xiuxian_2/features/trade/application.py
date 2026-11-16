@@ -427,6 +427,8 @@ class TradeApplication(LegacyApplication):
         price: int,
         quantity: int,
         max_orders: int,
+        creation_open: bool = True,
+        cap_to_stock: bool = False,
     ):
         return self.guishi_baitan_repository.create(
             operation_id=operation_id,
@@ -436,6 +438,8 @@ class TradeApplication(LegacyApplication):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+            creation_open=creation_open,
+            cap_to_stock=cap_to_stock,
         )
 
     def guishi_cancel_qiugou(
