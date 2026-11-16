@@ -21,6 +21,9 @@ class MindStateHotpathTests(unittest.TestCase):
         self.assertIn("buff_data_provider=user_buff_data", handler)
         self.assertEqual(handler.count("user_buff_data = UserBuffDate(user_id)"), 1)
         self.assertNotIn("_sql_message().get_user_info_with_id(user_id)", handler)
+        self.assertNotIn("_sql_message().get_player_data(user_id)", handler)
+        self.assertIn('"气血": final_attr["current_hp"]', handler)
+        self.assertIn('"真元": final_attr["current_mp"]', handler)
 
     def test_base_attributes_accepts_matching_profile_without_sql_read(self) -> None:
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import xiuxian2_handle

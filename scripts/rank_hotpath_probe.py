@@ -515,11 +515,14 @@ async def _run_state_variant(
     original_base = state_module.get_base_attributes
     original_attributes = state_module.get_player_attributes
     original_user_read = manager_type.get_user_info_with_id
+    original_player_data = manager_type.get_player_data
     original_buff_read = manager_type.get_user_buff_info
     original_manager_read = manager_type._read_query
     original_uow_execute = uow_module.DatabaseUnitOfWork.execute
     counters = {
         "user_reads": 0,
+        "player_data_calls": 0,
+        "player_data_ms": 0.0,
         "buff_reads": 0,
         "manager_read": 0,
         "uow_execute": 0,
@@ -533,6 +536,14 @@ async def _run_state_variant(
     def traced_buff_read(manager, user_id):
         counters["buff_reads"] += 1
         return original_buff_read(manager, user_id)
+
+    def traced_player_data(manager, user_id, boss=False):
+        started = time.perf_counter()
+        try:
+            return original_player_data(manager, user_id, boss=boss)
+        finally:
+            counters["player_data_calls"] += 1
+            counters["player_data_ms"] += (time.perf_counter() - started) * 1000
 
     def traced_manager_read(manager, sql, params=None, **kwargs):
         counters["manager_read"] += 1
@@ -554,6 +565,7 @@ async def _run_state_variant(
             result = original_check_user(event)
             if result[0] and result[1]:
                 state_module._sql_message().get_user_info_with_id(result[1]["user_id"])
+                state_module._sql_message().get_player_data(result[1]["user_id"])
             return result
 
         def legacy_base(user_id, **kwargs):
@@ -569,6 +581,7 @@ async def _run_state_variant(
         state_module.get_player_attributes = legacy_attributes
 
     manager_type.get_user_info_with_id = traced_user_read
+    manager_type.get_player_data = traced_player_data
     manager_type.get_user_buff_info = traced_buff_read
     manager_type._read_query = traced_manager_read
     uow_module.DatabaseUnitOfWork.execute = traced_uow_execute
@@ -577,6 +590,8 @@ async def _run_state_variant(
         for number in range(1, REQUESTS + 1):
             before = {
                 "user_reads": counters["user_reads"],
+                "player_data_calls": counters["player_data_calls"],
+                "player_data_ms": counters["player_data_ms"],
                 "buff_reads": counters["buff_reads"],
                 "manager_read": counters["manager_read"],
                 "uow_execute": counters["uow_execute"],
@@ -602,6 +617,10 @@ async def _run_state_variant(
                     "errors": result.get("errors", []),
                     "blocked": result.get("blocked", []),
                     "user_reads": counters["user_reads"] - before["user_reads"],
+                    "player_data_calls": counters["player_data_calls"] - before["player_data_calls"],
+                    "player_data_ms": round(
+                        counters["player_data_ms"] - before["player_data_ms"], 3
+                    ),
                     "buff_reads": counters["buff_reads"] - before["buff_reads"],
                     "manager_read": counters["manager_read"] - before["manager_read"],
                     "uow_execute": counters["uow_execute"] - before["uow_execute"],
@@ -616,6 +635,7 @@ async def _run_state_variant(
         state_module.get_base_attributes = original_base
         state_module.get_player_attributes = original_attributes
         manager_type.get_user_info_with_id = original_user_read
+        manager_type.get_player_data = original_player_data
         manager_type.get_user_buff_info = original_buff_read
         manager_type._read_query = original_manager_read
         uow_module.DatabaseUnitOfWork.execute = original_uow_execute
@@ -635,6 +655,8 @@ async def _run_state_variant(
         "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
         "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
         "user_reads": sum(item["user_reads"] for item in samples),
+        "player_data_calls": sum(item["player_data_calls"] for item in samples),
+        "player_data_ms": round(sum(item["player_data_ms"] for item in samples), 3),
         "buff_reads": sum(item["buff_reads"] for item in samples),
         "manager_read": sum(item["manager_read"] for item in samples),
         "uow_execute": sum(item["uow_execute"] for item in samples),
@@ -1042,6 +1064,9 @@ async def _smoke(args: argparse.Namespace) -> dict:
             item for item in probe.inventory() if item["command"] == "我的修仙信息图片版"
         )
         state_entry = next(item for item in probe.inventory() if item["command"] == STATE_COMMAND)
+        state_module = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff"
+        )
         snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
         cases = []
         for number, label, case_entry, input_text in (
@@ -1070,12 +1095,59 @@ async def _smoke(args: argparse.Namespace) -> dict:
                 }
             )
         snapshot.restore()
+        unknown = await probe.run_case(
+            state_entry,
+            "unregistered_player",
+            5,
+            input_text=STATE_COMMAND,
+            timeout=8,
+        )
+        unknown_reply = "".join(unknown.get("replies") or [])
+        cases.append(
+            {
+                "label": "state-unregistered",
+                "command": STATE_COMMAND,
+                "status": unknown.get("status"),
+                "reply_bytes": len(unknown_reply.encode("utf-8")),
+                "reply_contains": "修仙界没有道友的信息" in unknown_reply,
+                "errors": unknown.get("errors", []),
+                "blocked": unknown.get("blocked", []),
+            }
+        )
+        original_state_attributes = state_module.get_player_attributes
+        state_module.get_player_attributes = lambda *_args, **_kwargs: None
+        try:
+            snapshot.restore()
+            attribute_failure = await probe.run_case(
+                state_entry,
+                "missing",
+                6,
+                actor="900001",
+                input_text=STATE_COMMAND,
+                timeout=8,
+            )
+        finally:
+            state_module.get_player_attributes = original_state_attributes
+        failure_reply = "".join(attribute_failure.get("replies") or [])
+        cases.append(
+            {
+                "label": "state-attribute-failure",
+                "command": STATE_COMMAND,
+                "status": attribute_failure.get("status"),
+                "reply_bytes": len(failure_reply.encode("utf-8")),
+                "reply_contains": "属性读取失败，请稍后再试。" in failure_reply,
+                "errors": attribute_failure.get("errors", []),
+                "blocked": attribute_failure.get("blocked", []),
+            }
+        )
+        snapshot.restore()
         payload = {
             "command": COMMAND,
             "entry": "live matcher/handler via tests.command_probe.run_case",
             "fixture": str(fixture),
             "status": "pass" if all(
                 case["status"] == "pass" and not case["errors"] and not case["blocked"]
+                and case.get("reply_contains", True)
                 for case in cases
             ) else "exception",
             "cases": cases,

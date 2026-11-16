@@ -930,12 +930,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_id = user_msg['user_id']
     update_last_check_info_time(user_id)
 
-    player_data = _sql_message().get_player_data(user_id)
-    if not player_data:
-        msg = "获取用户状态信息失败！"
-        await handle_send(bot, event, msg)
-        await mind_state.finish()
-
     user_info = user_msg
     current_status = load_player_user(user_id)
 
@@ -951,6 +945,14 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         msg = "属性读取失败，请稍后再试。"
         await handle_send(bot, event, msg)
         await mind_state.finish()
+
+    # The checked profile and final projection already contain every field this
+    # status view displays; avoid rebuilding the full dynamic player object.
+    player_data = {
+        "道号": user_info["user_name"],
+        "气血": final_attr["current_hp"],
+        "真元": final_attr["current_mp"],
+    }
 
     status_map = {
         "on": "🔓 开启",
