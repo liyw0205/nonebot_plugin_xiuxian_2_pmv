@@ -5,7 +5,7 @@
 ## 定时任务伪正常与魔修入侵时区修复（develop checkpoint）
 
 2026-11-17 优先处理定时任务“日志失败但调度器收到成功”的问题，不扩展性能优化。
-现状基线为 `develop`/`origin/develop=6a2b58d29654676ca2cb2d2e20ca3ade3d76be98`；工作区保留用户删除的
+现状基线为 `develop`/`origin/develop=fbbb8b63`；工作区保留用户删除的
 `docs/refactor_phase2_legacy_path_items.json`，不恢复、不提交。根因是 APScheduler 使用
 `Asia/Shanghai` 而 `SystemClock` 提供 UTC：魔修开启、结束、业务日期、波次槽位和
 `讨伐魔修` 状态判断原先直接读取 UTC 小时，导致本地有效窗口被判为未开启。
@@ -17,14 +17,17 @@
 `讨伐魔修` handler 均有回归。灵脉 `00:30` 幂等槽位也改用本地业务日期。
 
 同类伪正常失败路径已审计并改为向调度器透传：傀儡收取、副本邀请扫描（含失败结果）、
-NewAPI 自动签到、体力恢复和宗门不活跃维护；失败保留 traceback，不记录“完成”。本轮
-共享锁内受影响组合为 **554 passed、20 个子测试通过**，含魔修调度、世界事件/灵脉、
+NewAPI 自动签到、体力恢复和宗门不活跃维护；失败保留 traceback，不记录“完成”。又修复
+世界事件生命周期/波次/灵脉自动回调把 `schema_missing`、`state_changed`、
+`invalid_transition` 或 `operation_conflict` 当作成功日志的伪正常路径；正常幂等的灵脉
+`already_active`/`not_triggered` 仍保留。新增启动激活和失败透传回归，当前受影响组合
+复测为 **55 passed、4 个子测试通过**（与既有 554/20 组合有重叠，不累计），含魔修调度、世界事件/灵脉、
 启动与任务失败可见性、秘境全组、贴纸 Web/应用、OneBot/QQ 合同和源码质量；另以
 隔离 SQLite 真实运行了 `RiftApplication.speedup` 普通/大加速 handler，核对 50/10、
 operation ID、道具扣减、回执和回复文本。未运行全量测试、真实 QQ/OneBot WebSocket、
 生产库或线上服务，未部署、未重启、未发送真实消息。
 
-白名单普通提交 `c29bb71d` 已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
+白名单普通提交 `c29bb71d`、`fbbb8b63` 已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
 冻结清单缺失仍是独立 blocker，不能以本轮定时任务或 G1 focused 通过替代。
 
 本 checkpoint 仅允许在受影响门禁完成后普通提交并推送 `develop`；`.codex-goal.md`、
