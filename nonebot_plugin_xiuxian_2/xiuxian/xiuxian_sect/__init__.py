@@ -2930,6 +2930,10 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         donation_data = donation_outcome.data or {}
         donation = type("SectDonationView", (), donation_data)()
         donation.applied = donation_outcome.ok
+        if donation_outcome.replayed or donation.status == "duplicate":
+            msg = "本次宗门捐献已经完成，请勿重复捐献。"
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_donate.finish()
         if donation.status == "stone_insufficient":
             msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")

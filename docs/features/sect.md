@@ -35,6 +35,15 @@ SQLite 事务：玩家灵石与对应修炼等级、宗门 `sect_materials` 和 
 `duplicate`，不重复扣费；改变数量则保留 `operation_conflict`。参数解析拒绝零、负数、非数字、
 多余参数和超过单次上限，职位与资材边界保持原规则。
 
+### 宗门捐献
+
+`宗门捐献` 通过 `SectApplication.donate` 以操作号幂等写入玩家灵石/贡献、宗门建设/资材和
+永久回执。相同消息回放返回已完成提示，不重复扣款；改变同一操作号参数返回
+`operation_conflict`，保留首笔回执。玩家、宗门和回执写入均检查影响行数与最终投影；
+`sect_donation_member_write_rejected`、`sect_donation_assets_write_rejected`、
+`sect_donation_receipt_write_rejected` 会整笔回滚，携具体 `reason/subject` 返回，SQLite
+`ABORT` 原异常透传。触发器故障解除后可用原操作号恢复。
+
 ## 商店每周限购行
 `宗门商店` 的商品行渲染 `每周限购：{剩余}/{总量}个`（售罄写 `已售罄（N/N个）`，
 不限购写 `不限购`），已购数量读取本周 `sect_shop_weekly_purchases`

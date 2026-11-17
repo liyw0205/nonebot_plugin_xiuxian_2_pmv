@@ -2,6 +2,32 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门捐献完整玩家组（G2 checkpoint）
+
+隔离 SQLite 与真实 `宗门捐献` dispatch 复现了两层伪正常：首次成功后的同消息回放由
+`OperationLedger` 返回 `replayed=True`，旧 handler 只看历史数据状态 `donated`，再次输出成功
+文案；改参数请求则由账本抛出 `OperationConflictError`，未进入具体拒绝回复而被命令兜底成泛化异常。
+仓储故障注入还确认玩家扣款/贡献、宗门建设/资材和永久回执三处 `RAISE(IGNORE)`、trigger 改写
+均必须整笔回滚，SQLite `ABORT` 原异常保留。
+
+现 `sect_donate` 同时识别 `donation_outcome.replayed` 与仓储 `duplicate`，重放只提示已完成、不
+重复扣款；`SectApplication._execute` 将账本改参冲突转为 `reason=operation_conflict,
+subject=actor` 的具体拒绝，不改写首笔回执。仓储继续逐写核 `rowcount`/最终投影，已知拒写保留
+`sect_donation_member_write_rejected`、`sect_donation_assets_write_rejected`、
+`sect_donation_receipt_write_rejected` 并在解除触发器后以同操作号恢复。
+
+真实参数组覆盖正整数、空白/0/负数/非数字/多余参数/超大数、同消息重放、改参冲突、三处拒写
+恢复和 OneBot 文本、QQ Markdown、发送失败降级 mock 合同；隔离数据核玩家灵石/贡献、宗门三项
+资产、永久回执与完整回滚。受影响仓储/应用/入口组合 `12 passed, 5 subtests passed`，参数
+矩阵两组 `6 passed, 3 subtests passed`；architecture `ok=true`、inventory、受影响 compileall、
+`git diff --check` 均通过。仅使用 `/home` venv、共享锁和隔离 SQLite，未访问线上数据库/部署/
+`/root/myenv`，真实 QQ 未联调；用户既有 JSON 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门改名。** 先以真实 `宗门改名` matcher/DI/handler 在隔离 SQLite 复现
+名称/费用/道具/永久回执的 IGNORE、改写、ABORT 和 replay/冲突，再覆盖合法/空白/重复名称、费用
+与道具边界、具体 `reason/subject`、完整回滚/恢复、实际数据和 OneBot/QQ mock 合同；不扩成员
+管理、商店、定时任务、性能或全仓审计。
+
 ## 最新交付：宗门三项修炼升级完整玩家组（G2 checkpoint）
 
 隔离 SQLite 与真实 `升级攻击修炼`、`升级元血修炼`、`升级灵海修炼` dispatch 复现了两类

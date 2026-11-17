@@ -94,7 +94,7 @@ def register(case):
         probe.evidence.update(sect_id=sid, membership=rows)
 
     @case("sect-donate-valid-amount", "宗门捐献", "正整数灵石数量", "真实宗主、宗门和充足灵石",
-          "扣款、贡献/建设/资材增加和回执持久化，重放不重复", group="sect-body-parameters")
+          "扣款、贡献/建设/资材增加和回执持久化，重放不重复且提示已完成", group="sect-donation-parameters")
     async def donate(probe):
         sid = seed_sect(probe)
         database = probe.context.paths.game_db
@@ -105,9 +105,28 @@ def register(case):
         saved = probe.rows(database, "SELECT sect_scale,sect_materials FROM sects WHERE sect_id=?", (sid,))
         assert before[0][1] - after[0][1] == 1000 and saved[0][0] - prior[0][0] == 1000 and saved[0][1] > prior[0][1], (text, before, after, prior, saved)
         assert probe.rows(database, "SELECT sect_contribution FROM user_xiuxian WHERE user_id='900001'")[0][0] >= 1000
-        await probe.command("宗门捐献", "宗门捐献 1000", number=960001)
+        replay = await probe.command("宗门捐献", "宗门捐献 1000", number=960001)
+        assert "已经完成" in replay and "捐献灵石1000枚" not in replay, replay
+        conflict = await probe.command("宗门捐献", "宗门捐献 2000", number=960001)
+        assert "该操作号已用于不同内容" in conflict, conflict
         assert balances(probe) == after and probe.rows(database, "SELECT sect_scale,sect_materials FROM sects WHERE sect_id=?", (sid,)) == saved
-        probe.evidence.update(sect_id=sid, before=prior, after=saved, wallet_delta=-1000, replay_unchanged=True)
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated donation delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "捐献回执合同", md_type="宗门", k1="捐献", v1="宗门捐献")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "捐献回执合同"
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(sect_id=sid, before=prior, after=saved, wallet_delta=-1000, replay_unchanged=True, replay=replay, conflict=conflict, adapter_contracts=4)
 
     @case("sect-member-keyword-page", "宗门成员查看", "真实成员名 页码", "宗门中两位合法成员",
           "展示指定成员而不显示未匹配成员，资料不变", group="sect-body-parameters")
@@ -156,7 +175,7 @@ def register(case):
                 probe.evidence.update(rejected_write=table, complete_rollback=True)
             return run
         case("sect-donate-rollback-" + table, "宗门捐献", "1000，逐写拒绝", "合法成员与资源，真实SQLite触发器拒绝一处写入",
-             "具体写入原因、玩家/宗门/回执完整回滚", group="sect-body-recovery", outcome="rejection")(build(table))
+             "具体写入原因、玩家/宗门/回执完整回滚", group="sect-donation-recovery", outcome="rejection")(build(table))
 
     for label, value in (("zero", "0"), ("negative", "-2"), ("decimal", "1.5"), ("extra", "100 extra"),
                          ("huge", "9" * 350), ("missing", "")):
@@ -169,7 +188,7 @@ def register(case):
                 probe.evidence.update(wallet_unchanged=True, sect_unchanged=True)
             return run
         case("sect-donate-reject-" + label, "宗门捐献", label, "真实宗门且充分灵石",
-             "参数或资源拒绝，玩家和宗门资产不变", group="sect-body-parameters", outcome="rejection")(build(value))
+             "参数或资源拒绝，玩家和宗门资产不变", group="sect-donation-parameters", outcome="rejection")(build(value))
 
     @case("body-stone-valid-count", "灵石炼体", "灵石正整数数量1000", "真实炼体档案、未达上限和充分灵石",
           "实际扣1000灵石、炼体气血增加、永久回执且重放不重复", group="sect-body-parameters")

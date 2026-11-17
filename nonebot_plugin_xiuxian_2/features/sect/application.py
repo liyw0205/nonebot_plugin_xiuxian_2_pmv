@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
@@ -437,6 +437,17 @@ class SectApplication:
                         raise DomainError(data["reason"], outcome.message, data) from exc
                     raise
                 return outcome
+            except OperationConflictError:
+                # Keep the first receipt immutable while exposing the concrete
+                # idempotency conflict to the command reply.
+                return OperationOutcome.rejected(
+                    operation_id,
+                    action,
+                    "该操作号已用于不同内容的请求，请发送一条新命令。",
+                    code="operation_conflict",
+                    data={"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor"},
+                    audit_category="sect",
+                )
             except DomainError:
                 raise
             except Exception as exc:
