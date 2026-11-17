@@ -45,9 +45,9 @@ inventory、`git diff --check`均通过。不重跑已绿全量。
 只用 `/home` 项目共享环境与隔离三库，未访问或修改 `/root/xiu2`、`/root/myenv` 或线上服务；
 用户JSON删除和 `.codex-goal.md` 保留且不提交。
 
-## 当前冻结：世界BOSS讨伐结算写入与账本恢复
+## 已完成：世界BOSS讨伐结算写入与账本恢复（develop checkpoint）
 
-下一相关完整目标仅沿玩家 `世界BOSS讨伐` 的真实 dispatch→战斗结果→`BossApplication.settle`→
+本组交付范围为玩家 `世界BOSS讨伐` 的真实 dispatch→战斗结果→`BossApplication.settle`→
 体力/冷却/积分/灵石/修为/统计/首领状态/永久回执/ledger，先隔离复现各持久化步骤的
 IGNORE/改写/ABORT 与业务提交后 ledger 中断。验证错误 reason/subject、完整回滚与 trigger
 副作用、同请求重试/重放不重复扣体力或发奖，并核对三库数据与完整性。保留伤害上限、
@@ -55,6 +55,29 @@ IGNORE/改写/ABORT 与业务提交后 ledger 中断。验证错误 reason/subje
 商店或全仓审计。已存在的 `world-boss-refresh` 参数链只验证正常讨伐与重放，不替代本组
 故障路径；源码疑点先以隔离数据库建立红证据，不预判根因。线上库/部署/环境、main/Release
 保持不动，完整目标完成且发布门禁满足前不合 main。
+
+## G2切片：宗门周常奖励领取完整玩家组（开发验收）
+
+隔离SQLite红复现证实永久回执`INSERT ... RAISE(IGNORE)`仍返回applied：玩家资产从
+`(10,20,30)`变为`(26,26,49)`，宗门资产从`(100,200)`变为`(121,223)`，背包多5件、
+BOSS积分多25、两个目标已标领取但永久回执为0；回执触发器副作用也会随错误的成功事务留下。
+现仓储逐项校验写影响行数，并在末步重新回读玩家/宗门资产、背包/绑定、积分、目标状态和回执；
+任何已知拒写在attached game+player事务内完整回滚，之后以`reason/subject`返回。
+具体`sect_weekly_*_write_rejected`穿过应用与真实指令回复；未知SQLite `ABORT`原异常透传，
+同消息故障解除后可完成，成功重放不重复奖励。
+
+真实matcher/DI/handler参数组覆盖无参全领、目标别名单领、未知/未完成/已领、退宗、背包上限、
+永久回执IGNORE后的具体失败/整笔恢复/同消息成功重放，以及SQLite ABORT/原异常可见/恢复。
+核对三库资产与领取状态快照、trigger副作用、永久回执和`integrity_check`；OneBot文本、QQ
+Markdown及发送失败降级为mock合同，未做真机。仓储/应用/入口组合`28 passed, 8 subtests`；
+新增永久回执自身被trigger改写回归后，仓储文件`10 passed, 6 subtests`；补入退宗场景后的
+参数入口文件`15 passed`。各组有重叠、不累计。architecture gate返回`ok`，独立inventory `3 passed`，
+受影响文件`compileall`与`git diff --check`通过。保持既有奖励、周期、进度、回执格式与迁移；
+不碰线上库、部署、共享环境或`/root/myenv`，不跑全量/轮询CI。
+
+下一执行项：本切片收尾后按白名单普通推送develop并核远端SHA；随后从当前G2参数矩阵选定下一条
+仍可用隔离数据验证的完整玩家功能组并先记录复现，不把此切片标成G2或总goal完成。
+用户冻结JSON删除和`.codex-goal.md`不暂存；G2--G5与真实客户端/发布门禁满足前不合main或发版。
 
 ## 宗门任务体力消费与永久回执（当前交付）
 

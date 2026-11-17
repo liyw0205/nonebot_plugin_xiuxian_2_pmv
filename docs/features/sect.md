@@ -89,7 +89,7 @@
 
 ## 事务与失败回滚
 
-周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
+周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。每步写入检查影响行数，末步再回读玩家/宗门资产、背包、BOSS 积分、目标领取状态和永久回执；`RAISE(IGNORE)`、trigger 改写或最终投影不一致会回滚整笔，并以具体 `reason`/`subject` 返回，未知 SQLite 异常保留原异常链。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
 
 ## 宗门命令合同
 

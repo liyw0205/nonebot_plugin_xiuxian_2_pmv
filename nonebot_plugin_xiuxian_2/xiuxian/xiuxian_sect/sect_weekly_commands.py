@@ -250,7 +250,11 @@ async def sect_weekly_claim_(
         )
     else:
         status = str(outcome.code or result.get("status", "failed"))
-        msg = status_messages.get(status, f"宗门周常奖励领取失败（{status}）。")
+        if status.endswith("_write_rejected"):
+            subject = str(result.get("subject", ""))
+            msg = f"宗门周常奖励写入未完成（原因：{status}；对象：{subject}），请稍后重试。"
+        else:
+            msg = status_messages.get(status, f"宗门周常奖励领取失败（{status}）。")
     await handle_send(
         bot,
         event,

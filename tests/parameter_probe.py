@@ -348,6 +348,10 @@ from tests.parameter_cases_sect_daily import register as register_sect_daily
 
 register_sect_daily(case)
 
+from tests.parameter_cases_sect_weekly import register as register_sect_weekly
+
+register_sect_weekly(case)
+
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 
 register_bag_consumers(case)

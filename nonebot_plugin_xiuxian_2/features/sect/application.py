@@ -545,6 +545,18 @@ class SectApplication:
                     replayed=status == "duplicate",
                     clock=self.clock,
                 )
+            if status == "write_rejected" and str(data.get("reason", "")).endswith("_write_rejected"):
+                reason = str(data["reason"])
+                subject = str(data.get("subject", ""))
+                return OperationOutcome.failed(
+                    operation_id,
+                    action,
+                    f"宗门周常奖励写入未完成（{reason}；对象：{subject}），请稍后重试。",
+                    code=reason,
+                    data=data,
+                    audit_category="sect",
+                    clock=self.clock,
+                )
             return OperationOutcome.rejected(
                 operation_id,
                 action,
