@@ -7,6 +7,9 @@ import unittest
 
 
 class GuishiParameterDispatchTests(unittest.TestCase):
+    def test_cancellation_and_expiry_write_recovery(self):
+        self.check_group("market-guishi-return", 3, {"success": 3})
+
     def test_stored_item_recovery_replay_and_boundaries(self):
         self.check_group("market-guishi-take", 5, {"success": 5})
 

@@ -269,11 +269,76 @@ def test_matching_expected_race_remains_a_normal_skip(status):
         asyncio.run(trade.auto_guishi_transactions_job())
 
 
-def test_expiry_cancel_failure_result_reaches_scheduler():
-    failure = GuishiOrderCancelResult("operation_conflict", "want")
+@pytest.mark.parametrize("reason", ("operation_conflict", "guishi_refund_balance_write_rejected",
+                                     "guishi_refund_order_delete_rejected", "guishi_refund_receipt_write_rejected"))
+def test_expiry_cancel_failure_result_reaches_scheduler(reason):
+    failure = GuishiOrderCancelResult("operation_conflict" if reason == "operation_conflict" else "state_changed", "want",
+                                      reason=reason, subject="want")
     with patch.object(trade.trade_application, "guishi_expire_qiugou", return_value=[failure]):
-        with pytest.raises(RuntimeError, match="want.*operation_conflict"):
+        with pytest.raises(RuntimeError, match=f"want.*{reason}.*subject=want"):
             asyncio.run(trade.clear_expired_baitan_orders_job())
+
+
+@pytest.mark.parametrize("reason", ("guishi_refund_balance_write_rejected", "guishi_refund_receipt_write_rejected",
+                                     "guishi_refund_order_invalid", "guishi_refund_receipt_invalid"))
+@pytest.mark.parametrize("onebot,markdown,send_fails", ((True, True, False), (False, False, False),
+                                                       (False, True, False), (False, True, True)))
+def test_cancel_failure_reply_preserves_reason_and_order(reason, onebot, markdown, send_fails):
+    result = GuishiOrderCancelResult("state_changed", "1001", "qiugou", "buyer", reason=reason, subject="1001")
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id="cancel", get_user_id=lambda: "buyer")
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, "check_user", return_value=(True, {"user_id": "buyer"}, "")
+    ), patch.object(trade.trade_application, "guishi_cancel_qiugou", return_value=result), patch.object(
+        trade, "record_trade_event"
+    ) as recorded, patch.object(trade, "handle_send", captured):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_cancel_qiugou_(object(), event, SimpleNamespace(extract_plain_text=lambda: "1001")))
+        recorded.assert_not_called()
+    reply = captured.call_args.args[2]
+    assert reason in reply and "订单1001" in reply and "数据已变化" not in reply
+    if reason.endswith("write_rejected"):
+        assert "该订单本次返还已撤销" in reply
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+    config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
+                             at_sender=False, message_optimization=False, img=False)
+    plain, md = AsyncMock(), AsyncMock(side_effect=RuntimeError("send failed") if send_fails else None)
+    with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), \
+            patch.object(utils, "is_group_event", return_value=True), \
+            patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), \
+            patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", md):
+        asyncio.run(utils.handle_send(bot, event, reply, **captured.call_args.kwargs))
+    if onebot or not markdown or send_fails:
+        plain.assert_awaited_once()
+        assert plain.call_args.kwargs['message'] == reply
+    else:
+        rendered = md.call_args.args[2]
+        assert reason in rendered and "订单1001" in rendered and "mqqapi://aio/inlinecmd" in rendered
+
+
+def test_cancel_unknown_failure_and_failed_delivery_are_visible():
+    original, delivery = RuntimeError("cancel fault"), RuntimeError("delivery fault")
+    captured = AsyncMock()
+    event = SimpleNamespace(message_id="cancel", get_user_id=lambda: "buyer")
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(object(), None))), patch.object(
+        trade, "check_user", return_value=(True, {"user_id": "buyer"}, "")
+    ), patch.object(trade.trade_application, "guishi_cancel_qiugou", side_effect=original) as cancel, patch.object(
+        trade, "report_exception", return_value="定位号：cancel-test"
+    ) as report, patch.object(trade, "handle_send", captured):
+        args = (object(), event, SimpleNamespace(extract_plain_text=lambda: "1001"))
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_cancel_qiugou_(*args))
+        assert report.call_args.args[1] is original
+        assert captured.call_args.args[2] == "定位号：cancel-test"
+        captured.side_effect = delivery
+        with pytest.raises(RuntimeError) as error:
+            asyncio.run(trade.guishi_cancel_qiugou_(*args))
+        assert error.value is delivery
+        report.reset_mock()
+        cancel.side_effect = FinishedException()
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.guishi_cancel_qiugou_(*args))
+        report.assert_not_called()
 
 
 def test_info_handler_reports_expiry_rejection_without_showing_a_normal_account():
@@ -292,15 +357,18 @@ def test_info_handler_reports_expiry_rejection_without_showing_a_normal_account(
     account.assert_not_called()
 
 
-def test_stall_cleanup_failure_result_reaches_scheduler():
+@pytest.mark.parametrize("reason", ("operation_conflict", "guishi_refund_inventory_write_rejected",
+                                     "guishi_refund_order_delete_rejected", "guishi_refund_receipt_write_rejected"))
+def test_stall_cleanup_failure_result_reaches_scheduler(reason):
     order = {"id": "sell", "user_id": "seller", "item_name": "herb"}
-    failure = GuishiExpiredOrderClearResult("operation_conflict", "sell")
+    failure = GuishiExpiredOrderClearResult("operation_conflict" if reason == "operation_conflict" else "state_changed", "sell",
+                                            reason=reason, subject="sell")
     with patch.object(trade.trade_application, "guishi_expire_qiugou", return_value=[]), patch.object(
         trade.trade_application, "guishi_get_orders", return_value=[order]
     ), patch.object(trade.items, "get_data_by_item_name", return_value=(1001, {"type": "药材"})), patch.object(
         trade.trade_application, "guishi_clear_expired_baitan", return_value=failure
     ):
-        with pytest.raises(RuntimeError, match="sell.*operation_conflict"):
+        with pytest.raises(RuntimeError, match=f"sell.*{reason}.*subject=sell"):
             asyncio.run(trade.clear_expired_baitan_orders_job())
 
 
@@ -427,14 +495,17 @@ def test_transfer_rejection_keeps_reason_subject_and_rollback_reply(action, reas
     ("onebot", "markdown", "send_fails"),
     ((True, True, False), (False, False, False), (False, True, False), (False, True, True)),
 )
-def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdown, send_fails):
+@pytest.mark.parametrize("reason", ("inventory_full", "guishi_refund_inventory_write_rejected",
+                                     "guishi_refund_order_delete_rejected", "guishi_refund_receipt_write_rejected"))
+def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdown, send_fails, reason):
     orders = [
         {"id": "1001", "user_id": "seller", "item_name": "herb"},
         {"id": "1002", "user_id": "seller", "item_name": "herb"},
     ]
     results = [
         GuishiOrderCancelResult("cancelled", "1001", "baitan", "seller", item_name="herb", refunded_quantity=2),
-        GuishiOrderCancelResult("inventory_full", "1002", "baitan", "seller"),
+        GuishiOrderCancelResult("inventory_full" if reason == "inventory_full" else "state_changed", "1002", "baitan", "seller",
+                                reason=reason, subject="1002"),
     ]
     captured = AsyncMock()
     event = SimpleNamespace(message_id="close", get_user_id=lambda: "seller")
@@ -451,7 +522,9 @@ def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdow
         assert recorded.call_args.args[3]["鬼市收摊退回物品"] == 2
     reply = captured.call_args.args[2]
     assert "本次取消1条" in reply and "剩余1条" in reply
-    assert "inventory_full" in reply and "1002" in reply
+    assert reason in reply and "1002" in reply
+    if reason != "inventory_full":
+        assert "该订单本次返还已撤销" in reply
     assert "所有摆摊订单已取消" not in reply
     bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
     config = SimpleNamespace(markdown_status=markdown, markdown_id2="", markdown_button_status=False,
@@ -469,7 +542,7 @@ def test_partial_close_retains_reason_and_order_in_adapter_reply(onebot, markdow
         assert plain.call_args.kwargs["message"] == reply
     else:
         rendered = md.call_args.args[2]
-        assert "inventory_full" in rendered and "1002" in rendered
+        assert reason in rendered and "1002" in rendered
         assert "鬼市收摊" in rendered and "mqqapi://aio/inlinecmd" in rendered
 
 

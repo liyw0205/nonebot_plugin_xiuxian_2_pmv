@@ -623,9 +623,11 @@ def _guishi_order_failure(action, result, order_id=""):
         "operation_conflict": "同一请求已用于不同内容，请使用新消息操作。",
         "state_changed": "订单或账户状态已变化，请重新查询后重试。",
     }
-    text = result_failure(action, result, messages=messages)
+    text = result_failure(action, result, messages=messages,
+                          subjects={str(order_id): f"订单{order_id}"} if order_id else None)
     subject = f"；订单：{order_id}" if order_id else ""
-    return f"{text}（原因：{result.status}{subject}）"
+    reason = getattr(result, "reason", "") or result.status
+    return f"{text}（原因：{reason}{subject}）"
 
 
 def _guishi_baitan_closed_message(now):
@@ -2287,13 +2289,16 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
     
-    result = trade_application.guishi_cancel_qiugou(
-        operation_id=_guishi_cancel_operation_id(
-            event, "qiugou", user_id, order_id
-        ),
-        user_id=user_id,
-        order_id=order_id,
-    )
+    try:
+        result = trade_application.guishi_cancel_qiugou(
+            operation_id=_guishi_cancel_operation_id(event, "qiugou", user_id, order_id),
+            user_id=user_id, order_id=order_id,
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("鬼市取消求购", exc, event=event))
+        await guishi_cancel_qiugou.finish()
     if not result.cancelled:
         msg = _guishi_order_failure("鬼市取消求购", result, order_id)
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2834,7 +2839,8 @@ async def clear_expired_baitan_orders_job():
         for result in expired_qiugou:
             if not result.cancelled and result.status != "order_missing":
                 raise RuntimeError(
-                    f"鬼市求购到期取消失败：order_id={result.order_id} status={result.status}"
+                    f"鬼市求购到期取消失败：order_id={result.order_id} status={result.status} "
+                    f"reason={getattr(result, 'reason', '') or result.status} subject={getattr(result, 'subject', '') or result.order_id}"
                 )
         refunded_by_user = {}
         for result in expired_qiugou:
@@ -2884,7 +2890,8 @@ async def clear_expired_baitan_orders_job():
             if result.status == "order_missing":
                 continue
             raise RuntimeError(
-                f"鬼市摆摊清理失败：order_id={order['id']} status={result.status}"
+                f"鬼市摆摊清理失败：order_id={order['id']} status={result.status} "
+                f"reason={getattr(result, 'reason', '') or result.status} subject={getattr(result, 'subject', '') or order['id']}"
             )
         if result.refunded_quantity > 0:
             user_info = _sql_message().get_user_info_with_id(result.user_id)
