@@ -2,6 +2,45 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 宗门每日次数重置与丹房维护（develop checkpoint）
+
+上一资材完整组1ab871e91d9b3e40c35c3c80928ce38ef94a29f5的精确CI44022748659
+已核completed/success，复用绿基线，不watch或重跑全量。本组仅既有
+daily_reset_sect_task→resetusertask→reset_daily_maintenance及玩家读取/领取链。
+隔离首5fail证实四步IGNORE仍真实EXECUTED、提交副作用/成功回执，及UTC取错上海
+业务日。现玩家重置、资材扣减、降级和永久回执逐步检查行数/最终回读，已知拒绝
+退出事务后才转结果；全部玩家/宗门及trigger副作用整日回滚。四个
+sect_daily_reset_{user,material,level,receipt}_write_rejected分别携玩家/宗门/业务日
+到实际任务ERROR，坏数值/坏回执/缺迁移保留具体原因，原SQLite异常透传。
+
+业务日期转换调度时区，默认上海，旧naive按本地解释；同日重放保留新次数和任务。
+费用/排序/无主无房/未知等级不改，无新迁移；大数用既有精确存储，历史带空格的
+JSON费用payload按结构比较，旧成功回执零改写，实际费用变化仍operation_conflict。
+legacy保留schema准备及原DTO，写入委派同一feature校验。
+
+30项新回归涵盖四步IGNORE/改写/ABORT/末步篡改、整日恢复、六种正常状态、真实
+声明/pending连续失败重试/08:00:15边界/触发、时区/大数/坏数据及旧兼容。
+sect-daily-maintenance两条真实dispatch/DI/handler贯穿次数上限→实际重置→三宗门
+查询→别名领取/任务接取→同日保留新状态→次日领取；另四步拒写与ABORT→原状态
+读取→重建应用恢复。核对三库资产/状态/回执/outbox/ledger/统计/任务与integrity，
+OneBot/QQ文本/Markdown/降级8个mock合同，无真机。初参数误查回执不存在user_id列
+及新大数夹具断言放错位置均已纠正，不计产品故障，不删除业务断言。
+
+原5红与旧维护/feature/失败可见性35pass；最终新回归+参数包装31pass/1deselected，
+旧维护/feature/失败可见性/schema/资材及参数62pass/1deselected，各组重叠不累计。
+architecture含inventory、独立inventory、受影响编译/diff通过，新回归接CI。
+本完整组白名单普通推develop，用户JSON删除和goal/辅助资料不提交。线上库/部署/
+环境及main/Release不动；G2--G5与总goal保持active，完整批次和发布门禁前不合main。
+
+## 宗门日重置后的丹药领取（下一冻结范围）
+
+沿本组真实领取路径，仅核对背包发药/绑定数量、每日已领标志和永久回执的原子交接，
+已知拒写/未知异常、失败后同请求恢复、旧成功回放、玩家状态判断和消息合同。
+先隔离SQLite证明内部写入拒绝是否伪成功，再决定修复，不把源码疑点称为根因。
+保持贡献/资材仅作为领取门槛、原奖励生成/职位/库存规则，不扩丹房建设、周常、
+任务奖励、其他仓储或全仓审计。实际参数/三库及OneBot/QQ合同闭环后再推develop；
+继续同一goal、项目venv与共享锁，不改线上或环境，不复跑未变绿基线。
+
 ## 宗门定时资材与玩家读取（develop checkpoint）
 
 96d6d935/CI44018801363已核completed/success，包含上一每日重置静态契约修正；

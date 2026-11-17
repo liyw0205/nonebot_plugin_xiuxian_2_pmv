@@ -159,6 +159,22 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 重建应用→只补剩余；核对三库资产/永久回执/统计及integrity_check。OneBot/QQ文本、
 Markdown与发送降级仅mock，无真实消息或线上部署验证。
 
+`daily_reset_sect_task` 每日08:00:15调用日重置，业务日期按实际调度时区取值，
+默认上海，旧naive时钟按本地解释。全部玩家次数、丹房维护及当日永久回执在同一
+事务；玩家UPDATE、资材扣减、降级UPDATE、回执INSERT各查行数并在提交前回读，
+拒写/改写/后步篡改前步均整日回滚，包括trigger副作用。四个
+`sect_daily_reset_{user,material,level,receipt}_write_rejected`携玩家/宗门/业务日
+到实际任务ERROR；坏数值、坏回执和缺迁移各保留原因，原SQLite异常透传。
+同日成功回执先回放，不覆盖新领取次数或任务；旧带空格JSON费用payload按结构比较，
+费用实际变化仍拒绝。超int64资材复用既有精确存储，无新迁移、旧回执改写或费用变更。
+无主/无房/未知等级仍按原规则跳过；旧服务仅准备schema，再委派同一feature校验。
+
+`test_sect_daily_maintenance_recovery.py`覆盖真实注册/pending重试/cron边界/触发、
+四步IGNORE/改写/ABORT与整日恢复、业务时区、六种正常状态、历史兼容及大数。
+`sect-daily-maintenance`两条真实参数场景连接日重置→宗门查询→别名领取/接任务→
+同日重放/次日，以及失败后原状态读取→重建应用恢复；核对三库状态/资产/回执/
+outbox/ledger/统计/任务和完整性。OneBot/QQ文本、Markdown及降级仅mock。
+
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。
 不活跃维护逐宗检查解散、继承、封闭结果；缺迁移、请求冲突和未识别结果保留
 `status/action/sect_id` 并使任务失败，已处理或正常竞争仍按具体原因跳过。批次可继续

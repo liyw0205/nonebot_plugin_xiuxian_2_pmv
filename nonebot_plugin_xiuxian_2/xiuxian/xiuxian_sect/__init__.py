@@ -401,11 +401,17 @@ async def materialsupdate_():
 
 # 重置用户宗门任务次数、宗门丹药领取次数
 async def resetusertask():
+    from zoneinfo import ZoneInfo
+    from ..xiuxian_scheduler import scheduler as daily_scheduler
+
     maintenance_costs = {
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    business_date = runtime_clock.now().date().isoformat()
+    moment = runtime_clock.now()
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(getattr(daily_scheduler, "timezone", None) or ZoneInfo("Asia/Shanghai"))
+    business_date = moment.date().isoformat()
     result = sect_application.reset_daily_maintenance(business_date, maintenance_costs)
     _require_sect_scheduled_result(
         result, "daily_reset", f"business_date={business_date}",

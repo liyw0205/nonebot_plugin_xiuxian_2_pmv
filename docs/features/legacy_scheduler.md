@@ -75,6 +75,7 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 世界BOSS定时全量刷新、玩家查询/讨伐与同槽回放 | b9a354d1 | 44011718379 success | test_world_boss_refresh_recovery.py、world-boss-refresh参数group |
 | 世界BOSS每日重置、分块拒写保留pending及业务日 | e5c7e881、96d6d935 | 44016104819失败于旧日志静态契约；96d6d935修正该契约，44018801363 success | test_world_boss_daily_reset_recovery.py、world-boss-daily-reset参数group |
 | 世界BOSS人工生成与定时场次交接、参数冲突与拒写恢复 | 96d6d935 | 44018801363 success；文档69073cee/44019699806 success | test_world_boss_manual_recovery.py、world-boss-manual-spawn参数group |
+| 宗门定时资材、逐宗门失败恢复及玩家读取 | 1ab871e9 | 44022748659 success | test_sect_material_recovery.py、sect-material-schedule参数group |
 
 宗门定时资材另补完整闭环（详见sect文档）：首轮7红实证状态/回执拒写伪成功、
 缺迁移实际任务伪EXECUTED及UTC取错业务日。现写后验证/整宗门回滚、具体原因至
@@ -82,6 +83,14 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 十一受影响模块88pass（含参数包装中的两条真实玩家场景），不作为全量通过计数。
 任务注册/pending恢复、真实触发、两步IGNORE/改写/ABORT、旧大数及玩家读取/三库
 完整性均有独立断言；OneBot/QQ仍仅mock。新回归接现有CI，不重跑已绿全量。
+
+宗门每日次数与丹房维护另有完整闭环：四步IGNORE原本真实EXECUTED且提交副作用，
+UTC日期也会错分业务日。现玩家/资材/等级/永久回执行数和最终回读、整日回滚，
+四个具体write_rejected原因携主体到任务ERROR；原异常透传、失败不记完成。
+实际注册/pending持续失败恢复/08:00:15触发边界、历史payload兼容及业务时区均验证；
+同日重放保留新领取和任务，次日正常维护。新回归与两条真实玩家参数包装31pass，
+受影响旧组62pass（重叠不累计）；详见sect文档。新回归接CI，OneBot/QQ仅mock，
+不能提前将新SHA CI写成通过或将此checkpoint当作完整批次发布验收。
 
 参数探针在96d6d935的清单有280个有参入口：126个有直接场景分配、154个
 pending_semantic_cases。清单仅匹配每个case声明的主命令，不能统计场景内的其他

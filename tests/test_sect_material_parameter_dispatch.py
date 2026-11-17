@@ -7,3 +7,6 @@ class SectMaterialParameterDispatchTests(unittest.TestCase):
 
     def test_scheduled_grant_player_reads_and_write_recovery(self):
         self.check_group('sect-material-schedule', 2, {'success': 2})
+
+    def test_daily_maintenance_player_claim_and_write_recovery(self):
+        self.check_group('sect-daily-maintenance', 2, {'success': 2})

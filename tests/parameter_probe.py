@@ -344,6 +344,10 @@ from tests.parameter_cases_sect_materials import register as register_sect_mater
 
 register_sect_materials(case)
 
+from tests.parameter_cases_sect_daily import register as register_sect_daily
+
+register_sect_daily(case)
+
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 
 register_bag_consumers(case)
