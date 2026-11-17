@@ -421,8 +421,9 @@ class SectApplication:
                 }.get(action)
                 if status in {"applied", "joined", "learned", "duplicate", success_status}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
-                elif action == "sect.claim_elixir" and str(data.get("reason", "")).endswith("_write_rejected"):
-                    outcome = OperationOutcome.failed(operation_id, action, "宗门丹药领取写入失败。",
+                elif action in {"sect.claim_elixir", "sect.learn_main"} and str(data.get("reason", "")).endswith("_write_rejected"):
+                    message = "宗门丹药领取写入失败。" if action == "sect.claim_elixir" else "宗门功法学习写入未完成，请稍后重试。"
+                    outcome = OperationOutcome.failed(operation_id, action, message,
                                                        code=data["reason"], data=data, audit_category="sect")
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, "宗门操作未完成。", code=status, data=data, audit_category="sect")
@@ -430,7 +431,7 @@ class SectApplication:
                     with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                         self.ledger.finish(uow, outcome)
                 except Exception as exc:
-                    if action == "sect.claim_elixir" and not outcome.ok and data.get("reason"):
+                    if action in {"sect.claim_elixir", "sect.learn_main"} and not outcome.ok and data.get("reason"):
                         raise DomainError(data["reason"], outcome.message, data) from exc
                     raise
                 return outcome

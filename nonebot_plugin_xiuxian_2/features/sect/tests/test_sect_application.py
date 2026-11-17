@@ -42,6 +42,17 @@ class _Repository:
         return {"status": "applied", "rewards": [("目标一", "灵石5")]}
 
 
+class _MainBuffReceiptRejectRepository(_Repository):
+    def learn_main(self, *args, **kwargs):
+        self.calls.append("main")
+        return {
+            "status": "state_changed",
+            "reason": "sect_mainbuff_receipt_write_rejected",
+            "subject": "op-main-reject",
+            "materials_cost": 10,
+        }
+
+
 class SectApplicationTests(unittest.TestCase):
     def test_started_ledger_is_retried_by_frozen_mutations(self):
         cases = (
@@ -111,6 +122,26 @@ class SectApplicationTests(unittest.TestCase):
             self.assertTrue(app.learn_secondary(operation_id="sect-sec-1", user_id="u", sect_id=1, buff_id=3, materials_cost=10, expected_catalog="[]").ok)
             self.assertTrue(app.claim_elixir(operation_id="sect-elixir-1", user_id="u", sect_id=1, contribution_required=1, materials_required=1, rewards=[], max_goods_num=99).ok)
             self.assertEqual(repository.calls, ["main", "secondary", "elixir"])
+
+    def test_mainbuff_write_rejection_keeps_specific_reason_and_is_retryable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            _prepare_ledger(database)
+            repository = _MainBuffReceiptRejectRepository()
+            app = SectApplication(database, repository=repository)
+            result = app.learn_main(
+                operation_id="op-main-reject",
+                user_id="u",
+                sect_id=1,
+                buff_id=2,
+                materials_cost=10,
+                expected_catalog="[]",
+            )
+            self.assertFalse(result.ok)
+            self.assertEqual("failed", result.status)
+            self.assertEqual("sect_mainbuff_receipt_write_rejected", result.code)
+            self.assertEqual(result.data["subject"], "op-main-reject")
+            self.assertEqual(repository.calls, ["main"])
 
     def test_weekly_claim_uses_atomic_repository_receipt_without_outer_ledger(self):
         with tempfile.TemporaryDirectory() as directory:

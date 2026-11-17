@@ -2,6 +2,28 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：学习宗门功法完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实`学习宗门功法` dispatch 复现永久回执 `INSERT ... RAISE(IGNORE)` 伪成功：旧路径
+回复成功、扣除宗门资材并写入 `BuffInfo`，回执为0且trigger副作用已提交。根因是
+`learn_main` 在 savepoint 内直接返回，外层事务因此提交，同时不检查三步写入影响行数或最终回读。
+
+现仓储对启动迁移表 fail-closed，资材 UPDATE、`BuffInfo` UPDATE 和永久回执 INSERT 均校验
+`rowcount` 与最终投影；已知 `sect_mainbuff_materials_write_rejected`、
+`sect_mainbuff_buff_write_rejected`、`sect_mainbuff_receipt_write_rejected` 在外层事务回滚后
+携 `reason/subject` 返回，经应用、指令回复和 ledger 保留具体原因。trigger 改写被最终回读拒绝，
+SQLite `ABORT` 原异常透传；故障解除后同操作号可恢复，成功重放不重复扣费/写回执。
+
+真实参数组覆盖合法功法名、同消息重放、空白/未知名、资材不足、职位限制、回执IGNORE后恢复，
+以及OneBot纯文本、QQ Markdown/发送失败降级mock合同；仓储覆盖资材/BuffInfo/回执三处IGNORE、
+回执改写、ABORT和副作用整笔回滚。定向组合 `21 passed, 2 subtests passed`，相关源码/兼容筛选
+`7 passed`；architecture `ok=true`、inventory、compileall、`git diff --check`通过。仅使用项目
+`/home` venv与隔离SQLite，未访问线上库/部署/共享环境，真实QQ未联调。
+
+代码与测试随后白名单普通提交推送 `develop`；用户既有 `docs/refactor_phase2_legacy_path_items.json`
+删除、`.codex-goal.md`和辅助报告不提交。G2/G3--G5、真实客户端和发布门禁仍未完成，main/Release
+不动；下一相关完整组冻结为宗门神通学习，先做同样的隔离红复现，不外推本组结论。
+
 ## 当前交付：宗门任务完成与周常同门勤务可靠记账（G2 checkpoint）
 
 隔离三库的真实`宗门任务完成`dispatch复现伪正常：灵石、经验、次数、统计及主结算回执已
@@ -22,8 +44,7 @@ architecture/inventory通过。仅用`/home` venv、共享锁和隔离SQLite，�
 
 本组已白名单普通提交`65625de2192149e66d6ccc7bc8587083220897a3`并推送`develop`，远端
 `refs/heads/develop`核得同SHA；用户JSON删除、goal及辅助报告不提交，线上库/部署/环境及
-`main`/Release不动。下一组由现有参数矩阵冻结为`学习宗门功法`：真实参数、资材/BuffInfo/永久
-回执、具体原因、恢复/重放及适配器合同；先隔离红复现，当前未证明该功能故障。总goal仍active。
+`main`/Release不动。下一组已转为宗门神通学习，仍需独立红复现与完整玩家验收；总goal仍active。
 
 ## 最近交付：每分钟体力恢复与玩家任务交接
 
