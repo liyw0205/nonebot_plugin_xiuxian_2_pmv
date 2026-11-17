@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -48,6 +50,20 @@ class PlayerStaminaSqlRepository:
         expected_stamina: int | None = None,
         operation_id: str | None = None,
     ) -> dict[str, Any]:
+        try:
+            return self._consume(user_id, amount, expected_stamina=expected_stamina, operation_id=operation_id)
+        except DomainError as exc:
+            # Refusals cross the transaction boundary before becoming results.
+            if exc.code not in {'stamina_user_write_rejected', 'stamina_receipt_write_rejected'}:
+                raise
+            return {'status': 'state_changed', **exc.details}
+
+    @staticmethod
+    def _reject(step, subject, stamina):
+        reason = f'stamina_{step}_write_rejected'
+        raise DomainError(reason, reason, {'reason': reason, 'subject': str(subject), 'stamina': stamina})
+
+    def _consume(self, user_id, amount, *, expected_stamina, operation_id):
         user_id = str(user_id).strip()
         amount = int(amount)
         operation_id = str(operation_id or "").strip()
@@ -72,7 +88,13 @@ class PlayerStaminaSqlRepository:
                 if previous is not None:
                     if str(previous["payload"]) != payload:
                         return self._result("operation_conflict")
-                    return self._result("duplicate", int(previous["stamina_after"]))
+                    try:
+                        remaining = require_exact_integer(previous['stamina_after'], field='user_stamina', subject=operation_id)
+                        if remaining < 0:
+                            raise ValueError('negative stamina receipt')
+                    except (DomainError, ValueError) as exc:
+                        raise DomainError('stamina_receipt_invalid', 'invalid stamina receipt', {'subject': operation_id}) from exc
+                    return self._result("duplicate", remaining)
             row = uow.query_one(
                 "SELECT rowid AS _rowid,COALESCE(user_stamina,0) AS user_stamina "
                 "FROM user_xiuxian WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
@@ -80,9 +102,9 @@ class PlayerStaminaSqlRepository:
             )
             if row is None:
                 return self._result("user_missing")
-            current = int(row["user_stamina"] or 0)
+            current = require_exact_integer(row['user_stamina'], field='user_stamina', subject=user_id)
             if expected_stamina is not None and current != int(expected_stamina):
-                return self._result("state_changed", current)
+                return {**self._result("state_changed", current), 'reason': 'stamina_changed', 'subject': user_id}
             if current < amount:
                 return self._result("stamina_insufficient", current)
             changed = uow.execute(
@@ -92,14 +114,23 @@ class PlayerStaminaSqlRepository:
                 (current - amount, row["_rowid"], user_id, current, amount),
             )
             if changed.rowcount != 1:
-                return self._result("state_changed", current)
+                self._reject('user', user_id, current)
             remaining = current - amount
             if operation_id:
-                uow.execute(
+                recorded = uow.execute(
                     "INSERT INTO player_stamina_operations(operation_id,payload,stamina_after) "
                     "VALUES(?,?,?)",
                     (operation_id, payload, remaining),
                 )
+                if recorded.rowcount != 1:
+                    self._reject('receipt', operation_id, current)
+            saved_user = uow.query_one('SELECT user_id,user_stamina FROM user_xiuxian WHERE rowid=?', (row['_rowid'],))
+            if saved_user != {'user_id': user_id, 'user_stamina': remaining}:
+                self._reject('user', user_id, current)
+            if operation_id:
+                saved_receipt = uow.query_one('SELECT payload,stamina_after FROM player_stamina_operations WHERE operation_id=?', (operation_id,))
+                if saved_receipt != {'payload': payload, 'stamina_after': remaining}:
+                    self._reject('receipt', operation_id, current)
             return self._result("applied", remaining)
 
     def recover(

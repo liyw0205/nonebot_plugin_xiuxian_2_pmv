@@ -78,12 +78,16 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 宗门定时资材、逐宗门失败恢复及玩家读取 | 1ab871e9 | 44022748659 success | test_sect_material_recovery.py、sect-material-schedule参数group |
 | 宗门每日次数重置及丹房维护 | c8992fc5 | 44027622264 success | test_sect_daily_maintenance_recovery.py、sect-daily-maintenance参数group |
 | 宗门丹药领取交接 | ffcd1521 | 44031986435失败于资格拒绝文案含推测连接词；本组保留原因码并修正文案 | test_sect_elixir_claim_recovery.py、sect-elixir-claim参数group及test_reason_finalization.py |
+| 宗门任务接取/刷新/完成交接 | e54ed250 | 44040298434仅时钟注入静态构造签名失败；后续保留时钟门禁并兼容额外时区参数 | test_sect_task_daily_handoff.py、sect-task-daily参数group及test_sect_task_settlement_progress_contract.py |
 
 日重置后的任务接取/刷新/完成另补同一交接链：任务与永久回执逐写校验和最后回读，
 完成四步整体回滚；旧消息先读本人回执，不覆盖当前新任务、跨日不重复结算。
 首次出门体力沿原规则独立提交，同消息故障恢复使用既有幂等体力接口，只扣一次。
 真实参数场景贯穿实际日重置、两种消耗与八步拒写恢复，三库资产/统计/回执/完整性
 和OneBot/QQ mock合同分别验证；不据此外推线上部署或真机呈现已通过。
+依赖的体力扣减/回执另补完整原子交接：两步拒写具体原因、整笔回滚、同消息恢复、
+恢复后的历史回放、原管理员豁免，以及实际体力恢复任务到宗门指令的隔离交接。
+本组不改变定时恢复算法，不把这条正常恢复证据当全部恢复故障路径已经验证。
 
 宗门定时资材另补完整闭环（详见sect文档）：首轮7红实证状态/回执拒写伪成功、
 缺迁移实际任务伪EXECUTED及UTC取错业务日。现写后验证/整宗门回滚、具体原因至

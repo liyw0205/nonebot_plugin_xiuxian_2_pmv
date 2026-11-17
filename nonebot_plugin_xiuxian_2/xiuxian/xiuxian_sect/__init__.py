@@ -24,7 +24,7 @@ from ..adapter_compat import (
     MessageSegment,
     get_at_user_id,
 )
-from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
+from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group, ADMIN_IDS
 from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
@@ -2232,13 +2232,16 @@ async def _complete_sect_task(bot, event):
     previous = sect_application.task_settlement_receipt(_sect_operation_id(event, 'task_complete', user_id), user_id)
     if previous is not None:
         await _task_settlement_replay(bot, event, previous)
-    stamina = consume_player_stamina(user_id, 3, expected_stamina=int(user_info.get('user_stamina') or 0),
-                                     operation_id=_sect_operation_id(event, 'task_stamina', user_id))
-    if stamina.get('status') not in {'applied', 'duplicate'}:
-        if stamina.get('status') == 'state_changed':
-            stamina = {**stamina, 'reason': 'stamina_changed', 'subject': str(user_id)}
-        await handle_send(bot, event, result_failure('宗门任务体力消耗', stamina))
-        await sect_task_complete.finish()
+    if str(event.get_user_id()) not in ADMIN_IDS:
+        stamina = consume_player_stamina(user_id, 3, expected_stamina=require_exact_integer(user_info.get('user_stamina') or 0, field='user_stamina', subject=str(user_id)),
+                                         operation_id=_sect_operation_id(event, 'task_stamina', user_id))
+        if stamina.get('status') not in {'applied', 'duplicate'}:
+            if stamina.get('status') == 'state_changed' and not stamina.get('reason'):
+                stamina = {**stamina, 'reason': 'stamina_changed', 'subject': str(user_id)}
+            subject = str(stamina.get('subject') or '')
+            await handle_send(bot, event, result_failure('宗门任务体力消耗', stamina,
+                             subjects={subject: '本次体力回执' if 'receipt' in str(stamina.get('reason')) else '本人'} if subject else None))
+            await sect_task_complete.finish()
     if sect_id:
         active_task = _daily_sect_task(user_id)
         if not active_task:

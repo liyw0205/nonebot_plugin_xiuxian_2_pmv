@@ -1,6 +1,9 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "stamina_user_write_rejected": "体力扣减保存失败，本次消耗已撤销，请联系管理员核对体力记录。",
+    "stamina_receipt_write_rejected": "体力消耗回执保存失败，本次消耗已撤销，请联系管理员核对请求记录。",
+    "stamina_receipt_invalid": "体力消耗历史回执损坏，请联系管理员核对请求记录。",
     "sect_task_claim_state_write_rejected": "接取任务状态保存失败，本次接取已撤销，请联系管理员核对任务记录。",
     "sect_task_claim_receipt_write_rejected": "接取任务回执保存失败，本次接取已撤销，请联系管理员核对请求记录。",
     "sect_task_refresh_state_write_rejected": "刷新任务状态保存失败，本次刷新已撤销，原任务保留，请联系管理员核查。",
@@ -506,7 +509,7 @@ def reason_text(code: str) -> str | None:
         "sect_elixir_get": "宗门丹药领取标志", "elixir_room_level": "宗门丹房等级",
         "sect_task": "宗门任务次数", "sect_task_receipt": "宗门任务回执数值",
         "sect_task_legacy_reward": "宗门任务历史奖励",
-        "hp": "气血", "exp": "修为", "sect_scale": "宗门建设度",
+        "hp": "气血", "exp": "修为", "sect_scale": "宗门建设度", "user_stamina": "体力",
         "sect_used_stone": "宗门灵石储备", "stone_amount": "灵石金额",
         "stone_delta": "灵石流水", "exp_delta": "修为流水",
         "sect_contribution_delta": "宗门贡献流水", "sect_scale_delta": "宗门规模流水",

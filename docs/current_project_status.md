@@ -2,6 +2,41 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 宗门任务体力消费与永久回执（当前交付）
+
+上一任务完整组已普通推develop：e54ed250f59a02bc314672b058c9ab33bc145c42，远端
+一致、main仍5bef9e06。精确CI44040298434已核completed/failure，6243项unittest
+仅task_settlement_clock_injected静态检查失败：新增task_timezone使旧完整构造串
+不匹配。本组允许额外关键字，同时保留clock注入与实际使用检查，新增移除clock
+反例验证门禁仍拒绝；原失败测试定向通过，未watch/重跑全量。
+
+沿已冻结体力交接，首6fail/2pass证实user拒写仅state_changed、回执拒写和改写/
+末步篡改仍applied；ABORT原本正确回滚。真实指令另红证实具体写拒绝被覆盖成体力
+快照变化。现扣减/回执逐步行数+最后回读，已知拒绝跨出事务后转结果，体力及trigger
+副作用整笔回滚，任务结算不开始；两个stamina_{user,receipt}_write_rejected携
+主体至实际宗门指令和共享Cooldown。正常快照竞争、坏体力/历史回执各保留原因，
+SQLite原异常/失败投递透传；恢复后的旧成功仍权威，不重扣。保留旧first-row投影、
+无operation调用和管理员免体力规则，无新迁移，不改recover/restore或其他玩法。
+
+28项新回归涵盖两步IGNORE/改写/末步篡改/ABORT、无回执调用、原payload身份、
+历史/坏数值/并发、共享依赖具体原因与失败投递。sect-task-stamina真实dispatch/
+DI/handler核六种拒写恢复、体力不足→实际恢复任务→ABORT安全定位→同消息恢复、
+旧消息与管理员免消耗；核三库资产/永久回执/统计/integrity，24个OneBot/QQ文本/
+Markdown/降级mock合同，无真机。首参数成功文案夹具和扩展ABORT冷却夹具已纠正，
+时钟门禁反例绕过只读结果缓存后正确生效，未删除业务断言或放宽发布门禁。
+
+初受影响组合57pass/138subtests；扩展后118pass/138subtests，唯一失败为上述冷却
+夹具，修正后参数包装1pass。最后管理员兼容及实际任务参数/handler10pass，相关
+源码13pass；最后原因/失败投递组合42pass/138subtests，缺迁移与请求冲突也保留
+具体回复。重叠不累计，其余绿基线复用。architecture含inventory、独立inventory、
+受影响编译/diff通过，仅白名单普通推develop。用户JSON删除和goal/
+辅助资料不提交，线上库/部署/环境及main/Release不动。
+
+下一相关有限目标为本批定时交付证据与发布条件收口：核精确SHA CI自然状态、已有
+魔修/pending/鬼市/拍卖/BOSS/宗门链与参数矩阵，不借等待新增全仓审计或性能工作。
+体力恢复异常路径未由本消费组验证，不外推其已闭环。G2其余功能、G3--G5、冻结
+JSON既有删除与真实QQ展示门禁保留，原goal active，完整批次和发布条件前不合main。
+
 ## 宗门每日次数重置与丹房维护（develop checkpoint）
 
 上一资材完整组1ab871e91d9b3e40c35c3c80928ce38ef94a29f5的精确CI44022748659
@@ -100,7 +135,8 @@ settlement模块与真实参数包装17pass。各组重叠不累计，不复跑�
 architecture含inventory、独立inventory通过；受影响编译/diff后白名单普通交付
 develop。用户JSON删除和goal/辅助资料不提交；线上库/部署/环境及main/Release不动。
 
-下一相关完整范围限宗门完成任务依赖的体力扣减与永久回执交接：先隔离SQLite复现
+本组随后冻结宗门完成任务依赖的体力扣减与永久回执交接（当前结果见本文顶部）：
+先隔离SQLite复现
 IGNORE/改写/末步篡改，再核具体原因、整笔回滚、同请求恢复/回放、原体力不足与
 快照冲突、实际宗门指令及OneBot/QQ合同。既有定时恢复仅作为可控初始状态验证，
 不增加自动补跑/恢复策略，不扩其他体力玩法或全仓。总goal/G2--G5、冻结JSON与

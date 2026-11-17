@@ -96,6 +96,95 @@ async def task_command(probe, command, *, number):
 
 
 def register(case):
+    @case('sect-task-stamina-write-recovery', '宗门任务完成', '体力扣减/回执拒写→同消息恢复→历史重放',
+          '实际宗门指令/DI与隔离三库，体力两步IGNORE/改写/末步篡改',
+          '具体原因、体力含副作用全笔回滚且不开始任务结算，恢复只扣一次',
+          group='sect-task-stamina')
+    async def task_stamina(probe):
+        from nonebot_plugin_xiuxian_2.features.base.stamina_application import PlayerStaminaApplication
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        with setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            def assets():
+                return (*snapshot(probe),
+                        probe.rows(state.database, 'SELECT * FROM player_stamina_operations ORDER BY operation_id'),
+                        probe.rows(state.database, 'SELECT * FROM sect_task_settlement_operations ORDER BY operation_id'))
+            with patch.object(module, 'sect_application', app), patch.object(member, 'sect_application', app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                for index, (step, action) in enumerate((step, action) for step in ('user', 'receipt') for action in ('ignore', 'rewrite', 'late')):
+                    number = 983000+index
+                    probe.player(sect_task=0, user_stamina=10, hp=100000, exp=100000, stone=10**12)
+                    reply = await task_command(probe, '宗门任务接取', number=number+100)
+                    task = app.get_active_task('900001')
+                    assert task and task['任务内容']['desc'] in reply, reply
+                    table, verb, rewrite = (
+                        ('user_xiuxian', 'UPDATE OF user_stamina', "UPDATE user_xiuxian SET user_stamina=0 WHERE user_id='900001';") if step == 'user' else
+                        ('player_stamina_operations', 'INSERT', 'UPDATE player_stamina_operations SET stamina_after=99;')
+                    )
+                    if action == 'late':
+                        table, verb = 'player_stamina_operations', 'INSERT'
+                    timing = 'BEFORE' if action == 'ignore' else 'AFTER'
+                    condition = "WHEN NEW.user_id='900001'" if table == 'user_xiuxian' else ''
+                    body = 'SELECT RAISE(IGNORE);' if action == 'ignore' else rewrite
+                    probe.seed(state.database, f'CREATE TRIGGER refuse_stamina {timing} {verb} ON {table} {condition} '
+                               "BEGIN UPDATE user_xiuxian SET stone=0 WHERE user_id='900003'; " + body + ' END')
+                    before = assets()
+                    reply = await task_command(probe, '宗门任务完成', number=number)
+                    token = '体力扣减保存失败' if step == 'user' else '体力消耗回执保存失败'
+                    assert token in reply and '已撤销' in reply and assets() == before, (step, action, reply)
+                    await message_contract(reply, token)
+                    probe.seed(state.database, 'DROP TRIGGER refuse_stamina')
+                    with patch.object(utils, '_player_stamina_application', PlayerStaminaApplication(state.database)):
+                        reply = await task_command(probe, '宗门任务完成', number=number)
+                        assert '任务完成' in reply, reply
+                        assert probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(7,)]
+                        saved = assets()
+                        reply = await task_command(probe, '宗门任务完成', number=number)
+                        assert '已完成' in reply and assets() == saved, reply
+                probe.player(sect_task=0, user_stamina=2, stone=10**12, hp=100000)
+                await task_command(probe, '宗门任务接取', number=9831000)
+                before = assets()
+                reply = await task_command(probe, '宗门任务完成', number=9831001)
+                assert '体力不足' in reply and assets() == before, reply
+                from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import lay_out
+                with patch.object(lay_out, 'XiuConfig', return_value=SimpleNamespace(max_stamina=10, stamina_recovery_points=3)):
+                    assert (await fire(lay_out.limit_all_stamina_)).code == EVENT_JOB_EXECUTED
+                assert probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(5,)]
+                from tests.command_probe import run_case
+                from tests.parameter_exception_watch import watch_handler_catches
+                entry = next(row for row in probe.entries if row['command'] == '宗门任务完成')
+                probe.seed(state.database, "CREATE TRIGGER refuse_stamina BEFORE INSERT ON player_stamina_operations BEGIN SELECT RAISE(ABORT,'isolated task stamina abort'); END")
+                before = assets()
+                from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.lay_out import _shutdown_cooldown_runtimes
+                _shutdown_cooldown_runtimes()
+                with patch.object(module, 'report_exception', return_value='任务失败（定位号：stamina-test）') as reported, watch_handler_catches(entry) as caught:
+                    result = await run_case(entry, 'parameter', 9831001, input_text='宗门任务完成', actor='900001')
+                assert result['status'] == 'pass' and len(caught) == 1 and assets() == before, (result, caught)
+                assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+                assert 'sqlite3.IntegrityError: isolated task stamina abort' in caught[0]['traceback']
+                assert '定位号：stamina-test' in ''.join(result['replies'])
+                probe.calls.append({'command': '宗门任务完成', 'expected_injected_fault': caught, **result})
+                probe.seed(state.database, 'DROP TRIGGER refuse_stamina')
+                reply = await task_command(probe, '宗门任务完成', number=9831001)
+                assert '任务完成' in reply and probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(2,)], reply
+                assert len(probe.rows(state.database, 'SELECT * FROM sect_task_settlement_operations')) == 7
+                assert probe.rows(probe.context.paths.player_db, 'SELECT "宗门任务" FROM statistics WHERE user_id=\'900001\'') == [(7,)]
+                probe.player(sect_task=0, user_stamina=0, hp=100000, stone=10**12)
+                with patch.object(module, 'ADMIN_IDS', {'900001'}), patch.object(lay_out, 'ADMIN_IDS', {'900001'}):
+                    await task_command(probe, '宗门任务接取', number=9831002)
+                    receipts = probe.rows(state.database, 'SELECT * FROM player_stamina_operations ORDER BY operation_id')
+                    reply = await task_command(probe, '宗门任务完成', number=9831003)
+                    assert '任务完成' in reply and probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(0,)], reply
+                    assert probe.rows(state.database, 'SELECT * FROM player_stamina_operations ORDER BY operation_id') == receipts
+            integrity(probe)
+            probe.evidence.update(stamina_rejected_writes=6, rollback_before_task_settlement=True,
+                                  restarted_same_message=True, actual_recovery_task=True,
+                                  original_sqlite_error=True, admin_exemption_preserved=True,
+                                  adapter_contracts=24, integrity='ok')
+
     @case('sect-task-daily-handoff', '宗门任务接取', '日重置→接取/刷新→灵石与气血完成→旧消息/次日',
           '实际每日任务、迁移三库与可控UTC业务时钟，真实随机任务配置',
           '任务状态/资产/次数/回执一致，历史消息不覆盖当前任务，次日旧消息零业务写',
