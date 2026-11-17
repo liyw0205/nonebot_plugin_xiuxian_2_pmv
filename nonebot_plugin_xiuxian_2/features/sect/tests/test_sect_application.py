@@ -53,6 +53,17 @@ class _MainBuffReceiptRejectRepository(_Repository):
         }
 
 
+class _SecBuffReceiptRejectRepository(_Repository):
+    def learn_secondary(self, *args, **kwargs):
+        self.calls.append("secondary")
+        return {
+            "status": "state_changed",
+            "reason": "sect_secbuff_receipt_write_rejected",
+            "subject": "op-sec-reject",
+            "materials_cost": 10,
+        }
+
+
 class SectApplicationTests(unittest.TestCase):
     def test_started_ledger_is_retried_by_frozen_mutations(self):
         cases = (
@@ -142,6 +153,19 @@ class SectApplicationTests(unittest.TestCase):
             self.assertEqual("sect_mainbuff_receipt_write_rejected", result.code)
             self.assertEqual(result.data["subject"], "op-main-reject")
             self.assertEqual(repository.calls, ["main"])
+
+    def test_secbuff_write_rejection_keeps_specific_reason(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            _prepare_ledger(database)
+            repository = _SecBuffReceiptRejectRepository()
+            result = SectApplication(database, repository=repository).learn_secondary(
+                operation_id="op-sec-reject", user_id="u", sect_id=1, buff_id=2,
+                materials_cost=10, expected_catalog="[]",
+            )
+            self.assertFalse(result.ok)
+            self.assertEqual("sect_secbuff_receipt_write_rejected", result.code)
+            self.assertEqual(result.data["subject"], "op-sec-reject")
 
     def test_weekly_claim_uses_atomic_repository_receipt_without_outer_ledger(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -356,6 +356,10 @@ from tests.parameter_cases_sect_mainbuff import register as register_sect_mainbu
 
 register_sect_mainbuff(case)
 
+from tests.parameter_cases_sect_secbuff import register as register_sect_secbuff
+
+register_sect_secbuff(case)
+
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 
 register_bag_consumers(case)

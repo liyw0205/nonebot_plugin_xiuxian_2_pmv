@@ -24,6 +24,26 @@ SQLite `ABORT` 原异常透传；故障解除后同操作号可恢复，成功�
 删除、`.codex-goal.md`和辅助报告不提交。G2/G3--G5、真实客户端和发布门禁仍未完成，main/Release
 不动；下一相关完整组冻结为宗门神通学习，先做同样的隔离红复现，不外推本组结论。
 
+## 最新交付：学习宗门神通完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实`学习宗门神通` dispatch 复现同类伪正常：永久学习回执 `INSERT ... RAISE(IGNORE)`
+时旧路径返回 `learned`，宗门资材与 `BuffInfo.sec_buff` 已变化，回执为0且trigger副作用提交。
+现 `learn_secondary` 对迁移表、资材 UPDATE、`BuffInfo` UPDATE、永久回执 INSERT 做影响行数和最终
+回读；`sect_secbuff_materials_write_rejected`、`sect_secbuff_buff_write_rejected`、
+`sect_secbuff_receipt_write_rejected` 在外层事务回滚后保留 `reason/subject`，应用/ledger/指令
+回复可见。trigger改写拒绝，SQLite `ABORT` 原异常透传；故障解除后同操作号恢复，已学习职位/资材
+门槛和历史规则保持。
+
+真实参数覆盖合法神通名、成功后的实际职位重放提示、空白/未知名、资材不足、职位限制、回执IGNORE
+恢复；仓储覆盖三处IGNORE、ABORT、副作用回滚，OneBot文本、QQ Markdown/发送失败降级为mock合同。
+定向 `16 passed, 4 subtests passed`，真实handoff `1/1`、参数矩阵 `3/3`，compileall/diff通过；
+未触碰线上库、部署或共享环境，真实QQ未联调。本组随后白名单提交推送develop，goal与用户JSON删除不提交。
+
+下一相关完整组冻结为`宗门功法/神通搜寻`双入口：隔离红证据已确认搜寻回执 `INSERT ... RAISE(IGNORE)`
+仍返回 `applied`，灵石/资材和目录变更提交、永久回执为0、trigger副作用为1；下一轮仅覆盖真实搜寻
+matcher/DI/handler、双类型目录写入、权限/资材边界、回执拒写/改写/ABORT、恢复/重放与适配器合同，
+不扩学习、奖励、性能或全仓审计。
+
 ## 当前交付：宗门任务完成与周常同门勤务可靠记账（G2 checkpoint）
 
 隔离三库的真实`宗门任务完成`dispatch复现伪正常：灵石、经验、次数、统计及主结算回执已

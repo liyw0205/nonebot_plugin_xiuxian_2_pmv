@@ -207,30 +207,73 @@ class SectRenameSqlRepository:
             return {"status": "applied", "rewards": normalized}
     def learn_secondary(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        try:
+            return self._learn_secondary(operation_id, user_id, sect_id, buff_id, materials_cost,
+                                         expected_catalog=expected_catalog,
+                                         forbidden_positions=forbidden_positions)
+        except DomainError as exc:
+            if exc.code.startswith("sect_secbuff_") and exc.code.endswith("_write_rejected"):
+                return {
+                    "status": "state_changed",
+                    "user_id": user_id,
+                    "sect_id": sect_id,
+                    "buff_id": buff_id,
+                    "materials_cost": materials_cost,
+                    "reason": exc.details.get("reason") or exc.code,
+                    "subject": str(exc.details.get("subject") or operation_id),
+                }
+            raise
+
+    @staticmethod
+    def _secbuff_reject(step: str, subject: str | int) -> None:
+        reason = f"sect_secbuff_{step}_write_rejected"
+        raise DomainError(reason, f"{reason}: {subject}", {"reason": reason, "subject": str(subject)})
+
+    def _learn_secondary(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions):
+        base = {"user_id": user_id, "sect_id": sect_id, "buff_id": buff_id}
+        if materials_cost < 0:
+            return {"status": "invalid_materials", **base, "materials_cost": materials_cost}
+        with DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
+            if not table_ready(uow, "sect_secbuff_learn_operations", frozenset(
+                {"operation_id", "user_id", "sect_id", "buff_id", "materials_cost", "materials_left"}
+            )):
+                return {"status": "schema_missing", **base, "reason": "schema_missing", "subject": operation_id}
             old=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_secbuff_learn_operations WHERE operation_id=?",(operation_id,))
             if old:
-                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]))!=(user_id,sect_id,buff_id):return {**{"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}, "reason": "operation_conflict", "subject": ""}
+                if (str(old["user_id"]),int(old["sect_id"]),int(old["buff_id"]),int(old["materials_cost"]))!=(user_id,sect_id,buff_id,materials_cost):return {**base, "status":"state_changed", "reason": "operation_conflict", "subject": operation_id}
                 return {"status":"duplicate","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":old["materials_cost"],"materials_left":old["materials_left"]}
             user=uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?",(user_id,));
             if user is None or user["sect_id"] is None or int(user["sect_id"])!=sect_id:return {"status":"membership_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"user_missing" if user is None else "sect_changed"}
             if int(user["sect_position"] or 0) in {int(v) for v in forbidden_positions}:return {"status":"position_forbidden","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             sect=uow.query_one("SELECT secbuff,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,));
             if sect is None or str(sect["secbuff"])!=str(expected_catalog):return {"status":"catalog_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_missing" if sect is None else "sect_catalog_changed"}
-            materials=as_int_like(sect["materials"]);buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
+            materials=require_exact_integer(sect["materials"], field="sect_materials", subject=str(sect_id));buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
             if materials<materials_cost:return {"status":"materials_insufficient","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":materials}
             if buff is None:return {"status":"buff_missing","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
-            if int(buff["sec_buff"] or 0)==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
+            current_buff=require_exact_integer(buff["sec_buff"] or 0, field="sec_buff", subject=user_id)
+            if current_buff==buff_id:return {"status":"already_learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id}
             left=materials-materials_cost
-            try:
-                with uow.savepoint("sect_secondary_apply"):
-                    sa=uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?,1,'sect_materials','actor')=0 AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
-                    ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
-                    if sa.rowcount!=1 or ba.rowcount!=1:
-                        raise _StateChanged
-            except _StateChanged:
-                return {"status":"state_changed","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"reason":"sect_materials_write_rejected" if sa.rowcount != 1 else "buff_write_rejected"}
-            uow.execute("INSERT INTO sect_secbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left));return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
+            sa=uow.execute("UPDATE sects SET sect_materials=xiuxian_int_store(?,'sect_materials','actor') WHERE sect_id=? AND xiuxian_int_cmp(sect_materials,?,1,'sect_materials','actor')=0 AND secbuff=?",(left,sect_id,materials,str(expected_catalog)))
+            if sa.rowcount != 1:
+                self._secbuff_reject("materials", sect_id)
+            saved_sect=uow.query_one("SELECT secbuff,sect_materials FROM sects WHERE sect_id=?",(sect_id,))
+            if saved_sect is None or str(saved_sect["secbuff"]) != str(expected_catalog) or require_exact_integer(saved_sect["sect_materials"], field="sect_materials", subject=str(sect_id)) != left:
+                self._secbuff_reject("materials", sect_id)
+            ba=uow.execute("UPDATE BuffInfo SET sec_buff=? WHERE user_id=? AND COALESCE(sec_buff,0)<>?",(buff_id,user_id,buff_id))
+            if ba.rowcount != 1:
+                self._secbuff_reject("buff", user_id)
+            saved_buff=uow.query_one("SELECT sec_buff FROM BuffInfo WHERE user_id=?",(user_id,))
+            if saved_buff is None or require_exact_integer(saved_buff["sec_buff"], field="sec_buff", subject=user_id) != buff_id:
+                self._secbuff_reject("buff", user_id)
+            recorded=uow.execute("INSERT INTO sect_secbuff_learn_operations(operation_id,user_id,sect_id,buff_id,materials_cost,materials_left) VALUES(?,?,?,?,?,?)",(operation_id,user_id,sect_id,buff_id,materials_cost,left))
+            if recorded.rowcount != 1:
+                self._secbuff_reject("receipt", operation_id)
+            saved_receipt=uow.query_one("SELECT user_id,sect_id,buff_id,materials_cost,materials_left FROM sect_secbuff_learn_operations WHERE operation_id=?",(operation_id,))
+            if (saved_receipt is None or str(saved_receipt["user_id"]) != user_id or int(saved_receipt["sect_id"]) != sect_id
+                    or int(saved_receipt["buff_id"]) != buff_id or int(saved_receipt["materials_cost"]) != materials_cost
+                    or int(saved_receipt["materials_left"]) != left):
+                self._secbuff_reject("receipt", operation_id)
+            return {"status":"learned","user_id":user_id,"sect_id":sect_id,"buff_id":buff_id,"materials_cost":materials_cost,"materials_left":left}
     def learn_main(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
         try:
