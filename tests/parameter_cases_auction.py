@@ -49,6 +49,7 @@ def assets(probe):
             probe.rows(game, 'SELECT * FROM auction_session_operations ORDER BY operation_id'),
             probe.rows(game, 'SELECT * FROM auction_pending_items ORDER BY id'),
             probe.rows(game, 'SELECT * FROM auction_pending_claim_operations ORDER BY operation_id'),
+            probe.rows(game, 'SELECT * FROM auction_queue_operations ORDER BY operation_id'),
             probe.rows(game, 'SELECT * FROM domain_outbox ORDER BY event_id'),
             probe.rows(market, 'SELECT * FROM auction_player_upload ORDER BY user_id,item_id'),
             probe.rows(player, 'SELECT * FROM statistics ORDER BY user_id'))
@@ -70,6 +71,133 @@ async def fire(callback):
 
 
 def register(case):
+    @case('auction-queue-handoff-recovery', '拍卖上架', '上架/下架三步拒写/原消息恢复/重放/流拍',
+          '真实库存绑定/装备，隔离三库，三步IGNORE和回执ABORT',
+          '拒绝零写保留具体原因，重建后同消息恢复；绑定返还/统计各一次，剩余拍品实际到期返还',
+          group='market-auction-queue')
+    async def queue_handoff(probe):
+        import sqlite3
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.features.auction.queue_application import AuctionQueueApplication
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+        with setup(probe) as state:
+            module, game, market = state.module, probe.context.paths.game_db, probe.context.paths.trade_db
+            item_id, name = herb(probe, '900002')
+            probe.player('900002', stone=100_000_000)
+            price = module.auction_config.get_auction_rules()['min_price']
+            probe.seed(game, 'UPDATE back SET bind_num=2,state=1 WHERE user_id=? AND goods_id=?', ('900002', item_id))
+            app = AuctionQueueApplication(game, market, 10, clock=state.clock)
+            with patch.object(module, '_auction_queue_application', return_value=app) as provider:
+                before = assets(probe)
+                for text in ('拍卖上架', f'拍卖上架 {name}', f'拍卖上架 {name} abc',
+                             f'拍卖上架 {name} -1', f'拍卖上架 {name} {price} extra'):
+                    reply = await probe.command('拍卖上架', text, actor='900002')
+                    assert '格式' in reply or '整数' in reply or '起拍价' in reply, reply
+                    assert assets(probe) == before
+                for action, command, text, number in (
+                    ('enqueue', '拍卖上架', f'拍卖上架 {name} {price}', 980400),
+                    ('dequeue', '拍卖下架', f'拍卖下架 {name}', 980401),
+                ):
+                    for target, table, database, event in (
+                        ('inventory', 'back', game, 'UPDATE' if action == 'enqueue' else 'INSERT'),
+                        ('queue', 'auction_player_upload', market, 'INSERT' if action == 'enqueue' else 'DELETE'),
+                        ('receipt', 'auction_queue_operations', game, 'INSERT'),
+                    ):
+                        side_effect = ("UPDATE auction_player_upload SET user_name='wrong';" if target == 'queue'
+                                       else "UPDATE back SET create_time='wrong' WHERE user_id='900002';")
+                        probe.seed(database, f'CREATE TRIGGER refuse_queue BEFORE {event} ON {table} '
+                                   f'BEGIN {side_effect} SELECT RAISE(IGNORE); END')
+                        before = assets(probe)
+                        reply = await probe.command(command, text, number=number, actor='900002')
+                        assert f'auction_queue_{target}_write_rejected' in reply and '主体：' in reply, reply
+                        assert '成功' not in reply and assets(probe) == before
+                        probe.seed(database, 'DROP TRIGGER refuse_queue')
+                    probe.seed(game, "CREATE TRIGGER refuse_queue BEFORE INSERT ON auction_queue_operations "
+                               "BEGIN SELECT RAISE(ABORT,'isolated queue command fault'); END")
+                    entry = next(row for row in probe.entries if row['command'] == command)
+                    before = assets(probe)
+                    with patch.object(module, 'report_exception', return_value='处理失败（定位号：auction-queue-test）') as reported, \
+                            watch_handler_catches(entry) as caught:
+                        result = await run_case(entry, 'parameter', number, input_text=text, actor='900002')
+                    assert result['status'] == 'pass' and len(caught) == 1, (result, caught)
+                    assert 'sqlite3.IntegrityError: isolated queue command fault' in caught[0]['traceback']
+                    assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+                    assert '定位号：auction-queue-test' in ''.join(result['replies'])
+                    probe.calls.append({'command': command, 'expected_injected_fault': caught, **result})
+                    assert assets(probe) == before
+                    probe.seed(game, 'DROP TRIGGER refuse_queue')
+                    provider.return_value = AuctionQueueApplication(game, market, 10, clock=state.clock)
+                    state.clock.moment += timedelta(minutes=1)
+                    reply = await probe.command(command, text, number=number, actor='900002')
+                    assert '成功' in reply, reply
+                    assert probe.rows(game, 'SELECT goods_num,bind_num,state FROM back WHERE user_id=? AND goods_id=?',
+                                      ('900002', item_id)) == [(9, 2, 1) if action == 'enqueue' else (10, 3, 1)]
+                    after = assets(probe)
+                    await probe.command(command, text, number=number, actor='900002')
+                    assert assets(probe) == after
+                    if action == 'enqueue':
+                        reply = await probe.command(command, f'拍卖上架 {name} {price * 2}', number=number, actor='900002')
+                        assert 'operation_conflict' in reply and assets(probe) == after, reply
+                        reply = await probe.command('拍卖下架', f'拍卖下架 {name}', actor='900001')
+                        assert 'queue_missing' in reply and assets(probe) == after, reply
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖上架次数","拍卖下架次数" FROM statistics WHERE user_id=\'900002\'') == [(1, 1)]
+                await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor='900002')
+                assert (await fire(module.auto_start_auction_job)).code == EVENT_JOB_EXECUTED
+                state.clock.moment += timedelta(hours=2)
+                assert (await fire(module.check_auction_end_job)).code == EVENT_JOB_EXECUTED
+                assert probe.rows(game, 'SELECT goods_num,bind_num,state FROM back WHERE user_id=? AND goods_id=?',
+                                  ('900002', item_id)) == [(10, 4, 1)]
+                after = assets(probe)
+                await fire(module.check_auction_end_job)
+                assert assets(probe) == after
+        integrity(probe)
+        probe.evidence.update(real_dispatch=True, rejected_steps=6, original_abort=True, full_rollback=True,
+                              same_message_recovery=True, binding_and_equipment=True, statistics_once=True,
+                              actual_expiry_return=True, integrity='ok')
+
+    @case('auction-queue-limits-and-inventory', '拍卖下架', '队列上限/库存不足/满包/同消息恢复',
+          '本人一件等待区、另一件绑定装备库存、可控上限和三库快照',
+          '非法和业务边界零写且具体原因，满包恢复仅退本人一件绑定物品', group='market-auction-queue')
+    async def queue_limits(probe):
+        from nonebot_plugin_xiuxian_2.features.auction.queue_application import AuctionQueueApplication
+        with setup(probe) as state:
+            module, game, market = state.module, probe.context.paths.game_db, probe.context.paths.trade_db
+            item_id, name = herb(probe, '900002')
+            other_id = next(int(key) for key in module.items.get_data_by_item_type('药材') if int(key) != item_id)
+            other_name = probe.grant_item(other_id, 2, '900002')
+            rules = dict(module.auction_config.get_auction_rules(), max_user_items=1)
+            price = rules['min_price']
+            app = AuctionQueueApplication(game, market, 10, clock=state.clock)
+            with patch.object(module, '_auction_queue_application', return_value=app), \
+                    patch.object(module.auction_config, 'get_auction_rules', return_value=rules):
+                probe.seed(game, 'UPDATE back SET bind_num=1,state=1 WHERE user_id=? AND goods_id=?', ('900002', other_id))
+                before = assets(probe)
+                reply = await probe.command('拍卖上架', f'拍卖上架 {other_name} {price}', actor='900002')
+                assert 'stock_insufficient' in reply and f'900002:{other_id}' in reply and assets(probe) == before, reply
+                await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor='900002', number=980410)
+                before = assets(probe)
+                reply = await probe.command('拍卖上架', f'拍卖上架 {other_name} {price}', actor='900002')
+                assert 'limit_reached' in reply and assets(probe) == before, reply
+                probe.seed(game, 'UPDATE back SET goods_num=10 WHERE user_id=? AND goods_id=?', ('900002', item_id))
+                before = assets(probe)
+                reply = await probe.command('拍卖下架', f'拍卖下架 {name}', actor='900002', number=980411)
+                assert 'inventory_full' in reply and assets(probe) == before, reply
+                probe.seed(game, 'UPDATE back SET goods_num=9 WHERE user_id=? AND goods_id=?', ('900002', item_id))
+                reply = await probe.command('拍卖下架', f'拍卖下架 {name}', actor='900002', number=980411)
+                assert '成功' in reply, reply
+                after = assets(probe)
+                await probe.command('拍卖下架', f'拍卖下架 {name}', actor='900002', number=980411)
+                assert assets(probe) == after
+                assert probe.rows(game, 'SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?',
+                                  ('900002', item_id)) == [(10, 1)]
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖上架次数","拍卖下架次数" FROM statistics WHERE user_id=\'900002\'') == [(1, 1)]
+        integrity(probe)
+        probe.evidence.update(ownership=True, capacity=True, stock=True, queue_limit=True,
+                              full_rollback=True, same_message_recovery=True, statistics_once=True, integrity='ok')
+
     @case('auction-scheduled-bid-restart-lifecycle', '拍卖竞拍', '上架/自动开启/参数/竞拍/截止/启动恢复',
           '真实玩家拍品和可控业务时钟，结束回执注入SQLite ABORT',
           '截止前扣款、截止零写，故障整场回滚，重启重试及重放只结算一次', group='market-auction-lifecycle')

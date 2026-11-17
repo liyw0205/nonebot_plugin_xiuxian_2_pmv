@@ -16,6 +16,8 @@ class AuctionQueueResult:
     item_name: str = ""
     start_price: int = 0
     user_name: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -57,6 +59,8 @@ class AuctionQueueService:
             result.item_name,
             result.start_price,
             result.user_name,
+            result.reason,
+            result.subject,
         )
 
     def get_operation(self, operation_id, action, user_id, item_id):

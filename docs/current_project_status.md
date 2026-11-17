@@ -2,7 +2,53 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 拍卖待领取取回与重试（当前冻结范围）
+## 拍卖玩家等待区完整交接（develop checkpoint）
+
+上一goal轮结算/领取两项交付属于progress。520a79df/CI44001821163本轮已单点核
+completed/success，不watch或重跑已绿全量。定时优先批次证据已归档于
+docs/features/legacy_scheduler.md；完整G2--G5及发布门禁仍未完成。按交易矩阵
+下一有限功能组仅玩家上架/下架等待区：扣/退一件物品、队列增删和永久回执三步，
+拒写/改写含副作用整笔回滚，具体reason/subject和故障解除后的同请求恢复；保留
+可交易库存/绑定/装备、本人归属、队列上限和历史成功回放。真实参数/两库资产/
+第三库统计/OneBot与QQ合同组成闭环，未确认问题先红复现。只核这组交接，不扩
+竞价经济、性能或其他仓储。项目venv/共享锁/临时数据；用户JSON删除与goal/
+辅助资料不提交，线上库/部署/环境不动，main/Release保持不动。
+
+初12红中1条AFTER INSERT错挂已有背包UPSERT的UPDATE，纠正夹具，不算独立
+业务故障；其余已证实拒写伪completed或误报stock_insufficient并提交trigger副作用。
+现扣/退物、队列增删、永久回执逐步行数和最终回读，已知拒绝跨出UoW后才转结果，
+两库含副作用完整回滚。三个auction_queue_*_write_rejected与subject贯穿兼容DTO
+和实际上架/下架；坏库存保留数值原因，同操作改底价明确冲突，历史成功先回放。
+未知SQLite原链/安全定位、NoneBot正常流程和失败发送异常透传；原绑定返还、装备、
+本人归属、上限规则保持。无新schema或历史回执重写。
+
+新增33项仓储回归和两条market-auction-queue真实dispatch/DI/handler，覆盖六步
+IGNORE/ABORT、重建应用同消息恢复/重放、非法/多余参数零写、上限/满包/绑定装备、
+三库资产/永久回执/实际统计与integrity_check；剩余拍品实际APScheduler开场/到期
+返还。OneBot/QQ文本/Markdown/发送降级及异常流程合同仅mock，未真机。
+受影响六模块组合181pass/4fail，四例来自扩展消息夹具漏竞拍配置键；修正后消息组
+100pass，其余85项绿复用，重叠不累计。architecture含inventory、受影响编译/diff
+通过；新增pytest与参数包装进CI。白名单普通推develop，完整goal保持active。
+下一相关完整目标仅拍卖竞拍扣款/替换上一竞价退款/拍品/永久回执交接的拒写恢复，
+先隔离红复现；不改加价/手续费/经济规则、不扩其他市场或全仓。批次和发布门禁未
+满足，main/Release不动，用户JSON删除与goal/辅助资料不提交。
+
+## 定时优先批次证据与剩余门禁（develop checkpoint）
+
+本轮两个完整目标已普通推develop：结算774b67ec48bc5a97ce8a7f550a766659c1d3bd12，
+精确SHA CI43999705305已核completed/success；领取
+520a79df2fc7c611823de0c5149722811e038064，CI44001821163已单点核success，
+不watch/重跑已绿全量。最新本地受影响领取组135pass，结算151pass及最后原因
+组103pass，各组重叠不累计。architecture含inventory、受影响编译/diff通过。
+新增31条结算/20条领取回归和真实命令包装均已进CI；仅mock OneBot/QQ，无真机。
+
+下一相关有限目标仅归档魔修/调度桥pending恢复/鬼市时间与返还/拍卖生命周期的
+已交付证据和总goal未决项，按现有参数矩阵指出下一可独立完成的功能组；只读核
+文档/现有CI，不将归档扩成新一轮全仓故障审计，不重跑未变基线。G2--G5仍未完成，
+用户冻结JSON既有删除继续阻塞Phase2发布门禁，真实QQ展示未验；main仍5bef9e06，
+不合并/发版。用户删除、goal与本地辅助资料保留且不提交；线上库/部署/环境不动。
+
+## 拍卖待领取取回与重试（develop checkpoint）
 
 结算持久化已普通提交推送774b67ec48bc5a97ce8a7f550a766659c1d3bd12，远端develop
 一致、main仍5bef9e06。复用151项受影响组合、后加诊断原因组103项和已绿

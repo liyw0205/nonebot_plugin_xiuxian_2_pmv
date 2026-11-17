@@ -59,6 +59,26 @@
 隔离 SQLite 与 mock 远端验证宗门五条维护分支、日重置、傀儡资产/回执失败回滚、
 NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普通返回或无 traceback 代替结算证据。
 
+## 定时优先批次交付证据（2026-11-17）
+
+以下均为develop上的隔离验证，精确提交与回归入口一一对应。已核通过的CI复用，
+不重复长时间watch或全量测试；没有用日志无traceback或回调正常返回证明业务正确。
+
+| 完整路径 | 交付提交 | CI证据 | 可重放入口 |
+| --- | --- | --- | --- |
+| 魔修启动有效窗/跨期状态/19:00讨伐至22:00关闭 | 968a0034 | 43951435416 success | test_demon_scheduler.py、test_demon_event_lifecycle_application.py |
+| 调度桥部分失败保留pending、连续故障与注册恢复 | 9d8d816e、5c5ca20c | 43947994349 success；后者另固定既有随机夹具 | architecture/test_scheduler_bridge.py、test_demon_scheduler.py |
+| 宗门/傀儡/NewAPI内层显式失败与部分恢复 | 2f17b57f | 43954272571 success | test_scheduled_job_failure_visibility.py |
+| 鬼市时区/截止、pending恢复、存取及到期返还/批量清空 | d8ecefe1至3befe21b的连续切片 | 最近3befe21b/43988136572 success | test_guishi_schedule.py、test_guishi_parameter_dispatch.py各明确group及trade feature文档 |
+| 拍卖注册/触发/边界/启动对账、开场交接、结算与领取 | ee80d0ac、eac10e62、774b67ec、520a79df | 43995218089/43996331825/43999705305/44001821163均success | test_auction_schedule.py、test_auction_parameter_dispatch.py、start/settlement/pending_write_rejection.py |
+
+部署只读证据显示进程和系统业务时区为Asia/Shanghai，而旧魔修源码按UTC小时
+判断；11月12至16日有刷新日志，缺少自动开启/结束成功记录。这只支持排查方向，
+不证明线上活动状态或修复已部署。未改线上数据库、更新/重启部署或修改部署环境。
+OneBot/QQ文本、Markdown和降级仅mock，真实客户端/连接与线上调度观察仍未验。
+Phase2冻结JSON的用户既有删除、剩余玩家参数矩阵及G3--G5门禁仍未解决，不能以
+本批次代替完整goal、合main或发布。后续相关玩家路径范围见唯一status入口。
+
 ## 灰度开关、回滚和已知限制
 
 移除该 manifest 即可关闭新登记和 Web 展示；旧任务会在兼容周期内继续运行。当前任务 handler 仍由旧包提供，调度声明已由桥接层统一延迟注册；下一发布周期再迁移至 feature jobs。

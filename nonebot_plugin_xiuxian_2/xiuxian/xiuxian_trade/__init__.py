@@ -3216,7 +3216,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "拍卖进行中时不能上架物品，请等待拍卖结束后再上架！", md_type="拍卖", k1="上架", v1="拍卖上架", k2="我的", v2="我的拍卖", k3="帮助", v3="拍卖帮助")
         await auction_add.finish()
     
-    if len(args_list) < 2:
+    if len(args_list) != 2:
         auction_rules = auction_config.get_auction_rules()
         msg = f"格式错误！正确格式：拍卖上架 [物品名] [底价]\n最低底价：{number_to(auction_rules['min_price'])}灵石"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="我的", v2="我的拍卖", k3="帮助", v3="拍卖帮助")
@@ -3257,26 +3257,20 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await auction_add.finish()
 
     auction_rules = auction_config.get_auction_rules()
-    result = _auction_queue_application().enqueue(
-        _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
-        user_id,
-        goods_id,
-        item_name,
-        base_price,
-        user_info['user_name'],
-        max_user_items=auction_rules["max_user_items"],
-    )
-    if result.status == "limit_reached":
-        msg = f"每人最多上架{auction_rules['max_user_items']}件物品到拍卖等待区！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_add.finish()
-    if result.status == "stock_insufficient":
-        msg = f"可交易的 {item_name} 数量不足，上架失败！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_add.finish()
-    if result.status == "already_queued":
-        msg = f"{item_name} 已在拍卖等待区，请勿重复上架！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+    try:
+        result = _auction_queue_application().enqueue(
+            _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
+            user_id,
+            goods_id,
+            item_name,
+            base_price,
+            user_info['user_name'],
+            max_user_items=auction_rules["max_user_items"],
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖上架", exc, event=event), md_type="拍卖")
         await auction_add.finish()
     if not result.succeeded:
         msg = {
@@ -3285,7 +3279,9 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             "already_queued": f"{item_name} 已在拍卖等待区。",
             "item_insufficient": f"可交易的 {item_name} 数量不足，上架失败。",
             "user_missing": "未找到修仙数据，上架未结算。",
-        }.get(result.status) or result_failure("拍卖上架", result)
+        }.get(result.status) or ("拍卖上架未完成。" if result.reason else result_failure("拍卖上架", result))
+        if result.reason:
+            msg += f"\n（原因：{result.reason}；主体：{result.subject}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
@@ -3327,16 +3323,32 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         operation_id = _auction_queue_operation_id(
             event, "dequeue", user_id, goods_id
         )
-        previous = _auction_queue_application().get_operation(
-            operation_id, "dequeue", user_id, goods_id
-        )
+        try:
+            previous = _auction_queue_application().get_operation(
+                operation_id, "dequeue", user_id, goods_id
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            await handle_send(bot, event, report_exception("拍卖下架回执读取", exc, event=event), md_type="拍卖")
+            await auction_remove.finish()
+        if previous is not None and not previous.succeeded:
+            msg = f"拍卖下架未完成。（原因：{previous.reason or previous.status}；主体：{previous.subject}）"
+            await handle_send(bot, event, msg, md_type="拍卖")
+            await auction_remove.finish()
         if previous is not None and previous.succeeded:
             msg = f"成功从拍卖等待区下架 {item_name}！物品已退回背包。"
             await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
             await auction_remove.finish()
     
     # 查找用户上架的该物品
-    player_items_in_queue = _auction_queue_application().get_player_items(user_id)
+    try:
+        player_items_in_queue = _auction_queue_application().get_player_items(user_id)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖下架等待区读取", exc, event=event), md_type="拍卖")
+        await auction_remove.finish()
     item_to_remove = None
     for item in player_items_in_queue:
         if item["item_name"] == item_name: # item_name是玩家上架时的名称
@@ -3344,38 +3356,38 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             break
     
     if not item_to_remove:
-        msg = f"没有找到名为{item_name}的上架物品在拍卖等待区！"
+        msg = f"没有找到名为{item_name}的上架物品在拍卖等待区！（原因：queue_missing；主体：{user_id}:{goods_id or item_name}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     
     item_info = items.get_data_by_item_id(item_to_remove["item_id"])
     if not item_info:
-        msg = "无法读取该物品信息：物品配置缺失。"
+        msg = f"无法读取该物品信息：物品配置缺失。（原因：item_missing；主体：{item_to_remove['item_id']}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     operation_id = _auction_queue_operation_id(
         event, "dequeue", user_id, item_to_remove["item_id"]
     )
-    result = _auction_queue_application().dequeue(
-        operation_id,
-        user_id,
-        item_to_remove["item_id"],
-        item_info["type"],
-    )
-    if result.status == "queue_missing":
-        msg = "该物品已不在拍卖等待区，请刷新后重试！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_remove.finish()
-    if result.status == "inventory_full":
-        msg = "背包中该物品数量已达上限，无法下架！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+    try:
+        result = _auction_queue_application().dequeue(
+            operation_id,
+            user_id,
+            item_to_remove["item_id"],
+            item_info["type"],
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖下架", exc, event=event), md_type="拍卖")
         await auction_remove.finish()
     if not result.succeeded:
         msg = {
             "queue_missing": "该物品已不在拍卖等待区。",
             "inventory_full": "背包中该物品已达上限，无法下架。",
             "user_missing": "未找到修仙数据，下架未结算。",
-        }.get(result.status) or result_failure("拍卖下架", result)
+        }.get(result.status) or ("拍卖下架未完成。" if result.reason else result_failure("拍卖下架", result))
+        if result.reason:
+            msg += f"\n（原因：{result.reason}；主体：{result.subject}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     
