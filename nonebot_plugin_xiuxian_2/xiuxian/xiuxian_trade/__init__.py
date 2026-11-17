@@ -383,6 +383,9 @@ async def _place_auction_bid_with_application(
         }[status]
         data = outcome.data or {}
         return False, f"{description}（原因：{data.get('reason') or status}；主体：{data.get('subject') or auction_id}）"
+    if status not in {"bid", "duplicate"} and (outcome.data or {}).get("reason"):
+        data = outcome.data
+        return False, f"竞拍未成立。（原因：{data['reason']}；主体：{data.get('subject') or auction_id}）"
     if status == "stone_insufficient":
         return False, "灵石不足，竞拍未成立。"
     if status == "bid_too_low":
@@ -3193,6 +3196,13 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         )
     except (MatcherException, ProcessException):
         raise
+    except DomainError as exc:
+        if exc.details.get("reason"):
+            result_msg = f"竞拍未成立。（原因：{exc.details['reason']}；主体：{exc.details.get('subject', '')}）"
+            if exc.__cause__ is not None:
+                result_msg += "\n" + report_exception("竞拍失败记录", exc.__cause__, event=event)
+        else:
+            result_msg = report_exception("拍卖竞拍", exc, event=event)
     except Exception as exc:
         result_msg = report_exception("拍卖竞拍", exc, event=event)
     await handle_send(bot, event, result_msg, md_type="拍卖", k1="列表", v1="拍卖查看", k2="再竞", v2=f"拍卖竞拍 {auction_id}", k3="帮助", v3="拍卖帮助")

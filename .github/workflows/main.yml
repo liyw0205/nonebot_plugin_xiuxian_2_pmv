@@ -60,6 +60,7 @@ jobs:
           tests/test_auction_settlement_write_rejection.py
           tests/test_auction_pending_write_rejection.py
           tests/test_auction_queue_write_rejection.py
+          tests/test_auction_bid_write_rejection.py
 
       - name: Run architecture gates
         run: python scripts/check_architecture.py

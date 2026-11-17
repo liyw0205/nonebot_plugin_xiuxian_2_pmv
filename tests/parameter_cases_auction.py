@@ -71,6 +71,88 @@ async def fire(callback):
 
 
 def register(case):
+    @case('auction-bid-write-recovery', '拍卖竞拍', '前次竞价/替换退款/四步拒写/重试/本人加价/到期',
+          '实际上架开场及前次扣款，四步IGNORE含副作用与回执ABORT',
+          '拒绝不扣款或提前退款；同请求恢复一次，实际统计/最高价/到期成交一致',
+          group='market-auction-bid-write')
+    async def bid_write(probe):
+        import sqlite3
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.features.auction.application import AuctionBidApplication
+        from nonebot_plugin_xiuxian_2.compatibility.auction_bid_effects import LegacyAuctionBidEffects
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+        with setup(probe) as state:
+            module, game = state.module, probe.context.paths.game_db
+            item_id, name = herb(probe, '900003')
+            for uid in ('900001', '900002', '900003'):
+                probe.player(uid, stone=100_000_000)
+            price = module.auction_config.get_auction_rules()['min_price']
+            await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor='900003')
+            assert (await fire(module.auto_start_auction_job)).code == EVENT_JOB_EXECUTED
+            lot = state.query.get_current_auction()[0]
+            reply = await probe.command('拍卖竞拍', f"拍卖竞拍 {lot['id']} {price}", actor='900002')
+            assert '竞拍成功' in reply, reply
+            text = f"拍卖竞拍 {lot['id']} {price * 2}"
+            for target, table, event, condition in (
+                ('debit', 'user_xiuxian', 'UPDATE', "WHEN NEW.user_id='900001'"),
+                ('refund', 'user_xiuxian', 'UPDATE', "WHEN NEW.user_id='900002'"),
+                ('item', 'auction_current', 'UPDATE', ''),
+                ('receipt', 'auction_bid_operations', 'INSERT', ''),
+            ):
+                probe.seed(game, f'CREATE TRIGGER refuse_bid BEFORE {event} ON {table} {condition} '
+                           "BEGIN UPDATE user_xiuxian SET stone=0 WHERE user_id='900003'; SELECT RAISE(IGNORE); END")
+                before = assets(probe)
+                reply = await probe.command('拍卖竞拍', text, number=980420)
+                assert f'auction_bid_{target}_write_rejected' in reply and '主体：' in reply, reply
+                assert '竞拍成功' not in reply and assets(probe) == before
+                probe.seed(game, 'DROP TRIGGER refuse_bid')
+            probe.seed(game, "CREATE TRIGGER refuse_bid BEFORE INSERT ON auction_bid_operations "
+                       "BEGIN SELECT RAISE(ABORT,'isolated bid command fault'); END")
+            entry = next(row for row in probe.entries if row['command'] == '拍卖竞拍')
+            before = assets(probe)
+            with patch.object(module, 'report_exception', return_value='处理失败（定位号：auction-bid-test）') as reported, \
+                    watch_handler_catches(entry) as caught:
+                result = await run_case(entry, 'parameter', 980420, input_text=text, actor='900001')
+            assert result['status'] == 'pass' and len(caught) == 1, (result, caught)
+            assert 'sqlite3.IntegrityError: isolated bid command fault' in caught[0]['traceback']
+            assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+            assert '定位号：auction-bid-test' in ''.join(result['replies'])
+            probe.calls.append({'command': '拍卖竞拍', 'expected_injected_fault': caught, **result})
+            assert assets(probe) == before
+            probe.seed(game, 'DROP TRIGGER refuse_bid')
+            restarted = AuctionBidApplication(game, effects=LegacyAuctionBidEffects(probe.context.paths.player_db))
+            with patch.object(module, '_auction_bid_application', return_value=restarted):
+                state.clock.moment += timedelta(minutes=1)
+                reply = await probe.command('拍卖竞拍', text, number=980420)
+                assert '竞拍成功' in reply and '已退还' in reply, reply
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == [(100_000_000-price*2,)]
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900002'") == [(100_000_000,)]
+                after = assets(probe)
+                await probe.command('拍卖竞拍', text, number=980420)
+                assert assets(probe) == after
+                reply = await probe.command('拍卖竞拍', f"拍卖竞拍 {lot['id']} {price * 3}")
+                assert '竞拍成功' in reply and '已退还' not in reply, reply
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == [(100_000_000-price*3,)]
+                assert state.query.get_current_auction(lot['id'])['bids'] == {'900001': price*3}
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖出价次数","拍卖出价灵石" FROM statistics WHERE user_id=\'900001\'') == [(2, price*5)]
+                state.clock.moment += timedelta(hours=2)
+                assert (await fire(module.check_auction_end_job)).code == EVENT_JOB_EXECUTED
+                history = state.query.get_auction_history(lot['id'])[0]
+                assert history['winner_id'] == '900001' and history['final_price'] == price*3
+                assert probe.managers[0].goods_num('900001', item_id) == 1
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900002'") == [(100_000_000,)]
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900003'") == [(100_000_000+history['seller_earnings'],)]
+                after = assets(probe)
+                await fire(module.check_auction_end_job)
+                await probe.command('拍卖竞拍', text, number=980420)
+                assert assets(probe) == after
+        integrity(probe)
+        probe.evidence.update(real_dispatch=True, rejected_steps=4, full_rollback=True, original_abort=True,
+                              restart_recovery=True, previous_refund_once=True, same_bidder_difference_only=True,
+                              actual_settlement=True, statistics_once=True, integrity='ok')
+
     @case('auction-queue-handoff-recovery', '拍卖上架', '上架/下架三步拒写/原消息恢复/重放/流拍',
           '真实库存绑定/装备，隔离三库，三步IGNORE和回执ABORT',
           '拒绝零写保留具体原因，重建后同消息恢复；绑定返还/统计各一次，剩余拍品实际到期返还',

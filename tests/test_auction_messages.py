@@ -34,6 +34,12 @@ from nonebot_plugin_xiuxian_2.features.auction.queue_repository import AuctionQu
                                            ('remove', 'auction_queue_inventory_write_rejected'),
                                            ('remove', 'auction_queue_queue_write_rejected'),
                                            ('remove', 'auction_queue_receipt_write_rejected'),
+                                           ('bid', 'auction_bid_debit_write_rejected'),
+                                           ('bid', 'auction_bid_refund_write_rejected'),
+                                           ('bid', 'auction_bid_item_write_rejected'),
+                                           ('bid', 'auction_bid_receipt_write_rejected'),
+                                           ('bid', 'participant_missing'),
+                                           ('bid', 'operation_conflict'),
                                            ('bid', 'auction_expired')))
 @pytest.mark.parametrize('onebot,markdown,send_fails', ((True, True, False), (False, False, False),
                                                      (False, True, False), (False, True, True)))
@@ -180,3 +186,31 @@ def test_queue_unknown_fault_flow_and_failed_delivery_propagate(phase):
             assert caught.value is flow
             captured.assert_not_called()
             reported.assert_not_called()
+
+
+def test_bid_diagnostic_error_keeps_business_reason_in_reply():
+    from nonebot_plugin_xiuxian_2.core.errors import DomainError
+    error = DomainError('auction_bid_refund_write_rejected', 'refund refused',
+                        {'reason': 'auction_bid_refund_write_rejected', 'subject': 'previous-bidder'})
+    captured = AsyncMock()
+    with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), \
+            patch.object(trade, 'check_user', return_value=(True, {'user_id': 'buyer'}, '')), \
+            patch.object(trade, '_place_auction_bid_with_application', new=AsyncMock(side_effect=error)), \
+            patch.object(trade, 'report_exception') as reported, patch.object(trade, 'handle_send', captured):
+        args = SimpleNamespace(extract_plain_text=lambda: 'lot 100')
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.auction_bid_(object(), object(), args))
+        assert error.code in captured.call_args.args[2] and 'previous-bidder' in captured.call_args.args[2]
+        reported.assert_not_called()
+        diagnostic = RuntimeError('isolated diagnostic fault')
+        error.__cause__ = diagnostic
+        reported.return_value = '定位号：bid-diagnostic-test'
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.auction_bid_(object(), object(), args))
+        assert error.code in captured.call_args.args[2] and 'bid-diagnostic-test' in captured.call_args.args[2]
+        assert reported.call_args.args[1] is diagnostic
+        delivery = RuntimeError('isolated bid delivery')
+        captured.side_effect = delivery
+        with pytest.raises(RuntimeError) as caught:
+            asyncio.run(trade.auction_bid_(object(), object(), args))
+        assert caught.value is delivery

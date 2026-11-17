@@ -8,6 +8,9 @@ class AuctionParameterDispatchTests(unittest.TestCase):
     def test_auction_queue_handoff_recovery_and_boundaries(self):
         self.check_group('market-auction-queue', 2, {'success': 2})
 
+    def test_auction_bid_handoff_recovery_and_settlement(self):
+        self.check_group('market-auction-bid-write', 1, {'success': 1})
+
     def test_auction_lifecycle(self):
         self.check_group('market-auction-lifecycle', 2, {'success': 2})
 
