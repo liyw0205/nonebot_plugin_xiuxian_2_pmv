@@ -176,6 +176,22 @@ DI/handler场景串联实际日重置→接取→刷新→两种消耗完成、�
 拒写恢复、体力不足→实际定时恢复→原ABORT→同消息恢复以及管理员免消耗，核三库
 和统计/永久回执/完整性，24个OneBot/QQ消息合同为mock，不外推线上或真机已通过。
 
+### 每分钟体力恢复
+
+`recover_user_stamina` 保持原interval、每分钟恢复量/上限和rowid分批；每个分批在
+SQLite事务内校验实际更新行数并回读目标玩家。拒写、身份改写或删除会回滚当前批次及
+trigger副作用，返回具体`stamina_recovery_write_rejected`和玩家subject，并使调度回调
+失败；先前已提交批次保留，后续批次停止。缺表/缺列和非法配置分别保留
+`schema_missing`/`stamina_recovery_config_invalid`及具体subject，原SQLite异常透传。
+恢复量为0仍是无写成功，批大小小于1仍钳为1；NULL、重复玩家记录和封顶规则保持。
+后续interval按既有规则形成一次新的恢复，不增加周期回执、断点补跑或补偿。
+
+`tests/test_stamina_schedule_recovery.py` 覆盖实际声明、pending注册失败重试、interval
+边界和真实APScheduler触发、缺schema/非法配置、IGNORE/改写/ABORT/超过SQLite参数
+分片的末步篡改、部分提交与失败批次回滚。`stamina-recovery`真实参数场景用隔离三库
+验证恢复失败时真实宗门任务仍体力不足、后续恢复再消费一次、成功消息只回放，并核对
+资产/回执/统计/完整性。OneBot/QQ文本、Markdown和降级合同为mock，未真机验证。
+
 ### 历史查询
 
 `我的宗门任务记录`（别名 `宗门任务记录`）补齐玩家侧逐次宗门任务的可见性：玩家只能看到

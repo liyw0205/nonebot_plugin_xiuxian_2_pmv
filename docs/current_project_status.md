@@ -2,6 +2,26 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 当前冻结：每分钟体力恢复与玩家任务交接
+
+宗门任务/体力消费已推develop；ee843e83精确CI44045484742已核completed/success，
+复用该绿基线。隔离首轮8fail/1pass证实IGNORE、改写、缺文件/列和非法恢复配置仍让
+真实调度回调EXECUTED，IGNORE还提交trigger副作用；原SQLite ABORT正确回滚并报错。
+现恢复批次逐行校验/最终回读，拒写在当前批次事务内回滚并向APScheduler抛错，原异常
+透传；此前已提交批次保留且停止后续。非法配置、缺迁移携具体reason/subject；真实任务
+注册、pending激活重试、interval边界和实际触发通过隔离APScheduler核验。参数链在隔离
+三库贯穿恢复失败→指令仍体力不足→恢复成功→任务消费及成功消息回放，OneBot/QQ为
+mock合同，无真机或部署验证。受影响组合113 passed、139 subtests passed，重叠不累计。
+architecture含inventory、独立inventory、受影响编译/diff通过，新恢复回归已接CI。
+过程中的event traceback断言和参数mock配置/冷却等夹具错误已修正，未放宽业务断言；
+新提交精确CI尚待推送后核验，不复跑已绿全量。
+
+保持每分钟恢复量/上限/按rowid分批、NULL与重复行兼容；下一tick是原规则下新一次恢复，
+不新增永久周期回执、断点自动补跑或补偿策略，不扩restore/其他玩法/性能或全仓。
+用户JSON删除与goal/辅助资料不提交；线上库/部署/环境及main/Release不动。
+下一有限目标为本批定时链证据与发布条件收口：推送后仅核本SHA精确CI自然终态，复用
+魔修/pending/鬼市/拍卖/BOSS/宗门既有绿CI，整理剩余G2--G5限制；不据等待CI扩展审计。
+
 ## 宗门任务体力消费与永久回执（当前交付）
 
 上一任务完整组已普通推develop：e54ed250f59a02bc314672b058c9ab33bc145c42，远端

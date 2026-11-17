@@ -69,6 +69,7 @@ jobs:
           tests/test_sect_elixir_claim_recovery.py
           tests/test_sect_task_daily_handoff.py
           tests/test_sect_task_stamina_handoff.py
+          tests/test_stamina_schedule_recovery.py
 
       - name: Run architecture gates
         run: python scripts/check_architecture.py

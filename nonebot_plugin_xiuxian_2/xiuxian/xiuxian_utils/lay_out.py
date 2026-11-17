@@ -75,8 +75,13 @@ def limit_all_stamina_():
         result = recover_player_stamina(
             XiuConfig().max_stamina,
             XiuConfig().stamina_recovery_points,
-            batch_size=max(1, int(os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000"))),
+            batch_size=os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000"),
         )
+        if result.get('status') != 'applied':
+            reason = result.get('reason') or result.get('status') or 'stamina_recovery_result_invalid'
+            subject = result.get('subject') or 'recover_user_stamina'
+            raise DomainError(reason, f'stamina recovery rejected reason={reason} subject={subject} updated={result.get("updated", 0)}',
+                              {'reason': reason, 'subject': subject, 'updated': result.get('updated', 0)})
         updated = int(result.get("updated", 0) or 0)
     except Exception as e:
         logger.opt(exception=e).warning("体力恢复定时任务执行失败，当前批次已回滚，后续恢复已停止")

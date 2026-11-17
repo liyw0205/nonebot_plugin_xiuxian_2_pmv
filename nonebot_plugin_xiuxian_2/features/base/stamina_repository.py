@@ -140,41 +140,74 @@ class PlayerStaminaSqlRepository:
         *,
         batch_size: int = 1000,
     ) -> dict[str, Any]:
-        max_stamina = int(max_stamina)
-        points = int(points)
-        batch_size = max(1, int(batch_size))
-        if max_stamina < 0 or points < 0:
-            return {"status": "invalid", "updated": 0}
+        values = {}
+        for field, value in (('max_stamina', max_stamina), ('stamina_recovery_points', points), ('batch_size', batch_size)):
+            try:
+                values[field] = require_exact_integer(value, field=field, subject=field)
+            except DomainError:
+                return {'status': 'invalid', 'reason': 'stamina_recovery_config_invalid', 'subject': field, 'updated': 0}
+            if field != 'batch_size' and values[field] < 0:
+                return {'status': 'invalid', 'reason': 'stamina_recovery_config_invalid', 'subject': field, 'updated': 0}
+        max_stamina, points = values['max_stamina'], values['stamina_recovery_points']
+        batch_size = max(1, values['batch_size'])
         if points == 0:
             return {"status": "applied", "updated": 0}
         if not self.database.is_file():
-            return {"status": "schema_missing", "updated": 0}
+            return {"status": "schema_missing", "reason": "schema_missing", "subject": "user_xiuxian", "updated": 0}
 
         total = 0
         last_rowid = 0
         while True:
-            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                if not self._schema_ready(uow):
-                    return {"status": "schema_missing", "updated": total}
-                rows = uow.query_all(
-                    "SELECT rowid AS _rowid FROM user_xiuxian "
-                    "WHERE rowid>? AND COALESCE(user_stamina,0)<? "
-                    "ORDER BY rowid LIMIT ?",
-                    (last_rowid, max_stamina, batch_size),
-                )
-                if not rows:
-                    break
-                first_rowid = int(rows[0]["_rowid"])
-                last_rowid = int(rows[-1]["_rowid"])
-                changed = uow.execute(
-                    "UPDATE user_xiuxian SET user_stamina=MIN(COALESCE(user_stamina,0)+?,?) "
-                    "WHERE rowid BETWEEN ? AND ? "
-                    "AND COALESCE(user_stamina,0)<?",
-                    (points, max_stamina, first_rowid, last_rowid, max_stamina),
-                )
-                updated = max(int(changed.rowcount), 0)
+            try:
+                updated, cursor = self._recover_batch(max_stamina, points, batch_size, last_rowid)
+            except DomainError as exc:
+                return {'status': 'schema_missing' if exc.code == 'schema_missing' else 'state_changed', 'reason': exc.details.get('reason') or exc.code,
+                        **exc.details, 'updated': total}
+            if cursor is None:
+                break
+            last_rowid = cursor
             total += updated
         return {"status": "applied", "updated": total}
+
+    def _recover_batch(self, max_stamina, points, batch_size, last_rowid):
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not self._schema_ready(uow):
+                raise DomainError('schema_missing', 'stamina recovery schema missing', {'subject': 'user_xiuxian'})
+            rows = uow.query_all(
+                "SELECT rowid AS _rowid,user_id,COALESCE(user_stamina,0) AS user_stamina FROM user_xiuxian "
+                "WHERE rowid>? AND (COALESCE(user_stamina,0)<? OR typeof(user_stamina) NOT IN ('integer','null')) "
+                "ORDER BY rowid LIMIT ?", (last_rowid, max_stamina, batch_size),
+            )
+            if not rows:
+                return 0, None
+            expected = {}
+            for row in rows:
+                current = require_exact_integer(row['user_stamina'], field='user_stamina', subject=str(row['user_id']))
+                if current < max_stamina:
+                    expected[row['_rowid']] = {**row, 'user_stamina': min(current+points, max_stamina)}
+            last_rowid = int(rows[-1]['_rowid'])
+            if not expected:
+                return 0, last_rowid
+            changed = uow.execute(
+                'UPDATE user_xiuxian SET user_stamina=MIN(COALESCE(user_stamina,0)+?,?) '
+                'WHERE rowid BETWEEN ? AND ? AND COALESCE(user_stamina,0)<?',
+                (points, max_stamina, int(rows[0]['_rowid']), last_rowid, max_stamina),
+            )
+            # Re-read only the bounded target set, below SQLite's legacy bind limit.
+            ids = list(expected)
+            for start in range(0, len(ids), 500):
+                batch = ids[start:start+500]
+                saved = {row['_rowid']: row for row in uow.query_all(
+                    'SELECT rowid AS _rowid,user_id,user_stamina FROM user_xiuxian WHERE rowid IN ('
+                    + ','.join('?' for _ in batch) + ')', tuple(batch))}
+                for rowid in batch:
+                    if saved.get(rowid) != expected[rowid]:
+                        raise DomainError('stamina_recovery_write_rejected', 'stamina recovery write rejected',
+                                          {'subject': str(expected[rowid]['user_id'])})
+            if changed.rowcount != len(expected):
+                raise DomainError('stamina_recovery_write_rejected', 'stamina recovery write count mismatch',
+                                  {'subject': f'rows:{ids[0]}-{ids[-1]}'})
+            return len(expected), last_rowid
 
     def restore(
         self,

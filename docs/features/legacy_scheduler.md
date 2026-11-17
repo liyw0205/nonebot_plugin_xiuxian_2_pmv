@@ -79,6 +79,8 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 宗门每日次数重置及丹房维护 | c8992fc5 | 44027622264 success | test_sect_daily_maintenance_recovery.py、sect-daily-maintenance参数group |
 | 宗门丹药领取交接 | ffcd1521 | 44031986435失败于资格拒绝文案含推测连接词；本组保留原因码并修正文案 | test_sect_elixir_claim_recovery.py、sect-elixir-claim参数group及test_reason_finalization.py |
 | 宗门任务接取/刷新/完成交接 | e54ed250 | 44040298434仅时钟注入静态构造签名失败；后续保留时钟门禁并兼容额外时区参数 | test_sect_task_daily_handoff.py、sect-task-daily参数group及test_sect_task_settlement_progress_contract.py |
+| 宗门任务体力消费与永久回执 | ee843e83 | 44045484742 success，亦包含前两组已修正的文案/时钟契约 | test_sect_task_stamina_handoff.py、sect-task-stamina参数group |
+| 每分钟体力恢复与实际任务体力交接 | 本节所在develop提交 | 本组113项/139子测试通过；精确SHA CI待核 | test_stamina_schedule_recovery.py、stamina-recovery参数group |
 
 日重置后的任务接取/刷新/完成另补同一交接链：任务与永久回执逐写校验和最后回读，
 完成四步整体回滚；旧消息先读本人回执，不覆盖当前新任务、跨日不重复结算。
@@ -103,6 +105,13 @@ UTC日期也会错分业务日。现玩家/资材/等级/永久回执行数和�
 同日重放保留新领取和任务，次日正常维护。新回归与两条真实玩家参数包装31pass，
 受影响旧组62pass（重叠不累计）；详见sect文档。新回归接CI，OneBot/QQ仅mock，
 不能提前将新SHA CI写成通过或将此checkpoint当作完整批次发布验收。
+
+每分钟体力恢复的首轮隔离8fail/1pass证明IGNORE、改写、缺schema和非法配置会被
+APScheduler误记为EXECUTED；原SQLite ABORT已正确回滚并报错。现逐分批校验更新行数和
+最终玩家值，拒写回滚当前批次及trigger副作用、透传调度错误；此前批次保留并停止后续。
+真实声明/pending重试/interval边界/触发、连续失败恢复及同一玩家任务体力交接均有隔离
+SQLite/真实handler证据。受影响组113 passed、139 subtests passed，非全量计数；OneBot/QQ
+仅mock。新提交的精确CI尚未检查，不外推已通过或真机/线上行为。
 
 日重置后的宗门丹药领取再补三步交接：发药/已领标志/永久回执拒写原本伪成功，
 现整笔回滚、具体原因到failed回执及真实玩家回复，同消息恢复，跨日旧消息不占

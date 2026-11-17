@@ -19,3 +19,6 @@ class SectMaterialParameterDispatchTests(unittest.TestCase):
 
     def test_daily_task_stamina_handoff_and_write_recovery(self):
         self.check_group('sect-task-stamina', 1, {'success': 1})
+
+    def test_scheduled_stamina_recovery_and_task_handoff(self):
+        self.check_group('stamina-recovery', 1, {'success': 1})

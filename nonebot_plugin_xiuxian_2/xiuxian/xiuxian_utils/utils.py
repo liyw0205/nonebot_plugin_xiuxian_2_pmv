@@ -216,8 +216,8 @@ def recover_player_stamina(
     batch_size: int = 1000,
 ):
     return _player_stamina().recover(
-        int(max_stamina),
-        int(points),
+        max_stamina,
+        points,
         batch_size=batch_size,
     )
 
