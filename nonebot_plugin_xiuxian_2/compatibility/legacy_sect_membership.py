@@ -92,6 +92,8 @@ class SectScheduledMaterialGrant:
     sect_id: int
     materials: int = 0
     combat_power: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -1606,76 +1608,17 @@ class SectMembershipService:
         sect_id,
         multiplier,
     ) -> SectScheduledMaterialGrant:
+        from ..features.sect.scheduled_material_repository import SectScheduledMaterialSqlRepository
+
         grant_key = str(grant_key).strip()
         if not grant_key:
             raise ValueError("grant_key must not be empty")
-        sect_id = int(sect_id)
-        multiplier = max(int(multiplier), 0)
-
+        sect_id, multiplier = int(sect_id), max(int(multiplier), 0)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                self._ensure_scheduled_material_grants(conn)
-                conn.commit()
-                conn.execute("BEGIN IMMEDIATE")
-                previous = conn.execute(
-                    """
-                    SELECT materials, combat_power
-                    FROM sect_scheduled_material_grants
-                    WHERE grant_key=%s AND sect_id=%s
-                    """,
-                    (grant_key, sect_id),
-                ).fetchone()
-                if previous:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant(
-                        "duplicate",
-                        grant_key,
-                        sect_id,
-                        as_int_like(previous[0]),
-                        as_int_like(previous[1]),
-                    )
-
-                sect = conn.execute(
-                    "SELECT sect_scale, sect_owner FROM sects WHERE sect_id=%s",
-                    (sect_id,),
-                ).fetchone()
-                if sect is None:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant("sect_missing", grant_key, sect_id)
-                if sect[1] is None:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant("sect_inactive", grant_key, sect_id)
-
-                materials = max(as_int_like(sect[0] or 0), 0) * multiplier
-                power_rows = conn.execute(
-                    "SELECT power FROM user_xiuxian WHERE sect_id=%s",
-                    (sect_id,),
-                )
-                combat_power = sum(as_int_like(row[0]) for row in power_rows)
-                conn.execute(
-                    """
-                    UPDATE sects
-                    SET sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor')),
-                        combat_power=%s
-                    WHERE sect_id=%s
-                    """,
-                    (materials, combat_power, sect_id),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO sect_scheduled_material_grants (
-                        grant_key, sect_id, materials, combat_power
-                    ) VALUES (%s, %s, %s, %s)
-                    """,
-                    (grant_key, sect_id, materials, combat_power),
-                )
-                conn.commit()
-                return SectScheduledMaterialGrant(
-                    "granted", grant_key, sect_id, materials, combat_power
-                )
-            except Exception:
-                conn.rollback()
-                raise
+            self._ensure_scheduled_material_grants(conn)
+            conn.commit()
+            result = SectScheduledMaterialSqlRepository(self._database).grant(grant_key, sect_id, multiplier)
+        return SectScheduledMaterialGrant(**result)
 
     def transfer_owner(
         self,

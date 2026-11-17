@@ -375,7 +375,12 @@ __sect_manage_help__ = """
     misfire_grace_time=300,
 )
 async def materialsupdate_():
-    grant_key = f"sect-materials:{runtime_clock.now().date().isoformat()}"
+    from zoneinfo import ZoneInfo
+
+    moment = runtime_clock.now()
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(getattr(materialsupdate, 'timezone', None) or ZoneInfo('Asia/Shanghai'))
+    grant_key = f"sect-materials:{moment.date().isoformat()}"
     all_sects = sect_application.list_scheduled_material_targets()
     granted = 0
     for s in all_sects:
@@ -384,7 +389,11 @@ async def materialsupdate_():
             sect_id=s[0],
             multiplier=config["发放宗门资材"]["倍率"],
         )
-        granted += int(result.applied)
+        _require_sect_scheduled_result(
+            result, 'material_grant', f'grant_key={grant_key} sect_id={s[0]}',
+            {'granted', 'duplicate', 'sect_missing', 'sect_inactive'},
+        )
+        granted += int(result.status == 'granted')
 
     logger.opt(colors=True).info(
         f"<green>已更新宗门资材和战力，本次发放 {granted} 个宗门</green>"
@@ -419,7 +428,10 @@ async def resetusertask():
 def _require_sect_scheduled_result(result, action: str, subject: str, accepted: set[str]) -> None:
     status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
     if status not in accepted:
-        raise RuntimeError(f"宗门定时操作失败：action={action} {subject} status={status or 'invalid_result'}")
+        reason = result.get('reason') if isinstance(result, dict) else getattr(result, 'reason', '')
+        failed_subject = result.get('subject') if isinstance(result, dict) else getattr(result, 'subject', '')
+        raise RuntimeError(f"宗门定时操作失败：action={action} {subject} status={status or 'invalid_result'} "
+                           f"reason={reason or status or 'invalid_result'} subject={failed_subject or subject}")
 
 
 # 定时任务自动检测并处理宗门状态

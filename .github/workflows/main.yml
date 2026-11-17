@@ -64,6 +64,7 @@ jobs:
           tests/test_world_boss_refresh_recovery.py
           tests/test_world_boss_daily_reset_recovery.py
           tests/test_world_boss_manual_recovery.py
+          tests/test_sect_material_recovery.py
 
       - name: Run architecture gates
         run: python scripts/check_architecture.py

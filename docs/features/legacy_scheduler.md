@@ -73,8 +73,15 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 拍卖注册/触发/边界/启动对账、开场交接、结算与领取 | ee80d0ac、eac10e62、774b67ec、520a79df | 43995218089/43996331825/43999705305/44001821163均success | test_auction_schedule.py、test_auction_parameter_dispatch.py、start/settlement/pending_write_rejection.py |
 | 拍卖等待区退物/上架及竞拍资金交接拒写恢复 | 498a9f32、44d001a2 | 44005611091/44007297793 success | test_auction_queue_write_rejection.py、test_auction_bid_write_rejection.py、对应真实参数group |
 | 世界BOSS定时全量刷新、玩家查询/讨伐与同槽回放 | b9a354d1 | 44011718379 success | test_world_boss_refresh_recovery.py、world-boss-refresh参数group |
-| 世界BOSS每日重置、分块拒写保留pending及业务日 | e5c7e881、96d6d935 | 44016104819失败于旧日志静态契约；96d6d935修正该契约，44018801363运行中 | test_world_boss_daily_reset_recovery.py、world-boss-daily-reset参数group |
-| 世界BOSS人工生成与定时场次交接、参数冲突与拒写恢复 | 96d6d935 | 44018801363运行中，本地受影响验证已通过 | test_world_boss_manual_recovery.py、world-boss-manual-spawn参数group |
+| 世界BOSS每日重置、分块拒写保留pending及业务日 | e5c7e881、96d6d935 | 44016104819失败于旧日志静态契约；96d6d935修正该契约，44018801363 success | test_world_boss_daily_reset_recovery.py、world-boss-daily-reset参数group |
+| 世界BOSS人工生成与定时场次交接、参数冲突与拒写恢复 | 96d6d935 | 44018801363 success；文档69073cee/44019699806 success | test_world_boss_manual_recovery.py、world-boss-manual-spawn参数group |
+
+宗门定时资材另补完整闭环（详见sect文档）：首轮7红实证状态/回执拒写伪成功、
+缺迁移实际任务伪EXECUTED及UTC取错业务日。现写后验证/整宗门回滚、具体原因至
+实际任务ERROR，先前宗门提交保留，同日恢复只补剩余；同刻跨时区和次日行为稳定。
+十一受影响模块88pass（含参数包装中的两条真实玩家场景），不作为全量通过计数。
+任务注册/pending恢复、真实触发、两步IGNORE/改写/ABORT、旧大数及玩家读取/三库
+完整性均有独立断言；OneBot/QQ仍仅mock。新回归接现有CI，不重跑已绿全量。
 
 参数探针在96d6d935的清单有280个有参入口：126个有直接场景分配、154个
 pending_semantic_cases。清单仅匹配每个case声明的主命令，不能统计场景内的其他

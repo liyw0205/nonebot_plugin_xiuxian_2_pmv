@@ -138,6 +138,27 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 
 ## 定时任务
 
+`sect_materials_grant` 沿用配置的 cron 小时、coalesce/max_instances=1 和300秒宽限。
+业务日期将注入时钟转换为调度时区（默认Asia/Shanghai）；旧无时区时间仍按本地解释。
+每天每宗门的永久回执限制重复发放：已完成宗门和随后新增资材不因重试被覆盖，
+后续宗门失败时停止本轮，故障解除后同日重试只处理尚未完成部分。正常宗门消失或
+失去宗主仍跳过；缺迁移、坏数值、写入拒绝则使实际APScheduler产生ERROR事件，
+保留具体reason/subject，失败不记录完成，新发放日志不计duplicate。
+
+资材/战力状态更新与回执插入逐步校验行数并在提交前回读两者。IGNORE、trigger改写
+或末步篡改前步时，`sect_material_state_write_rejected` / `sect_material_receipt_write_rejected`
+携宗门编号，退出事务完整回滚（含trigger副作用）后才转结果；原SQLite异常透传。
+新超int64写入复用`xiuxian_int_store`的ASCII BLOB表示，避免列affinity变成REAL后
+无法通过最终校验；成员既有REAL及旧战力回执仍沿用历史整数转换，不恢复已失精度，
+不重写旧回执。legacy服务只保留schema准备，写入委派同一feature仓储，无新迁移。
+
+`test_sect_material_recovery.py` 覆盖实际声明/连续注册失败pending恢复、cron边界、
+真实触发、上海跨日/同刻跨时区、两步拒写/改写/ABORT、部分提交恢复、大数与历史
+回放、坏资材原因和正常目标竞争。`sect-material-schedule`两条真实dispatch/DI/handler
+串联发放→我的宗门/宗门信息别名→成员关键词分页→重放/次日，以及第二宗门拒写→
+重建应用→只补剩余；核对三库资产/永久回执/统计及integrity_check。OneBot/QQ文本、
+Markdown与发送降级仅mock，无真实消息或线上部署验证。
+
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。
 不活跃维护逐宗检查解散、继承、封闭结果；缺迁移、请求冲突和未识别结果保留
 `status/action/sect_id` 并使任务失败，已处理或正常竞争仍按具体原因跳过。批次可继续

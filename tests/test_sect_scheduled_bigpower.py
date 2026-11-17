@@ -10,9 +10,10 @@ statement aborted and the whole scheduled grant (materials included) was lost.
 
 These cases drive the production path (``SectApplication`` →
 ``SectScheduledMaterialSqlRepository``) with the deployed NUMERIC affinities and
-pin: int64-range grants stay exact INTEGER, >int64 grants finish and record the
-receipt as REAL (the disclosed precision limit, not a clamp), and replays stay
-idempotent.
+pin: int64-range grants stay exact INTEGER, new >int64 grants preserve the
+computed total as ASCII BLOB, historical REAL receipts keep their stored value,
+and replays stay idempotent. Member power already stored as REAL retains the
+legacy integer conversion; this does not recover precision lost in old data.
 """
 
 from __future__ import annotations
@@ -77,7 +78,7 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
             ).fetchone()
 
     def stored_power_total(self) -> int:
-        """Historical SQL SUM rounds away the small member; the receipt is REAL too."""
+        """Historical SQL SUM rounds away the small member."""
         with sqlite3.connect(self.database) as connection:
             total = connection.execute(
                 "SELECT COALESCE(SUM(power),0) FROM user_xiuxian WHERE sect_id=1"
@@ -113,13 +114,14 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
         self.assertEqual(6, result.combat_power - self.stored_power_total())
         materials_kind, materials, power_kind, power = self.sect_row()
         self.assertEqual(("integer", 290), (materials_kind, materials))
-        # Beyond int64 the column keeps REAL (double) instead of raising.
-        self.assertEqual("real", power_kind)
-        self.assertEqual(float(expected_power), power)
-        self.assertEqual((240, float(expected_power)), self.receipt())
+        # New writes bypass NUMERIC affinity to preserve the computed total.
+        self.assertEqual("blob", power_kind)
+        self.assertEqual(str(expected_power).encode('ascii'), power)
+        self.assertEqual((240, power), self.receipt())
+        self.assertEqual(expected_power, self.service.get_sect_info(1)['combat_power'])
 
     def test_high_power_replay_is_idempotent(self) -> None:
-        expected_power = self.stored_power_total()
+        expected_power = int(float(10**25)) + 6
         first = self.service.grant_scheduled_materials("sect-materials:2026-11-08", 1, 2)
         self.assertEqual("granted", first.status)
         before = self.sect_row()
@@ -128,9 +130,19 @@ class ScheduledMaterialBigPowerTests(unittest.TestCase):
 
         self.assertEqual("duplicate", replay.status)
         self.assertEqual(240, replay.materials)
-        # Replay reports the stored value (REAL -> int), never a second grant.
+        # New receipts retain the computed small-member contribution on replay.
         self.assertEqual(expected_power, replay.combat_power)
         self.assertEqual(before, self.sect_row())
+
+    def test_historical_real_receipt_replays_stored_power_without_rewriting(self) -> None:
+        value = float(10**25)
+        with sqlite3.connect(self.database) as connection:
+            connection.execute("INSERT INTO sect_scheduled_material_grants VALUES(?,?,?,?)",
+                               ('sect-materials:2026-11-08', 1, 240, value))
+        before = self.sect_row(), self.receipt()
+        replay = self.service.grant_scheduled_materials('sect-materials:2026-11-08', 1, 99)
+        self.assertEqual(('duplicate', 240, int(value)), (replay.status, replay.materials, replay.combat_power))
+        self.assertEqual(before, (self.sect_row(), self.receipt()))
 
     def test_missing_receipt_table_is_reported_without_writing(self) -> None:
         with sqlite3.connect(self.database) as connection:
