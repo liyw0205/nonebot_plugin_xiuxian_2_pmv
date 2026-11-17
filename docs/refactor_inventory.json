@@ -3088,6 +3088,7 @@
     "invitation_reward_migrations",
     "invitation_reward_operations",
     "is",
+    "isolated_effect",
     "json_each",
     "keepers",
     "latest",

@@ -579,6 +579,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         previous_settlement = boss_application.settlement_result_compat(
             operation_id=operation_id, user_id=str(user_id)
         )
+    except (MatcherException, ProcessException):
+        raise
     except Exception as exc:
         await _report_world_boss_settlement_exception(bot, event, exc)
         await battle.finish()
@@ -968,6 +970,8 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
             activity_bosses=activity_bosses,
         )
+    except (MatcherException, ProcessException):
+        raise
     except Exception as exc:
         await _report_world_boss_settlement_exception(bot, event, exc)
         await battle.finish()

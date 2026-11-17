@@ -13,6 +13,7 @@ from nonebot_plugin_xiuxian_2.features.boss.application import BossApplication
 from nonebot_plugin_xiuxian_2.features.boss.migrations import apply_boss_player_schema, apply_boss_settlement
 from nonebot_plugin_xiuxian_2.features.boss.repository import BossPurchaseSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from nonebot_plugin_xiuxian_2.core.errors import ConflictError
 
 
 OLD_BOSS = {
@@ -223,7 +224,8 @@ def test_operation_failure_rolls_back_every_database(tmp_path):
     conn.close()
 
 
-def test_committed_battle_receipt_repairs_failed_ledger_without_reapplying(tmp_path):
+@pytest.mark.parametrize("interrupted_status", ["failed", "started", "needs_reconcile"])
+def test_committed_battle_receipt_repairs_failed_ledger_without_reapplying(tmp_path, interrupted_status):
     game, player, activity = create_databases(tmp_path)
     with DatabaseUnitOfWork(game) as uow:
         apply_boss_settlement(uow)
@@ -307,8 +309,50 @@ def test_committed_battle_receipt_repairs_failed_ledger_without_reapplying(tmp_p
         assert connection.execute("SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,)).fetchall() == [("failed",)]
         assert connection.execute("SELECT status FROM operation_audit WHERE operation_id=?", (operation_id,)).fetchall() == [("failed",)]
 
+    with pytest.raises(ConflictError, match="玩家身份不匹配"):
+        app.settlement_result_compat(operation_id=operation_id, user_id="another-player")
+    assert business_state() == committed
+
+    with DatabaseUnitOfWork(game) as uow:
+        original_hash = uow.query_one(
+            "SELECT request_hash FROM operation_ledger WHERE operation_id=?", (operation_id,)
+        )["request_hash"]
+        uow.execute("UPDATE operation_ledger SET request_hash='mismatched' WHERE operation_id=?", (operation_id,))
+    with pytest.raises(ConflictError, match="操作请求不匹配"):
+        app.settlement_result_compat(operation_id=operation_id, user_id="10001")
+    assert business_state() == committed
+
+    with DatabaseUnitOfWork(game) as uow:
+        uow.execute("UPDATE operation_ledger SET request_hash=? WHERE operation_id=?", (original_hash, operation_id))
+        original_payload = uow.query_one(
+            "SELECT payload FROM world_boss_battle_operations WHERE operation_id=?", (operation_id,)
+        )["payload"]
+        legacy_payload = json.loads(original_payload)
+        legacy_payload.pop("checked_at")
+        legacy_payload.pop("expected_checked_at")
+        legacy_text = json.dumps(legacy_payload, ensure_ascii=False, indent=2)
+        uow.execute(
+            "UPDATE world_boss_battle_operations SET payload=? WHERE operation_id=?",
+            (legacy_text, operation_id),
+        )
+    legacy_replay = app.settlement_result_compat(operation_id=operation_id, user_id="10001")
+    assert legacy_replay.status == "duplicate" and business_state() == committed
+    with DatabaseUnitOfWork(game) as uow:
+        assert uow.query_one("SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,))["status"] == "failed"
+        assert uow.query_one(
+            "SELECT payload FROM world_boss_battle_operations WHERE operation_id=?", (operation_id,)
+        )["payload"] == legacy_text
+        uow.execute(
+            "UPDATE world_boss_battle_operations SET payload=? WHERE operation_id=?",
+            (original_payload, operation_id),
+        )
+
     with DatabaseUnitOfWork(game) as uow:
         uow.execute("DROP TRIGGER refuse_battle_ledger_finish")
+        uow.execute(
+            "UPDATE operation_ledger SET status=? WHERE operation_id=?",
+            (interrupted_status, operation_id),
+        )
     replay = app.settlement_result_compat(operation_id=operation_id, user_id="10001")
 
     assert replay is not None and replay.status == "duplicate"
