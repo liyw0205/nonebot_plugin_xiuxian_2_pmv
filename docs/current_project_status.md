@@ -32,14 +32,48 @@ architecture含inventory、独立inventory、受影响编译/diff通过，新回
 本完整组白名单普通推develop，用户JSON删除和goal/辅助资料不提交。线上库/部署/
 环境及main/Release不动；G2--G5与总goal保持active，完整批次和发布门禁前不合main。
 
-## 宗门日重置后的丹药领取（下一冻结范围）
+## 宗门日重置后的丹药领取（develop checkpoint）
 
-沿本组真实领取路径，仅核对背包发药/绑定数量、每日已领标志和永久回执的原子交接，
-已知拒写/未知异常、失败后同请求恢复、旧成功回放、玩家状态判断和消息合同。
-先隔离SQLite证明内部写入拒绝是否伪成功，再决定修复，不把源码疑点称为根因。
-保持贡献/资材仅作为领取门槛、原奖励生成/职位/库存规则，不扩丹房建设、周常、
-任务奖励、其他仓储或全仓审计。实际参数/三库及OneBot/QQ合同闭环后再推develop；
-继续同一goal、项目venv与共享锁，不改线上或环境，不复跑未变绿基线。
+每日维护c8992fc5ccacab76a444d2cebd83348ca8111bf3的精确CI44027622264已单点核
+completed/success，未watch或重跑全量。main仍5bef9e06、正式Release仍v1.3.17。
+
+沿同一goal完成每日任务到领取的交接，保持贡献/资材仅作为门槛、原奖励生成/职位/
+库存规则，无新迁移。首3仓储红+1应用红证明少发药却已领、发药未标已领、发药无
+永久回执仍applied且提交trigger副作用，ledger错误成功阻止重建应用恢复。首应用
+夹具漏建ledger，补齐后稳定红，不计为产品故障。
+
+现背包INSERT/UPDATE、每日已领标志与永久回执行数/最终回读，已知拒绝跨出事务
+再转结果，整笔含副作用回滚。item/user/receipt三个sect_elixir_*_write_rejected
+及eligibility晚期篡改原因/主体贯穿应用、failed回执和指令；坏数值/坏回执/缺迁移
+保留具体原因。原异常透传，诊断二次失败保留原错误链；写入失败可同请求恢复，
+started预约可继续。已提交业务但诊断失败时，永久回执可补完诊断，不再发药。
+
+聊天服务端随机奖励不纳入玩家请求指纹，避免重新生成误判改参，显式API奖励参数
+仍参与冲突检查。玩家旧消息先读本人成功回执；跨日/退宗后回放也不占新次数，
+并发晚到的回放显示实际历史奖励。旧成功payload零改写，legacy保留原DTO、NULL
+职位拒绝和旧物品元数据更新规则，委派同一写校验。未知异常安全定位/日志、正常
+流程和失败投递均有回归；发送失败不宣称业务回滚。
+
+44项新回归含三步IGNORE/改写/ABORT/末步篡改、已有物品/绑定/多药/重复ID库存
+上限/大数/坏数据、旧回放与兼容、同key和不同key竞争、started/诊断失败恢复、
+实际handler和Flask CSRF/失败/同key恢复。两条sect-elixir-claim真实dispatch/DI/
+handler从实际日重置→三步拒写/原ABORT→重建同消息恢复→别名/次日旧消息/新领取，
+另高级丹房不同随机结果重试与具体门槛拒绝，核三库资产/回执/ledger/统计/任务与
+integrity；16个OneBot/QQ文本/Markdown/降级mock合同，未真机。
+
+原4红与旧组13pass/2subtests；新增扩展/旧组47pass/2subtests，Web初跑因CSRF夹具
+键误写1fail/41pass，纠正后该例通过；领取/每日参数42pass/1deselected，八个受影响
+模块84pass/2subtests，最后异常/相关源码56pass/234deselected。各组重叠不累计。
+最终领取参数包装1pass/2deselected，含两条真实场景及晚到回放实际奖励断言。
+architecture含inventory及独立inventory通过，受影响编译/diff后白名单普通交付
+develop。用户JSON删除和goal/辅助资料不提交，线上库/部署/环境及main/Release不动。
+
+## 宗门定时链交付证据与剩余门禁（下一冻结范围）
+
+仅核本次精确SHA CI、已交付资材/日维护/领取与魔修/pending/鬼市/拍卖/BOSS既有
+证据和参数矩阵，明确下一相关完整功能及G2--G5未决。复用未变绿基线，不以CI
+等待为由扩成新一轮全仓审计，不新开丹房建设/周常/任务奖励/经济或性能。冻结JSON
+既有删除和真实QQ展示未验继续限制发布；总goal active，完整批次及发布门禁前不合main。
 
 ## 宗门定时资材与玩家读取（develop checkpoint）
 

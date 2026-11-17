@@ -89,6 +89,126 @@ async def message_contract(reply, token):
 
 
 def register(case):
+    @case('sect-elixir-claim-recovery', '宗门丹药领取', '日重置→三步拒写/原ABORT→同消息恢复→别名回放→次日旧消息',
+          '隔离三库、真实每日任务、背包/次数/回执trigger与副作用',
+          '具体原因回复，失败全笔回滚，重建应用后恢复一次，次日旧消息不发药也不占新次数',
+          group='sect-elixir-claim')
+    async def claim_recovery(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+        with setup(probe) as state:
+            assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+            def assets():
+                rows = snapshot(probe)
+                return rows[:2] + rows[3:7] + rows[8:]
+            for step, table, verb, condition, text in (
+                ('item', 'back', 'INSERT', '', '丹药入库保存失败'),
+                ('user', 'user_xiuxian', 'UPDATE', "WHEN NEW.user_id='900001' AND NEW.sect_elixir_get=1", '已领标志保存失败'),
+                ('receipt', 'sect_elixir_claim_operations', 'INSERT', '', '领取回执保存失败'),
+            ):
+                probe.seed(state.database, f'CREATE TRIGGER refuse_claim BEFORE {verb} ON {table} {condition} '
+                           "BEGIN UPDATE user_xiuxian SET stone=0 WHERE user_id='900003'; SELECT RAISE(IGNORE); END")
+                before = assets()
+                reply = await probe.command('宗门丹药领取', number=981001)
+                assert text in reply and '已撤销' in reply and '成功领取' not in reply, reply
+                assert assets() == before
+                ledger = probe.rows(state.database, "SELECT status,result_json FROM operation_ledger WHERE action='sect.claim_elixir'")
+                assert len(ledger) == 1 and ledger[0][0] == 'failed' and f'sect_elixir_{step}_write_rejected' in ledger[0][1]
+                await message_contract(reply, text)
+                probe.seed(state.database, 'DROP TRIGGER refuse_claim')
+            probe.seed(state.database, "CREATE TRIGGER refuse_claim BEFORE INSERT ON sect_elixir_claim_operations "
+                       "BEGIN SELECT RAISE(ABORT,'isolated elixir command fault'); END")
+            entry = next(row for row in probe.entries if row['command'] == '宗门丹药领取')
+            before = assets()
+            with patch.object(state.module, 'report_exception', return_value='领取失败（定位号：elixir-test）') as reported, \
+                    watch_handler_catches(entry) as caught:
+                result = await run_case(entry, 'parameter', 981001, input_text='宗门丹药领取', actor='900001')
+            assert result['status'] == 'pass' and len(caught) == 1, (result, caught)
+            assert 'sqlite3.IntegrityError: isolated elixir command fault' in caught[0]['traceback']
+            assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+            assert '定位号：elixir-test' in ''.join(result['replies']) and assets() == before
+            probe.calls.append({'command': '宗门丹药领取', 'expected_injected_fault': caught, **result})
+            probe.seed(state.database, 'DROP TRIGGER refuse_claim')
+            with patch.object(state.module, 'sect_application', SectApplication(state.database)):
+                reply = await probe.command('领取宗门丹药', number=981001)
+                assert '成功领取' in reply and probe.managers[0].goods_num('900001', 1999) == 1, reply
+                saved = snapshot(probe)
+                reply = await probe.command('宗门丹药领取', number=981001)
+                assert '已完成' in reply and snapshot(probe) == saved, reply
+                state.clock.moment += timedelta(days=1)
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                saved = snapshot(probe)
+                reply = await probe.command('领取宗门丹药', number=981001)
+                assert '已完成' in reply and snapshot(probe) == saved, reply
+                reply = await probe.command('领取宗门丹药', number=981002)
+                assert '成功领取' in reply and probe.managers[0].goods_num('900001', 1999) == 2, reply
+                assert probe.rows(state.database, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=1999") == [(2, 2)]
+                assert len(probe.rows(state.database, 'SELECT * FROM sect_elixir_claim_operations')) == 2
+            integrity(probe)
+            probe.evidence.update(actual_daily_reset=True, rejected_steps=3, rollback=True, restarted_same_message=True,
+                                  alias_replay=True, next_day_old_message_zero_write=True, adapter_contracts=12, integrity='ok')
+
+    @case('sect-elixir-multiple-rewards', '领取宗门丹药', '高阶丹房随机多药→回执拒写→重新生成→同消息恢复',
+          '真实配置二级丹房，固定两次不同随机结果，隔离迁移三库',
+          '服务端重新生成结果不当玩家改参，整批绑定数量一致；已领/无房/职位/贡献/资材/满包具体拒绝',
+          group='sect-elixir-claim')
+    async def multiple_rewards(probe):
+        with setup(probe) as state:
+            sid = state.sects[0]
+            probe.seed(state.database, 'UPDATE sects SET elixir_room_level=2,sect_materials=2000 WHERE sect_id=?', (sid,))
+            state.module.config['宗门丹房参数']['elixir_room_level']['2']['give_level']['give_num'] = 3
+            assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+            probe.seed(state.database, "CREATE TRIGGER refuse_claim BEFORE INSERT ON sect_elixir_claim_operations BEGIN SELECT RAISE(IGNORE); END")
+            before = snapshot(probe)
+            with patch.object(state.module.items, 'get_random_id_list_by_rank_and_item_type', return_value=[2001, 2002]), \
+                    patch.object(state.module.runtime_random, 'choice', return_value=2001):
+                reply = await probe.command('领取宗门丹药', number=981010)
+            assert '回执保存失败' in reply and snapshot(probe)[5] == before[5], reply
+            probe.seed(state.database, 'DROP TRIGGER refuse_claim')
+            with patch.object(state.module.items, 'get_random_id_list_by_rank_and_item_type', return_value=[2001, 2002]), \
+                    patch.object(state.module.runtime_random, 'choice', return_value=2002):
+                reply = await probe.command('宗门丹药领取', number=981010)
+            assert '成功领取' in reply, reply
+            assert probe.rows(state.database, "SELECT goods_id,goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id") == [(1999, 1, 1), (2002, 2, 2)]
+            saved = snapshot(probe)
+            reply = await probe.command('领取宗门丹药', number=981010)
+            assert '已完成' in reply and snapshot(probe) == saved
+            await message_contract(reply, '已完成')
+            original_check = state.module.check_user
+            def stale_player(event):
+                valid, player, message = original_check(event)
+                return valid, {**player, 'sect_elixir_get': 0}, message
+            with patch.object(state.module.sect_application, 'elixir_claim_receipt', return_value=None), \
+                    patch.object(state.module, 'check_user', side_effect=stale_player), \
+                    patch.object(state.module.items, 'get_random_id_list_by_rank_and_item_type', return_value=[2001, 2002]), \
+                    patch.object(state.module.runtime_random, 'choice', return_value=2001):
+                reply = await probe.command('领取宗门丹药', number=981010)
+            assert '已完成' in reply and state.module.items.get_data_by_item_id(2002)['name'] in reply, reply
+            assert state.module.items.get_data_by_item_id(2001)['name'] not in reply, reply
+            assert snapshot(probe)[3:] == saved[3:] and snapshot(probe)[:2] == saved[:2]
+            reply = await probe.command('领取宗门丹药', number=981011)
+            assert '已经领取过' in reply
+            reply = await probe.command('领取宗门丹药', actor='900003')
+            assert '还未建设丹房' in reply
+            for values, token in (({'sect_position': 15}, '不满足领取要求'),
+                                  ({'sect_position': 0, 'sect_contribution': 0}, '贡献度不满足')):
+                probe.player('900002', **values)
+                reply = await probe.command('宗门丹药领取', actor='900002')
+                assert token in reply, reply
+            probe.player('900002', sect_contribution=10**12)
+            probe.seed(state.database, 'UPDATE sects SET sect_materials=0 WHERE sect_id=?', (state.sects[1],))
+            reply = await probe.command('领取宗门丹药', actor='900002')
+            assert '资材无法维护' in reply, reply
+            probe.seed(state.database, 'UPDATE sects SET sect_materials=500 WHERE sect_id=?', (state.sects[1],))
+            with patch.object(state.module, 'XiuConfig', return_value=SimpleNamespace(max_goods_num=0)):
+                reply = await probe.command('领取宗门丹药', actor='900002')
+            assert '背包已满' in reply, reply
+            assert snapshot(probe)[4:7] == saved[4:7] and snapshot(probe)[8:] == saved[8:]
+            integrity(probe)
+            probe.evidence.update(multiple_items=True, bound_counts=True, regenerated_rewards_recovered=True,
+                                  specific_eligibility=True, alias_replay=True, adapter_contracts=4, integrity='ok')
+
     @case('sect-daily-maintenance-player-lifecycle', '宗门丹药领取', '已领/任务次数上限→实际重置→别名领取→重放/次日',
           '三个真实宗门分别扣资材/降级/失效，隔离三库与可控UTC时钟',
           '玩家读取真实维护结果，重置后领取一次，同日任务重放保留新状态，次日再次可领',

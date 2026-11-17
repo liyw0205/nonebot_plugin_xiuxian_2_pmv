@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+from ...core.errors import DomainError
 from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from .schema import table_ready
 
 
 class _StateChanged(Exception):
@@ -69,24 +72,139 @@ class SectRenameSqlRepository:
         self.database = str(database)
         self.clock = clock or SystemClock()
 
-    def claim_elixir(self, operation_id, user_id, sect_id, contribution_required, materials_required, rewards, max_goods_num):
-        operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,contribution_required,materials_required,max_goods_num=int(sect_id),int(contribution_required),int(materials_required),int(max_goods_num);normalized=tuple((int(r[0]),str(r[1]),str(r[2]),int(r[3])) for r in rewards);payload=__import__('json').dumps([user_id,sect_id,contribution_required,materials_required,normalized],ensure_ascii=True)
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            old=uow.query_one("SELECT rewards FROM sect_elixir_claim_operations WHERE operation_id=?",(operation_id,))
-            if old:return {"status":"duplicate","rewards":tuple(tuple(x) for x in __import__('json').loads(old["rewards"]))}
-            user=uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,COALESCE(sect_elixir_get,0) AS claimed FROM user_xiuxian WHERE user_id=?",(user_id,));sect=uow.query_one("SELECT COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",(sect_id,))
-            if user is None or sect is None or int(user["sect_id"] or 0)!=sect_id:return {"status":"membership_changed", "reason":"user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"}
-            if int(user["sect_position"] or 0)==15:return {"status":"position_ineligible"}
-            if int(sect["level"])<=0:return {"status":"room_missing"}
-            if as_int_like(user["contribution"])<contribution_required:return {"status":"contribution_insufficient"}
-            if as_int_like(sect["materials"])<materials_required:return {"status":"materials_insufficient"}
-            if int(user["claimed"])==1:return {"status":"already_claimed"}
-            for item_id,_,_,qty in normalized:
-                row=uow.query_one("SELECT COALESCE(goods_num,0) AS n FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
-                if (int(row["n"]) if row else 0)+qty>max_goods_num:return {"status":"inventory_full"}
-            stamp=self.clock.now().isoformat()
-            for item_id,name,kind,qty in normalized:uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.goods_num,update_time=excluded.update_time",(user_id,item_id,name,kind,qty,stamp,stamp,qty))
-            uow.execute("UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=? AND COALESCE(sect_elixir_get,0)=0",(user_id,));uow.execute("INSERT INTO sect_elixir_claim_operations(operation_id,payload,rewards) VALUES(?,?,?)",(operation_id,payload,__import__('json').dumps(normalized,ensure_ascii=True)));return {"status":"applied","rewards":normalized}
+    def claim_elixir(self, operation_id, user_id, sect_id, contribution_required, materials_required, rewards, max_goods_num, *, legacy=False):
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        sect_id, contribution_required, materials_required, max_goods_num = map(
+            int, (sect_id, contribution_required, materials_required, max_goods_num))
+        normalized = tuple((int(r[0]), str(r[1]), str(r[2]), int(r[3])) for r in rewards)
+        if not operation_id or not normalized or any(r[0] < 0 or r[3] <= 0 for r in normalized):
+            raise ValueError("valid operation and rewards are required")
+        payload = json.dumps([user_id, sect_id, contribution_required, materials_required, normalized], ensure_ascii=True)
+        try:
+            return self._claim_elixir(operation_id, user_id, sect_id, contribution_required,
+                                      materials_required, normalized, max_goods_num, payload, legacy)
+        except DomainError as exc:
+            return {"status": "state_changed", "reason": exc.details.get("reason") or exc.code,
+                    "subject": str(exc.details.get("subject") or user_id)}
+
+    @staticmethod
+    def _elixir_reject(step, subject):
+        reason = f"sect_elixir_{step}_write_rejected"
+        raise DomainError(reason, reason, {"reason": reason, "subject": str(subject)})
+
+    @staticmethod
+    def _elixir_rewards(raw, subject):
+        try:
+            rows = json.loads(raw)
+            if not isinstance(rows, list) or not rows:
+                raise ValueError("missing rewards")
+            result = []
+            for row in rows:
+                if not isinstance(row, list) or len(row) != 4:
+                    raise ValueError("invalid reward row")
+                item, name, kind, count = row
+                if type(item) is not int or item < 0 or type(count) is not int or count <= 0 or not isinstance(name, str) or not isinstance(kind, str):
+                    raise ValueError("invalid reward fields")
+                result.append(tuple(row))
+            return tuple(result)
+        except (ValueError, TypeError) as exc:
+            raise DomainError("sect_elixir_receipt_invalid", "invalid elixir receipt", {"subject": subject}) from exc
+
+    def elixir_claim_receipt(self, operation_id, user_id):
+        if not Path(self.database).is_file():
+            return None
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not table_ready(uow, "sect_elixir_claim_operations", frozenset({"operation_id", "payload", "rewards"})):
+                return None
+            old = uow.query_one("SELECT payload,rewards FROM sect_elixir_claim_operations WHERE operation_id=?", (operation_id,))
+            if old is None:
+                return None
+            try:
+                payload = json.loads(old["payload"])
+                if not isinstance(payload, list) or len(payload) != 5:
+                    raise ValueError("invalid request")
+            except (ValueError, TypeError) as exc:
+                raise DomainError("sect_elixir_receipt_invalid", "invalid elixir request", {"subject": operation_id}) from exc
+            if str(payload[0]) != str(user_id):
+                raise DomainError("operation_conflict", "elixir receipt belongs to another player", {"subject": user_id})
+            return {"status": "duplicate", "rewards": self._elixir_rewards(old["rewards"], operation_id)}
+
+    def _claim_elixir(self, operation_id, user_id, sect_id, contribution_required,
+                      materials_required, normalized, max_goods_num, payload, legacy):
+        reject = lambda reason, subject=user_id: {"status": reason, "reason": reason, "subject": subject}
+        number = lambda value, field: require_exact_integer(value, field=field, subject=user_id)
+        if not Path(self.database).is_file():
+            return reject("schema_missing")
+        with DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
+            if not table_ready(uow, "sect_elixir_claim_operations", frozenset({"operation_id", "payload", "rewards"})):
+                return reject("schema_missing")
+            old = uow.query_one("SELECT rewards FROM sect_elixir_claim_operations WHERE operation_id=?", (operation_id,))
+            if old:
+                return {"status": "duplicate", "rewards": self._elixir_rewards(old["rewards"], operation_id)}
+            user = uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,"
+                                 "COALESCE(sect_elixir_get,0) AS claimed FROM user_xiuxian WHERE user_id=?", (user_id,))
+            sect = uow.query_one("SELECT COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials "
+                                 "FROM sects WHERE sect_id=?", (sect_id,))
+            if user is None or sect is None or int(user["sect_id"] or 0) != sect_id:
+                return {**reject("user_missing" if user is None else "sect_missing" if sect is None else "sect_changed"),
+                        "status": "membership_changed"}
+            position = 15 if legacy and user["sect_position"] is None else int(user["sect_position"] or 0)
+            if position == 15:
+                return reject("position_ineligible")
+            if number(sect["level"], "elixir_room_level") <= 0:
+                return reject("room_missing")
+            if number(user["contribution"], "sect_contribution") < contribution_required:
+                return reject("contribution_insufficient")
+            if number(sect["materials"], "sect_materials") < materials_required:
+                return reject("materials_insufficient", str(sect_id))
+            if number(user["claimed"], "sect_elixir_get") == 1:
+                return reject("already_claimed")
+            expected = {}
+            for item_id, _, _, qty in normalized:
+                if item_id not in expected:
+                    row = uow.query_one("SELECT COALESCE(goods_num,0) AS n,COALESCE(bind_num,0) AS b "
+                                        "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                    expected[item_id] = (number(row["n"], "sect_elixir_inventory"), number(row["b"], "sect_elixir_bound")) if row else (0, 0)
+                count, bound = expected[item_id]
+                if count < 0 or bound < 0 or bound > count:
+                    return reject("sect_elixir_inventory_invalid", str(item_id))
+                expected[item_id] = (count + qty, bound + qty)
+                if count + qty > max_goods_num:
+                    return reject("inventory_full", str(item_id))
+            stamp = self.clock.now().isoformat()
+            metadata_update = "goods_name=excluded.goods_name,goods_type=excluded.goods_type," if legacy else ""
+            for item_id, name, kind, qty in normalized:
+                changed = uow.execute(
+                    "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                    "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                    "goods_num=xiuxian_int_store(xiuxian_int_add(COALESCE(back.goods_num,0),excluded.goods_num)),"
+                    "bind_num=xiuxian_int_store(xiuxian_int_add(COALESCE(back.bind_num,0),excluded.goods_num)),"
+                    + metadata_update + "update_time=excluded.update_time", (user_id, item_id, name, kind, qty, stamp, stamp, qty))
+                if changed.rowcount != 1:
+                    self._elixir_reject("item", item_id)
+            changed = uow.execute("UPDATE user_xiuxian SET sect_elixir_get=1 WHERE user_id=? AND COALESCE(sect_elixir_get,0)=0", (user_id,))
+            if changed.rowcount != 1:
+                self._elixir_reject("user", user_id)
+            encoded = json.dumps(normalized, ensure_ascii=True)
+            changed = uow.execute("INSERT INTO sect_elixir_claim_operations(operation_id,payload,rewards) VALUES(?,?,?)", (operation_id, payload, encoded))
+            if changed.rowcount != 1:
+                self._elixir_reject("receipt", operation_id)
+            for item_id, counts in expected.items():
+                row = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                if row is None or (number(row["goods_num"], "sect_elixir_inventory"), number(row["bind_num"], "sect_elixir_bound")) != counts:
+                    self._elixir_reject("item", item_id)
+            saved_user = uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,"
+                                       "COALESCE(sect_elixir_get,0) AS claimed FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if saved_user != {**user, "claimed": 1}:
+                self._elixir_reject("user", user_id)
+            saved_sect = uow.query_one("SELECT COALESCE(elixir_room_level,0) AS level,COALESCE(sect_materials,0) AS materials "
+                                       "FROM sects WHERE sect_id=?", (sect_id,))
+            if saved_sect != sect:
+                self._elixir_reject("eligibility", sect_id)
+            saved = uow.query_one("SELECT payload,rewards FROM sect_elixir_claim_operations WHERE operation_id=?", (operation_id,))
+            if saved != {"payload": payload, "rewards": encoded}:
+                self._elixir_reject("receipt", operation_id)
+            return {"status": "applied", "rewards": normalized}
     def learn_secondary(self, operation_id, user_id, sect_id, buff_id, materials_cost, *, expected_catalog, forbidden_positions=(12,14,15)):
         operation_id,user_id=str(operation_id).strip(),str(user_id);sect_id,buff_id,materials_cost=int(sect_id),int(buff_id),int(materials_cost)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:

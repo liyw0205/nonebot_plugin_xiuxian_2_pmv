@@ -1,6 +1,13 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "sect_elixir_item_write_rejected": "丹药入库保存失败，本次领取已撤销，请联系管理员核对背包。",
+    "sect_elixir_user_write_rejected": "丹药已领标志保存失败，本次领取已撤销，请联系管理员核对领取次数。",
+    "sect_elixir_receipt_write_rejected": "丹药领取回执保存失败，本次领取已撤销，请联系管理员核对请求记录。",
+    "sect_elixir_eligibility_write_rejected": "领取期间宗门丹房或资材被改写，本次领取已撤销，请联系管理员核对宗门记录。",
+    "sect_elixir_receipt_invalid": "宗门丹药历史领取回执格式不合法，请联系管理员核对该次领取。",
+    "sect_elixir_inventory_invalid": "丹药库存与绑定数量不合法，请联系管理员核对背包。",
+    "sect_elixir_level_unsupported": "当前丹房等级没有对应的领取配置，请联系管理员核对丹房等级。",
     "collect_synthesis_arguments": "格式：活动换字 源字 目标字 [活动名]，每次获得一张目标字牌。",
     "collect_synthesis_same_token": "源字与目标字相同，请选择不同字牌。",
     "collect_synthesis_activity_missing": "未找到指定集字活动，请查看活动背包中的活动名。",
@@ -484,6 +491,8 @@ def reason_text(code: str) -> str | None:
         "listing_price": "仙肆价格", "activity_points": "活动积分", "training_points": "历练积分",
         "tower_score": "通天塔积分", "arena_honor": "竞技场荣誉", "boss_integral": "世界积分",
         "sect_contribution": "宗门贡献", "sect_materials": "宗门资材",
+        "sect_elixir_inventory": "宗门丹药库存", "sect_elixir_bound": "宗门丹药绑定数量",
+        "sect_elixir_get": "宗门丹药领取标志", "elixir_room_level": "宗门丹房等级",
         "sect_used_stone": "宗门灵石储备", "stone_amount": "灵石金额",
         "stone_delta": "灵石流水", "exp_delta": "修为流水",
         "sect_contribution_delta": "宗门贡献流水", "sect_scale_delta": "宗门规模流水",

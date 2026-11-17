@@ -10,7 +10,11 @@ from nonebot import require
 from ..on_compat import on_command
 from ..messaging.delivery import delivery_service
 from nonebot.log import logger
-from ..command_guard import guard_command, result_failure
+from ..command_guard import guard_command, result_failure, report_exception, failure_reply
+from nonebot.exception import MatcherException, ProcessException
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
+from ...core.player_reasons import reason_text
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -1015,6 +1019,26 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
 @sect_elixir_get.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门丹药领取"""
+    try:
+        await _claim_sect_elixir(bot, event)
+    except (MatcherException, ProcessException):
+        raise
+    except DomainError as exc:
+        if reason_text(exc.details.get("reason", "")) or reason_text(exc.code):
+            msg = failure_reply("领取宗门丹药", exc)
+            if exc.__cause__ is not None:
+                report_exception("领取宗门丹药诊断", exc, event=event)
+        else:
+            msg = report_exception("领取宗门丹药", exc, event=event)
+    except Exception as exc:
+        msg = report_exception("领取宗门丹药", exc, event=event)
+    else:
+        return
+    await handle_send(bot, event, msg)
+    await sect_elixir_get.finish()
+
+
+async def _claim_sect_elixir(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1023,6 +1047,14 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     sect_id = user_info['sect_id']
     user_id = user_info['user_id']
+    operation_id = _sect_operation_id(event, "elixir_claim", user_id)
+    previous = sect_application.elixir_claim_receipt(operation_id, user_id)
+    if previous is not None:
+        msg = "该次宗门丹药领取已完成：\n" + "\n".join(
+            f"{name} {amount} 枚" for _, name, _, amount in previous["rewards"]
+        )
+        await handle_send(bot, event, msg, md_type="宗门")
+        await sect_elixir_get.finish()
     sect_application.update_last_check_info_time(user_id)
     if sect_id:
         sect_position = user_info['sect_position']
@@ -1033,21 +1065,26 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await sect_elixir_get.finish()
         else:
             sect_info = sect_application.get_sect_info(sect_id)
-            if int(sect_info['elixir_room_level']) == 0:
+            if sect_info is None:
+                raise DomainError("sect_missing", "sect is missing", {"subject": str(sect_id)})
+            room_level = require_exact_integer(sect_info['elixir_room_level'], field="elixir_room_level", subject=str(sect_id))
+            if room_level == 0:
                 msg = f"道友的宗门目前还未建设丹房！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
-            if int(user_info['sect_contribution']) < elixir_room_config['领取贡献度要求']:
+            if require_exact_integer(user_info['sect_contribution'], field="sect_contribution", subject=str(user_id)) < elixir_room_config['领取贡献度要求']:
                 msg = f"道友的宗门贡献度不满足领取条件，当前宗门贡献度要求：{elixir_room_config['领取贡献度要求']}点！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             elixir_room_level_up_config = elixir_room_config['elixir_room_level']
+            if str(room_level) not in elixir_room_level_up_config:
+                raise DomainError("sect_elixir_level_unsupported", "unsupported elixir room level", {"subject": str(sect_id)})
             elixir_room_cost = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]['level_up_cost']['建设度']
             if sect_info['sect_materials'] < elixir_room_cost:
                 msg = f"当前宗门资材无法维护丹房，请等待{config['发放宗门资材']['时间']}点发放宗门资材后尝试领取！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
-            if int(user_info['sect_elixir_get']) == 1:
+            if require_exact_integer(user_info['sect_elixir_get'], field="sect_elixir_get", subject=str(user_id)) == 1:
                 msg = f"道友已经领取过了，不要贪心哦~"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
@@ -1078,8 +1115,9 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         rewards.append((item_id, goods_info['name'], '丹药', amount))
 
             claim_outcome = sect_application.claim_elixir(
-                operation_id=_sect_operation_id(event, "elixir_claim", user_id) or f"sect:elixir:{user_id}:{sect_ids.new_id()}",
+                operation_id=operation_id,
                 user_id=user_id,
+                generated_rewards=True,
                 sect_id=sect_id,
                 contribution_required=elixir_room_config['领取贡献度要求'],
                 materials_required=elixir_room_cost,
@@ -1098,8 +1136,17 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     "materials_insufficient": "当前宗门资材无法维护丹房。",
                     "inventory_full": "背包已满，无法领取丹药。",
                 }
-                await handle_send(bot, event, result_failure("领取宗门丹药", result, messages=failure_messages))
+                subject = str(getattr(result, "subject", ""))
+                reason = getattr(result, "reason", "") or result.status
+                label = "本次领取回执" if "receipt" in reason else "本人" if subject == str(user_id) else f"编号{subject}"
+                await handle_send(bot, event, result_failure(
+                    "领取宗门丹药", result, messages=failure_messages, subjects={subject: label} if subject else None
+                ))
                 await sect_elixir_get.finish()
+            if claim_outcome.replayed or claim_data.get("status") == "duplicate":
+                msg = "该次宗门丹药领取已完成：\n" + "\n".join(
+                    f"{name} {amount} 枚" for _, name, _, amount in claim_data["rewards"]
+                )
             await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await sect_elixir_get.finish()
     else:

@@ -93,6 +93,26 @@
 
 ## 宗门命令合同
 
+`宗门丹药领取`及别名`领取宗门丹药`在日重置后读取新的领取次数和丹房状态。
+发药/绑定数量、已领标志与永久回执同事务，逐写行数及最后回读，拒写/改写含
+trigger副作用整笔回滚。`sect_elixir_item_write_rejected`、
+`sect_elixir_user_write_rejected`、`sect_elixir_receipt_write_rejected`及晚期宗门
+状态改写的`sect_elixir_eligibility_write_rejected`携具体主体经应用、failed回执
+和实际回复保留；原SQLite异常透传，诊断失败不遮原原因/异常。
+
+新写入失败可同请求恢复，started预约可续；贡献和宗门资材仍只校验门槛，不在领取
+时扣减。多药、已有绑定、重复物品ID与库存上限按整批校验，大数使用既有精确存储。
+聊天随机奖励由服务端生成，不参与玩家请求指纹；显式API奖励参数仍检查冲突。
+旧成功回执先回放，保持历史奖励、旧payload和次数；次日旧消息不占新次数，并发
+晚到的回放也显示实际历史奖励。业务已提交而诊断失败时，重放仅补完诊断。legacy
+保留原DTO、NULL职位拒绝与物品元数据更新语义，写入委派同一feature校验，无新迁移。
+
+`test_sect_elixir_claim_recovery.py`验证三步IGNORE/改写/ABORT、后步篡改前步、整笔
+回滚/重建恢复/并发、大数/坏数据/旧兼容、真实handler流程与失败投递及Flask合同。
+`sect-elixir-claim`两条真实dispatch/DI/handler衔接每日调度→领取故障→同消息恢复→
+别名/跨日/随机多药和旧消息回放；核对三库资产/回执/ledger/统计/任务及完整性。
+OneBot/QQ文本、Markdown与降级仅mock，真实QQ展示未验。
+
 主/副功法搜寻（`宗门功法搜寻`、`宗门神通搜寻`）经
 `SectApplication.apply_buff_search(..., owner_position=...)` 进入
 `SectBuffSearchSqlRepository`，在 `sects` 上写**真实列** `mainbuff` / `secbuff`

@@ -10,3 +10,6 @@ class SectMaterialParameterDispatchTests(unittest.TestCase):
 
     def test_daily_maintenance_player_claim_and_write_recovery(self):
         self.check_group('sect-daily-maintenance', 2, {'success': 2})
+
+    def test_elixir_claim_write_recovery_and_multiple_rewards(self):
+        self.check_group('sect-elixir-claim', 2, {'success': 2})
