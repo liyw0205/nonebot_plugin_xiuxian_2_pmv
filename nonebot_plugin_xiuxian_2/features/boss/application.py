@@ -32,6 +32,8 @@ class BossSettlementResult:
     exp: int = 0
     integral: int = 0
     activity_lines: tuple[str, ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -162,6 +164,22 @@ class BossApplication:
                             self.ledger.release_unsettled(uow, reservation)
                     except Exception as release_error:
                         raise exc from release_error
+                if action == "boss.settle" and reservation is not None and exc.code.startswith("boss_battle_") and exc.code.endswith("_write_rejected"):
+                    try:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    except Exception as release_error:
+                        raise exc from release_error
+                    reason = str(exc.details.get("reason") or exc.code)
+                    subject = str(exc.details.get("subject") or "")
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "世界BOSS讨伐结算未能完整保存。",
+                        code=exc.code,
+                        data={"status": "state_changed", "reason": reason, "subject": subject},
+                        audit_category="boss",
+                    )
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.game_database, operation_id, action, payload, str(exc))
@@ -269,6 +287,8 @@ class BossApplication:
             as_int_like(data.get("exp", 0) or 0),
             int(data.get("integral", 0) or 0),
             lines,
+            str(data.get("reason", "") or ""),
+            str(data.get("subject", "") or ""),
         )
 
     def settlement_result_compat(self, *, operation_id: str) -> BossSettlementResult | None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 from ...core.numeric import as_int_like
 from dataclasses import replace as _reason_replace
 from ...core.snapshot_reason import first_difference
+from ...core.errors import DomainError
 
 import json
 from dataclasses import dataclass
@@ -139,6 +140,8 @@ class WorldBossBattleSettlementSqlRepository:
         exp: int | None = None,
         integral: int | None = None,
         activity_lines: tuple[str, ...] = (),
+        reason: str = "",
+        subject: str = "",
     ) -> WorldBossBattleSettlementResult:
         return WorldBossBattleSettlementResult(
             status,
@@ -149,7 +152,63 @@ class WorldBossBattleSettlementSqlRepository:
             as_int_like(expected_exp if exp is None else exp),
             as_int_like(expected_integral if integral is None else integral),
             tuple(activity_lines),
+            str(reason),
+            str(subject),
         )
+
+    @staticmethod
+    def _write_rejected(stage: str, subject: str) -> DomainError:
+        code = f"boss_battle_{stage}_write_rejected"
+        return DomainError(
+            code,
+            f"world boss battle {stage} write did not persist exactly",
+            {"reason": code, "subject": str(subject)},
+        )
+
+    @staticmethod
+    def _row_matches(row: Mapping[str, Any] | None, expected: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            actual = row.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                try:
+                    actual = as_int_like(actual)
+                except (TypeError, ValueError, OverflowError):
+                    return False
+            if actual != value:
+                return False
+        return True
+
+    def _verify_write(
+        self,
+        uow: DatabaseUnitOfWork,
+        checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]],
+        *,
+        stage: str,
+        subject: str,
+        changed: Any,
+        sql: str,
+        params: tuple[Any, ...],
+        expected: dict[str, Any],
+        required: bool = True,
+        remember: bool = True,
+    ) -> Mapping[str, Any]:
+        row = uow.query_one(sql, params)
+        if ((required and changed.rowcount != 1) or not self._row_matches(row, expected)):
+            raise self._write_rejected(stage, subject)
+        if remember:
+            checks.append((stage, str(subject), sql, params, expected))
+        return row
+
+    def _verify_final_writes(
+        self,
+        uow: DatabaseUnitOfWork,
+        checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]],
+    ) -> None:
+        for stage, subject, sql, params, expected in checks:
+            if not self._row_matches(uow.query_one(sql, params), expected):
+                raise self._write_rejected(stage, subject)
 
     def settlement_result(self, operation_id: str) -> WorldBossBattleSettlementResult | None:
         operation_id = str(operation_id).strip()
@@ -180,21 +239,49 @@ class WorldBossBattleSettlementSqlRepository:
             tuple(str(line) for line in lines),
         )
 
-    def _increment_stat(self, uow: DatabaseUnitOfWork, user_id: str, field: str) -> None:
+    def _increment_stat(
+        self,
+        uow: DatabaseUnitOfWork,
+        user_id: str,
+        field: str,
+        checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]],
+    ) -> int:
         quoted = '"' + field.replace('"', '""') + '"'
-        uow.execute(
+        sql = f"SELECT COALESCE({quoted},0) AS value FROM player_data.statistics WHERE user_id=?"
+        previous = uow.query_one(sql, (user_id,))
+        try:
+            expected = as_int_like(previous["value"] if previous else 0) + 1
+        except (TypeError, ValueError, OverflowError):
+            raise self._write_rejected("statistics", user_id)
+        changed = uow.execute(
             f"INSERT INTO player_data.statistics(user_id,{quoted}) VALUES (?,1) "
             f"ON CONFLICT(user_id) DO UPDATE SET {quoted}=COALESCE({quoted},0)+1",
             (user_id,),
         )
 
-    def _record_tasks(self, uow: DatabaseUnitOfWork, user_id: str, daily_period: str, weekly_period: str) -> None:
+        self._verify_write(
+            uow, checks, stage="statistics", subject=user_id, changed=changed,
+            sql=sql, params=(user_id,), expected={"value": expected},
+        )
+        return expected
+
+    def _record_tasks(
+        self,
+        uow: DatabaseUnitOfWork,
+        user_id: str,
+        daily_period: str,
+        weekly_period: str,
+        checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]],
+    ) -> dict[str, Any]:
+        columns = (
+            "daily_period", "daily_progress", "daily_claimed",
+            "weekly_period", "weekly_progress", "weekly_claimed",
+        )
         row = uow.query_one(
-            "SELECT daily_period,daily_progress,daily_claimed,weekly_period,weekly_progress,weekly_claimed "
-            "FROM player_data.xiuxian_tasks WHERE user_id=?",
+            f"SELECT {','.join(columns)} FROM player_data.xiuxian_tasks WHERE user_id=?",
             (user_id,),
         )
-        values = list(row.values()) if row else ["", "{}", "[]", "", "{}", "[]"]
+        values = [row.get(column) for column in columns] if row else ["", "{}", "[]", "", "{}", "[]"]
         for prefix, period, target in (("daily", daily_period, 1), ("weekly", weekly_period, 150)):
             offset = 0 if prefix == "daily" else 3
             progress = self._loads(values[offset + 1], {}) if str(values[offset] or "") == period else {}
@@ -202,15 +289,23 @@ class WorldBossBattleSettlementSqlRepository:
             key = "daily_boss" if prefix == "daily" else "weekly_boss"
             progress[key] = min(target, int(progress.get(key, 0) or 0) + 1)
             values[offset:offset + 3] = [period, self._json(progress), self._json(claimed)]
-        uow.execute(
+        params = (user_id, *values)
+        changed = uow.execute(
             "INSERT INTO player_data.xiuxian_tasks(user_id,daily_period,daily_progress,daily_claimed,"
             "weekly_period,weekly_progress,weekly_claimed) VALUES (?,?,?,?,?,?,?) "
             "ON CONFLICT(user_id) DO UPDATE SET daily_period=excluded.daily_period,"
             "daily_progress=excluded.daily_progress,daily_claimed=excluded.daily_claimed,"
             "weekly_period=excluded.weekly_period,weekly_progress=excluded.weekly_progress,"
             "weekly_claimed=excluded.weekly_claimed",
-            (user_id, *values),
+            params,
         )
+        expected = dict(zip(columns, values))
+        sql = f"SELECT {','.join(columns)} FROM player_data.xiuxian_tasks WHERE user_id=?"
+        self._verify_write(
+            uow, checks, stage="tasks", subject=user_id, changed=changed,
+            sql=sql, params=(user_id,), expected=expected,
+        )
+        return expected
 
     def _apply_activity_damage(
         self,
@@ -219,6 +314,7 @@ class WorldBossBattleSettlementSqlRepository:
         raw_damage: int,
         activities: list[Mapping[str, Any]],
         prefix: str,
+        checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]],
     ) -> list[str]:
         if not activities:
             return []
@@ -252,9 +348,15 @@ class WorldBossBattleSettlementSqlRepository:
             row = uow.query_one(f"SELECT hp_left,max_hp FROM {state_table} WHERE activity_key=?", (key,))
             hp_left = max_hp if row is None else max(0, safe_int(row["hp_left"]))
             if row is None:
-                uow.execute(
+                changed = uow.execute(
                     f"INSERT INTO {state_table}(activity_key,hp_left,max_hp,update_time) VALUES (?,?,?,?)",
                     (key, max_hp, max_hp, stamp),
+                )
+                self._verify_write(
+                    uow, checks, stage="activity_state", subject=user_id, changed=changed,
+                    sql=f"SELECT hp_left,max_hp,update_time FROM {state_table} WHERE activity_key=?",
+                    params=(key,), expected={"hp_left": max_hp, "max_hp": max_hp, "update_time": stamp},
+                    remember=False,
                 )
             multiplier = max(0.0, float(activity.get("multiplier", 1.0)))
             cap = max(1, safe_int(max_hp * float(activity.get("hit_hp_cap_ratio", 0.01)), 1))
@@ -267,28 +369,70 @@ class WorldBossBattleSettlementSqlRepository:
                 f"UPDATE {state_table} SET hp_left=?,max_hp=?,update_time=? WHERE activity_key=? AND hp_left=?",
                 (new_hp, max_hp, stamp, key, hp_left),
             )
-            if changed.rowcount != 1:
-                raise RuntimeError("activity boss state changed")
-            uow.execute(
+            self._verify_write(
+                uow, checks, stage="activity_state", subject=user_id, changed=changed,
+                sql=f"SELECT hp_left,max_hp,update_time FROM {state_table} WHERE activity_key=?",
+                params=(key,), expected={"hp_left": new_hp, "max_hp": max_hp, "update_time": stamp},
+            )
+
+            prior_damage = uow.query_one(
+                f"SELECT total_damage FROM {damage_table} WHERE activity_key=? AND user_id=?",
+                (key, user_id),
+            )
+            prior_total = 0 if prior_damage is None else safe_int(prior_damage["total_damage"])
+            expected_total = min(sqlite_max, prior_total + damage)
+            changed = uow.execute(
                 f"INSERT INTO {damage_table}(activity_key,user_id,total_damage,update_time) VALUES (?,?,?,?) "
                 "ON CONFLICT(activity_key,user_id) DO UPDATE SET "
                 "total_damage=MIN(?,COALESCE(activity_boss_damage.total_damage,0)+excluded.total_damage),"
                 "update_time=excluded.update_time",
                 (key, user_id, damage, stamp, sqlite_max),
             )
-            uow.execute(
+            log_changed = uow.execute(
                 f"INSERT INTO {fight_table}(activity_key,user_id,damage,fight_date,source,create_time) "
                 "VALUES (?,?,?,?,'world_boss',?)",
                 (key, user_id, damage, today, stamp),
+            )
+            self._verify_write(
+                uow, checks, stage="activity_damage", subject=user_id, changed=changed,
+                sql=f"SELECT total_damage,update_time FROM {damage_table} WHERE activity_key=? AND user_id=?",
+                params=(key, user_id), expected={"total_damage": expected_total, "update_time": stamp},
+            )
+            log_row = uow.query_one(
+                f"SELECT activity_key,user_id,damage,fight_date,source,create_time FROM {fight_table} "
+                "WHERE id=?",
+                (log_changed.lastrowid,),
+            )
+            self._verify_write(
+                uow, checks, stage="activity_log", subject=user_id, changed=log_changed,
+                sql=f"SELECT activity_key,user_id,damage,fight_date,source,create_time FROM {fight_table} WHERE id=?",
+                params=(log_changed.lastrowid,), expected={
+                    "activity_key": key, "user_id": user_id, "damage": damage,
+                    "fight_date": today, "source": "world_boss", "create_time": stamp,
+                },
             )
             percent_left = 100.0 * new_hp / max_hp
             for milestone in activity.get("server_milestones", []):
                 threshold = float(milestone.get("hp_percent", 0))
                 if percent_left <= threshold:
-                    uow.execute(
+                    milestone_key = str(milestone.get("key") or f"p{threshold}")
+                    previous_milestone = uow.query_one(
+                        f"SELECT unlocked_time FROM {milestone_table} WHERE activity_key=? AND milestone_key=?",
+                        (key, milestone_key),
+                    )
+                    unlocked_time = str(previous_milestone["unlocked_time"] or "") if previous_milestone else stamp
+                    changed = uow.execute(
                         f"INSERT OR IGNORE INTO {milestone_table}(activity_key,milestone_key,unlocked_time) "
                         "VALUES (?,?,?)",
-                        (key, str(milestone.get("key") or f"p{threshold}"), stamp),
+                        (key, milestone_key, stamp),
+                    )
+                    self._verify_write(
+                        uow, checks, stage="activity_milestone", subject=user_id, changed=changed,
+                        sql=f"SELECT milestone_key,unlocked_time FROM {milestone_table} "
+                        "WHERE activity_key=? AND milestone_key=?",
+                        params=(key, milestone_key),
+                        expected={"milestone_key": milestone_key, "unlocked_time": unlocked_time},
+                        required=previous_milestone is None,
                     )
             lines.append(f"活动首领·{activity.get('boss_name', '活动首领')} 计入伤害 {damage}，剩余 {new_hp}/{max_hp}")
         return lines
@@ -354,47 +498,175 @@ class WorldBossBattleSettlementSqlRepository:
 
             quantity = max(0, int(item.get("quantity", 0) or 0))
             item_id = int(item.get("id", 0) or 0)
+            inventory_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
+            current = None
             if quantity:
-                current = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                fields = ["COALESCE(goods_num,0) AS goods_num"]
+                if "bind_num" in inventory_columns:
+                    fields.append("COALESCE(bind_num,0) AS bind_num")
+                current = uow.query_one(
+                    f"SELECT {','.join(fields)} FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )
                 if (int(current["goods_num"]) if current else 0) + quantity > int(max_goods_num):
                     return self._result("inventory_full", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral)
 
+            checks: list[tuple[str, str, str, tuple[Any, ...], dict[str, Any]]] = []
             stamina = int(expected_stamina) - int(stamina_cost)
             stone = int(expected_stone) + int(stone_reward)
             exp = int(expected_exp) + int(exp_reward)
             count = int(expected_battle_count) + 1
             integral = int(expected_total_integral) + int(integral_reward)
-            if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
-                raise RuntimeError("player state changed")
-            if uow.execute("UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND COALESCE(last_check_info_time,'')=?", (str(checked_at), user_id, str(expected_checked_at))).rowcount != 1:
-                raise RuntimeError("cooldown changed")
+            player_expected = {
+                "user_stamina": stamina, "hp": max(1, int(final_hp)), "mp": max(1, int(final_mp)),
+                "exp": exp, "stone": stone,
+            }
+            player_sql = "SELECT user_stamina,hp,mp,exp,stone FROM user_xiuxian WHERE user_id=?"
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=xiuxian_int_store(?,'stone','actor') "
+                "WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 "
+                "AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 "
+                "AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone,
+                 user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone),
+            )
+            self._verify_write(
+                uow, checks, stage="stamina", subject=user_id, changed=changed,
+                sql=player_sql, params=(user_id,), expected=player_expected,
+            )
+            changed = uow.execute(
+                "UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND COALESCE(last_check_info_time,'')=?",
+                (str(checked_at), user_id, str(expected_checked_at)),
+            )
+            self._verify_write(
+                uow, checks, stage="cooldown", subject=user_id, changed=changed,
+                sql="SELECT last_check_info_time AS checked_at FROM user_cd WHERE user_id=?",
+                params=(user_id,), expected={"checked_at": str(checked_at)},
+            )
+            daily_expected = {
+                "boss_stone": int(expected_daily_stone) + int(stone_reward),
+                "boss_integral": int(expected_daily_integral) + int(integral_reward),
+                "boss_battle_count": count,
+            }
+            daily_sql = (
+                "SELECT boss_stone,boss_integral,boss_battle_count FROM player_data.boss WHERE user_id=?"
+            )
             if daily is None:
-                uow.execute("INSERT INTO player_data.boss(user_id,boss_stone,boss_integral,boss_battle_count) VALUES (?,?,?,?)", (user_id, int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count))
-            elif uow.execute("UPDATE player_data.boss SET boss_stone=?,boss_integral=?,boss_battle_count=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(boss_stone,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_integral,0),?)=0 AND xiuxian_int_cmp(COALESCE(boss_battle_count,0),?)=0", (int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count, user_id, expected_daily_stone, expected_daily_integral, expected_battle_count)).rowcount != 1:
-                raise RuntimeError("boss state changed")
+                changed = uow.execute(
+                    "INSERT INTO player_data.boss(user_id,boss_stone,boss_integral,boss_battle_count) "
+                    "VALUES (?,?,?,?)",
+                    (user_id, daily_expected["boss_stone"], daily_expected["boss_integral"], count),
+                )
+            else:
+                changed = uow.execute(
+                    "UPDATE player_data.boss SET boss_stone=?,boss_integral=?,boss_battle_count=? "
+                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(boss_stone,0),?)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(boss_integral,0),?)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(boss_battle_count,0),?)=0",
+                    (daily_expected["boss_stone"], daily_expected["boss_integral"], count,
+                     user_id, expected_daily_stone, expected_daily_integral, expected_battle_count),
+                )
+            self._verify_write(
+                uow, checks, stage="daily", subject=user_id, changed=changed,
+                sql=daily_sql, params=(user_id,), expected=daily_expected,
+            )
+            total_expected = {"integral": integral}
+            total_sql = "SELECT integral FROM player_data.boss_limit WHERE user_id=?"
             if total is None:
-                uow.execute("INSERT INTO player_data.boss_limit(user_id,integral) VALUES(?,xiuxian_int_store(?,'boss_integral','actor'))", (user_id, integral))
-            elif uow.execute("UPDATE player_data.boss_limit SET integral=xiuxian_int_store(?,'boss_integral','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?,1,'boss_integral','actor')=0", (integral, user_id, expected_total_integral)).rowcount != 1:
-                raise RuntimeError("boss integral changed")
+                changed = uow.execute(
+                    "INSERT INTO player_data.boss_limit(user_id,integral) "
+                    "VALUES (?,xiuxian_int_store(?,'boss_integral','actor'))",
+                    (user_id, integral),
+                )
+            else:
+                changed = uow.execute(
+                    "UPDATE player_data.boss_limit SET integral=xiuxian_int_store(?,'boss_integral','actor') "
+                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(integral,0),?,1,'boss_integral','actor')=0",
+                    (integral, user_id, expected_total_integral),
+                )
+            self._verify_write(
+                uow, checks, stage="integral", subject=user_id, changed=changed,
+                sql=total_sql, params=(user_id,), expected=total_expected,
+            )
             if quantity:
                 stamp = self.clock.now().strftime("%Y-%m-%d %H:%M:%S")
                 bind = quantity if bool(item.get("bind")) else 0
-                columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
-                if "bind_num" in columns:
-                    uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, str(item.get("name", "")), str(item.get("type", "")), quantity, stamp, stamp, bind))
+                item_name = str(item.get("name", ""))
+                item_type = str(item.get("type", ""))
+                if "bind_num" in inventory_columns:
+                    changed = uow.execute(
+                        "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                        "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                        "goods_num=back.goods_num+excluded.goods_num,"
+                        "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                        (user_id, item_id, item_name, item_type, quantity, stamp, stamp, bind),
+                    )
                 else:
-                    uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,update_time=excluded.update_time", (user_id, item_id, str(item.get("name", "")), str(item.get("type", "")), quantity, stamp, stamp))
+                    changed = uow.execute(
+                        "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time) "
+                        "VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                        "goods_num=back.goods_num+excluded.goods_num,update_time=excluded.update_time",
+                        (user_id, item_id, item_name, item_type, quantity, stamp, stamp),
+                    )
+                expected_inventory = {
+                    "goods_num": (0 if current is None else int(current["goods_num"])) + quantity,
+                    "update_time": stamp,
+                }
+                if current is None:
+                    expected_inventory.update({"goods_name": item_name, "goods_type": item_type, "create_time": stamp})
+                if "bind_num" in inventory_columns:
+                    expected_inventory["bind_num"] = (0 if current is None else int(current["bind_num"])) + bind
+                selected_inventory = ["goods_num", "goods_name", "goods_type", "create_time", "update_time"]
+                if "bind_num" in inventory_columns:
+                    selected_inventory.append("bind_num")
+                self._verify_write(
+                    uow, checks, stage="inventory", subject=user_id, changed=changed,
+                    sql=f"SELECT {','.join(selected_inventory)} FROM back WHERE user_id=? AND goods_id=?",
+                    params=(user_id, item_id), expected=expected_inventory,
+                )
             if expected_state_payload is None:
-                uow.execute("INSERT INTO player_data.world_boss_state(state_key,bosses,updated_at) VALUES ('global',?,?)", (self._json(settled_bosses), str(checked_at)))
-            elif uow.execute("UPDATE player_data.world_boss_state SET bosses=?,updated_at=? WHERE state_key='global' AND bosses=?", (self._json(settled_bosses), str(checked_at), expected_state_payload)).rowcount != 1:
-                raise RuntimeError("world boss state changed")
-            self._increment_stat(uow, user_id, "讨伐世界BOSS")
+                changed = uow.execute(
+                    "INSERT INTO player_data.world_boss_state(state_key,bosses,updated_at) VALUES ('global',?,?)",
+                    (self._json(settled_bosses), str(checked_at)),
+                )
+            else:
+                changed = uow.execute(
+                    "UPDATE player_data.world_boss_state SET bosses=?,updated_at=? "
+                    "WHERE state_key='global' AND bosses=?",
+                    (self._json(settled_bosses), str(checked_at), expected_state_payload),
+                )
+            self._verify_write(
+                uow, checks, stage="state", subject=user_id, changed=changed,
+                sql="SELECT bosses,updated_at FROM player_data.world_boss_state WHERE state_key='global'",
+                params=(), expected={"bosses": self._json(settled_bosses), "updated_at": str(checked_at)},
+            )
+            self._increment_stat(uow, user_id, "讨伐世界BOSS", checks)
             if killed:
-                self._increment_stat(uow, user_id, "击败世界BOSS")
-            self._record_tasks(uow, user_id, str(daily_period), str(weekly_period))
-            lines = self._apply_activity_damage(uow, user_id, int(actual_damage), activity_bosses, activity_prefix) if activity_bosses and self.activity_database else []
+                self._increment_stat(uow, user_id, "击败世界BOSS", checks)
+            self._record_tasks(uow, user_id, str(daily_period), str(weekly_period), checks)
+            lines = self._apply_activity_damage(
+                uow, user_id, int(actual_damage), activity_bosses, activity_prefix, checks
+            ) if activity_bosses and self.activity_database else []
             boss_hp = int(settled_bosses[boss_index].get("气血", 0)) if 0 <= boss_index < len(settled_bosses) else 0
-            uow.execute("INSERT INTO world_boss_battle_operations(operation_id,payload,boss_hp,stamina,battle_count,stone,exp,integral,activity_lines) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,xiuxian_int_store(?,'boss_integral','actor'),?)", (operation_id, payload, boss_hp, stamina, count, stone, exp, integral, self._json(lines)))
+            receipt_expected = {
+                "payload": payload, "boss_hp": boss_hp, "stamina": stamina, "battle_count": count,
+                "stone": stone, "exp": exp, "integral": integral, "activity_lines": self._json(lines),
+            }
+            receipt_sql = (
+                "SELECT payload,boss_hp,stamina,battle_count,stone,exp,integral,activity_lines "
+                "FROM world_boss_battle_operations WHERE operation_id=?"
+            )
+            changed = uow.execute(
+                "INSERT INTO world_boss_battle_operations(operation_id,payload,boss_hp,stamina,battle_count,"
+                "stone,exp,integral,activity_lines) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,"
+                "xiuxian_int_store(?,'boss_integral','actor'),?)",
+                (operation_id, payload, boss_hp, stamina, count, stone, exp, integral, self._json(lines)),
+            )
+            self._verify_write(
+                uow, checks, stage="receipt", subject=user_id, changed=changed,
+                sql=receipt_sql, params=(operation_id,), expected=receipt_expected,
+            )
+            self._verify_final_writes(uow, checks)
             return self._result("applied", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral, boss_hp=boss_hp, stamina=stamina, battle_count=count, stone=stone, exp=exp, integral=integral, activity_lines=tuple(lines))
 
 
