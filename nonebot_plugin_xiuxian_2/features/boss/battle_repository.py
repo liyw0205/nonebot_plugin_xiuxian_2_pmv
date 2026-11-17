@@ -239,6 +239,25 @@ class WorldBossBattleSettlementSqlRepository:
             tuple(str(line) for line in lines),
         )
 
+    def settlement_payload(self, operation_id: str) -> dict[str, Any] | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            return None
+        try:
+            with self.lock, DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+                row = uow.query_one(
+                    "SELECT payload FROM world_boss_battle_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+        except Exception as exc:
+            if "no such table" in str(exc).lower():
+                return None
+            raise
+        if row is None:
+            return None
+        payload = self._loads(row.get("payload"), {})
+        return payload if isinstance(payload, dict) else None
+
     def _increment_stat(
         self,
         uow: DatabaseUnitOfWork,
@@ -450,6 +469,8 @@ class WorldBossBattleSettlementSqlRepository:
             "boss_index": boss_index,
             "stamina_cost": int(stamina_cost),
             "battle_limit": int(battle_limit),
+            "expected_checked_at": str(expected_checked_at or ""),
+            "checked_at": str(checked_at),
             "max_goods_num": int(max_goods_num),
             "daily_period": str(daily_period),
             "weekly_period": str(weekly_period),
@@ -466,7 +487,11 @@ class WorldBossBattleSettlementSqlRepository:
                     (operation_id,),
                 )
             if previous is not None:
-                if str(previous["payload"]) != payload:
+                previous_payload = self._loads(previous["payload"], {})
+                legacy_payload = self._loads(payload, {})
+                legacy_payload.pop("expected_checked_at", None)
+                legacy_payload.pop("checked_at", None)
+                if previous_payload not in (self._loads(payload, {}), legacy_payload):
                     return _reason_replace(self._result("state_changed", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral), reason="operation_conflict", subject="")
                 lines = self._loads(previous["activity_lines"], [])
                 return self._result("duplicate", expected_stamina=expected_stamina, expected_battle_count=expected_battle_count, expected_stone=expected_stone, expected_exp=expected_exp, expected_integral=expected_total_integral, boss_hp=previous["boss_hp"], stamina=previous["stamina"], battle_count=previous["battle_count"], stone=previous["stone"], exp=previous["exp"], integral=previous["integral"], activity_lines=tuple(lines))

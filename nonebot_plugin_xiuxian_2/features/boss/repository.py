@@ -20,6 +20,7 @@ class BossRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
     def settle(self, *args: Any, **kwargs: Any) -> Any: ...
     def settlement_result(self, operation_id: str) -> Any: ...
+    def settlement_payload(self, operation_id: str) -> dict[str, Any] | None: ...
     def weekly_purchases(self, user_id: str, today: Any = None) -> dict[str, Any] | None: ...
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot: ...
     def battle_checked_at_snapshot(self, user_id: str) -> str: ...
@@ -48,6 +49,11 @@ class LegacyBossRepository:
 
     def settlement_result(self, operation_id: str) -> Any:
         return self._services()[1].get_result(operation_id)
+
+    def settlement_payload(self, operation_id: str) -> dict[str, Any] | None:
+        return WorldBossBattleSettlementSqlRepository(
+            self.game_database, self.player_database, self.activity_database
+        ).settlement_payload(operation_id)
 
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
         return WorldBossBattleSettlementSqlRepository(
@@ -85,6 +91,9 @@ class BossPurchaseSqlRepository:
 
     def settlement_result(self, operation_id: str) -> Any:
         return self._settlement.settlement_result(operation_id)
+
+    def settlement_payload(self, operation_id: str) -> dict[str, Any] | None:
+        return self._settlement.settlement_payload(operation_id)
 
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
         return self._settlement.daily_limit_snapshot(user_id)

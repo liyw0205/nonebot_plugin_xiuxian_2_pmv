@@ -291,8 +291,57 @@ class BossApplication:
             str(data.get("subject", "") or ""),
         )
 
-    def settlement_result_compat(self, *, operation_id: str) -> BossSettlementResult | None:
-        return self._settlement_result(self.settlement_result(operation_id=operation_id), "duplicate")
+    def settlement_result_compat(
+        self, *, operation_id: str, user_id: str | None = None
+    ) -> BossSettlementResult | None:
+        raw = self.settlement_result(operation_id=operation_id)
+        if raw is None:
+            return None
+        if user_id is not None:
+            self._recover_committed_settlement(
+                operation_id=str(operation_id), user_id=str(user_id), result=raw
+            )
+        return self._settlement_result(raw, "duplicate")
+
+    def _recover_committed_settlement(
+        self, *, operation_id: str, user_id: str, result: Any
+    ) -> None:
+        repository = self._repository()
+        payload_reader = getattr(repository, "settlement_payload", None)
+        if not callable(payload_reader):
+            return
+        payload = payload_reader(operation_id)
+        if not isinstance(payload, Mapping) or str(payload.get("user_id", "")) != user_id:
+            raise ConflictError("世界BOSS结算回执与玩家身份不匹配")
+        required = {
+            "user_id", "boss_index", "stamina_cost", "battle_limit", "expected_checked_at",
+            "checked_at", "max_goods_num", "daily_period", "weekly_period",
+        }
+        # Older permanent receipts omit timestamps and remain replayable, but cannot
+        # prove the newer ledger request fingerprint well enough for repair.
+        if set(payload) != required:
+            return
+
+        data = _data(result)
+        normalized = {"status": "duplicate", **data}
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            record = self.ledger.get(uow, operation_id, "boss.settle")
+            if record is None or record.status not in {"started", "failed", "needs_reconcile"}:
+                return
+            if record.request_hash != request_hash(payload):
+                raise ConflictError("世界BOSS结算回执与操作请求不匹配")
+            outcome = OperationOutcome.applied(
+                operation_id,
+                "boss.settle",
+                data=normalized,
+                consumed={"stamina": int(payload.get("stamina_cost", 0) or 0)},
+                granted={
+                    key: int(normalized.get(key, 0) or 0)
+                    for key in ("stone", "exp", "integral")
+                },
+                audit_category="boss",
+            )
+            self.ledger.finish(uow, outcome)
 
     def settle_compat(self, *, operation_id: str | None = None, **kwargs: Any) -> BossSettlementResult:
         if operation_id is not None:

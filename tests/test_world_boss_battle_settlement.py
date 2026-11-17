@@ -9,6 +9,10 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_boss.transaction_service import (
     WorldBossBattleSettlementService,
 )
+from nonebot_plugin_xiuxian_2.features.boss.application import BossApplication
+from nonebot_plugin_xiuxian_2.features.boss.migrations import apply_boss_player_schema, apply_boss_settlement
+from nonebot_plugin_xiuxian_2.features.boss.repository import BossPurchaseSqlRepository
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
 
 OLD_BOSS = {
@@ -217,6 +221,162 @@ def test_operation_failure_rolls_back_every_database(tmp_path):
     assert json.loads(conn.execute("SELECT bosses FROM world_boss_state").fetchone()[0]) == [OLD_BOSS]
     assert conn.execute("SELECT boss_stone,boss_integral,boss_battle_count FROM boss").fetchone() == (100, 10, 2)
     conn.close()
+
+
+def test_committed_battle_receipt_repairs_failed_ledger_without_reapplying(tmp_path):
+    game, player, activity = create_databases(tmp_path)
+    with DatabaseUnitOfWork(game) as uow:
+        apply_boss_settlement(uow)
+        OperationLedger().ensure_schema(uow)
+        uow.execute(
+            "CREATE TRIGGER refuse_battle_ledger_finish BEFORE UPDATE OF status ON operation_ledger "
+            "WHEN NEW.action='boss.settle' AND NEW.status='applied' BEGIN SELECT RAISE(IGNORE); END"
+        )
+    with DatabaseUnitOfWork(player) as uow:
+        apply_boss_player_schema(uow)
+    with sqlite3.connect(activity) as connection:
+        connection.executescript(
+            "CREATE TABLE activity_boss_state(activity_key TEXT PRIMARY KEY,hp_left INTEGER,max_hp INTEGER,update_time TEXT);"
+            "CREATE TABLE activity_boss_damage(activity_key TEXT,user_id TEXT,total_damage INTEGER,update_time TEXT,"
+            "PRIMARY KEY(activity_key,user_id));"
+            "CREATE TABLE activity_boss_fight_log(id INTEGER PRIMARY KEY AUTOINCREMENT,activity_key TEXT,user_id TEXT,"
+            "damage INTEGER,fight_date TEXT,source TEXT,create_time TEXT);"
+            "CREATE TABLE activity_boss_milestone(activity_key TEXT,milestone_key TEXT,unlocked_time TEXT,"
+            "PRIMARY KEY(activity_key,milestone_key));"
+        )
+
+    repository = BossPurchaseSqlRepository(game, player, activity)
+    app = BossApplication(game, player, activity_database=activity, repository=repository)
+    operation_id = "battle-ledger-recovery"
+    request = dict(
+        operation_id=operation_id, user_id="10001", expected_bosses=[OLD_BOSS],
+        settled_bosses=[{**OLD_BOSS, "气血": 800}], boss_index=0,
+        expected_stamina=100, stamina_cost=10, expected_hp=2000, expected_mp=500,
+        final_hp=600, final_mp=300, expected_exp=10000, exp_reward=200,
+        expected_stone=2000, stone_reward=500, expected_daily_stone=100,
+        expected_daily_integral=10, expected_total_integral=50, integral_reward=20,
+        expected_battle_count=2, battle_limit=30, expected_checked_at="old-check",
+        checked_at="new-check",
+        item={"id": 9001, "name": "首领遗物", "type": "神物", "quantity": 1, "bind": True},
+        max_goods_num=10, actual_damage=200, killed=True,
+        daily_period="2026-07-14", weekly_period="2026-W29",
+        activity_bosses=[{
+            "key": "summer", "boss_name": "炎君", "max_hp": 1000,
+            "daily_fight_limit": 3, "hit_hp_cap_ratio": 0.2, "multiplier": 1.0,
+            "server_milestones": [{"key": "p80", "hp_percent": 80}],
+        }],
+    )
+
+    with pytest.raises(RuntimeError, match="operation ledger finish write rejected: boss.settle"):
+        app.settle(**request)
+
+    def business_state():
+        with sqlite3.connect(game) as connection:
+            game_rows = (
+                connection.execute("SELECT user_stamina,hp,mp,exp,stone FROM user_xiuxian").fetchall(),
+                connection.execute("SELECT last_check_info_time FROM user_cd").fetchall(),
+                connection.execute("SELECT goods_num,bind_num FROM back WHERE goods_id=9001").fetchall(),
+                connection.execute(
+                    "SELECT operation_id,boss_hp,stamina,battle_count,stone,exp,integral "
+                    "FROM world_boss_battle_operations"
+                ).fetchall(),
+            )
+        with sqlite3.connect(player) as connection:
+            player_rows = (
+                connection.execute("SELECT boss_stone,boss_integral,boss_battle_count FROM boss").fetchall(),
+                connection.execute("SELECT integral FROM boss_limit").fetchall(),
+                connection.execute("SELECT bosses FROM world_boss_state").fetchall(),
+                connection.execute('SELECT "讨伐世界BOSS","击败世界BOSS" FROM statistics').fetchall(),
+                connection.execute("SELECT daily_progress,weekly_progress FROM xiuxian_tasks").fetchall(),
+            )
+        with sqlite3.connect(activity) as connection:
+            activity_rows = (
+                connection.execute("SELECT hp_left,max_hp FROM activity_boss_state").fetchall(),
+                connection.execute("SELECT total_damage FROM activity_boss_damage").fetchall(),
+                connection.execute("SELECT damage,source FROM activity_boss_fight_log").fetchall(),
+                connection.execute("SELECT milestone_key FROM activity_boss_milestone").fetchall(),
+            )
+        return game_rows, player_rows, activity_rows
+
+    committed = business_state()
+    assert committed[0][0] == [(90, 600, 300, 10200, 2500)]
+    assert committed[0][2] == [(1, 1)] and len(committed[0][3]) == 1
+    assert committed[1][0] == [(600, 30, 3)] and committed[1][3] == [(1, 1)]
+    assert committed[2] == ([(800, 1000)], [(200,)], [(200, "world_boss")], [("p80",)])
+    with sqlite3.connect(game) as connection:
+        assert connection.execute("SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,)).fetchall() == [("failed",)]
+        assert connection.execute("SELECT status FROM operation_audit WHERE operation_id=?", (operation_id,)).fetchall() == [("failed",)]
+
+    with DatabaseUnitOfWork(game) as uow:
+        uow.execute("DROP TRIGGER refuse_battle_ledger_finish")
+    replay = app.settlement_result_compat(operation_id=operation_id, user_id="10001")
+
+    assert replay is not None and replay.status == "duplicate"
+    assert business_state() == committed
+    with sqlite3.connect(game) as connection:
+        assert connection.execute("SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,)).fetchall() == [("applied",)]
+        assert connection.execute("SELECT status FROM operation_audit WHERE operation_id=? ORDER BY rowid", (operation_id,)).fetchall() == [("failed",), ("applied",)]
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    for database in (player, activity):
+        with sqlite3.connect(database) as connection:
+            assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+    app_replay = app.settle(**request)
+    assert app_replay.replayed and app_replay.status == "replayed"
+    assert business_state() == committed
+    with sqlite3.connect(game) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM operation_audit WHERE operation_id=?", (operation_id,)
+        ).fetchone()[0] == 2
+
+
+@pytest.mark.parametrize(
+    "adapter_name,markdown_failure,expect_plain",
+    [("OneBot V11", False, True), ("QQ", False, False), ("QQ", True, True)],
+)
+def test_uncertain_battle_reply_survives_onebot_and_qq_delivery(
+    adapter_name, markdown_failure, expect_plain
+):
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, patch
+
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+    reply = "本次世界BOSS讨伐暂时无法确认结果，请查询当前状态后再重试。定位号：abc123"
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: adapter_name))
+    event = SimpleNamespace()
+    config = SimpleNamespace(
+        markdown_status=True,
+        markdown_id="",
+        markdown_id2="template",
+        markdown_button_status=False,
+        message_optimization=False,
+        at_sender=False,
+        img=False,
+    )
+    send_plain = AsyncMock()
+    send_markdown = AsyncMock(
+        side_effect=RuntimeError("isolated markdown send failure") if markdown_failure else None
+    )
+
+    with patch.object(utils, "XiuConfig", return_value=config), \
+            patch.object(utils, "is_group_event", return_value=True), \
+            patch.object(utils, "_markdown_buttons_enabled", return_value=False), \
+            patch.object(utils, "_allow_native_markdown", return_value=True), \
+            patch.object(utils, "handle_send2", send_plain), \
+            patch.object(utils, "handle_send_md_type", send_markdown):
+        asyncio.run(utils.handle_send(bot, event, reply, md_type="世界BOSS"))
+
+    if expect_plain:
+        send_plain.assert_awaited_once_with(bot, event, reply)
+    else:
+        send_plain.assert_not_awaited()
+    if adapter_name == "QQ":
+        assert send_markdown.await_count == 1
+        assert send_markdown.call_args.args[2] == reply
+    else:
+        send_markdown.assert_not_awaited()
 
 
 def test_real_entry_uses_composite_service_without_segmented_side_paths():

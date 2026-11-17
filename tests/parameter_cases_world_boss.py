@@ -539,6 +539,132 @@ def register(case):
                                   cooldown_forms=['null', 'aware', 'legacy_local', 'empty'],
                                   replay_zero_writes=True, next_slot_refreshed=True, integrity='ok')
 
+    @case('world-boss-battle-write-recovery', '世界BOSS讨伐', '拒写回滚→同消息重试；ledger中断→永久回执恢复',
+          '真实matcher/DI/应用；隔离SQLite注入BOSS写入拒绝和ledger收尾IGNORE',
+          '保留具体原因、事务回滚及回执恢复，奖励/体力/统计只提交一次',
+          group='world-boss-battle-recovery')
+    async def battle_write_recovery(probe):
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+
+        with setup(probe) as state:
+            game, player = probe.context.paths.game_db, probe.context.paths.player_db
+            probe.player(level='练气境中期', exp=1000, hp=1000, mp=1000, user_stamina=100)
+            probe.player('900003', level='永恒境中期', exp=10**12)
+            probe.seed(player, "INSERT OR IGNORE INTO boss(user_id,boss_stone,boss_integral,boss_battle_count) "
+                       "VALUES('900001',0,0,0)")
+            state.app.daily_limit_snapshot('900001')
+            state.module.boss_integral_application.get_integral('900001')
+            probe.managers[0].get_user_cd('900001')
+            assert (await fire(state.module.generate_all_bosses_task)).code == EVENT_JOB_EXECUTED
+            bosses, _ = state.app.snapshot()
+            assert bosses, 'world boss refresh produced no bosses'
+            index = next((i for i, row in enumerate(bosses, 1) if row['jj'] == '练气境'), 1)
+            entry = next(row for row in probe.entries if row['command'] == '世界BOSS讨伐')
+            before = assets(probe)
+            for database in (game, player):
+                probe.seed(database, "CREATE TABLE isolated_effect(value TEXT)")
+            probe.seed(player,
+                       "CREATE TRIGGER refuse_battle_daily BEFORE UPDATE OF boss_stone ON boss "
+                       "WHEN NEW.user_id='900001' BEGIN INSERT INTO isolated_effect VALUES('daily'); "
+                       "SELECT RAISE(IGNORE); END")
+
+            async def fight(uid, boss, **kwargs):
+                nodes = [{'type': 'node', 'data': {'name': 'battle', 'uin': uid, 'content': 'isolated battle'}}]
+                return nodes, 'Boss赢了', deepcopy(boss), [
+                    {'player': {'team_id': 0, 'user_id': uid, 'total_dmg': 100,
+                                'hp': 900, 'mp': 900}}]
+
+            async def attack(number):
+                return await probe.command(
+                    '世界BOSS讨伐', f'讨伐世界BOSS {index}', number=number
+                )
+
+            with patch.object(state.module, 'Boss_fight', side_effect=fight) as battle, \
+                    patch.object(state.module, 'boss_drops', return_value=(None, None)):
+                rejected = await attack(986100)
+                assert '今日次数或收益未保存' in rejected and '已撤销' in rejected, rejected
+                assert assets(probe) == before
+                assert probe.rows(player, 'SELECT value FROM isolated_effect') == []
+                assert probe.rows(game, "SELECT status FROM operation_ledger "
+                                   "WHERE operation_id='world-boss-battle:986100:900001'") == []
+
+                probe.seed(player, 'DROP TRIGGER refuse_battle_daily')
+                probe.clear_cooldowns()
+                applied = await attack(986100)
+                assert '实际削减世界BOSS血量：100' in applied, applied
+                after_first = assets(probe)
+                assert after_first != before
+                assert probe.rows(player, 'SELECT "讨伐世界BOSS" FROM statistics WHERE user_id=\'900001\'') == [(1,)]
+                assert probe.rows(game, 'SELECT user_stamina FROM user_xiuxian WHERE user_id=\'900001\'') == [
+                    (100-int(state.config['讨伐世界Boss体力消耗']),)]
+                probe.clear_cooldowns()
+                replay = await attack(986100)
+                assert '已经处理' in replay and assets(probe) == after_first, replay
+                assert battle.await_count == 2
+
+                probe.seed(game,
+                           "CREATE TRIGGER refuse_battle_finish BEFORE UPDATE OF status ON operation_ledger "
+                           "WHEN NEW.action='boss.settle' AND NEW.status='applied' "
+                           "BEGIN SELECT RAISE(IGNORE); END")
+                probe.clear_cooldowns()
+                with watch_handler_catches(entry) as caught:
+                    uncertain = await run_case(
+                        entry, 'parameter', 986101, input_text=f'讨伐世界BOSS {index}', actor='900001'
+                    )
+                assert uncertain['status'] == 'exception' and len(caught) == 1, (uncertain, caught)
+                assert any('operation ledger finish write rejected: boss.settle/'
+                           'world-boss-battle:986101:900001' in record['traceback'] for record in caught), caught
+                assert any('[command] 世界BOSS讨伐' in record['message']
+                           and 'RuntimeError' in record['exception'] for record in uncertain['logs']), uncertain
+                assert '暂时无法确认结果' in ''.join(uncertain['replies'])
+                assert '定位号：' in ''.join(uncertain['replies'])
+                assert '已撤销' not in ''.join(uncertain['replies']) and '实际削减世界BOSS血量' not in ''.join(uncertain['replies'])
+                assert state.module.battle_flag[state.module.GLOBAL_BOSS_KEY] is False
+                committed = assets(probe)
+                assert probe.rows(game, "SELECT status FROM operation_ledger "
+                                  "WHERE operation_id='world-boss-battle:986101:900001'") == [('failed',)]
+                assert probe.rows(game, 'SELECT COUNT(*) FROM world_boss_battle_operations') == [(2,)]
+                assert probe.rows(player, 'SELECT "讨伐世界BOSS" FROM statistics WHERE user_id=\'900001\'') == [(2,)]
+
+                probe.clear_cooldowns()
+                with watch_handler_catches(entry) as replay_caught:
+                    retry_while_blocked = await run_case(
+                        entry, 'parameter', 986101, input_text=f'讨伐世界BOSS {index}', actor='900001'
+                    )
+                assert retry_while_blocked['status'] == 'exception' and len(replay_caught) == 1, (
+                    retry_while_blocked, replay_caught
+                )
+                assert any('operation ledger finish write rejected: boss.settle/'
+                           'world-boss-battle:986101:900001' in record['traceback']
+                           for record in replay_caught), replay_caught
+                retry_reply = ''.join(retry_while_blocked['replies'])
+                assert '暂时无法确认结果' in retry_reply and '定位号：' in retry_reply
+                assert '已撤销' not in retry_reply and '实际削减世界BOSS血量' not in retry_reply
+                assert state.module.battle_flag[state.module.GLOBAL_BOSS_KEY] is False
+                assert assets(probe) == committed
+                assert probe.rows(game, "SELECT status FROM operation_ledger "
+                                  "WHERE operation_id='world-boss-battle:986101:900001'") == [('failed',)]
+
+                probe.seed(game, 'DROP TRIGGER refuse_battle_finish')
+                probe.clear_cooldowns()
+                recovered = await attack(986101)
+                assert '已经处理' in recovered and assets(probe) == committed, recovered
+                assert probe.rows(game, "SELECT status FROM operation_ledger "
+                                  "WHERE operation_id='world-boss-battle:986101:900001'") == [('applied',)]
+                assert probe.rows(game, "SELECT status FROM operation_audit "
+                                  "WHERE operation_id='world-boss-battle:986101:900001' ORDER BY rowid") == [
+                                      ('failed',), ('applied',)]
+                assert battle.await_count == 3
+                assert state.module.group_boss['global'] == state.app.snapshot()[0]
+            integrity(probe)
+            probe.evidence.update(
+                known_write_reason=True, write_rejection_rollback=True, same_message_retry=True,
+                post_commit_ledger_recovery=True, no_duplicate_cost_or_reward=True,
+                live_boss_cache_reconciled=True, isolated_databases_integrity='ok',
+            )
+
     @case('world-boss-daily-reset-lifecycle', '重置世界BOSS', '上海零点重置→读取额度→同日重放→次日',
           '真实启动迁移三库与可控UTC时钟；管理员和普通玩家真实matcher',
           '日期跟随调度时区，三额度归零，永久积分与三库其他资产不变，同日不清零新额度',

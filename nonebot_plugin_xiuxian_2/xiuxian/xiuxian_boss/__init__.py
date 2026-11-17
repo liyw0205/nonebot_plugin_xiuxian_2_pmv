@@ -123,6 +123,17 @@ runtime_random = SystemRandom()
 _world_boss_battle_settlement_service_instance = None
 
 
+async def _report_world_boss_settlement_exception(bot, event, exc):
+    battle_flag[GLOBAL_BOSS_KEY] = False
+    diagnostic = report_exception("世界BOSS讨伐", exc, event=event)
+    await handle_send(
+        bot,
+        event,
+        "本次世界BOSS讨伐暂时无法确认结果，请查询当前状态后再重试。\n" + diagnostic,
+        md_type="世界BOSS",
+    )
+
+
 def _sql_message():
     global _sql_message_instance
     if _sql_message_instance is None:
@@ -564,8 +575,16 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     operation_key = event_id or boss_ids.new_id()
     operation_id = f"world-boss-battle:{operation_key}:{user_id}"
     # 先查 operation：同事件重放必须在限购/重伤/境界前置拦截之前回放。
-    previous_settlement = boss_application.settlement_result_compat(operation_id=operation_id)
+    try:
+        previous_settlement = boss_application.settlement_result_compat(
+            operation_id=operation_id, user_id=str(user_id)
+        )
+    except Exception as exc:
+        await _report_world_boss_settlement_exception(bot, event, exc)
+        await battle.finish()
     if previous_settlement is not None:
+        settled_bosses, _ = boss_application.full_refresh_snapshot()
+        _sync_world_boss_cache(settled_bosses)
         msg = (
             "该讨伐请求已经处理，无需重复提交。\n"
             f"当前体力：{previous_settlement.stamina}，今日讨伐：{previous_settlement.battle_count}次"
@@ -913,41 +932,45 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # Rewards and combat state share the composite settlement boundary.
     now = runtime_clock.now()
-    settlement = boss_application.settle_compat(
-        operation_id=operation_id,
-        user_id=user_id,
-        expected_bosses=expected_bosses,
-        settled_bosses=settled_bosses,
-        boss_index=boss_num - 1,
-        expected_stamina=user_info['user_stamina'],
-        stamina_cost=stamina_cost,
-        expected_hp=user_info['hp'],
-        expected_mp=user_info['mp'],
-        final_hp=final_hp,
-        final_mp=final_mp,
-        expected_exp=user_info['exp'],
-        exp_reward=now_exp,
-        expected_stone=user_info['stone'],
-        stone_reward=get_stone,
-        expected_daily_stone=today_stone,
-        expected_daily_integral=today_integral,
-        expected_total_integral=total_integral,
-        integral_reward=boss_integral,
-        expected_battle_count=today_battle_count,
-        battle_limit=battle_count,
-        expected_checked_at="" if checked_at is None else str(checked_at),
-        checked_at=str(now),
-        item={
-            "id": drops_info['id'], "name": drops_info['name'], "type": drops_info['type'],
-            "quantity": 1, "bind": drops_info['type'] in ["特殊道具", "神物"],
-        } if reward_drop else None,
-        max_goods_num=XiuConfig().max_goods_num,
-        actual_damage=actual_damage,
-        killed=boss_now_hp <= 0,
-        daily_period=now.strftime("%Y-%m-%d"),
-        weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
-        activity_bosses=activity_bosses,
-    )
+    try:
+        settlement = boss_application.settle_compat(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_bosses=expected_bosses,
+            settled_bosses=settled_bosses,
+            boss_index=boss_num - 1,
+            expected_stamina=user_info['user_stamina'],
+            stamina_cost=stamina_cost,
+            expected_hp=user_info['hp'],
+            expected_mp=user_info['mp'],
+            final_hp=final_hp,
+            final_mp=final_mp,
+            expected_exp=user_info['exp'],
+            exp_reward=now_exp,
+            expected_stone=user_info['stone'],
+            stone_reward=get_stone,
+            expected_daily_stone=today_stone,
+            expected_daily_integral=today_integral,
+            expected_total_integral=total_integral,
+            integral_reward=boss_integral,
+            expected_battle_count=today_battle_count,
+            battle_limit=battle_count,
+            expected_checked_at="" if checked_at is None else str(checked_at),
+            checked_at=str(now),
+            item={
+                "id": drops_info['id'], "name": drops_info['name'], "type": drops_info['type'],
+                "quantity": 1, "bind": drops_info['type'] in ["特殊道具", "神物"],
+            } if reward_drop else None,
+            max_goods_num=XiuConfig().max_goods_num,
+            actual_damage=actual_damage,
+            killed=boss_now_hp <= 0,
+            daily_period=now.strftime("%Y-%m-%d"),
+            weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
+            activity_bosses=activity_bosses,
+        )
+    except Exception as exc:
+        await _report_world_boss_settlement_exception(bot, event, exc)
+        await battle.finish()
     if settlement.status == "stamina_insufficient":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")

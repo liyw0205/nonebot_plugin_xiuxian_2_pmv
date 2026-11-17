@@ -11,6 +11,9 @@ class WorldBossParameterDispatchTests(unittest.TestCase):
     def test_refresh_player_and_write_recovery(self):
         self.check_group('world-boss-refresh', 3, {'success': 2, 'rejection': 1})
 
+    def test_battle_write_rejection_and_ledger_recovery(self):
+        self.check_group('world-boss-battle-recovery', 1, {'success': 1})
+
     def test_daily_reset_player_and_write_recovery(self):
         self.check_group('world-boss-daily-reset', 2, {'success': 2})
 
