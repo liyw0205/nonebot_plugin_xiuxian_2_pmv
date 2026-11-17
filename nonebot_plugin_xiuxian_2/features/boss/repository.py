@@ -22,6 +22,7 @@ class BossRepository(Protocol):
     def settlement_result(self, operation_id: str) -> Any: ...
     def weekly_purchases(self, user_id: str, today: Any = None) -> dict[str, Any] | None: ...
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot: ...
+    def battle_checked_at_snapshot(self, user_id: str) -> str: ...
 
 
 class LegacyBossRepository:
@@ -61,6 +62,9 @@ class LegacyBossRepository:
             self.activity_database,
         ).weekly_purchases(user_id, today)
 
+    def battle_checked_at_snapshot(self, user_id: str) -> str:
+        return WorldBossBattleSettlementSqlRepository(self.game_database, self.player_database).battle_checked_at_snapshot(user_id)
+
 
 class BossPurchaseSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, activity_database: str | Path | None = None, *, clock=None) -> None:
@@ -83,6 +87,9 @@ class BossPurchaseSqlRepository:
 
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
         return self._settlement.daily_limit_snapshot(user_id)
+
+    def battle_checked_at_snapshot(self, user_id: str) -> str:
+        return self._settlement.battle_checked_at_snapshot(user_id)
 
     def weekly_purchases(self, user_id: str, today=None) -> dict[str, Any] | None:
         user_id = str(user_id).strip()

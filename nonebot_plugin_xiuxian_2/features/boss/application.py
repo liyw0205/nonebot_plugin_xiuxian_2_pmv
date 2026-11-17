@@ -122,6 +122,9 @@ class BossApplication:
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
         return self._repository().daily_limit_snapshot(str(user_id))
 
+    def battle_checked_at_snapshot(self, user_id: str) -> str:
+        return self._repository().battle_checked_at_snapshot(str(user_id))
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:

@@ -332,6 +332,10 @@ from tests.parameter_cases_auction import register as register_auction
 
 register_auction(case)
 
+from tests.parameter_cases_world_boss import register as register_world_boss
+
+register_world_boss(case)
+
 from tests.parameter_cases_sect_body import register as register_sect_body
 
 register_sect_body(case)

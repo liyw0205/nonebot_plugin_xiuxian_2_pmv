@@ -94,7 +94,7 @@ class BossSettlementRequest:
             self.expected_battle_count, self.battle_limit, self.max_goods_num, self.actual_damage,
         ) < 0:
             raise ValueError("settlement quantities must not be negative")
-        if not self.expected_checked_at or not self.checked_at or not self.daily_period or not self.weekly_period:
+        if not self.checked_at or not self.daily_period or not self.weekly_period:
             raise ValueError("settlement periods and timestamps are required")
 
     def payload(self) -> dict[str, Any]:

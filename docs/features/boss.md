@@ -97,6 +97,35 @@
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。
 
+### 全量刷新故障恢复
+
+`set_boss_generation` 的注册异常透传启动生命周期；调度桥尚未激活时保留声明，激活
+失败可重试，不能凭“已配置”日志认定任务已注册。小时/分钟统一接受非负整数或整数
+字符串，均为0时正常禁用，负数/小数/布尔/缺键明确 `world_boss_schedule_invalid`。
+间隔的幂等槽使用注入业务时钟的 Unix 时间戳，同一时刻转换时区不改变操作号；整点
+相邻时间槽分别刷新。同槽回放读取当前状态同步缓存，不将历史回执中的满血状态复活。
+
+状态 UPSERT 与永久回执 INSERT 在同一 player DB immediate 事务中逐步校验行数，
+全部写入后再回读两行；IGNORE、trigger改写或后一步篡改早一步均整笔回滚（含副作用）。
+`world_boss_refresh_state_write_rejected/global` 与
+`world_boss_refresh_receipt_write_rejected/operation_id` 经应用到实际任务/管理员回复。
+任务拒绝产生 `EVENT_JOB_ERROR`；配置变化、场次变化、缺迁移、生成数据无效各保留
+具体原因/主体。SQLite未知异常保留原链，管理员收到安全定位；正常流程和失败回复的
+投递异常透传。成功回执和旧紧凑/完整payload继续回放，拒写无回执，同请求可恢复。
+状态或回执JSON损坏明确拒绝，不过滤坏条目或当空列表覆盖。
+
+玩家查询、列表与讨伐只接受完整正整数编号/页码（查询空参数列全部，列表默认1）。
+负号、多余参数、非数字和超长整数明确拒绝；全量生成不接收参数。讨伐CAS通过feature
+仓储读取冷却原文，保留旧本地/带时区时间，不使用展示工具函数重新格式化；首次NULL
+和空串均是未记录时间的合法期望值，实际结算时间和日/周期间仍必填。奖励、20%伤害
+上限与额度规则不变，缺用户行仍拒绝。全量生成回复沿原有纯文本消息门面，不强制QQ
+Markdown；定时通知失败可能发生在提交后，重放不重复刷新/通知，未新增通知补发队列。
+
+可重放入口为 `tests/test_world_boss_refresh_recovery.py` 和
+`tests/test_world_boss_parameter_dispatch.py`：实际注册/调度事件、隔离迁移SQLite、
+真实dispatch/DI/handler贯穿刷新→查询/分页→讨伐→回放→下一槽，核对余额/体力/
+扣血/回执/统计/缓存及三库完整性。战斗、图片渲染和发送为mock，不代表真实QQ展示。
+
 每日限额重置的逐用户明细（`world_boss_daily_limit_reset_targets`）由启动维护
 `features/maintenance/reset_target_retention.py` 保留 30 天：只清理「日期规范、状态为
 `applied/skipped`、且该业务日父操作行已 `completed`」的行；`pending`/未知状态/非 ISO 日期/

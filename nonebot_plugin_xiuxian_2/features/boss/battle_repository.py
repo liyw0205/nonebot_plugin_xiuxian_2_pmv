@@ -61,6 +61,11 @@ class WorldBossBattleSettlementSqlRepository:
         self.clock = clock or SystemClock()
         self.lock = lock or RLock()
 
+    def battle_checked_at_snapshot(self, user_id: str) -> str:
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            row = uow.query_one('SELECT last_check_info_time FROM user_cd WHERE user_id=?', (str(user_id),))
+        return str(row['last_check_info_time'] or '') if row else ''
+
     @staticmethod
     def _integer(value: Any) -> int:
         try:
@@ -361,7 +366,7 @@ class WorldBossBattleSettlementSqlRepository:
             integral = int(expected_total_integral) + int(integral_reward)
             if uow.execute("UPDATE user_xiuxian SET user_stamina=?,hp=?,mp=?,exp=?,stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND user_stamina=? AND xiuxian_int_cmp(hp,?)=0 AND xiuxian_int_cmp(mp,?)=0 AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0", (stamina, max(1, int(final_hp)), max(1, int(final_mp)), exp, stone, user_id, expected_stamina, expected_hp, expected_mp, expected_exp, expected_stone)).rowcount != 1:
                 raise RuntimeError("player state changed")
-            if uow.execute("UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND last_check_info_time=?", (str(checked_at), user_id, str(expected_checked_at))).rowcount != 1:
+            if uow.execute("UPDATE user_cd SET last_check_info_time=? WHERE user_id=? AND COALESCE(last_check_info_time,'')=?", (str(checked_at), user_id, str(expected_checked_at))).rowcount != 1:
                 raise RuntimeError("cooldown changed")
             if daily is None:
                 uow.execute("INSERT INTO player_data.boss(user_id,boss_stone,boss_integral,boss_battle_count) VALUES (?,?,?,?)", (user_id, int(expected_daily_stone) + int(stone_reward), int(expected_daily_integral) + int(integral_reward), count))
