@@ -22,7 +22,8 @@ SQLite `ABORT` 原异常透传。重复操作按同一入口、升级步数和�
 QQ Markdown、发送失败降级为 mock 合同。受影响组合 `16 passed`，参数矩阵 `3/3`，架构、编译、
 diff 均通过；仅使用 `/home` venv 和隔离 SQLite，未触碰线上库/部署/环境，真实 QQ 未联调。
 
-本组代码与测试待白名单普通提交推送 `develop` 后核远端 SHA；用户既有
+本组代码与测试已白名单普通提交推送 `develop`：`325811edfcf913a6b91d3e12338e55ac2577d249`，
+`git ls-remote` 与显式更新后的 `origin/develop` 均核得同 SHA；`main` 仍未变。用户既有
 `docs/refactor_phase2_legacy_path_items.json` 删除、`.codex-goal.md` 不暂存不提交。总 goal/G2--G5、
 真实客户端和发布门禁仍未完成，`main`/Release 不动；下一冻结组为宗门捐献完整玩家组，先做隔离
 红复现，不外推本组结论。
