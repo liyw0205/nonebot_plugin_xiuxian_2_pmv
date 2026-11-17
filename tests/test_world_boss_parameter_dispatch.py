@@ -10,3 +10,6 @@ class WorldBossParameterDispatchTests(unittest.TestCase):
 
     def test_daily_reset_player_and_write_recovery(self):
         self.check_group('world-boss-daily-reset', 2, {'success': 2})
+
+    def test_manual_spawn_session_parameters_and_write_recovery(self):
+        self.check_group('world-boss-manual-spawn', 3, {'success': 3})

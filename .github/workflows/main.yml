@@ -63,6 +63,7 @@ jobs:
           tests/test_auction_bid_write_rejection.py
           tests/test_world_boss_refresh_recovery.py
           tests/test_world_boss_daily_reset_recovery.py
+          tests/test_world_boss_manual_recovery.py
 
       - name: Run architecture gates
         run: python scripts/check_architecture.py

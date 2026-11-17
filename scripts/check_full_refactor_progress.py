@@ -6121,7 +6121,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_real_batch_completion_callbacks_reject_non_success" in admin_mutation_tests
             ),
             "world_boss_failure_does_not_log_completion": (
-                'logger.error(f"世界BOSS额度重置未完成：{result.status}")' in activity_boss_entry
+                'logger.error("世界BOSS额度重置未完成：{} subject={}",' in activity_boss_entry
+                and "getattr(result, 'reason', '') or result.status" in activity_boss_entry
+                and "getattr(result, 'subject', '') or business_date" in activity_boss_entry
+                and 'if not result.succeeded or result.task_status != "running":' in activity_boss_entry
                 and "def test_real_boss_reset_loop_logs_failure_instead_of_completion" in admin_mutation_tests
             ),
             "xiangyuan_refund_rollback_and_missing_target_are_covered": (

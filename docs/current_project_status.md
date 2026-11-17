@@ -2,7 +2,38 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 世界BOSS每日额度重置（当前交付范围）
+## 世界BOSS人工生成与定时场次交接（develop checkpoint）
+
+继续原goal。首组8fail证实人工状态/回执IGNORE或改写伪成功、坏状态当空列表、
+同消息改变境界/名称仍回放，以及schema_missing被合成配置变化。现状态UPSERT/
+永久回执INSERT逐步校验行数并最后回读，已知拒绝跨出事务后才转结果，整笔含
+trigger副作用回滚；两个world_boss_spawn_*_write_rejected分别携global/操作号。
+坏状态/回执、缺迁移、配置/场次变化、非法境界/名称和生成数据均保留reason/subject。
+新回执存原始请求，旧payload按历史首领兼容显式参数；成功先回放且同步当前状态，
+不把历史满血首领恢复进缓存。旧服务仅保留schema准备，委派同一feature校验。
+
+71项新回归覆盖两步IGNORE/改写/ABORT/末步篡改、坏状态/回执、旧payload、真实
+定时刷新后受伤缓存、兼容服务、两handler未知定位/正常流程/失败投递，以及11种
+原因的OneBot/QQ文本/Markdown/降级。三条world-boss-manual-spawn真实dispatch/
+DI/handler覆盖定时刷新→指定/随机替换→玩家查询/分页→下一槽→旧请求回放，另覆
+权限/缺参/多参/非法目标/同消息改参数零写及两步拒写后重建应用同消息恢复；核对
+三库资产/永久积分/回执/outbox/统计/任务与integrity_check。发送/图片为mock，无真机。
+
+人工/旧兼容/刷新/feature仓储129pass；参数包装1pass（3条真实场景）；管理员
+门禁/运行时/全量刷新/战斗组58pass、29subtests；相关源码8pass（238deselected），
+各组重叠不累计。参数初跑2例夹具遗漏最高境界玩家和重建应用读取配置，已纠正并
+保留业务断言。architecture含inventory、独立inventory、受影响编译/diff均通过，
+新pytest与参数包装已接CI。上一e5c7e881/CI44016104819已核completed/failure：
+6237项unittest仅静态门禁要求旧日志源码失败，现检查具体reason/subject和失败退出
+分支，保留运行时失败日志回归；不重跑全量，不把上次CI记为绿。
+
+本组仅白名单普通交付develop；下一有限完整目标是定时优先批次证据和发布条件收口，
+只核本次精确SHA CI、已交付魔修/pending/鬼市/拍卖/世界BOSS及现有参数矩阵和未决
+门禁，不重新全仓审计或新开天罚/商店/经济/性能。G2--G5、用户冻结JSON删除和
+真实QQ展示门禁保留，main/Release不动；线上库/部署/环境不动，原goal active。
+用户删除与goal/辅助资料不提交，不以任一checkpoint代替完整批次或发布验收。
+
+## 世界BOSS每日额度重置（develop checkpoint）
 
 继续原goal，上一完整刷新b9a354d104d5641927794a5dbebc0bbddc57a543已推develop，
 精确SHA CI44011718379单点已核completed/success，不watch或复跑已绿全量。

@@ -74,6 +74,8 @@ from ...features.boss.punishment_repository import WorldBossPunishmentSqlReposit
 from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
     WorldBossManualSpawnSqlRepository,
+    WorldBossManualSpawnResult,
+    WorldBossSpawnError,
     WorldBossRefreshError,
 )
 from ...features.base.keyword_page import (
@@ -383,16 +385,23 @@ def _spawn_world_boss(
     boss_jj: str | None = None,
     boss_name: str | None = None,
 ):
-    result = boss_application.spawn_result(operation_id, config_loader=get_boss_config)
+    request = {'realm': boss_jj or '', 'name': boss_name or ''}
+    result = boss_application.spawn_result(operation_id, config_loader=get_boss_config, request=request)
     if result is not None:
-        current_bosses, _ = boss_application.spawn_snapshot(config_loader=get_boss_config)
-        _sync_world_boss_cache(current_bosses)
+        if result.succeeded:
+            current_bosses, _ = boss_application.spawn_snapshot(config_loader=get_boss_config)
+            _sync_world_boss_cache(current_bosses)
         return result
 
     boss_jj = boss_jj or createboss()
+    current_config = get_boss_config()
+    if boss_jj not in current_config.get('Boss灵石', {}):
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_realm_invalid', subject=str(boss_jj))
+    if boss_name is not None and boss_name not in current_config.get('Boss名字', []):
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_name_invalid', subject=str(boss_name))
     bossinfo = createboss_jj(boss_jj, boss_name)
     if bossinfo is None:
-        return None
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_realm_invalid', subject=str(boss_jj))
     expected_bosses, expected_revision = boss_application.spawn_snapshot(config_loader=get_boss_config)
     result = boss_application.spawn(
         operation_id=operation_id,
@@ -400,6 +409,7 @@ def _spawn_world_boss(
         expected_bosses=expected_bosses,
         expected_config=WorldBossManualSpawnSqlRepository.config_snapshot(get_boss_config(), boss_jj),
         boss=bossinfo,
+        request=request,
         config_loader=get_boss_config,
     )
     if result.succeeded:
@@ -1376,31 +1386,37 @@ def _world_boss_refresh_failure(reason, subject):
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    if args.extract_plain_text().strip():
+        await handle_send(bot, event, "世界BOSS生成无需参数；指定境界请使用世界BOSS指定生成。")
+        await create.finish()
+        return
     event_id = str(
         getattr(event, "message_id", "")
         or getattr(event, "id", "")
         or time_module.time_ns()
     )
     operation_id = f"world-boss-manual-spawn:{event_id}"
-    result = _spawn_world_boss(operation_id)
-    if result is None or not result.succeeded:
-        msg = "世界Boss场次或生成配置已变化，请重新执行生成指令。"
-        await handle_send(bot, event, msg)
-        await create.finish()
-    bossinfo = dict(result.boss)
-    boss_jj = bossinfo["jj"]
-    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
+    try:
+        result = _spawn_world_boss(operation_id)
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossSpawnError as exc:
+        msg = _world_boss_spawn_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception('世界BOSS生成', exc, event=event)
+    else:
+        msg = _world_boss_spawn_reply(result)
     await handle_send(bot, event, msg)
     await create.finish()
 
 @create_appoint.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+async def create_appointed_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
     # 解析参数
     arg_list = args.extract_plain_text().split()
-    if len(arg_list) < 1:
+    if len(arg_list) not in {1, 2}:
         msg = f"请输入正确的指令，例如：生成指定世界boss 祭道境 少姜"
         await handle_send(bot, event, msg)
         await create_appoint.finish()
@@ -1413,23 +1429,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         or getattr(event, "id", "")
         or time_module.time_ns()
     )
-    result = _spawn_world_boss(
-        f"world-boss-appointed-spawn:{event_id}",
-        boss_jj,
-        boss_name,
-    )
-    if result is None:
-        msg = f"请输入正确的境界，例如：生成指定世界boss 祭道境"
-        await handle_send(bot, event, msg)
-        await create_appoint.finish()
-    if not result.succeeded:
-        msg = "世界Boss场次或生成配置已变化，请重新执行指定生成指令。"
-        await handle_send(bot, event, msg)
-        await create_appoint.finish()
-    bossinfo = dict(result.boss)
-    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
+    try:
+        result = _spawn_world_boss(f"world-boss-appointed-spawn:{event_id}", boss_jj, boss_name)
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossSpawnError as exc:
+        msg = _world_boss_spawn_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception('世界BOSS指定生成', exc, event=event)
+    else:
+        msg = _world_boss_spawn_reply(result)
     await handle_send(bot, event, msg)
     await create_appoint.finish()
+
+
+def _world_boss_spawn_reply(result):
+    if not result.succeeded:
+        return _world_boss_spawn_failure(getattr(result, 'reason', '') or result.status,
+                                         getattr(result, 'subject', '') or 'global')
+    prefix = '该请求此前已生成' if result.status == 'duplicate' else '已生成'
+    return f"{prefix}{result.boss['jj']}Boss:{result.boss['name']}，诸位道友请击败Boss获得奖励吧！"
+
+
+def _world_boss_spawn_failure(reason, subject):
+    messages = {
+        'schema_missing': '生成服务数据库迁移未就绪，请联系管理员。',
+        'operation_conflict': '该消息已用于不同生成参数，请核对原请求。',
+        'config_changed': '生成配置已变化，请重新执行生成。',
+        'session_changed': '世界BOSS场次已变化，请重新执行生成。',
+        'world_boss_generated_invalid': '生成的BOSS不符合配置，请联系管理员核对。',
+        'world_boss_realm_invalid': '请输入正确的境界，例如：世界BOSS指定生成 祭道境。',
+        'world_boss_name_invalid': '首领名称不在生成配置中，请核对名称。',
+        'world_boss_state_invalid': '持久化世界BOSS状态损坏，请联系管理员核对。',
+        'world_boss_spawn_receipt_invalid': '历史生成回执损坏，请联系管理员核对。',
+        'world_boss_spawn_state_write_rejected': '场次写入被拒绝，本次生成已回滚，请稍后重试。',
+        'world_boss_spawn_receipt_write_rejected': '生成回执写入被拒绝，本次生成已回滚，请稍后重试。',
+    }
+    msg = result_failure('世界BOSS生成', {'status': reason, 'reason': reason}, messages=messages)
+    return f"{msg}（原因：{reason}；主体：{subject}）"
+
 
 @boss_integral_store.handle(parameterless=[Cooldown(cd_time=0)])
 async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):

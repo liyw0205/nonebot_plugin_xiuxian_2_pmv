@@ -44,7 +44,149 @@ def assets(probe):
             probe.rows(player, 'SELECT * FROM statistics ORDER BY user_id'))
 
 
+def manual_assets(probe):
+    return assets(probe) + (
+        probe.rows(probe.context.paths.player_db,
+                   'SELECT * FROM world_boss_manual_spawn_operations ORDER BY operation_id'),
+        probe.rows(probe.context.paths.trade_db, 'SELECT * FROM auction_player_upload ORDER BY user_id,item_id'),
+    )
+
+
 def register(case):
+    @case('world-boss-manual-session-lifecycle', '世界BOSS指定生成', '定时刷新→指定/随机替换→玩家查询→下一槽→旧消息回放',
+          '真实迁移库/生成配置/业务时钟；管理员和玩家真实matcher',
+          '只替换选定境界、其他资产不变，旧回放不恢复历史场次，缓存与当前状态一致',
+          group='world-boss-manual-spawn')
+    async def manual_lifecycle(probe):
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        with setup(probe) as state:
+            module, app = state.module, state.app
+            probe.player(level='练气境中期', exp=1000)
+            probe.player('900003', level='永恒境中期', exp=10**12)
+            assert (await fire(module.generate_all_bosses_task)).code == EVENT_JOB_EXECUTED
+            original, revision = app.snapshot()
+            before = manual_assets(probe)
+            realm, name = '练气境', state.config['Boss名字'][0]
+            command = f'指定生成世界boss  {realm}  {name}  '
+            reply = await probe.command('世界BOSS指定生成', command, actor='900003', number=983000)
+            assert f'已生成{realm}Boss:{name}' in reply, reply
+            changed, new_revision = app.snapshot()
+            assert new_revision == revision + 1
+            assert [row for row in original if row['jj'] != realm] == [row for row in changed if row['jj'] != realm]
+            target = next(row for row in changed if row['jj'] == realm)
+            assert target['name'] == name and len(changed) == len(original)
+            after = manual_assets(probe)
+            assert after[:5] == before[:5] and after[6:11] == before[6:11] and after[12:] == before[12:]
+            with patch.object(module, 'get_msg_pic', new=AsyncMock(return_value='base64://aW1hZ2U=')) as render:
+                await probe.command('查询世界BOSS', f'查询世界BOSS {len(changed)}')
+                assert name in render.call_args.args[0]
+            reply = await probe.command('世界BOSS列表', f'世界BOSS列表 {(len(changed)+4)//5}')
+            assert name in reply, reply
+            assert manual_assets(probe) == after
+            reply = await probe.command('世界BOSS指定生成', f'世界BOSS指定生成 {realm}', actor='900003', number=983001)
+            assert f'已生成{realm}Boss:' in reply, reply
+            with patch.object(module, 'createboss', return_value=realm):
+                reply = await probe.command('世界BOSS生成', '生成世界boss  ', actor='900003', number=983002)
+            assert f'已生成{realm}Boss:' in reply, reply
+            state.clock.moment += timedelta(hours=1)
+            assert (await fire(module.generate_all_bosses_task)).code == EVENT_JOB_EXECUTED
+            current = app.snapshot()[0]
+            saved = manual_assets(probe)
+            with patch.object(module, 'createboss_jj') as generate:
+                for entry, text, number in [('世界BOSS指定生成', command, 983000),
+                                            ('世界BOSS指定生成', f'世界BOSS指定生成 {realm}', 983001),
+                                            ('世界BOSS生成', '世界BOSS生成', 983002)]:
+                    reply = await probe.command(entry, text, actor='900003', number=number)
+                    assert '该请求此前已生成' in reply and manual_assets(probe) == saved, reply
+                    assert module.group_boss['global'] == state.store.data['global'] == current
+                generate.assert_not_called()
+            assert probe.rows(probe.context.paths.player_db, 'SELECT COUNT(*) FROM world_boss_manual_spawn_operations') == [(3,)]
+            integrity(probe)
+            probe.evidence.update(single_realm_replaced=True, scheduled_handoff=True, historical_replay_zero_writes=True,
+                                  unrelated_assets_unchanged=True, integrity='ok')
+
+    @case('world-boss-manual-parameters', '世界BOSS指定生成', '权限/缺参/多参/非法境界名称/同消息参数冲突',
+          '真实管理员/玩家dispatch，当前合法配置；非法参数不调用生成器',
+          '拒绝保留原因且零写，随机无参数、指定1至2参数，消息内容改变不可回放',
+          group='world-boss-manual-spawn')
+    async def manual_parameters(probe):
+        from tests.command_probe import run_case
+        with setup(probe) as state:
+            before = manual_assets(probe)
+            for command in ('世界BOSS生成', '世界BOSS指定生成'):
+                entry = next(row for row in probe.entries if row['command'] == command)
+                result = await run_case(entry, 'parameter', 983010, input_text=command, actor='900001')
+                assert result['status'] == 'blocked' and result['reason'] == 'permission/rule rejected', result
+                assert not result['replies'] and not result['errors'] and manual_assets(probe) == before
+                probe.calls.append({'command': command, 'expected_permission_rejection': True, **result})
+            with patch.object(state.module, 'createboss_jj') as generate:
+                for command, text, expected in [
+                    ('世界BOSS生成', '世界BOSS生成 extra', '无需参数'),
+                    ('世界BOSS指定生成', '世界BOSS指定生成', '正确的指令'),
+                    ('世界BOSS指定生成', '世界BOSS指定生成 练气境 name extra', '正确的指令'),
+                    ('世界BOSS指定生成', '世界BOSS指定生成 invalid', 'world_boss_realm_invalid'),
+                    ('世界BOSS指定生成', '世界BOSS指定生成 练气境 invalid', 'world_boss_name_invalid'),
+                ]:
+                    reply = await probe.command(command, text, actor='900003')
+                    assert expected in reply and manual_assets(probe) == before, reply
+                generate.assert_not_called()
+            name = state.config['Boss名字'][0]
+            reply = await probe.command('世界BOSS指定生成', '世界BOSS指定生成 练气境', actor='900003', number=983011)
+            assert '已生成练气境Boss:' in reply, reply
+            saved = manual_assets(probe)
+            for text in (f'世界BOSS指定生成 练气境 {name}', '世界BOSS指定生成 筑基境'):
+                reply = await probe.command('世界BOSS指定生成', text, actor='900003', number=983011)
+                assert 'operation_conflict' in reply and '983011' in reply and manual_assets(probe) == saved, reply
+            integrity(probe)
+            probe.evidence.update(permission_zero_write=True, invalid_parameter_zero_write=True,
+                                  changed_request_conflict=True, integrity='ok')
+
+    @case('world-boss-manual-write-recovery', '世界BOSS生成', '两步拒写/原ABORT→重建应用同消息恢复/重放',
+          '实际任务先生成，SQLite trigger IGNORE/副作用与ABORT，真实两种管理员handler',
+          '失败整笔回滚并保留具体原因或安全定位，解除故障恢复一次，其他资产不变',
+          group='world-boss-manual-spawn')
+    async def manual_recovery(probe):
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.features.boss.application import BossApplication
+        from tests.command_probe import run_case
+        with setup(probe) as state:
+            assert (await fire(state.module.generate_all_bosses_task)).code == EVENT_JOB_EXECUTED
+            player = probe.context.paths.player_db
+            before = manual_assets(probe)
+            for command, text, number in [('世界BOSS生成', '世界BOSS生成', 983020),
+                                          ('世界BOSS指定生成', '世界BOSS指定生成 练气境', 983021)]:
+                entry = next(row for row in probe.entries if row['command'] == command)
+                for target, table, event in [('state', 'world_boss_state', 'UPDATE'),
+                                              ('receipt', 'world_boss_manual_spawn_operations', 'INSERT')]:
+                    probe.seed(player, f'CREATE TRIGGER refuse_manual BEFORE {event} ON {table} BEGIN '
+                               "INSERT INTO boss(user_id,boss_integral) VALUES('side-effect',7); SELECT RAISE(IGNORE); END")
+                    reply = await probe.command(command, text, actor='900003', number=number)
+                    assert f'world_boss_spawn_{target}_write_rejected' in reply and '主体：' in reply, reply
+                    assert '已回滚' in reply and '已生成' not in reply and manual_assets(probe) == before, reply
+                    probe.seed(player, 'DROP TRIGGER refuse_manual')
+                probe.seed(player, 'CREATE TRIGGER refuse_manual BEFORE INSERT ON world_boss_manual_spawn_operations '
+                           "BEGIN SELECT RAISE(ABORT,'isolated manual abort'); END")
+                result = await run_case(entry, 'parameter', number, input_text=text, actor='900003')
+                assert result['status'] == 'exception' and result['replies'] and not result['blocked'], result
+                assert result['errors'] and all('isolated manual abort' in error for error in result['errors']), result
+                assert '定位号' in ''.join(result['replies']) and manual_assets(probe) == before, result
+                probe.calls.append({'command': command, 'expected_failure': 'isolated manual abort', **result})
+                probe.seed(player, 'DROP TRIGGER refuse_manual')
+                restarted = BossApplication(probe.context.paths.game_db, player, clock=state.clock)
+                with patch.object(state.module, 'boss_application', restarted):
+                    reply = await probe.command(command, text, actor='900003', number=number)
+                    assert '已生成' in reply, reply
+                    saved = manual_assets(probe)
+                    assert saved[:5] == before[:5] and saved[6:11] == before[6:11] and saved[12:] == before[12:]
+                    reply = await probe.command(command, text, actor='900003', number=number)
+                    assert '此前已生成' in reply and manual_assets(probe) == saved, reply
+                    assert state.module.group_boss['global'] == state.store.data['global'] == restarted.spawn_snapshot(config_loader=lambda: state.config)[0]
+                before = saved
+            assert probe.rows(player, 'SELECT COUNT(*) FROM world_boss_manual_spawn_operations') == [(2,)]
+            integrity(probe)
+            probe.evidence.update(rejected_steps=['state', 'receipt'], rollback_including_trigger=True,
+                                  restart_recovery=True, duplicate_zero_write=True, integrity='ok')
+
     @case('world-boss-refresh-player-lifecycle', '世界BOSS讨伐', '刷新→查询/分页/编号讨伐→重放→下一时间槽',
           '真实启动迁移库及随包生成配置；战斗伤害固定，发送mock',
           '任务刷新与玩家读取同一持久化状态，讨伐扣血/体力/奖励/统计一次，重复刷新不复活BOSS',

@@ -21,10 +21,17 @@ class WorldBossManualSpawnResult:
     bosses: tuple[dict[str, Any], ...] = ()
     boss: dict[str, Any] | None = None
     revision: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"spawned", "duplicate"}
+
+
+class WorldBossSpawnError(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, f"{reason}: {subject}", {"reason": reason, "subject": subject})
 
 
 @dataclass(frozen=True)
@@ -72,10 +79,12 @@ class WorldBossManualSpawnSqlRepository:
     @staticmethod
     def _decode(value: Any) -> list[dict[str, Any]]:
         try:
-            raw = json.loads(value or "[]")
-        except (TypeError, ValueError):
-            return []
-        return [dict(item) for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
+            raw = json.loads(value)
+        except (TypeError, ValueError) as exc:
+            raise WorldBossSpawnError('world_boss_state_invalid', 'global') from exc
+        if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+            raise WorldBossSpawnError('world_boss_state_invalid', 'global')
+        return [dict(item) for item in raw]
 
     @staticmethod
     def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
@@ -112,14 +121,43 @@ class WorldBossManualSpawnSqlRepository:
             return False
 
     @classmethod
-    def _from_json(cls, value: Any, status: str) -> WorldBossManualSpawnResult:
-        stored = json.loads(str(value))
-        return WorldBossManualSpawnResult(
-            status,
-            tuple(dict(boss) for boss in stored.get("bosses", ())),
-            dict(stored.get("boss", {})),
-            int(stored.get("revision", 0)),
-        )
+    def _from_json(cls, value: Any, status: str, operation_id: str = '') -> WorldBossManualSpawnResult:
+        try:
+            stored = json.loads(str(value))
+            if (not isinstance(stored, dict) or not isinstance(stored.get('bosses'), list)
+                    or any(not isinstance(item, dict) for item in stored['bosses'])
+                    or not isinstance(stored.get('boss'), dict)
+                    or not {'name', 'jj'}.issubset(stored['boss']) or stored['boss'] not in stored['bosses']
+                    or not isinstance(stored.get('revision'), int) or isinstance(stored['revision'], bool)
+                    or stored['revision'] < 0):
+                raise ValueError('invalid manual spawn receipt')
+            return WorldBossManualSpawnResult(status, tuple(stored['bosses']), dict(stored['boss']), stored['revision'])
+        except (TypeError, ValueError, KeyError) as exc:
+            raise WorldBossSpawnError('world_boss_spawn_receipt_invalid', operation_id) from exc
+
+    @classmethod
+    def _replay(cls, row, operation_id, request=None):
+        result = cls._from_json(row['result_json'], 'duplicate', operation_id)
+        try:
+            payload = json.loads(row['payload'])
+            if not isinstance(payload, dict) or payload.get('boss') != result.boss:
+                raise ValueError('receipt payload does not match generated boss')
+            stored_request = payload.get('request')
+            if stored_request is not None and (
+                not isinstance(stored_request, dict) or set(stored_request) != {'realm', 'name'}
+                or any(not isinstance(value, str) for value in stored_request.values())
+            ):
+                raise ValueError('invalid manual request')
+        except (TypeError, ValueError) as exc:
+            raise WorldBossSpawnError('world_boss_spawn_receipt_invalid', operation_id) from exc
+        if request is not None:
+            conflict = stored_request != request if stored_request is not None else (
+                bool(request.get('realm') and request['realm'] != result.boss['jj'])
+                or bool(request.get('name') and request['name'] != result.boss['name'])
+            )
+            if conflict:
+                return WorldBossManualSpawnResult('operation_conflict', reason='operation_conflict', subject=operation_id)
+        return result
 
     def snapshot(self) -> tuple[list[dict[str, Any]], int]:
         if not self.database.is_file():
@@ -130,7 +168,7 @@ class WorldBossManualSpawnSqlRepository:
             row = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
             return (self._decode(row["bosses"]), int(row["revision"] or 0)) if row else ([], 0)
 
-    def get_result(self, operation_id: str) -> WorldBossManualSpawnResult | None:
+    def get_result(self, operation_id: str, *, request=None) -> WorldBossManualSpawnResult | None:
         operation_id = str(operation_id).strip()
         if not operation_id or not self.database.is_file():
             return None
@@ -138,10 +176,10 @@ class WorldBossManualSpawnSqlRepository:
             if not self._schema_ready(uow):
                 return None
             row = uow.query_one(
-                "SELECT result_json FROM world_boss_manual_spawn_operations WHERE operation_id=?",
+                "SELECT payload,result_json FROM world_boss_manual_spawn_operations WHERE operation_id=?",
                 (operation_id,),
             )
-            return self._from_json(row["result_json"], "duplicate") if row else None
+            return self._replay(row, operation_id, request) if row else None
 
     def spawn(
         self,
@@ -151,7 +189,15 @@ class WorldBossManualSpawnSqlRepository:
         expected_bosses: list[dict[str, Any]],
         expected_config: dict[str, Any],
         boss: dict[str, Any],
+        request: dict[str, str] | None = None,
     ) -> WorldBossManualSpawnResult:
+        try:
+            return self._spawn(operation_id=operation_id, expected_revision=expected_revision,
+                               expected_bosses=expected_bosses, expected_config=expected_config, boss=boss, request=request)
+        except WorldBossSpawnError as exc:
+            return WorldBossManualSpawnResult('state_changed', reason=exc.code, subject=exc.details['subject'])
+
+    def _spawn(self, *, operation_id, expected_revision, expected_bosses, expected_config, boss, request):
         operation_id = str(operation_id).strip()
         expected_revision = int(expected_revision)
         expected_bosses = [dict(item) for item in expected_bosses]
@@ -160,48 +206,63 @@ class WorldBossManualSpawnSqlRepository:
         if not operation_id:
             raise ValueError("operation_id is required")
         if not self.database.is_file():
-            return WorldBossManualSpawnResult("schema_missing")
-        payload = self._json({
+            return WorldBossManualSpawnResult("schema_missing", reason='schema_missing', subject=operation_id)
+        payload_data = {
             "expected_revision": expected_revision,
             "expected_bosses": expected_bosses,
             "expected_config": expected_config,
             "boss": boss,
-        })
-        with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        }
+        if request is not None:
+            payload_data['request'] = dict(request)
+        payload = self._json(payload_data)
+        with self.lock, DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
             if not self._schema_ready(uow):
-                return WorldBossManualSpawnResult("schema_missing")
+                return WorldBossManualSpawnResult("schema_missing", reason='schema_missing', subject=operation_id)
             previous = uow.query_one(
                 "SELECT payload,result_json FROM world_boss_manual_spawn_operations WHERE operation_id=?",
                 (operation_id,),
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return WorldBossManualSpawnResult("operation_conflict")
-                return self._from_json(previous["result_json"], "duplicate")
+                    return WorldBossManualSpawnResult("operation_conflict", reason='operation_conflict', subject=operation_id)
+                return self._replay(previous, operation_id, request)
 
             realm = str(boss.get("jj", ""))
             current_config = self.config_snapshot(self.config_loader(), realm)
-            if current_config != expected_config or not self._valid_boss(boss, current_config):
-                return WorldBossManualSpawnResult("config_changed")
+            if current_config != expected_config:
+                return WorldBossManualSpawnResult("config_changed", reason='config_changed', subject='boss_config')
+            if not self._valid_boss(boss, current_config):
+                return WorldBossManualSpawnResult("config_changed", reason='world_boss_generated_invalid', subject=realm)
             row = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
             current_bosses = self._decode(row["bosses"]) if row else []
             current_revision = int(row["revision"] or 0) if row else 0
             if current_revision != expected_revision or self._json(current_bosses) != self._json(expected_bosses):
-                return WorldBossManualSpawnResult("session_changed")
+                return WorldBossManualSpawnResult("session_changed", reason='session_changed', subject='global')
             bosses = [item for item in current_bosses if item.get("jj") != realm]
             bosses.append(boss)
             revision = current_revision + 1
-            uow.execute(
+            written = uow.execute(
                 "INSERT INTO world_boss_state(state_key,bosses,updated_at,revision) "
                 "VALUES ('global',?,CURRENT_TIMESTAMP,?) ON CONFLICT(state_key) DO UPDATE SET "
                 "bosses=excluded.bosses,updated_at=excluded.updated_at,revision=excluded.revision",
                 (self._json(bosses), revision),
             )
+            if written.rowcount != 1:
+                raise WorldBossSpawnError('world_boss_spawn_state_write_rejected', 'global')
             result_json = self._json({"bosses": bosses, "boss": boss, "revision": revision})
-            uow.execute(
+            recorded = uow.execute(
                 "INSERT INTO world_boss_manual_spawn_operations(operation_id,payload,result_json) VALUES(?,?,?)",
                 (operation_id, payload, result_json),
             )
+            if recorded.rowcount != 1:
+                raise WorldBossSpawnError('world_boss_spawn_receipt_write_rejected', operation_id)
+            actual = uow.query_one("SELECT bosses,revision FROM world_boss_state WHERE state_key='global'")
+            if actual != {'bosses': self._json(bosses), 'revision': revision}:
+                raise WorldBossSpawnError('world_boss_spawn_state_write_rejected', 'global')
+            receipt = uow.query_one('SELECT payload,result_json FROM world_boss_manual_spawn_operations WHERE operation_id=?', (operation_id,))
+            if receipt != {'payload': payload, 'result_json': result_json}:
+                raise WorldBossSpawnError('world_boss_spawn_receipt_write_rejected', operation_id)
             return WorldBossManualSpawnResult("spawned", tuple(bosses), boss, revision)
 
 

@@ -157,6 +157,30 @@ cron边界/真实触发、隔离SQLite五步拒写/改写/ABORT/后步篡改与�
 玩家额度读取、跨本地日期、同日新额度保留、拒写/未知异常同消息恢复与三库完整性。
 OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
 
+### 人工生成与定时场次交接
+
+随机生成不接收参数，指定生成接受境界及可选名称；先校验配置中的境界/名称，再生成。
+普通玩家权限拒绝、缺参/多参/非法目标均不写场次或回执。新回执记录原始生成请求，
+同消息改变境界或是否显式指定名称返回 `operation_conflict/operation_id`；旧payload
+无request时按已生成首领约束显式参数，保留历史成功回放，不重写旧数据。回放先于
+当前生成配置校验，不重新随机生成；同步当前持久化场次缓存，避免恢复历史满血首领。
+
+人工单体替换与定时全量刷新共用 `world_boss_state` 的revision/CAS；只替换同境界
+首领，保留其他境界。状态UPSERT和永久回执INSERT同一immediate事务，逐步检查
+行数并在末尾回读两行。IGNORE、trigger改写及末步篡改早先状态均完整回滚含副作用；
+具体 `world_boss_spawn_state_write_rejected/global`、
+`world_boss_spawn_receipt_write_rejected/operation_id` 经应用到管理员回复。
+缺迁移、配置/场次变化、坏状态/回执及非法生成数据各保留reason/subject；未知SQLite
+异常保留原链并回复安全定位。正常NoneBot流程和失败投递异常透传，拒写无成功回执，
+故障解除可重建应用、同消息恢复一次。旧服务保留schema准备后委派同一feature校验。
+
+`tests/test_world_boss_manual_recovery.py` 包含隔离SQLite拒写/改写/ABORT/坏数据、
+旧回执和当前受伤状态缓存合同、兼容服务及两handler异常/消息合同。三条
+`world-boss-manual-spawn` 真实dispatch/DI/handler贯穿定时刷新、指定/随机生成、
+查询/分页、下一时间槽与历史回放，另覆权限、参数冲突、两步故障与重建恢复；核对
+三库资产/永久积分/回执/outbox/任务/统计及integrity_check。OneBot/QQ文本/Markdown/
+降级仅mock，不代表真实QQ展示。没有新增迁移或改变首领生成、奖励、经济规则。
+
 ## 配置项
 
 `boss_enabled`（`XIUXIAN_BOSS_ENABLED`）控制新资产边界，默认启用。

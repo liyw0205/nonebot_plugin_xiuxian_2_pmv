@@ -224,16 +224,17 @@ class BossApplication:
     def spawn_snapshot(self, *, config_loader):
         return self._manual_spawn(config_loader).snapshot()
 
-    def spawn_result(self, operation_id: str, *, config_loader):
-        return self._manual_spawn(config_loader).get_result(operation_id)
+    def spawn_result(self, operation_id: str, *, config_loader, request=None):
+        return self._manual_spawn(config_loader).get_result(operation_id, request=request)
 
-    def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader):
+    def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader, request=None):
         return self._manual_spawn(config_loader).spawn(
             operation_id=operation_id,
             expected_revision=expected_revision,
             expected_bosses=expected_bosses,
             expected_config=expected_config,
             boss=boss,
+            request=request,
         )
 
     def punishment_snapshot(self):
