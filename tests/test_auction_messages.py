@@ -8,6 +8,7 @@ from nonebot.exception import FinishedException
 
 from tests.test_guishi_schedule import trade, utils
 from nonebot_plugin_xiuxian_2.features.auction.domain import AuctionLifecycleError
+from nonebot_plugin_xiuxian_2.features.auction.pending import AuctionPendingClaimResult
 
 
 @pytest.mark.parametrize('command,reason', (('start', 'auction_start_session_inactive'),
@@ -23,6 +24,9 @@ from nonebot_plugin_xiuxian_2.features.auction.domain import AuctionLifecycleErr
                                            ('end', 'auction_settlement_item_delete_rejected'),
                                            ('end', 'auction_settlement_session_write_rejected'),
                                            ('end', 'auction_settlement_receipt_write_rejected'),
+                                           ('claim', 'auction_claim_inventory_write_rejected'),
+                                           ('claim', 'auction_claim_pending_write_rejected'),
+                                           ('claim', 'auction_claim_receipt_write_rejected'),
                                            ('bid', 'auction_expired')))
 @pytest.mark.parametrize('onebot,markdown,send_fails', ((True, True, False), (False, False, False),
                                                      (False, True, False), (False, True, True)))
@@ -35,13 +39,15 @@ def test_lifecycle_reason_and_subject_survive_adapters(command, reason, onebot, 
     bid = SimpleNamespace(place_bid=lambda **kwargs: SimpleNamespace(
         code=reason, status='rejected', data={'status': reason, 'reason': reason, 'subject': 'session-test'}))
     event = SimpleNamespace(get_user_id=lambda: 'buyer')
-    args = SimpleNamespace(extract_plain_text=lambda: 'a001 100')
+    args = SimpleNamespace(extract_plain_text=lambda: '领取 sale' if command == 'claim' else 'a001 100')
     with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), \
             patch.object(trade, 'SUPERUSER', new=AsyncMock(return_value=True)), \
             patch.object(trade, 'check_user', return_value=(True, {'user_id': 'buyer'}, '')), \
             patch.object(trade, '_auction_session_service', return_value=session), \
             patch.object(trade, '_auction_query_application', return_value=query), \
             patch.object(trade, '_auction_bid_application', return_value=bid), \
+            patch.object(trade, '_auction_pending_application', return_value=SimpleNamespace(claim=lambda **kwargs:
+                         AuctionPendingClaimResult('state_changed', reason=reason, subject='session-test'))), \
             patch.object(trade, 'get_auction_status', return_value={'active': True}), \
             patch.object(trade, '_sql_message', return_value=SimpleNamespace(get_user_info_with_id=lambda uid: {'stone': 1000})), \
             patch.object(trade, '_auction_session_operation_id', return_value='operation-test'), \
@@ -49,9 +55,9 @@ def test_lifecycle_reason_and_subject_survive_adapters(command, reason, onebot, 
             patch.object(trade, '_start_auction_with_application', side_effect=AuctionLifecycleError(reason, 'session-test')), \
             patch.object(trade, '_end_auction_with_application', new=AsyncMock(side_effect=AuctionLifecycleError(reason, 'session-test'))), \
             patch.object(trade, 'handle_send', captured):
-        callback = getattr(trade, f'auction_{command}_')
+        callback = trade.my_auction_ if command == 'claim' else getattr(trade, f'auction_{command}_')
         with pytest.raises(FinishedException):
-            asyncio.run(callback(object(), event, args) if command == 'bid' else callback(object(), event))
+            asyncio.run(callback(object(), event, args) if command in {'bid', 'claim'} else callback(object(), event))
     reply = captured.call_args.args[2]
     assert reason in reply and 'session-test' in reply
     bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: 'OneBot V11' if onebot else 'QQ'))
@@ -72,14 +78,14 @@ def test_lifecycle_reason_and_subject_survive_adapters(command, reason, onebot, 
         assert reason in rendered and 'session-test' in rendered
 
 
-@pytest.mark.parametrize('command', ('start', 'end', 'bid'))
+@pytest.mark.parametrize('command', ('start', 'end', 'bid', 'claim'))
 def test_unknown_fault_flow_exception_and_failed_delivery_propagate(command):
     fault = RuntimeError('isolated business fault')
     delivery = RuntimeError('isolated delivery fault')
     captured = AsyncMock()
-    operation = Mock(side_effect=fault) if command == 'start' else AsyncMock(side_effect=fault)
+    operation = Mock(side_effect=fault) if command in {'start', 'claim'} else AsyncMock(side_effect=fault)
     target = {'start': '_start_auction_with_application', 'end': '_end_auction_with_application',
-              'bid': '_place_auction_bid_with_application'}[command]
+              'bid': '_place_auction_bid_with_application', 'claim': '_auction_pending_application'}[command]
     session = SimpleNamespace(get_active_session=lambda: None if command == 'start' else {'session_id': 'session-test'})
     with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), \
             patch.object(trade, 'SUPERUSER', new=AsyncMock(return_value=True)), \
@@ -90,10 +96,10 @@ def test_unknown_fault_flow_exception_and_failed_delivery_propagate(command):
             patch.object(trade.auction_config, 'update_schedule'), patch.object(trade, target, operation), \
             patch.object(trade, 'report_exception', return_value='定位号：auction-test') as reported, \
             patch.object(trade, 'handle_send', captured):
-        callback = getattr(trade, f'auction_{command}_')
+        callback = trade.my_auction_ if command == 'claim' else getattr(trade, f'auction_{command}_')
         async def invoke():
-            if command == 'bid':
-                await callback(object(), object(), SimpleNamespace(extract_plain_text=lambda: 'a001 100'))
+            if command in {'bid', 'claim'}:
+                await callback(object(), object(), SimpleNamespace(extract_plain_text=lambda: '领取 sale' if command == 'claim' else 'a001 100'))
             else:
                 await callback(object(), object())
         with pytest.raises(FinishedException):

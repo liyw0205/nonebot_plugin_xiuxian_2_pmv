@@ -13,3 +13,6 @@ class AuctionParameterDispatchTests(unittest.TestCase):
 
     def test_auction_settlement_write_recovery(self):
         self.check_group('market-auction-settlement-write', 2, {'success': 2})
+
+    def test_auction_pending_claim_lifecycle(self):
+        self.check_group('market-auction-claim', 1, {'success': 1})

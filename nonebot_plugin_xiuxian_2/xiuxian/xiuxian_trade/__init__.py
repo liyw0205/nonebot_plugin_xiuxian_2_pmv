@@ -3404,22 +3404,31 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     if command_text.startswith("领取"):
         scope = command_text[len("领取"):].strip()
-        result = _auction_pending_application().claim(
-            operation_id=_auction_pending_claim_operation_id(event, user_id, scope or None),
-            user_id=user_id,
-            auction_id=scope or None,
-        )
+        try:
+            result = _auction_pending_application().claim(
+                operation_id=_auction_pending_claim_operation_id(event, user_id, scope or None),
+                user_id=user_id,
+                auction_id=scope or None,
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            await handle_send(bot, event, report_exception("拍卖领取", exc, event=event), md_type="拍卖")
+            await my_auction.finish()
         if result.status == "schema_missing":
-            reply = "拍卖待领取暂不可用（数据库尚未就绪），请联系管理员。"
+            reply = f"拍卖待领取暂不可用（原因：{result.reason or result.status}；主体：{result.subject}），请联系管理员。"
         elif result.status == "operation_conflict":
-            reply = "该领取请求与之前的记录冲突，请重新发送指令。"
+            reply = f"该领取请求与之前的记录冲突（原因：{result.reason or result.status}；主体：{result.subject}），请重新发送指令。"
+        elif result.reason:
+            reply = f"拍卖领取未完成。（原因：{result.reason}；主体：{result.subject}）"
         elif result.status == "empty":
             reply = (
                 f"未找到拍卖ID {scope} 的待领取物品。" if scope else "您没有待领取的拍卖物品。"
             )
-        elif result.status == "blocked":
+        elif result.status == "blocked" or (result.status == "duplicate" and not result.claimed and result.blocked):
             names = "、".join(f"{row['item_name']}(ID:{row['auction_id']})" for row in result.blocked)
-            reply = f"背包已满，暂时无法领取：{names}\n请整理背包后再次使用 我的拍卖 领取。"
+            prefix = "该请求此前因背包已满未领取" if result.status == "duplicate" else "背包已满，暂时无法领取"
+            reply = f"{prefix}：{names}\n请整理背包后重新发送 我的拍卖 领取。"
         else:
             claimed = "\n".join(
                 f"{row['role_label']}：{row['item_name']} x1（拍卖ID:{row['auction_id']}）"

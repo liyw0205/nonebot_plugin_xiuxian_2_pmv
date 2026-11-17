@@ -398,6 +398,13 @@ unittest CI。
 均在隔离SQLite验证。满背包成交的管理员回复保留成交价和待领取，不误报流拍。
 范围与限制见`docs/features/auction.md`，不代表全市场写路径或真实QQ已验。
 
+结算寄存后的取回通过`market-auction-claim`继续真实命令生命周期：实际成交/
+流拍寄存、本人全部/指定领取、部分满包、三步拒写与未知SQLite异常整笔回滚、
+重建同消息恢复及旧回放。`test_auction_pending_write_rejection.py`覆盖发物、领取
+标记、永久回执的IGNORE/改写与最终回读；具体`auction_claim_*_write_rejected`
+及subject传到命令，不伪报已领取。历史满包回放仍受阻，释放空间后用新请求，
+保持旧成功回放、绑定和归属；未改变拍卖费用、奖励或待领取表结构。
+
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`
 - `route: POST /api/v1/trade/withdraw`
