@@ -66,7 +66,7 @@ from .sect_member_utils import (
     set_sect_list,
 )
 from ..xiuxian_utils.utils import (
-    check_user, number_to,
+    check_user, number_to, consume_player_stamina,
     send_msg_handler, handle_send,
     update_statistics_value, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
@@ -190,6 +190,7 @@ def _sect_operation_id(event, action, target_id):
 
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
+sect_application.task_timezone = materialsupdate.timezone
 upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
 uphppractice = on_command("升级元血修炼", priority=5, block=True)
 upmppractice = on_command("升级灵海修炼", priority=5, block=True)
@@ -1866,9 +1867,53 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         
 @sect_task_refresh.handle(parameterless=[Cooldown(cd_time=config['宗门任务刷新cd'])])
-@guard_command("刷新宗门任务")
 async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """刷新宗门任务"""
+    await _run_daily_sect_task('刷新宗门任务', _refresh_sect_task, bot, event)
+
+
+async def _run_daily_sect_task(action, handler, bot, event):
+    try:
+        return await handler(bot, event)
+    except (MatcherException, ProcessException):
+        raise
+    except DomainError as exc:
+        msg = failure_reply(action, exc) if reason_text(exc.details.get('reason', '')) or reason_text(exc.code) else report_exception(action, exc, event=event)
+    except Exception as exc:
+        msg = report_exception(action, exc, event=event)
+    await handle_send(bot, event, msg)
+
+
+def _task_failure(action, result, user_id):
+    subject = str(result.get('subject') or '')
+    reason = str(result.get('reason') or '')
+    label = '本次任务回执' if 'receipt' in reason else '本人' if subject == str(user_id) else f'宗门编号{subject}'
+    return result_failure(action, result, subjects={subject: label} if subject else None)
+
+
+async def _task_claim_replay(bot, event, user_id, action):
+    receipt = sect_application.task_claim_receipt(_sect_operation_id(event, action, user_id), user_id)
+    if receipt is None:
+        return False
+    await handle_send(bot, event, f"该次宗门任务操作已完成：{receipt['task_key']}。请查看当前任务。", md_type='宗门')
+    return True
+
+
+def _daily_sect_task(user_id):
+    task = get_user_sect_task(user_id)
+    if task is not None:
+        data = task.get('任务内容')
+        if not isinstance(data, dict) or not {'type', 'cost', 'give', 'sect', 'desc'}.issubset(data) or data['type'] not in {1, 2}:
+            raise DomainError('sect_task_data_invalid', 'invalid daily task contents', {'subject': str(user_id)})
+    return task
+
+
+async def _task_settlement_replay(bot, event, result):
+    await handle_send(bot, event, f"该次宗门任务已完成：获得修为 {number_to(result['exp_reward'])}，贡献度 {result['sect_reward']}。", md_type='宗门')
+    await sect_task_complete.finish()
+
+
+async def _refresh_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1876,13 +1921,15 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await sect_task_refresh.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    if await _task_claim_replay(bot, event, user_id, 'task_refresh'):
+        await sect_task_refresh.finish()
     if sect_id:
-        if get_user_sect_task(user_id):
+        if _daily_sect_task(user_id):
             refreshed_task = refresh_user_sect_task(
                 user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), return_failure=True
             )
             if "任务内容" not in refreshed_task:
-                await handle_send(bot, event, result_failure("刷新宗门任务", refreshed_task))
+                await handle_send(bot, event, _task_failure("刷新宗门任务", refreshed_task, user_id))
                 await sect_task_refresh.finish()
             if refreshed_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2116,9 +2163,12 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await sect_users.finish()
 
 @sect_task.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("接取宗门任务")
 async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """获取宗门任务"""
+    await _run_daily_sect_task('接取宗门任务', _claim_sect_task, bot, event)
+
+
+async def _claim_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -2126,6 +2176,8 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sect_task.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    if await _task_claim_replay(bot, event, user_id, 'task_claim'):
+        await sect_task.finish()
     if sect_id:
         user_now_num = int(user_info['sect_task'])
         if user_now_num >= config["每日宗门任务次上限"]:
@@ -2133,7 +2185,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await sect_task.finish()
 
-        active_task = get_user_sect_task(user_id)
+        active_task = _daily_sect_task(user_id)
         if active_task:  # 已有任务
             if active_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2148,7 +2200,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             False, return_failure=True,
         )
         if "任务内容" not in claimed_task:
-            await handle_send(bot, event, result_failure("接取宗门任务", claimed_task))
+            await handle_send(bot, event, _task_failure("接取宗门任务", claimed_task, user_id))
             await sect_task.finish()
         if claimed_task['任务内容']['type'] == 1:
             task_type = "⚔️"
@@ -2163,10 +2215,13 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sect_task.finish()
 
 
-@sect_task_complete.handle(parameterless=[Cooldown(cd_time=config['宗门任务完成cd'], stamina_cost = 3,)])
-@guard_command("完成宗门任务")
+@sect_task_complete.handle(parameterless=[Cooldown(cd_time=config['宗门任务完成cd'])])
 async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """完成宗门任务"""
+    await _run_daily_sect_task('完成宗门任务', _complete_sect_task, bot, event)
+
+
+async def _complete_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -2174,8 +2229,18 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await sect_task_complete.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    previous = sect_application.task_settlement_receipt(_sect_operation_id(event, 'task_complete', user_id), user_id)
+    if previous is not None:
+        await _task_settlement_replay(bot, event, previous)
+    stamina = consume_player_stamina(user_id, 3, expected_stamina=int(user_info.get('user_stamina') or 0),
+                                     operation_id=_sect_operation_id(event, 'task_stamina', user_id))
+    if stamina.get('status') not in {'applied', 'duplicate'}:
+        if stamina.get('status') == 'state_changed':
+            stamina = {**stamina, 'reason': 'stamina_changed', 'subject': str(user_id)}
+        await handle_send(bot, event, result_failure('宗门任务体力消耗', stamina))
+        await sect_task_complete.finish()
     if sect_id:
-        active_task = get_user_sect_task(user_id)
+        active_task = _daily_sect_task(user_id)
         if not active_task:
             msg = f"道友当前没有接取宗门任务哦！"
             await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
@@ -2232,11 +2297,14 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sect_stone,
                 active_task["任务名称"],
                 active_task["任务内容"],
+                enforce_current_period=True,
             )
             if not settlement.applied:
-                msg = result_failure("完成宗门任务", settlement)
+                msg = _task_failure("完成宗门任务", settlement, user_id)
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
+            if settlement.status == 'duplicate':
+                await _task_settlement_replay(bot, event, settlement)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
@@ -2314,11 +2382,14 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sect_stone,
                 active_task["任务名称"],
                 active_task["任务内容"],
+                enforce_current_period=True,
             )
             if not settlement.applied:
-                msg = result_failure("完成宗门任务", settlement)
+                msg = _task_failure("完成宗门任务", settlement, user_id)
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
+            if settlement.status == 'duplicate':
+                await _task_settlement_replay(bot, event, settlement)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"

@@ -76,6 +76,14 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 世界BOSS每日重置、分块拒写保留pending及业务日 | e5c7e881、96d6d935 | 44016104819失败于旧日志静态契约；96d6d935修正该契约，44018801363 success | test_world_boss_daily_reset_recovery.py、world-boss-daily-reset参数group |
 | 世界BOSS人工生成与定时场次交接、参数冲突与拒写恢复 | 96d6d935 | 44018801363 success；文档69073cee/44019699806 success | test_world_boss_manual_recovery.py、world-boss-manual-spawn参数group |
 | 宗门定时资材、逐宗门失败恢复及玩家读取 | 1ab871e9 | 44022748659 success | test_sect_material_recovery.py、sect-material-schedule参数group |
+| 宗门每日次数重置及丹房维护 | c8992fc5 | 44027622264 success | test_sect_daily_maintenance_recovery.py、sect-daily-maintenance参数group |
+| 宗门丹药领取交接 | ffcd1521 | 44031986435失败于资格拒绝文案含推测连接词；本组保留原因码并修正文案 | test_sect_elixir_claim_recovery.py、sect-elixir-claim参数group及test_reason_finalization.py |
+
+日重置后的任务接取/刷新/完成另补同一交接链：任务与永久回执逐写校验和最后回读，
+完成四步整体回滚；旧消息先读本人回执，不覆盖当前新任务、跨日不重复结算。
+首次出门体力沿原规则独立提交，同消息故障恢复使用既有幂等体力接口，只扣一次。
+真实参数场景贯穿实际日重置、两种消耗与八步拒写恢复，三库资产/统计/回执/完整性
+和OneBot/QQ mock合同分别验证；不据此外推线上部署或真机呈现已通过。
 
 宗门定时资材另补完整闭环（详见sect文档）：首轮7红实证状态/回执拒写伪成功、
 缺迁移实际任务伪EXECUTED及UTC取错业务日。现写后验证/整宗门回滚、具体原因至

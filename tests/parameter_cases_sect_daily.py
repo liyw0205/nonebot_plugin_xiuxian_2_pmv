@@ -88,7 +88,168 @@ async def message_contract(reply, token):
             assert token in md.call_args.args[2]
 
 
+async def task_command(probe, command, *, number):
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.lay_out import _shutdown_cooldown_runtimes
+    # Expire only the isolated probe timers; command guards and stamina still run.
+    _shutdown_cooldown_runtimes()
+    return await probe.command(command, number=number)
+
+
 def register(case):
+    @case('sect-task-daily-handoff', '宗门任务接取', '日重置→接取/刷新→灵石与气血完成→旧消息/次日',
+          '实际每日任务、迁移三库与可控UTC业务时钟，真实随机任务配置',
+          '任务状态/资产/次数/回执一致，历史消息不覆盖当前任务，次日旧消息零业务写',
+          group='sect-task-daily')
+    async def task_lifecycle(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        with setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            with patch.object(module, 'sect_application', app), patch.object(member, 'sect_application', app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                keys = {kind: next(key for key, value in module.config['宗门任务'].items() if value['type'] == kind) for kind in (1, 2)}
+                probe.player(exp=100000, hp=100000, stone=10**12)
+                with patch.object(app.random, 'choice', return_value=keys[2]):
+                    reply = await task_command(probe, '宗门任务接取', number=982001)
+                task = app.get_active_task('900001')
+                assert task['任务名称'] == keys[2] and task['period'] == '2026-11-18' and task['任务内容']['desc'] in reply, (task, reply)
+                with patch.object(app.random, 'choice', return_value=keys[1]):
+                    reply = await task_command(probe, '宗门任务刷新', number=982002)
+                assert '已刷新' in reply and app.get_active_task('900001')['任务名称'] == keys[1], reply
+                saved = snapshot(probe)
+                reply = await task_command(probe, '宗门任务刷新', number=982002)
+                assert '已完成' in reply and snapshot(probe) == saved, reply
+                reply = await task_command(probe, '我的宗门任务', number=982001)
+                assert '已完成' in reply and app.get_active_task('900001')['任务名称'] == keys[1] and snapshot(probe) == saved
+                before = probe.rows(state.database, "SELECT hp,stone,exp,sect_task,sect_contribution FROM user_xiuxian WHERE user_id='900001'")[0]
+                reply = await task_command(probe, '宗门任务完成', number=982003)
+                assert '任务完成' in reply and '气血减少' in reply, reply
+                first = probe.rows(state.database, 'SELECT cost_type,cost,exp_reward,sect_reward FROM sect_task_settlement_operations')[0]
+                after = probe.rows(state.database, "SELECT hp,stone,exp,sect_task,sect_contribution FROM user_xiuxian WHERE user_id='900001'")[0]
+                assert first[0] == 'hp' and tuple(map(int, after)) == (int(before[0])-first[1], int(before[1]), int(before[2])+first[2], 1, int(before[4])+first[3])
+                assert app.get_active_task('900001') is None
+                await message_contract(reply, '任务完成')
+                with patch.object(app.random, 'choice', return_value=keys[2]):
+                    await task_command(probe, '宗门任务接取', number=982004)
+                saved = snapshot(probe)
+                reply = await task_command(probe, '宗门任务完成', number=982003)
+                assert probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(97,)], 'replay deducted stamina again'
+                assert '已完成' in reply and snapshot(probe) == saved and app.get_active_task('900001')['任务名称'] == keys[2], reply
+                reply = await task_command(probe, '宗门任务完成', number=982005)
+                assert '任务完成' in reply and '消耗灵石' in reply, reply
+                assert probe.rows(state.database, "SELECT sect_task FROM user_xiuxian WHERE user_id='900001'") == [(2,)]
+                assert probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(94,)]
+                assert probe.rows(probe.context.paths.player_db, 'SELECT "宗门任务" FROM statistics WHERE user_id=\'900001\'') == [(2,)]
+                saved = snapshot(probe)
+                settled = probe.rows(state.database, 'SELECT * FROM sect_task_settlement_operations ORDER BY operation_id')
+                state.clock.moment += timedelta(days=1)
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                for command, number in (('宗门任务接取', 982001), ('宗门任务刷新', 982002), ('宗门任务完成', 982005)):
+                    before = snapshot(probe)
+                    reply = await task_command(probe, command, number=number)
+                    assert '已完成' in reply and snapshot(probe) == before, reply
+                probe.player(sect_id=None)
+                before = snapshot(probe)
+                reply = await task_command(probe, '宗门任务完成', number=982003)
+                assert '已完成' in reply and snapshot(probe) == before, reply
+                probe.player(sect_id=state.sects[0])
+                assert probe.rows(state.database, 'SELECT * FROM sect_task_settlement_operations ORDER BY operation_id') == settled
+                assert probe.rows(state.database, "SELECT sect_task FROM user_xiuxian WHERE user_id='900001'") == [(0,)]
+                await message_contract(reply, '已完成')
+                with patch.object(app.random, 'choice', return_value=keys[2]):
+                    await task_command(probe, '宗门任务接取', number=982006)
+                assert app.get_active_task('900001')['period'] == '2026-11-19'
+                assert snapshot(probe)[8:13] == saved[8:13]
+                assert len(probe.rows(state.database, 'SELECT * FROM sect_task_claim_operations')) == 4
+                probe.player(stone=0)
+                before = snapshot(probe)
+                reply = await task_command(probe, '宗门任务完成', number=982007)
+                assert '灵石带少' in reply and snapshot(probe)[1:] == before[1:] and app.get_active_task('900001'), reply
+                with patch.object(app.random, 'choice', return_value=keys[1]):
+                    await task_command(probe, '宗门任务刷新', number=982008)
+                probe.player(hp=1)
+                reply = await task_command(probe, '宗门任务完成', number=982009)
+                assert '状态欠佳' in reply and app.get_active_task('900001'), reply
+                assert probe.rows(state.database, "SELECT sect_task FROM user_xiuxian WHERE user_id='900001'") == [(0,)]
+                probe.player(sect_task=module.config['每日宗门任务次上限'])
+                before = snapshot(probe)
+                reply = await task_command(probe, '宗门任务接取', number=982010)
+                assert '今日无法再获取' in reply and snapshot(probe) == before, reply
+                reply = await task_command(probe, '宗门任务刷新', number=982011)
+                assert '次数' in reply and snapshot(probe) == before, reply
+            integrity(probe)
+            probe.evidence.update(actual_daily_reset=True, claim_refresh_complete=True, both_costs=True,
+                                  current_task_preserved_on_replay=True, next_day_zero_write=True, adapter_contracts=8, integrity='ok')
+
+    @case('sect-task-write-recovery', '宗门任务接取', '接取/刷新两步与完成四步拒写→重建应用同消息恢复→ABORT',
+          '实际handler/DI、SQLite触发器副作用、可控业务时钟与隔离三库',
+          '每种具体原因回复，失败整笔回滚；故障解除同消息只成功一次，统计与资产一致',
+          group='sect-task-daily')
+    async def task_recovery(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+        with setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            with patch.object(module, 'sect_application', app), patch.object(member, 'sect_application', app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                probe.player(exp=100000, hp=100000, stone=10**12)
+                for mode, command, steps, number in (
+                    ('claim', '宗门任务接取', [('state', 'sect_task_state', 'INSERT', '接取任务状态'), ('receipt', 'sect_task_claim_operations', 'INSERT', '接取任务回执')], 982020),
+                    ('refresh', '宗门任务刷新', [('state', 'sect_task_state', 'UPDATE', '刷新任务状态'), ('receipt', 'sect_task_claim_operations', 'INSERT', '刷新任务回执')], 982021),
+                    ('settlement', '宗门任务完成', [('user', 'user_xiuxian', 'UPDATE', '任务消耗'), ('sect', 'sects', 'UPDATE', '任务宗门奖励'), ('state', 'sect_task_state', 'UPDATE', '任务完成状态'), ('receipt', 'sect_task_settlement_operations', 'INSERT', '任务结算回执')], 982022),
+                ):
+                    stamina_before = probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'")[0][0]
+                    for step, table, verb, token in steps:
+                        condition = "WHEN NEW.user_id='900001'" if table == 'user_xiuxian' else ''
+                        if table == 'user_xiuxian':
+                            verb = 'UPDATE OF sect_task'
+                        probe.seed(state.database, f'CREATE TRIGGER refuse_task BEFORE {verb} ON {table} {condition} '
+                                   "BEGIN UPDATE user_xiuxian SET stone=0 WHERE user_id='900003'; SELECT RAISE(IGNORE); END")
+                        before = snapshot(probe)
+                        reply = await task_command(probe, command, number=number)
+                        after = snapshot(probe)
+                        if mode == 'settlement' and step == 'user':
+                            columns = [row[1] for row in probe.rows(state.database, 'PRAGMA table_info(user_xiuxian)')]
+                            stamina_index, user_index = columns.index('user_stamina'), columns.index('user_id')
+                            expected_users = [tuple(value-3 if i == stamina_index and row[user_index] == '900001' else value for i, value in enumerate(row)) for row in before[0]]
+                            before = (expected_users, *before[1:])
+                        assert token in reply and '已撤销' in reply and after == before, (mode, step, reply)
+                        await message_contract(reply, token)
+                        probe.seed(state.database, 'DROP TRIGGER refuse_task')
+                    restarted = SectApplication(state.database, clock=state.clock)
+                    with patch.object(module, 'sect_application', restarted), patch.object(member, 'sect_application', restarted):
+                        reply = await task_command(probe, command, number=number)
+                        if mode == 'claim':
+                            assert '已撤销' not in reply and restarted.get_active_task('900001'), reply
+                        else:
+                            assert ('已刷新' if mode == 'refresh' else '任务完成') in reply, reply
+                        before = snapshot(probe)
+                        reply = await task_command(probe, command, number=number)
+                        assert '已完成' in reply and snapshot(probe) == before, reply
+                    assert probe.rows(state.database, "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'") == [(stamina_before-(3 if mode == 'settlement' else 0),)]
+                assert probe.rows(probe.context.paths.player_db, 'SELECT "宗门任务" FROM statistics WHERE user_id=\'900001\'') == [(1,)]
+                before = snapshot(probe)
+                probe.seed(state.database, "CREATE TRIGGER refuse_task BEFORE INSERT ON sect_task_claim_operations BEGIN SELECT RAISE(ABORT,'isolated task command fault'); END")
+                entry = next(row for row in probe.entries if row['command'] == '宗门任务接取')
+                with patch.object(module, 'report_exception', return_value='任务失败（定位号：task-test）') as reported, watch_handler_catches(entry) as caught:
+                    result = await run_case(entry, 'parameter', 982023, input_text='宗门任务接取', actor='900001')
+                assert result['status'] == 'pass' and len(caught) == 1, (result, caught)
+                assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+                assert 'sqlite3.IntegrityError: isolated task command fault' in caught[0]['traceback']
+                assert '定位号：task-test' in ''.join(result['replies']) and snapshot(probe) == before
+                probe.calls.append({'command': '宗门任务接取', 'expected_injected_fault': caught, **result})
+                probe.seed(state.database, 'DROP TRIGGER refuse_task')
+                await probe.command('宗门任务接取', number=982023)
+                assert len(probe.rows(state.database, 'SELECT * FROM sect_task_settlement_operations')) == 1
+                assert probe.rows(state.database, "SELECT sect_task FROM user_xiuxian WHERE user_id='900001'") == [(1,)]
+            integrity(probe)
+            probe.evidence.update(rejected_steps=8, rollback=True, restarted_same_message=True,
+                                  original_sqlite_error=True, adapter_contracts=32, integrity='ok')
+
     @case('sect-elixir-claim-recovery', '宗门丹药领取', '日重置→三步拒写/原ABORT→同消息恢复→别名回放→次日旧消息',
           '隔离三库、真实每日任务、背包/次数/回执trigger与副作用',
           '具体原因回复，失败全笔回滚，重建应用后恢复一次，次日旧消息不发药也不占新次数',

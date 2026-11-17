@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+from zoneinfo import ZoneInfo
 
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
@@ -79,6 +80,7 @@ class SectApplication:
         ledger: OperationLedger | None = None,
         clock=None,
         random_source=None,
+        task_timezone=None,
     ) -> None:
         self.database = str(database)
         self.player_database = str(player_database) if player_database is not None else None
@@ -88,6 +90,7 @@ class SectApplication:
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
         self.random = random_source or SystemRandom()
+        self.task_timezone = task_timezone or ZoneInfo('Asia/Shanghai')
         self.activity_repository = SectActivitySqlRepository(self.database)
         self.directory_repository = SectDirectorySqlRepository(self.database)
         self.inactive_owner_repository = SectInactiveOwnerSqlRepository(self.database)
@@ -130,7 +133,13 @@ class SectApplication:
 
     def _task_now(self):
         value = self.clock.now()
-        return value.astimezone() if value.tzinfo is not None else value
+        return value.astimezone(self.task_timezone) if value.tzinfo is not None else value
+
+    def task_claim_receipt(self, operation_id, user_id):
+        return self.task_state_repository.claim_receipt(operation_id, user_id)
+
+    def task_settlement_receipt(self, operation_id, user_id):
+        return SectTaskSettlementSqlRepository(self.database, clock=self.clock, task_timezone=self.task_timezone).settlement_receipt(operation_id, user_id)
 
     def current_task_period(self) -> str:
         return self._task_now().strftime("%Y-%m-%d")
@@ -209,6 +218,8 @@ class SectApplication:
         task_key = self.random.choice(list(task_config))
         task_data = dict(task_config[task_key])
         now = self._task_now()
+        if str(current_task.get('period') or now.strftime('%Y-%m-%d')) != now.strftime('%Y-%m-%d'):
+            return SectMutationResult(status='state_changed', reason='sect_task_period_changed', subject=user_id)
         return SectMutationResult(
             self.task_state_repository.refresh_task(
                 operation_id,
@@ -357,8 +368,8 @@ class SectApplication:
     def upgrade_practice(self, operation_id: str, user_id: str, sect_id: int, practice_type: str, expected_level: int, next_level: int, stone_cost: int, materials_cost: int):
         return SectMutationResult(SectPracticeSqlRepository(self.database).upgrade(operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost))
 
-    def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None):
-        repository = SectTaskSettlementSqlRepository(self.database, clock=self.clock)
+    def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None, *, enforce_current_period: bool = False):
+        repository = SectTaskSettlementSqlRepository(self.database, clock=self.clock, task_timezone=self.task_timezone)
         return SectMutationResult(
             repository.settle(
                 operation_id,
@@ -371,6 +382,7 @@ class SectApplication:
                 sect_reward,
                 expected_task_key,
                 expected_task_data,
+                current_period=self.current_task_period() if enforce_current_period else None,
             )
         )
 

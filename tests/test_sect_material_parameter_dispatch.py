@@ -13,3 +13,6 @@ class SectMaterialParameterDispatchTests(unittest.TestCase):
 
     def test_elixir_claim_write_recovery_and_multiple_rewards(self):
         self.check_group('sect-elixir-claim', 2, {'success': 2})
+
+    def test_daily_task_handoff_replay_and_write_recovery(self):
+        self.check_group('sect-task-daily', 2, {'success': 2})
