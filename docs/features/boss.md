@@ -4,7 +4,9 @@
 
 世界BOSS兑换和讨伐结算均通过 application 生成唯一 operation_id。旧 NoneBot 命令通过兼容门面调用新 application，返回字段保持兼容。
 
-`世界BOSS兑换` 由 `BossPurchaseCommandApplication` 负责。命令先读取 ledger/旧回执和用户 profile，再读取商品配置、物品目录、周限购与积分快照；原始请求数量写入 operation payload，实际数量只在事务内按剩余周限购裁剪。成功回放不依赖当前配置、目录、积分或周限购，拒绝和不明确回执不会渲染为成功。回执仓储只读、不执行请求期 DDL；`started`、`needs_reconcile`、旧表缺少明确 status 和坏 JSON 均 fail closed。
+`世界BOSS兑换` 由 `BossPurchaseCommandApplication` 负责。命令先读取 ledger/旧回执和用户 profile，再读取商品配置、物品目录、周限购与积分快照；原始请求数量写入 operation payload，实际数量只在事务内按剩余周限购裁剪。成功回放不依赖当前配置、目录、积分或周限购，拒绝和不明确回执不会渲染为成功。回执仓储只读、不执行请求期 DDL；没有可核验业务回执的 `started`、`needs_reconcile`、无 ledger 的旧表缺少明确 status 和坏 JSON 均 fail closed。
+
+当 ledger 仍为 `started/failed` 但同操作已有完整业务回执时，仓储只在用户、商品、原始数量和 ledger 请求哈希全部一致后提供恢复资料；应用只补齐 ledger/audit，不再扣积分、改周限购或发物。兼容旧八元素数组回执时，若无法从旧请求身份确定原始数量则保持待核查，不猜测恢复。没有匹配回执的 started、`needs_reconcile`、缺字段和坏 JSON 继续 fail closed。
 
 ## 命令与别名
 
@@ -41,7 +43,9 @@
 
 资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。
 
-兑换 writer 复用 `BossApplication.purchase -> BossPurchaseSqlRepository.purchase`，在附加 player DB 的 immediate SQLite 事务中校验积分/周限购/背包容量并同时更新积分、周限购、背包和业务回执；ledger 与业务回执仍保留原 operation identity。已确认的 SQL 回滚记录为 `internal_error`，同 payload 可重试；无法确认的 started/needs_reconcile 不盲目重放。
+兑换 writer 复用 `BossApplication.purchase -> BossPurchaseSqlRepository.purchase`，在附加 player DB 的 immediate SQLite 事务中校验积分/周限购/背包容量并同时更新积分、周限购、背包和业务回执。每步写入检查影响行数并回读，末尾再次核对前序资产；`IGNORE`、trigger 改写和副作用均须整笔回滚。已知拒写保留 `reason/subject` 到玩家回复；原 SQLite 异常保留 traceback，并以“暂时无法确认结果”回复，不宣称业务已撤销。
+
+共享 `OperationLedger.finish` 在记录完成日志前校验 ledger 最终行及 audit 行；静默拒写或改写不会伪装成成功。若资产与业务回执已经提交而 ledger 收尾失败，原回复保持不确定，下一次相同请求从已校验回执仅恢复 ledger，不重复扣分或发物。OneBot 文本、QQ Markdown 与降级合同由 mock 回归验证，不代表真实 QQ 客户端展示。
 
 世界BOSS战斗和“世界BOSS信息”通过 `BossApplication.daily_limit_snapshot` 读取每日讨伐次数、积分和灵石。读取使用只读 UoW，每次最多取一行，不缓存；缺数据库、表、用户行或旧字段时返回零，不创建数据库/表、不补字段，也不插入默认用户行。战斗沿用该快照作为结算 CAS 的期望值；显式限额写入与每日重置仍由各自 mutation 路径负责。
 
@@ -157,6 +161,16 @@ cron边界/真实触发、隔离SQLite五步拒写/改写/ABORT/后步篡改与�
 玩家额度读取、跨本地日期、同日新额度保留、拒写/未知异常同消息恢复与三库完整性。
 OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
 
+### 世界BOSS兑换回执与命令入口恢复
+
+`tests/test_boss_purchase_command_ingress.py` 覆盖隔离 handler body 的参数拒绝、限购裁切与
+回放、known write rejection 的 reason/subject、资产回滚和同消息恢复，以及 OneBot 文本、
+QQ Markdown/发送失败降级。`tests/test_world_boss_parameter_dispatch.py` 的
+`world-boss-purchase` 组走真实 matcher/DI/application/repository 和隔离迁移三库，核验
+默认数量/别名/边界、积分/周限购/背包/业务回执、IGNORE/改写/ABORT与ledger收尾故障；
+还覆盖业务已提交后旧数组回执与 `started` ledger 的恢复，并断言资产只结算一次。
+异常发送、Markdown渲染及QQ行为均为mock，未做真实客户端验证。
+
 ### 人工生成与定时场次交接
 
 随机生成不接收参数，指定生成接受境界及可选名称；先校验配置中的境界/名称，再生成。
@@ -183,7 +197,7 @@ OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
 
 参数清单的 `planned_cases` 仅按case主命令分配，不收录场景内的全部调用。因此
 `世界BOSS列表` 虽已在刷新/人工生成场景实际执行，清单仍标pending；`世界BOSS兑换`
-虽分配了未知商品拒绝场景，也不代表正常兑换或全部边界已验证。清单用于定位证据，
+的新增正常生命周期、拒写恢复和 ledger 恢复证据不能泛化为其他主命令均已覆盖。清单用于定位证据，
 不能替代真实dispatch、资产/回执断言及对应测试结果。
 
 ## 配置项

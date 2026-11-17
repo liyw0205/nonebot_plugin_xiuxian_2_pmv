@@ -5,6 +5,9 @@ from tests import test_guishi_parameter_dispatch as dispatch
 class WorldBossParameterDispatchTests(unittest.TestCase):
     check_group = dispatch.GuishiParameterDispatchTests.check_group
 
+    def test_purchase_player_lifecycle_and_write_recovery(self):
+        self.check_group('world-boss-purchase', 3, {'success': 3})
+
     def test_refresh_player_and_write_recovery(self):
         self.check_group('world-boss-refresh', 3, {'success': 2, 'rejection': 1})
 

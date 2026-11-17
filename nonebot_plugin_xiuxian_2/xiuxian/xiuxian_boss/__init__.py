@@ -1613,8 +1613,8 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     except ConflictError:
         await handle_send(bot, event, "兑换请求冲突，本次未结算。", md_type="世界BOSS")
         return
-    except Exception as exc:
-        logger.warning("boss purchase command failed: {}", type(exc).__name__)
+    except Exception:
+        logger.exception("world-boss purchase failed; operation_id={}", operation_id)
         await handle_send(bot, event, "世界BOSS兑换异常，暂时无法确认结果，请稍后核查。", md_type="世界BOSS")
         return
     await handle_send(bot, event, message, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")

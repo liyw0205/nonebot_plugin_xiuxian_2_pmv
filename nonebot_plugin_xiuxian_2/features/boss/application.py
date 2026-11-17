@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .battle_repository import WorldBossDailyLimitSnapshot
@@ -127,6 +128,7 @@ class BossApplication:
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
+            reservation = None
             try:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     existing = self.ledger.begin(uow, operation_id, action, payload)
@@ -135,6 +137,7 @@ class BossApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
+                    reservation = self.ledger.get(uow, operation_id, action)
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 normalized = {"status": status, **raw}
@@ -147,11 +150,62 @@ class BossApplication:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if action == "boss.purchase" and reservation is not None and exc.code in {
+                    "boss_integral_write_rejected",
+                    "boss_weekly_write_rejected",
+                    "boss_inventory_write_rejected",
+                    "boss_receipt_write_rejected",
+                }:
+                    try:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    except Exception as release_error:
+                        raise exc from release_error
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.game_database, operation_id, action, payload, str(exc))
                 raise
+
+    def recover_committed_purchase(self, *, operation_id: str, user_id: str,
+                                   request_payload: Mapping[str, Any], result: Mapping[str, Any]) -> OperationOutcome[dict[str, Any]]:
+        """Finish only the ledger after the command repository validates a committed receipt."""
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        action = "boss.purchase"
+        payload = dict(request_payload)
+        if not operation_id or not user_id or payload.get("user_id") != user_id:
+            raise ConflictError("已提交兑换回执的操作身份无法确认")
+
+        with trace_context(operation_id=operation_id, user_scope=user_id):
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                record = self.ledger.get(uow, operation_id, action)
+                if record is None or record.request_hash != request_hash(payload):
+                    raise ConflictError("已提交兑换回执与操作账本不匹配")
+                if record.status in {"applied", "rejected"}:
+                    previous = record.outcome()
+                    if previous is not None:
+                        return previous.replay()
+                    raise ConflictError("已提交兑换回执缺少有效账本结果")
+                if record.status not in {"started", "failed"}:
+                    raise ConflictError("兑换请求状态无法恢复")
+
+                status = str(result.get("status", "failed"))
+                normalized = {"status": status, **dict(result)}
+                if status in {"applied", "duplicate"}:
+                    consumed = {"integral": int(normalized.get("cost", 0) or 0)}
+                    granted = {key: int(normalized[key]) for key in ("stone", "exp", "integral")
+                               if key in normalized}
+                    outcome = OperationOutcome.applied(
+                        operation_id, action, data=normalized, consumed=consumed,
+                        granted=granted, audit_category="boss",
+                    )
+                else:
+                    outcome = OperationOutcome.rejected(
+                        operation_id, action, "世界BOSS操作未完成。", code=status,
+                        data=normalized, audit_category="boss",
+                    )
+                self.ledger.finish(uow, outcome)
+                return outcome
 
     def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_integral: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, today: Any = None, requested_quantity: int | None = None) -> OperationOutcome[dict[str, Any]]:
         try:
@@ -161,7 +215,15 @@ class BossApplication:
             raise ValidationError(str(exc)) from exc
         payload = request.payload()
         def call():
-            raw = _data(self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_integral, request.expected_weekly_purchases, request.max_goods_num, request.today))
+            repository = self._repository()
+            purchase_args = (request.operation_id, request.user_id, request.item_id, request.item_name,
+                             request.item_type, request.quantity, request.unit_cost, request.weekly_limit,
+                             request.expected_integral, request.expected_weekly_purchases,
+                             request.max_goods_num, request.today)
+            if request.requested_quantity is not None:
+                raw = _data(repository.purchase(*purchase_args, requested_quantity=request.requested_quantity))
+            else:
+                raw = _data(repository.purchase(*purchase_args))
             return {**raw, "item_id": request.item_id, "item_name": request.item_name, "item_type": request.item_type, "request": payload}
         return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="boss.purchase", payload=payload, call=call)
 

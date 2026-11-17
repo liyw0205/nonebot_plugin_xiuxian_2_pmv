@@ -64,6 +64,7 @@ jobs:
           tests/test_world_boss_refresh_recovery.py
           tests/test_world_boss_daily_reset_recovery.py
           tests/test_world_boss_manual_recovery.py
+          tests/test_boss_purchase_command_ingress.py
           tests/test_sect_material_recovery.py
           tests/test_sect_daily_maintenance_recovery.py
           tests/test_sect_elixir_claim_recovery.py

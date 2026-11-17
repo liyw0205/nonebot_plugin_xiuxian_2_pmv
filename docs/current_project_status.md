@@ -2,7 +2,7 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 当前冻结：每分钟体力恢复与玩家任务交接
+## 最近交付：每分钟体力恢复与玩家任务交接
 
 宗门任务/体力消费已推develop；ee843e83精确CI44045484742已核completed/success，
 复用该绿基线。隔离首轮8fail/1pass证实IGNORE、改写、缺文件/列和非法恢复配置仍让
@@ -14,13 +14,47 @@
 mock合同，无真机或部署验证。受影响组合113 passed、139 subtests passed，重叠不累计。
 architecture含inventory、独立inventory、受影响编译/diff通过，新恢复回归已接CI。
 过程中的event traceback断言和参数mock配置/冷却等夹具错误已修正，未放宽业务断言；
-新提交精确CI尚待推送后核验，不复跑已绿全量。
+精确提交`a739d7f8de1e328489ba5c37867f8c4a7184cfdb`的CI44051907668已核
+completed/success，不复跑已绿全量。功能与测试已推送develop，main未变。
 
 保持每分钟恢复量/上限/按rowid分批、NULL与重复行兼容；下一tick是原规则下新一次恢复，
 不新增永久周期回执、断点自动补跑或补偿策略，不扩restore/其他玩法/性能或全仓。
 用户JSON删除与goal/辅助资料不提交；线上库/部署/环境及main/Release不动。
-下一有限目标为本批定时链证据与发布条件收口：推送后仅核本SHA精确CI自然终态，复用
-魔修/pending/鬼市/拍卖/BOSS/宗门既有绿CI，整理剩余G2--G5限制；不据等待CI扩展审计。
+
+## 最近交付：世界BOSS兑换完整玩家闭环
+
+用户指定复用定时任务优先 goal，不新建重复 goal。5c5ca20c/CI43947994349已核绿，复用该
+全量基线，不重跑全量。现有真实SQLite故障注入证实积分、周限购、背包和业务回执的
+`RAISE(IGNORE)`/trigger改写会造成早期步骤未校验；更靠后的 `operation_ledger` 最终
+UPDATE 被忽略后，资产及业务回执已提交，旧路径仍可能输出成功而重试卡在处理中。
+
+现写入逐步检查行数与最终回读，末尾重新核对积分、周限购、背包和永久回执；已知拒写
+携 `reason/subject`，整笔回滚 trigger 副作用并释放未结算请求。共享 `OperationLedger.finish`
+核验最终账本结果及审计行后才写完成日志。若业务已提交而账本未收尾，玩家只收到待核查，
+同请求从已验证的业务回执只修账本、不重扣分/发物；新 envelope 和可通过请求哈希验证的旧
+数组 payload 均覆盖，进程中断遗留 `started` 也可恢复。未知数据库异常保留 traceback。
+
+真实 `world-boss-purchase` matcher/DI 参数组覆盖默认数量/别名/限购裁切、余额/上限/错误参数、
+成功重放/冲突、三步 IGNORE/改写/ABORT 与恢复，以及资产提交后 ledger 忽略、旧数组回执和
+`started` 状态恢复。OneBot纯文本和QQ Markdown/发送失败降级为mock合同，未真机。当前入口
+pytest不是unittest discover覆盖，已加入CI定向pytest组。定向组合32 passed/3 deselected；
+入口/应用/仓储/账本/迁移组合72 passed、2 subtests；受影响文件compileall、architecture、
+inventory、`git diff --check`均通过。不重跑已绿全量。
+
+本组代码/功能文档与测试已在develop完成定向验证；白名单提交推送后只单点核验精确SHA CI，不合main、不发版。
+只用 `/home` 项目共享环境与隔离三库，未访问或修改 `/root/xiu2`、`/root/myenv` 或线上服务；
+用户JSON删除和 `.codex-goal.md` 保留且不提交。
+
+## 当前冻结：世界BOSS讨伐结算写入与账本恢复
+
+下一相关完整目标仅沿玩家 `世界BOSS讨伐` 的真实 dispatch→战斗结果→`BossApplication.settle`→
+体力/冷却/积分/灵石/修为/统计/首领状态/永久回执/ledger，先隔离复现各持久化步骤的
+IGNORE/改写/ABORT 与业务提交后 ledger 中断。验证错误 reason/subject、完整回滚与 trigger
+副作用、同请求重试/重放不重复扣体力或发奖，并核对三库数据与完整性。保留伤害上限、
+奖励、每日额度、冷却与战斗规则；OneBot/QQ只做短mock合同，不做真机，不扩刷新/天罚/其他
+商店或全仓审计。已存在的 `world-boss-refresh` 参数链只验证正常讨伐与重放，不替代本组
+故障路径；源码疑点先以隔离数据库建立红证据，不预判根因。线上库/部署/环境、main/Release
+保持不动，完整目标完成且发布门禁满足前不合 main。
 
 ## 宗门任务体力消费与永久回执（当前交付）
 

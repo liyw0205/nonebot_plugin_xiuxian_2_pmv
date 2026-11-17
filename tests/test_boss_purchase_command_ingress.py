@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -54,10 +54,12 @@ def _context(tmp_path, *, weekly=8, integral=100):
             "quantity INTEGER NOT NULL,cost INTEGER NOT NULL,integral INTEGER NOT NULL,"
             "purchased INTEGER NOT NULL,inventory INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'applied')"
         )
+        uow.execute("CREATE TABLE isolated_effect(value TEXT)")
         OperationLedger().ensure_schema(uow)
     with DatabaseUnitOfWork(player) as uow:
         uow.execute("CREATE TABLE boss_limit(user_id TEXT PRIMARY KEY,integral INTEGER)")
         uow.execute("INSERT INTO boss_limit VALUES('u',?)", (integral,))
+        uow.execute("CREATE TABLE isolated_effect(value TEXT)")
         uow.execute("CREATE TABLE boss(user_id TEXT PRIMARY KEY,weekly_purchases TEXT)")
         uow.execute(
             "INSERT INTO boss VALUES('u',?)",
@@ -289,6 +291,115 @@ def test_sql_failure_rolls_back_assets_and_same_operation_retries(tmp_path):
     assert _query(context.game, "SELECT status FROM operation_ledger") == [("applied",)]
 
 
+def test_known_integral_write_rejection_releases_started_request_for_same_message_retry(tmp_path):
+    context = _context(tmp_path, weekly=0)
+    with DatabaseUnitOfWork(context.player) as uow:
+        uow.execute("CREATE TRIGGER refuse_boss_integral BEFORE UPDATE OF integral ON boss_limit "
+                    "BEGIN INSERT INTO isolated_effect VALUES('trigger side effect'); SELECT RAISE(IGNORE); END")
+    handler = _handler(context)
+    before = _state(context)
+    first_reply = handler.run("1 1")
+    after_rejection = _state(context)
+    effect_after_rejection = _query(context.player, "SELECT * FROM isolated_effect")
+    ledger_after_rejection = _query(context.game, "SELECT status FROM operation_ledger")
+    with DatabaseUnitOfWork(context.player) as uow:
+        uow.execute("DROP TRIGGER refuse_boss_integral")
+    retry_reply = handler.run("1 1")
+    result = {
+        "reason_reached_player": "积分扣除保存失败" in first_reply,
+        "assets_rolled_back": after_rejection[:3] == before[:3],
+        "trigger_rolled_back": effect_after_rejection == [],
+        "known_failure_not_left_started": ledger_after_rejection != [("started",)],
+        "retry_succeeded": SUCCESS in retry_reply,
+        "final_integral": _query(context.player, "SELECT integral FROM boss_limit"),
+        "final_inventory": _query(context.game, "SELECT goods_num,bind_num FROM back"),
+        "ledger_after_retry": _query(context.game, "SELECT status FROM operation_ledger"),
+    }
+    assert result == {
+        "reason_reached_player": True,
+        "assets_rolled_back": True,
+        "trigger_rolled_back": True,
+        "known_failure_not_left_started": True,
+        "retry_succeeded": True,
+        "final_integral": [(90,)],
+        "final_inventory": [(1, 1)],
+        "ledger_after_retry": [("applied",)],
+    }, {"result": result, "first_reply": first_reply, "retry_reply": retry_reply}
+
+
+@pytest.mark.parametrize("stage", ["weekly", "inventory", "receipt"])
+def test_ignored_purchase_write_is_rejected_rolled_back_and_retryable(tmp_path, stage):
+    context = _context(tmp_path, weekly=0)
+    if stage == "weekly":
+        database = context.player
+        trigger = (
+            "CREATE TRIGGER refuse_purchase BEFORE UPDATE OF weekly_purchases ON boss "
+            "BEGIN INSERT INTO isolated_effect VALUES('weekly side effect'); SELECT RAISE(IGNORE); END"
+        )
+        expected = "周限购记录保存失败"
+    elif stage == "inventory":
+        database = context.game
+        trigger = (
+            "CREATE TRIGGER refuse_purchase BEFORE INSERT ON back "
+            "BEGIN INSERT INTO isolated_effect VALUES('inventory side effect'); SELECT RAISE(IGNORE); END"
+        )
+        expected = "背包保存失败"
+    else:
+        database = context.game
+        trigger = (
+            "CREATE TRIGGER refuse_purchase BEFORE INSERT ON boss_purchase_operations "
+            "BEGIN INSERT INTO isolated_effect VALUES('receipt side effect'); SELECT RAISE(IGNORE); END"
+        )
+        expected = "兑换回执保存失败"
+
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute(trigger)
+    handler = _handler(context)
+    before = _state(context)
+    first_reply = handler.run("1 1")
+    after_rejection = _state(context)
+    effects = _query(database, "SELECT value FROM isolated_effect")
+
+    assert expected in first_reply, {"stage": stage, "reply": first_reply, "state": after_rejection}
+    assert after_rejection[:4] == before[:4]
+    assert effects == []
+    assert after_rejection[4] == []
+
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute("DROP TRIGGER refuse_purchase")
+    retry_reply = handler.run("1 1")
+    assert SUCCESS in retry_reply
+    assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
+    assert _query(context.player, "SELECT weekly_purchases FROM boss") == [
+        (json.dumps({"_last_reset": TODAY.isoformat(), "1": 1}),)
+    ]
+    assert _query(context.game, "SELECT goods_num,bind_num FROM back") == [(1, 1)]
+    assert _query(context.game, "SELECT status FROM operation_ledger") == [("applied",)]
+
+
+def test_ignored_operation_ledger_finish_never_reports_success_or_strands_retry(tmp_path):
+    context = _context(tmp_path, weekly=0)
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("ALTER TABLE boss_purchase_operations DROP COLUMN status")
+        uow.execute("CREATE TRIGGER refuse_purchase_finish BEFORE UPDATE OF status ON operation_ledger "
+                    "WHEN NEW.status='applied' BEGIN SELECT RAISE(IGNORE); END")
+    handler = _handler(context)
+    reply = handler.run("1 1")
+    assert "暂时无法确认结果" in reply and SUCCESS not in reply
+    assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
+    assert _query(context.game, "SELECT goods_num,bind_num FROM back") == [(1, 1)]
+    assert _query(context.game, "SELECT quantity FROM boss_purchase_operations") == [(1,)]
+    assert _query(context.game, "SELECT status FROM operation_ledger") == [("failed",)]
+
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("DROP TRIGGER refuse_purchase_finish")
+    retry = handler.run("1 1")
+    assert "已经处理" in retry and "兑换请求正在处理中" not in retry
+    assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
+    assert _query(context.game, "SELECT COUNT(*) FROM boss_purchase_operations") == [(1,)]
+    assert _query(context.game, "SELECT status FROM operation_ledger") == [("applied",)]
+
+
 def test_handler_preserves_world_boss_buttons_and_identity_fallback(tmp_path):
     context = _context(tmp_path, weekly=0)
     handler = _handler(context)
@@ -300,3 +411,65 @@ def test_handler_preserves_world_boss_buttons_and_identity_fallback(tmp_path):
     handler.ids.new_id.assert_not_called()
     assert SUCCESS in handler.run("1", event_id=None, fallback_id="")
     handler.ids.new_id.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "reply_kind,onebot,markdown,send_fails",
+    [
+        (kind, onebot, markdown, send_fails)
+        for kind in ("known_rejection", "uncertain")
+        for onebot, markdown, send_fails in (
+            (True, True, False), (False, False, False),
+            (False, True, False), (False, True, True),
+        )
+    ],
+)
+def test_purchase_reply_is_preserved_by_onebot_qq_markdown_and_fallback(
+    tmp_path, reply_kind, onebot, markdown, send_fails
+):
+    context = _context(tmp_path, weekly=0)
+    if reply_kind == "known_rejection":
+        with DatabaseUnitOfWork(context.player) as uow:
+            uow.execute(
+                "CREATE TRIGGER refuse_weekly BEFORE UPDATE OF weekly_purchases ON boss "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        reply = _handler(context).run("1 1")
+        assert "boss_weekly_write_rejected" in reply and "主体：u" in reply
+    else:
+        with DatabaseUnitOfWork(context.game) as uow:
+            uow.execute(
+                "CREATE TRIGGER abort_inventory BEFORE INSERT ON back "
+                "BEGIN SELECT RAISE(ABORT,'isolated purchase abort'); END"
+            )
+        reply = _handler(context).run("1 1")
+        assert "暂时无法确认结果" in reply
+        assert "isolated purchase abort" not in reply
+
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+    event = SimpleNamespace(get_user_id=lambda: "u")
+    config = SimpleNamespace(
+        markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False,
+        at_sender=False, message_optimization=False, img=False,
+    )
+    plain = AsyncMock()
+    md = AsyncMock(side_effect=RuntimeError("isolated QQ delivery failure") if send_fails else None)
+    with patch.object(utils, "XiuConfig", return_value=config), \
+            patch.object(utils, "get_chat_scene", return_value="group"), \
+            patch.object(utils, "is_group_event", return_value=True), \
+            patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), \
+            patch.object(utils, "_send_event_message", plain), \
+            patch.object(utils, "_send_markdown_or_keyboard", md):
+        asyncio.run(utils.handle_send(
+            bot, event, reply, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换",
+            k2="商店", v2="世界BOSS商店",
+        ))
+    if onebot or not markdown or send_fails:
+        plain.assert_awaited_once()
+        assert plain.call_args.kwargs["message"] == reply
+    else:
+        md.assert_awaited_once()
+        normalize_newlines = lambda value: value.replace("\r\n", "\n").replace("\r", "\n")
+        assert normalize_newlines(reply) in normalize_newlines(md.call_args.args[2])

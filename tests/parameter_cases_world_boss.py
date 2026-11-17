@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -52,7 +53,286 @@ def manual_assets(probe):
     )
 
 
+@contextmanager
+def purchase_setup(probe):
+    from nonebot_plugin_xiuxian_2.features.boss.purchase_command_application import BossPurchaseCommandApplication
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_boss as module
+
+    game, player = probe.context.paths.game_db, probe.context.paths.player_db
+    clock = FixedClock(datetime(2026, 11, 17, 10, tzinfo=timezone.utc))
+    config = {"世界积分商品": {}}
+    items = {}
+    for item_id in range(1, 10):
+        config["世界积分商品"][str(item_id)] = {"cost": 10, "weekly_limit": 3 if item_id == 1 else 10}
+        items[item_id] = {"name": "灵草", "type": "药材"}
+    config["世界积分商品"]["20"] = {"cost": 10, "weekly_limit": 3}
+    items[20] = {"name": "限购灵草", "type": "药材"}
+    config["世界积分商品"]["21"] = {"cost": 10, "weekly_limit": 10}
+    items[21] = {"name": "满仓灵草", "type": "药材"}
+    application = BossPurchaseCommandApplication(
+        game, player, lambda: config, lambda: {str(item_id): item for item_id, item in items.items()},
+        max_goods_num_provider=lambda: 3, clock=clock,
+    )
+    probe.seed(player,
+               "INSERT INTO boss_limit(user_id,integral) VALUES('900001',100) "
+               "ON CONFLICT(user_id) DO UPDATE SET integral=excluded.integral")
+    boss_columns = {row[1] for row in probe.rows(player, 'PRAGMA table_info("boss")')}
+    weekly_table = "boss" if "weekly_purchases" in boss_columns else "boss_weekly_purchases"
+    if weekly_table == "boss":
+        probe.seed(player,
+                   "INSERT INTO boss(user_id,weekly_purchases) VALUES('900001',?) "
+                   "ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",
+                   (json.dumps({"_last_reset": "2026-11-17"}),))
+    else:
+        probe.seed(player,
+                   "INSERT INTO boss_weekly_purchases(user_id,weekly_purchases) VALUES('900001',?) "
+                   "ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",
+                   (json.dumps({"_last_reset": "2026-11-17"}),))
+    probe.seed(player, "CREATE TABLE IF NOT EXISTS isolated_effect(value TEXT)")
+    probe.seed(game, "CREATE TABLE IF NOT EXISTS isolated_effect(value TEXT)")
+    with patch.object(module, "boss_purchase_command_application", application):
+        yield SimpleNamespace(module=module, application=application, clock=clock, config=config,
+                              weekly_table=weekly_table)
+
+
+def set_weekly(probe, state, purchases):
+    table = state.weekly_table
+    probe.seed(probe.context.paths.player_db,
+               f"INSERT INTO {table}(user_id,weekly_purchases) VALUES('900001',?) "
+               "ON CONFLICT(user_id) DO UPDATE SET weekly_purchases=excluded.weekly_purchases",
+               (json.dumps({"_last_reset": "2026-11-17", **purchases}),))
+
+
+def purchase_state(probe, state):
+    player, game = probe.context.paths.player_db, probe.context.paths.game_db
+    return (
+        probe.rows(player, "SELECT integral FROM boss_limit WHERE user_id='900001'"),
+        probe.rows(player, f"SELECT weekly_purchases FROM {state.weekly_table} WHERE user_id='900001'"),
+        probe.rows(game, "SELECT goods_id,goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+        probe.rows(game, "SELECT operation_id,payload,quantity,cost,integral,purchased,inventory FROM boss_purchase_operations ORDER BY operation_id"),
+        probe.rows(game, "SELECT operation_id,status FROM operation_ledger WHERE action='boss.purchase' ORDER BY operation_id"),
+        probe.rows(game, "SELECT operation_id,status FROM operation_audit WHERE action='boss.purchase' ORDER BY audit_id"),
+    )
+
+
 def register(case):
+    @case('world-boss-purchase-lifecycle', '世界BOSS兑换', '默认数量/别名/限购裁切/拒绝/重放/冲突',
+          '真实玩家matcher/DI；启动迁移隔离三库；世界积分与商店配置可控',
+          '回复与积分、周限购、背包、永久回执及ledger一致；拒绝零资产写',
+          group='world-boss-purchase')
+    async def purchase_lifecycle(probe):
+        with purchase_setup(probe) as state:
+            player, game = probe.context.paths.player_db, probe.context.paths.game_db
+            before = purchase_state(probe, state)
+            reply = await probe.command('世界BOSS兑换', '世界BOSS兑换 1', number=984010)
+            assert '成功兑换获得：灵草1个' in reply, reply
+            after_default = purchase_state(probe, state)
+            assert after_default[0] == [(90,)]
+            assert len(after_default[2]) == 1 and after_default[2][0][3:] == (1, 1)
+            assert len(after_default[3]) == 1 and after_default[4] == [('boss-purchase:984010:900001', 'applied')]
+            assert purchase_state(probe, state) != before
+            replay = await probe.command('世界BOSS兑换', '世界BOSS兑换 1', number=984010)
+            assert '已经处理' in replay and purchase_state(probe, state) == after_default, replay
+            conflict = await probe.command('世界BOSS兑换', '世界BOSS兑换 1 2', number=984010)
+            assert '请求冲突' in conflict and purchase_state(probe, state) == after_default, conflict
+
+            set_weekly(probe, state, {'1': 2})
+            reply = await probe.command('世界BOSS兑换', '世界boss兑换 1 5', number=984011)
+            assert '成功兑换获得：灵草1个' in reply, reply
+            after_clip = purchase_state(probe, state)
+            assert after_clip[0] == [(80,)] and after_clip[2][0][3:] == (2, 2)
+            assert '1": 3' in after_clip[1][0][0]
+            replay = await probe.command('世界BOSS兑换', '世界BOSS兑换 1 5', number=984011)
+            assert '已经处理' in replay and purchase_state(probe, state) == after_clip, replay
+
+            probe.seed(player, "UPDATE boss_limit SET integral=0 WHERE user_id='900001'")
+            before_insufficient = purchase_state(probe, state)
+            insufficient = await probe.command('世界BOSS兑换', '世界BOSS兑换 2', number=984012)
+            assert '世界积分不足' in insufficient, insufficient
+            after_insufficient = purchase_state(probe, state)
+            assert after_insufficient[:3] == before_insufficient[:3]
+            assert after_insufficient[4][-1] == ('boss-purchase:984012:900001', 'rejected')
+
+            probe.seed(player, "UPDATE boss_limit SET integral=100 WHERE user_id='900001'")
+            probe.seed(game,
+                       "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                       "VALUES('900001',21,'满仓灵草','药材',3,'2026-11-17','2026-11-17',3)")
+            before_full = purchase_state(probe, state)
+            full = await probe.command('世界BOSS兑换', '世界BOSS兑换 21', number=984013)
+            assert '持有数量已达上限' in full, full
+            assert purchase_state(probe, state)[:3] == before_full[:3]
+
+            set_weekly(probe, state, {'1': 3})
+            before_limit = purchase_state(probe, state)
+            limited = await probe.command('世界BOSS兑换', '世界BOSS兑换 1', number=984014)
+            assert '限购数量' in limited, limited
+            assert purchase_state(probe, state)[:3] == before_limit[:3]
+
+            before_unknown = purchase_state(probe, state)
+            unknown = await probe.command('世界BOSS兑换', '世界BOSS兑换 999', number=984015)
+            assert '正确的商品编号' in unknown and purchase_state(probe, state) == before_unknown, unknown
+            for raw in ('世界BOSS兑换 1 0', '世界BOSS兑换 1 -1', '世界BOSS兑换 1 2 extra'):
+                before_invalid = purchase_state(probe, state)
+                invalid = await probe.command('世界BOSS兑换', raw, number=984016 + len(probe.calls))
+                assert '正确的商品编号' in invalid and purchase_state(probe, state) == before_invalid, invalid
+
+            assert probe.rows(game, "SELECT COUNT(*) FROM boss_purchase_operations") == [(5,)]
+            assert probe.rows(game, "SELECT operation_id,status FROM operation_ledger WHERE action='boss.purchase' ORDER BY operation_id") == [
+                ('boss-purchase:984010:900001', 'applied'),
+                ('boss-purchase:984011:900001', 'applied'),
+                ('boss-purchase:984012:900001', 'rejected'),
+                ('boss-purchase:984013:900001', 'rejected'),
+                ('boss-purchase:984014:900001', 'rejected'),
+            ]
+            integrity(probe)
+            probe.evidence.update(default_quantity=True, alias=True, weekly_clip=True, replay_zero_write=True,
+                                  changed_payload_conflict=True,
+                                  rejected=['invalid_parameter', 'insufficient_integral', 'inventory_full',
+                                            'weekly_limit', 'unknown_item'],
+                                  isolated_databases_integrity='ok')
+
+    @case('world-boss-purchase-write-recovery', '世界BOSS兑换', '周限购/背包/回执 IGNORE、改写、ABORT 与同消息恢复',
+          '真实matcher/DI/应用；隔离SQLite trigger逐步骤拒绝或篡改写入',
+          '已知拒绝保留reason/subject、完整回滚与可重试；ABORT traceback可见且同请求恢复',
+          group='world-boss-purchase')
+    async def purchase_write_recovery(probe):
+        from tests.command_probe import run_case
+
+        with purchase_setup(probe) as state:
+            game, player = probe.context.paths.game_db, probe.context.paths.player_db
+            entry = next(row for row in probe.entries if row['command'] == '世界BOSS兑换')
+            sequence = 0
+            for stage in ('weekly', 'inventory', 'receipt'):
+                for failure in ('ignore', 'rewrite', 'abort'):
+                    sequence += 1
+                    item_id = sequence
+                    number = 984100 + sequence
+                    table = state.weekly_table
+                    if stage == 'weekly':
+                        database = player
+                        if failure == 'ignore':
+                            trigger = (f"CREATE TRIGGER purchase_fault BEFORE UPDATE OF weekly_purchases ON {table} "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('weekly'); SELECT RAISE(IGNORE); END")
+                        elif failure == 'rewrite':
+                            trigger = (f"CREATE TRIGGER purchase_fault AFTER UPDATE OF weekly_purchases ON {table} "
+                                       f"BEGIN INSERT INTO isolated_effect VALUES('weekly'); UPDATE {table} SET weekly_purchases='{{\"_last_reset\":\"2026-11-17\",\"{item_id}\":99}}' "
+                                       "WHERE user_id='900001'; END")
+                        else:
+                            trigger = (f"CREATE TRIGGER purchase_fault BEFORE UPDATE OF weekly_purchases ON {table} "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('weekly'); SELECT RAISE(ABORT,'isolated weekly abort'); END")
+                    elif stage == 'inventory':
+                        database = game
+                        if failure == 'ignore':
+                            trigger = ("CREATE TRIGGER purchase_fault BEFORE INSERT ON back "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('inventory'); SELECT RAISE(IGNORE); END")
+                        elif failure == 'rewrite':
+                            trigger = ("CREATE TRIGGER purchase_fault AFTER INSERT ON back "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('inventory'); UPDATE back SET goods_num=goods_num+1 "
+                                       "WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id; END")
+                        else:
+                            trigger = ("CREATE TRIGGER purchase_fault BEFORE INSERT ON back "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('inventory'); SELECT RAISE(ABORT,'isolated inventory abort'); END")
+                    else:
+                        database = game
+                        if failure == 'ignore':
+                            trigger = ("CREATE TRIGGER purchase_fault BEFORE INSERT ON boss_purchase_operations "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('receipt'); SELECT RAISE(IGNORE); END")
+                        elif failure == 'rewrite':
+                            trigger = ("CREATE TRIGGER purchase_fault AFTER INSERT ON boss_purchase_operations "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('receipt'); UPDATE boss_purchase_operations SET quantity=quantity+1 "
+                                       "WHERE operation_id=NEW.operation_id; END")
+                        else:
+                            trigger = ("CREATE TRIGGER purchase_fault BEFORE INSERT ON boss_purchase_operations "
+                                       "BEGIN INSERT INTO isolated_effect VALUES('receipt'); SELECT RAISE(ABORT,'isolated receipt abort'); END")
+
+                    with patch.object(state.application, 'config_provider', lambda: state.config):
+                        if stage == 'weekly':
+                            set_weekly(probe, state, {})
+                        before = purchase_state(probe, state)
+                        probe.seed(database, trigger)
+                        command = f'世界BOSS兑换 {item_id}'
+                        if failure == 'abort':
+                            result = await run_case(entry, 'parameter', number, input_text=command)
+                            assert result['status'] == 'exception' and result['replies'], result
+                            assert any(f'isolated {stage} abort' in error for error in result['errors']), result
+                            assert '暂时无法确认结果' in ''.join(result['replies']), result
+                            probe.calls.append({'command': '世界BOSS兑换', 'expected_database_exception': failure, **result})
+                            after = purchase_state(probe, state)
+                            assert after[:4] == before[:4], (stage, failure, before, after)
+                            assert after[4][-1] == (f'boss-purchase:{number}:900001', 'failed')
+                            assert probe.rows(database, "SELECT value FROM isolated_effect") == []
+                        else:
+                            reply = await probe.command('世界BOSS兑换', command, number=number)
+                            expected_reason = f'boss_{stage}_write_rejected'
+                            assert expected_reason in reply and '主体：900001' in reply, (stage, failure, reply)
+                            after = purchase_state(probe, state)
+                            assert after == before, (stage, failure, before, after)
+                            assert probe.rows(database, "SELECT value FROM isolated_effect") == []
+                        probe.seed(database, 'DROP TRIGGER purchase_fault')
+                        retry = await probe.command('世界BOSS兑换', command, number=number)
+                        assert '成功兑换获得' in retry, (stage, failure, retry)
+                        settled = purchase_state(probe, state)
+                        replay = await probe.command('世界BOSS兑换', command, number=number)
+                        assert '已经处理' in replay and purchase_state(probe, state) == settled, replay
+            integrity(probe)
+            probe.evidence.update(rejected_stages=['weekly', 'inventory', 'receipt'],
+                                  failure_modes=['IGNORE', 'rewrite', 'ABORT'], same_request_recovery=True,
+                                  duplicate_zero_write=True, isolated_databases_integrity='ok')
+
+    @case('world-boss-purchase-ledger-recovery', '世界BOSS兑换', '业务提交后ledger中断→待核查→同消息回执恢复',
+          '真实matcher/DI；业务回执已提交、ledger收尾UPDATE注入IGNORE，再覆盖旧payload和started恢复',
+          '不谎报回滚或成功；从已核验回执修复ledger且业务只写一次',
+          group='world-boss-purchase')
+    async def purchase_ledger_recovery(probe):
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+
+        with purchase_setup(probe) as state:
+            game = probe.context.paths.game_db
+            entry = next(row for row in probe.entries if row['command'] == '世界BOSS兑换')
+            probe.seed(game,
+                       "CREATE TRIGGER refuse_purchase_finish BEFORE UPDATE OF status ON operation_ledger "
+                       "WHEN NEW.status='applied' BEGIN SELECT RAISE(IGNORE); END")
+            with watch_handler_catches(entry) as caught:
+                result = await run_case(entry, 'parameter', 984300,
+                                        input_text='世界BOSS兑换 1 5', actor='900001')
+            assert result['status'] == 'exception' and len(caught) == 1 and not result['blocked'], (result, caught)
+            assert 'RuntimeError: operation ledger finish write rejected: boss.purchase/boss-purchase:984300:900001' \
+                in caught[0]['traceback'], caught
+            first = '\n'.join(result['replies'])
+            assert '暂时无法确认结果' in first and '已撤销' not in first and '成功兑换' not in first, result
+            assert any('world-boss purchase failed; operation_id=boss-purchase:984300:900001' in log['message']
+                       and 'operation ledger finish write rejected' in log['exception']
+                       for log in result['logs']), result
+            probe.calls.append({'command': '世界BOSS兑换', 'expected_post_commit_ledger_failure': caught, **result})
+            committed = purchase_state(probe, state)
+            assert committed[0] == [(70,)] and len(committed[2]) == 1 and committed[2][0][3:] == (3, 3)
+            assert len(committed[3]) == 1 and committed[4] == [('boss-purchase:984300:900001', 'failed')]
+            assert committed[5][-1] == ('boss-purchase:984300:900001', 'failed')
+
+            legacy_payload = json.dumps(
+                ['900001', 1, '灵草', '药材', 3, 10, 3, 3], ensure_ascii=True, separators=(',', ':')
+            )
+            probe.seed(game, 'UPDATE boss_purchase_operations SET payload=? WHERE operation_id=?',
+                       (legacy_payload, 'boss-purchase:984300:900001'))
+            probe.seed(game, "UPDATE operation_ledger SET status='started',result_json=NULL "
+                       "WHERE operation_id=? AND action='boss.purchase'",
+                       ('boss-purchase:984300:900001',))
+            assert probe.rows(game, 'SELECT payload FROM boss_purchase_operations') == [(legacy_payload,)]
+            assert probe.rows(game, "SELECT status FROM operation_ledger WHERE action='boss.purchase'") == [('started',)]
+
+            probe.seed(game, 'DROP TRIGGER refuse_purchase_finish')
+            recovered = await probe.command('世界BOSS兑换', '世界BOSS兑换 1 5', number=984300)
+            assert '已经处理' in recovered, recovered
+            settled = purchase_state(probe, state)
+            assert settled[0] == [(70,)] and settled[2] == committed[2] and len(settled[3]) == 1
+            assert settled[4] == [('boss-purchase:984300:900001', 'applied')]
+            assert [row[1] for row in settled[5]] == ['failed', 'applied']
+            integrity(probe)
+            probe.evidence.update(business_commit_preserved=True, no_false_success_or_rollback_claim=True,
+                                  same_operation_ledger_recovered=True, asset_writes_once=True,
+                                  isolated_databases_integrity='ok')
+
     @case('world-boss-manual-session-lifecycle', '世界BOSS指定生成', '定时刷新→指定/随机替换→玩家查询→下一槽→旧消息回放',
           '真实迁移库/生成配置/业务时钟；管理员和玩家真实matcher',
           '只替换选定境界、其他资产不变，旧回放不恢复历史场次，缓存与当前状态一致',

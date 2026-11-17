@@ -98,6 +98,8 @@ class LedgerEmitTests(unittest.TestCase):
             "nonebot_plugin_xiuxian_2.infrastructure.database.ledger.emit", capture
         ):
             with DatabaseUnitOfWork(self.database) as uow:
+                self.ledger.begin(uow, outcome.operation_id, outcome.action, {})
+            with DatabaseUnitOfWork(self.database) as uow:
                 self.ledger.finish(uow, outcome)
         return capture
 
@@ -138,6 +140,41 @@ class LedgerEmitTests(unittest.TestCase):
         self.assertIn("status=failed", message)
         self.assertIn("code=internal_error", message)
         self.assertIn("category=failure", message)
+
+    def test_audit_finish_rejection_rolls_back_ledger_and_does_not_emit_success(self) -> None:
+        failures = (
+            ("ignored", "BEFORE INSERT ON operation_audit BEGIN SELECT RAISE(IGNORE); END"),
+            ("rewritten", "AFTER INSERT ON operation_audit BEGIN "
+             "UPDATE operation_audit SET after_json='{}' WHERE audit_id=NEW.audit_id; END"),
+        )
+        for suffix, trigger_body in failures:
+            with self.subTest(failure=suffix):
+                outcome = OperationOutcome.applied(
+                    f"op-audit-{suffix}", "sect.upgrade", after={"level": 2}
+                )
+                with DatabaseUnitOfWork(self.database) as uow:
+                    self.ledger.begin(uow, outcome.operation_id, outcome.action, {"level": 2})
+                    uow.execute(f"CREATE TRIGGER injected_audit_fault {trigger_body}")
+
+                capture = _Capture()
+                with patch(
+                    "nonebot_plugin_xiuxian_2.infrastructure.database.ledger.emit", capture
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "operation audit finish write rejected"):
+                        with DatabaseUnitOfWork(self.database) as uow:
+                            self.ledger.finish(uow, outcome)
+
+                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                    saved = self.ledger.get(uow, outcome.operation_id, outcome.action)
+                    audit_count = uow.query_one(
+                        "SELECT COUNT(*) AS n FROM operation_audit WHERE operation_id=? AND action=?",
+                        (outcome.operation_id, outcome.action),
+                    )["n"]
+                self.assertEqual(saved.status, "started")
+                self.assertEqual(audit_count, 0)
+                self.assertEqual(capture.events, [])
+                with DatabaseUnitOfWork(self.database) as uow:
+                    uow.execute("DROP TRIGGER injected_audit_fault")
 
 
 if __name__ == "__main__":
