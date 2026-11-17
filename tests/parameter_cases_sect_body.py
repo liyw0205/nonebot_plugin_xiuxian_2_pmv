@@ -221,6 +221,77 @@ def register(case):
         assert probe.rows(database, "SELECT COUNT(*) FROM sect_position_change_operations WHERE operation_id LIKE 'sect:960060:%'") == [(1,)]
         probe.evidence.update(sect_id=sid, reason="sect_position_receipt_write_rejected", recovered=True)
 
+    @case("sect-kick-replay", "踢出宗门", "成员道号成功/同消息重放", "真实宗主与同宗成员",
+          "成员实际脱离宗门；重放只提示已完成且不重复写", group="sect-member-removal-parameters")
+    async def kick_replay(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        text = await probe.command("踢出宗门", "踢出宗门 诊断对手", number=960070)
+        assert "被" in text and probe.rows(database, "SELECT sect_id,sect_position,sect_contribution FROM user_xiuxian WHERE user_id='900002'") == [(None, None, 0)], text
+        probe.clear_cooldowns()
+        replay = await probe.command("踢出宗门", "踢出宗门 诊断对手", number=960070)
+        assert "已经完成" in replay and "被" not in replay, replay
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        contracts = 0
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated removal delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "成员关系回执合同", md_type="宗门", k1="踢出", v1="宗门踢出")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+            else:
+                markdown_send.assert_awaited_once()
+            contracts += 1
+        probe.evidence.update(sect_id=sid, replay=replay, adapter_contracts=contracts)
+
+    @case("sect-leave-replay", "退出宗门", "同门成员成功/同消息重放", "真实同宗成员（非宗主）",
+          "成员实际脱离宗门；成员已无宗门时重放仍读取历史回执", group="sect-member-removal-parameters")
+    async def leave_replay(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        text = await probe.command("退出宗门", "退出宗门", actor="900002", number=960080)
+        assert "已退出" in text and probe.rows(database, "SELECT sect_id,sect_position,sect_contribution FROM user_xiuxian WHERE user_id='900002'") == [(None, None, 0)], text
+        probe.clear_cooldowns()
+        replay = await probe.command("退出宗门", "退出宗门", actor="900002", number=960080)
+        assert "已经完成" in replay and "已退出" not in replay, replay
+        probe.evidence.update(sect_id=sid, replay=replay)
+
+    @case("sect-kick-recovery", "踢出宗门", "成员写入 trigger 改写后同消息恢复", "真实宗主与同宗成员",
+          "具体成员写拒绝、成员关系与回执回滚；解除故障后同消息成功", group="sect-member-removal-recovery", outcome="rejection")
+    async def kick_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_kick_member_rewrite AFTER UPDATE OF sect_id ON user_xiuxian WHEN NEW.user_id='900002' AND NEW.sect_id IS NULL BEGIN UPDATE user_xiuxian SET sect_contribution=7 WHERE user_id='900002'; END")
+        first = await probe.command("踢出宗门", "踢出宗门 诊断对手", number=960090)
+        assert "成员关系保存失败" in first, first
+        assert probe.rows(database, "SELECT sect_id,sect_position,sect_contribution FROM user_xiuxian WHERE user_id='900002'") == [(sid, 12, 0)]
+        probe.seed(database, "DROP TRIGGER sect_kick_member_rewrite")
+        probe.clear_cooldowns()
+        recovered = await probe.command("踢出宗门", "踢出宗门 诊断对手", number=960090)
+        assert "被" in recovered and probe.rows(database, "SELECT sect_id FROM user_xiuxian WHERE user_id='900002'") == [(None,)], recovered
+        probe.evidence.update(sect_id=sid, reason="sect_kick_member_write_rejected", recovered=True)
+
+    @case("sect-leave-recovery", "退出宗门", "回执 IGNORE 后同消息恢复", "真实同宗成员（非宗主）",
+          "具体回执拒绝、成员关系与回执回滚；解除故障后同消息成功", group="sect-member-removal-recovery", outcome="rejection")
+    async def leave_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_leave_receipt_ignore BEFORE INSERT ON sect_member_removal_operations BEGIN SELECT RAISE(IGNORE); END")
+        first = await probe.command("退出宗门", "退出宗门", actor="900002", number=960100)
+        assert "退出宗门回执保存失败" in first, first
+        assert probe.rows(database, "SELECT sect_id,sect_position,sect_contribution FROM user_xiuxian WHERE user_id='900002'") == [(sid, 12, 0)]
+        probe.seed(database, "DROP TRIGGER sect_leave_receipt_ignore")
+        probe.clear_cooldowns()
+        recovered = await probe.command("退出宗门", "退出宗门", actor="900002", number=960100)
+        assert "已退出" in recovered and probe.rows(database, "SELECT sect_id FROM user_xiuxian WHERE user_id='900002'") == [(None,)], recovered
+        probe.evidence.update(sect_id=sid, reason="sect_leave_receipt_write_rejected", recovered=True)
+
     @case("sect-rename-valid-name", "宗门改名", "合法中文新名称", "真实宗主与充足改名费用",
           "宗门名称持久化，扣除真实配置费用或道具", group="sect-body-parameters")
     async def rename(probe):

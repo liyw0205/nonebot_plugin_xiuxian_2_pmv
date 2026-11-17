@@ -2808,7 +2808,11 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     kick_data = kick_outcome.data or {}
     result = type("SectKickView", (), kick_data)()
     result.applied = kick_outcome.ok
-    if result.status == "self_target":
+    if kick_outcome.replayed or result.status == "duplicate":
+        msg = "这条踢出宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("踢出宗门", kick_outcome)
+    elif result.status == "self_target":
         msg = f"无法对自己进行操作，试试退出宗门？"
     elif result.status == "different_sect":
         msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
@@ -2842,10 +2846,6 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_out.finish()
     user_id = user_info['user_id']
-    if not user_info['sect_id']:
-        msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
-        await sect_out.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
     leave_outcome = sect_application.leave(
@@ -2856,12 +2856,23 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     leave_data = leave_outcome.data or {}
     result = type("SectLeaveView", (), leave_data)()
     result.applied = leave_outcome.ok
-    if result.status == "owner_cannot_leave":
+    if result.status == "not_in_sect" and not leave_outcome.replayed:
+        msg = "道友还未加入一方宗门。"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await sect_out.finish()
+    if leave_outcome.replayed or result.status == "duplicate":
+        msg = "这条退出宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("退出宗门", leave_outcome)
+    elif result.status == "owner_cannot_leave":
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
         await handle_send(bot, event, msg, md_type="宗门", k1="传位", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
-    sect_name = result.sect_name or (sect_application.get_sect_info(int(user_info['sect_id'])) or {}).get('sect_name', '')
-    msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
+    elif result.status == "left":
+        sect_name = result.sect_name or (sect_application.get_sect_info(int(user_info['sect_id'])) or {}).get('sect_name', '')
+        msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
+    else:
+        msg = result_failure("退出宗门", leave_outcome)
     await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await sect_out.finish()
 

@@ -92,6 +92,43 @@ class _PositionRepository(_Repository):
         }
 
 
+class _RemovalRepository(_Repository):
+    def __init__(self, *, action: str, reject_once: bool = False) -> None:
+        super().__init__()
+        self.action = action
+        self.reject_once = reject_once
+
+    def _result(self, operation_id, user_id, target_id, status):
+        return {
+            "status": status,
+            "actor_id": user_id,
+            "target_id": target_id,
+            "sect_id": 1,
+            "sect_name": "测试宗",
+            "actor_name": "宗主",
+            "target_name": "成员",
+            "actor_position": 0,
+            "target_position": 5,
+        }
+
+    def kick(self, operation_id, actor_id, target_id, *, manager_max_position):
+        self.calls.append(("kick", operation_id))
+        if self.reject_once:
+            self.reject_once = False
+            return {"status": "state_changed", "reason": "sect_kick_receipt_write_rejected", "subject": operation_id}
+        return self._result(operation_id, actor_id, target_id, "kicked")
+
+    def leave(self, operation_id, user_id, *, owner_position=0):
+        self.calls.append(("leave", operation_id))
+        if self.reject_once:
+            self.reject_once = False
+            return {"status": "state_changed", "reason": "sect_leave_receipt_write_rejected", "subject": operation_id}
+        result = self._result(operation_id, user_id, user_id, "left")
+        result["actor_name"] = result["target_name"] = "成员"
+        result["actor_position"] = result["target_position"] = 5
+        return result
+
+
 class SectApplicationTests(unittest.TestCase):
     def test_started_ledger_is_retried_by_frozen_mutations(self):
         cases = (
@@ -222,6 +259,23 @@ class SectApplicationTests(unittest.TestCase):
             self.assertEqual((first.status, replay.status, replay.replayed), ("applied", "replayed", True))
             self.assertEqual((conflict.status, conflict.code, conflict.data["subject"]), ("rejected", "operation_conflict", "actor"))
             self.assertEqual([4], [call[1] for call in repository.calls])
+
+    def test_member_removal_write_rejections_are_retryable(self):
+        for action, invoke, reason in (
+            ("kick", lambda app: app.kick(operation_id="op-kick", user_id="u", target_id="t", manager_max_position=2), "sect_kick_receipt_write_rejected"),
+            ("leave", lambda app: app.leave(operation_id="op-leave", user_id="u", owner_position=0), "sect_leave_receipt_write_rejected"),
+        ):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as directory:
+                database = Path(directory) / "game.db"
+                _prepare_ledger(database)
+                repository = _RemovalRepository(action=action, reject_once=True)
+                app = SectApplication(database, repository=repository)
+                failed = invoke(app)
+                self.assertFalse(failed.ok)
+                self.assertEqual((failed.code, failed.data["subject"]), (reason, failed.operation_id))
+                recovered = invoke(app)
+                self.assertTrue(recovered.ok)
+                self.assertEqual([entry[0] for entry in repository.calls], [action, action])
 
     def test_weekly_claim_uses_atomic_repository_receipt_without_outer_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
