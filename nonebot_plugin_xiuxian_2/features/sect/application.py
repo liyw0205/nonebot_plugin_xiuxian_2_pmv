@@ -280,9 +280,17 @@ class SectApplication:
         amount: int,
         goals: Iterable[Mapping[str, Any]],
         updated_at: str,
+        *,
+        settlement_operation_id: str | None = None,
     ) -> list[dict[str, Any]]:
         return self._weekly_progress_repository().record_progress(
-            sect_id, week_key, user_id, amount, goals, updated_at
+            sect_id,
+            week_key,
+            user_id,
+            amount,
+            goals,
+            updated_at,
+            settlement_operation_id=settlement_operation_id,
         )
 
     def weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:

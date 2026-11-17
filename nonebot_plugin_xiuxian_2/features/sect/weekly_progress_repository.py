@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
+from datetime import date
 from pathlib import Path
 from typing import Any
 
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
@@ -67,6 +70,21 @@ class SectWeeklyProgressSqlRepository:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_schema_ready(uow)
 
+    @staticmethod
+    def _reject(reason: str, subject: str) -> None:
+        raise DomainError(reason, reason, {"reason": reason, "subject": subject})
+
+    @classmethod
+    def _verify_goal(cls, uow, sect_id, week_key, goal_key, expected):
+        saved = uow.query_one(
+            "SELECT * FROM sect_weekly_goal WHERE sect_id=? AND week_key=? AND goal_key=?",
+            (sect_id, week_key, goal_key),
+        )
+        if saved != expected:
+            cls._reject(
+                "sect_weekly_progress_goal_write_rejected", f"{sect_id}/{week_key}/{goal_key}"
+            )
+
     def ensure_goals(
         self,
         sect_id: int | str,
@@ -107,32 +125,109 @@ class SectWeeklyProgressSqlRepository:
         amount: int,
         goals: Iterable[Mapping[str, Any]],
         updated_at: str,
+        *,
+        settlement_operation_id: str | None = None,
     ) -> list[dict[str, Any]]:
         sect_id, week_key, user_id, amount = int(sect_id), str(week_key), str(user_id), int(amount)
         if sect_id <= 0 or not week_key or not user_id or amount <= 0:
             raise ValueError("sect_id, week_key, user_id and positive amount are required")
         goal_values = self._goal_values(goals)
         updated: list[dict[str, Any]] = []
+        expected_goals: dict[str, dict[str, Any]] = {}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if settlement_operation_id:
+                settlement_columns = {
+                    str(row["name"])
+                    for row in uow.query_all("PRAGMA table_info(sect_task_settlement_operations)")
+                }
+                if not {"operation_id", "user_id", "sect_id", "period", "weekly_event_status"}.issubset(settlement_columns):
+                    raise DomainError(
+                        "schema_missing",
+                        "task weekly event status schema is not ready",
+                        {"reason": "sect_weekly_progress_schema_missing", "subject": settlement_operation_id},
+                    )
+                settlement = uow.query_one(
+                    "SELECT * "
+                    "FROM sect_task_settlement_operations WHERE operation_id=?",
+                    (str(settlement_operation_id),),
+                )
+                if settlement is None:
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_missing",
+                        "task settlement receipt was not found for weekly progress",
+                        {"reason": "sect_weekly_progress_settlement_missing", "subject": settlement_operation_id},
+                    )
+                if str(settlement["user_id"]) != user_id or int(settlement["sect_id"]) != sect_id:
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_conflict",
+                        "task settlement receipt does not match weekly progress owner",
+                        {"reason": "sect_weekly_progress_settlement_conflict", "subject": settlement_operation_id},
+                    )
+                if settlement["weekly_event_status"] in {"legacy", "recorded"}:
+                    return []
+                if settlement["weekly_event_status"] != "pending":
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_state_invalid",
+                        "task settlement has an invalid weekly event state",
+                        {"reason": "sect_weekly_progress_settlement_state_invalid", "subject": settlement_operation_id},
+                    )
+                try:
+                    business_day = date.fromisoformat(str(settlement["period"]))
+                except ValueError as exc:
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_period_invalid",
+                        "task weekly business date is invalid",
+                        {"reason": "sect_weekly_progress_settlement_period_invalid", "subject": settlement_operation_id},
+                    ) from exc
+                year, week, _ = business_day.isocalendar()
+                week_key = f"{year}-W{week:02d}"
+                try:
+                    self._assert_schema_ready(uow)
+                except RuntimeError as exc:
+                    raise DomainError(
+                        "schema_missing",
+                        "task weekly goal schema is not ready",
+                        {"reason": "sect_weekly_progress_schema_missing", "subject": settlement_operation_id},
+                    ) from exc
+
             self._ensure_goals(uow, sect_id, week_key, goal_values, updated_at)
             for goal_key, target in goal_values:
                 row = uow.query_one(
-                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "SELECT * FROM sect_weekly_goal "
                     "WHERE sect_id=? AND week_key=? AND goal_key=?",
                     (sect_id, week_key, goal_key),
                 )
+                subject = f"{sect_id}/{week_key}/{goal_key}"
                 if row is None:
+                    if settlement_operation_id:
+                        self._reject("sect_weekly_progress_goal_write_rejected", subject)
                     raise RuntimeError("weekly goal disappeared during progress update")
-                old_progress = int(row["progress"] or 0)
-                try:
-                    participants = json.loads(str(row["participants"] or "{}"))
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    participants = {}
-                if not isinstance(participants, dict):
-                    participants = {}
+                if settlement_operation_id:
+                    try:
+                        old_progress = require_exact_integer(row["progress"], field="progress", subject=subject)
+                        participants = json.loads(str(row["participants"]))
+                        if not isinstance(participants, dict) or old_progress < 0:
+                            raise ValueError("invalid weekly progress data")
+                        for value in participants.values():
+                            if isinstance(value, bool) or require_exact_integer(value, field="participants", subject=subject) < 0:
+                                raise ValueError("invalid participant total")
+                    except (DomainError, TypeError, ValueError) as exc:
+                        raise DomainError(
+                            "sect_weekly_progress_data_invalid",
+                            "task weekly progress data is invalid",
+                            {"reason": "sect_weekly_progress_data_invalid", "subject": subject},
+                        ) from exc
+                else:
+                    old_progress = int(row["progress"] or 0)
+                    try:
+                        participants = json.loads(str(row["participants"] or "{}"))
+                    except (TypeError, ValueError):
+                        participants = {}
+                    if not isinstance(participants, dict):
+                        participants = {}
                 participants[user_id] = int(participants.get(user_id, 0) or 0) + amount
                 new_progress = min(old_progress + amount, target)
-                uow.execute(
+                update = uow.execute(
                     "UPDATE sect_weekly_goal SET progress=?,participants=?,updated_at=? "
                     "WHERE sect_id=? AND week_key=? AND goal_key=?",
                     (
@@ -144,6 +239,20 @@ class SectWeeklyProgressSqlRepository:
                         goal_key,
                     ),
                 )
+                if settlement_operation_id:
+                    if update.rowcount != 1:
+                        raise DomainError(
+                            "sect_weekly_progress_goal_write_rejected",
+                            "weekly goal progress write did not affect one row",
+                            {"reason": "sect_weekly_progress_goal_write_rejected", "subject": subject},
+                        )
+                    expected_goals[goal_key] = {
+                        **row,
+                        "progress": new_progress,
+                        "participants": json.dumps(participants, ensure_ascii=False),
+                        "updated_at": str(updated_at),
+                    }
+                    self._verify_goal(uow, sect_id, week_key, goal_key, expected_goals[goal_key])
                 updated.append(
                     {
                         "goal_key": goal_key,
@@ -153,6 +262,30 @@ class SectWeeklyProgressSqlRepository:
                         "completed": old_progress < target <= new_progress,
                     }
                 )
+            if settlement_operation_id:
+                marker = uow.execute(
+                    "UPDATE sect_task_settlement_operations SET weekly_event_status='recorded' "
+                    "WHERE operation_id=? AND user_id=? AND sect_id=? AND weekly_event_status='pending'",
+                    (str(settlement_operation_id), user_id, sect_id),
+                )
+                if marker.rowcount != 1:
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_write_rejected",
+                        "task settlement weekly event status write did not affect one row",
+                        {"reason": "sect_weekly_progress_settlement_write_rejected", "subject": settlement_operation_id},
+                    )
+                saved_status = uow.query_one(
+                    "SELECT * FROM sect_task_settlement_operations WHERE operation_id=?",
+                    (str(settlement_operation_id),),
+                )
+                if saved_status != {**settlement, "weekly_event_status": "recorded"}:
+                    raise DomainError(
+                        "sect_weekly_progress_settlement_write_rejected",
+                        "task settlement weekly event status did not persist",
+                        {"reason": "sect_weekly_progress_settlement_write_rejected", "subject": settlement_operation_id},
+                    )
+                for goal_key, expected in expected_goals.items():
+                    self._verify_goal(uow, sect_id, week_key, goal_key, expected)
         return updated
 
     def weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:

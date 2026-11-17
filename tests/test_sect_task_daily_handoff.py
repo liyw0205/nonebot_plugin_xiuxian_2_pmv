@@ -17,7 +17,7 @@ from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
 from nonebot_plugin_xiuxian_2.features.sect.migrations import (
     apply_sect_task_state, apply_sect_task_claim_operations,
-    apply_sect_task_settlement_operations,
+    apply_sect_task_settlement_operations, apply_sect_task_weekly_event_status,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
@@ -34,6 +34,7 @@ def state(tmp_path):
         apply_sect_task_state(uow)
         apply_sect_task_claim_operations(uow)
         apply_sect_task_settlement_operations(uow)
+        apply_sect_task_weekly_event_status(uow)
         uow.execute('CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,sect_id INTEGER,'
                     'stone INTEGER,hp INTEGER,exp INTEGER,sect_task INTEGER,sect_contribution INTEGER)')
         uow.execute("INSERT INTO user_xiuxian VALUES('user',1,1000,500,2000,0,20)")

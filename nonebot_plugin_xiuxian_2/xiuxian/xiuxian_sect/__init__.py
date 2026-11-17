@@ -1908,7 +1908,22 @@ def _daily_sect_task(user_id):
     return task
 
 
-async def _task_settlement_replay(bot, event, result):
+async def _task_settlement_replay(bot, event, result, operation_id):
+    if result.get("weekly_event_status") == "pending":
+        from ..xiuxian_utils.game_events import record_required_sect_weekly_event
+
+        record_required_sect_weekly_event(
+            str(result["user_id"]),
+            "sect_task_complete",
+            1,
+            {
+                "source": "sect",
+                "action": "task_complete",
+                "trace_id": str(operation_id),
+                "settlement_operation_id": str(operation_id),
+                "sect_id": int(result["sect_id"]),
+            },
+        )
     await handle_send(bot, event, f"该次宗门任务已完成：获得修为 {number_to(result['exp_reward'])}，贡献度 {result['sect_reward']}。", md_type='宗门')
     await sect_task_complete.finish()
 
@@ -2229,9 +2244,10 @@ async def _complete_sect_task(bot, event):
         await sect_task_complete.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
-    previous = sect_application.task_settlement_receipt(_sect_operation_id(event, 'task_complete', user_id), user_id)
+    task_operation_id = _sect_operation_id(event, 'task_complete', user_id)
+    previous = sect_application.task_settlement_receipt(task_operation_id, user_id)
     if previous is not None:
-        await _task_settlement_replay(bot, event, previous)
+        await _task_settlement_replay(bot, event, previous, task_operation_id)
     if str(event.get_user_id()) not in ADMIN_IDS:
         stamina = consume_player_stamina(user_id, 3, expected_stamina=require_exact_integer(user_info.get('user_stamina') or 0, field='user_stamina', subject=str(user_id)),
                                          operation_id=_sect_operation_id(event, 'task_stamina', user_id))
@@ -2286,9 +2302,6 @@ async def _complete_sect_task(bot, event):
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(active_task['任务内容']['sect'])
-            task_operation_id = _sect_operation_id(
-                event, "task_complete", user_id
-            )
             settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
@@ -2307,7 +2320,7 @@ async def _complete_sect_task(bot, event):
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
             if settlement.status == 'duplicate':
-                await _task_settlement_replay(bot, event, settlement)
+                await _task_settlement_replay(bot, event, settlement, task_operation_id)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
@@ -2327,6 +2340,8 @@ async def _complete_sect_task(bot, event):
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
                         "trace_id": task_operation_id,
+                        "settlement_operation_id": task_operation_id,
+                        "require_sect_weekly": True,
                         "sect_id": sect_id, "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,
@@ -2371,9 +2386,6 @@ async def _complete_sect_task(bot, event):
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(active_task['任务内容']['sect'])
-            task_operation_id = _sect_operation_id(
-                event, "task_complete", user_id
-            )
             settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
@@ -2392,7 +2404,7 @@ async def _complete_sect_task(bot, event):
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
             if settlement.status == 'duplicate':
-                await _task_settlement_replay(bot, event, settlement)
+                await _task_settlement_replay(bot, event, settlement, task_operation_id)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
@@ -2412,6 +2424,8 @@ async def _complete_sect_task(bot, event):
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
                         "trace_id": task_operation_id,
+                        "settlement_operation_id": task_operation_id,
+                        "require_sect_weekly": True,
                         "sect_id": sect_id, "stone_delta": -int(costls), "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,

@@ -1,6 +1,28 @@
 # 当前项目状态
 
-最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+
+## 当前交付：宗门任务完成与周常同门勤务可靠记账（G2 checkpoint）
+
+隔离三库的真实`宗门任务完成`dispatch复现伪正常：灵石、经验、次数、统计及主结算回执已
+提交，命令却回复成功；`sect_weekly_goal`仍为`progress=0,participants={}`，IGNORE trigger
+副作用实际提交。根因是周常仓储只返回内存投影、不核UPDATE是否持久化，安全事件包装吞掉失败，
+指令继续成功回复。
+
+新增`sect.020`：旧任务回执默认`legacy`，新结算回执以`pending`表示周常待记账。周常进度、
+参与者与`pending→recorded`同事务核影响行数和最终回读；已知拒写回滚周常事务及trigger副作用，
+保留`reason/subject`，SQLite原异常透传。同消息重放只补`pending`，不再扣费、发奖或增加统计。
+保留HP/灵石消耗、奖励、次数及周常周期；旧回执不猜补记。
+
+真实参数组覆盖无参HP/灵石任务、周常IGNORE具体提示、SQLite ABORT原异常日志、恢复和同消息
+重放；回读三库资产、体力、统计、结算状态、周常参与者及完整性。OneBot文本、QQ Markdown与
+发送失败降级为mock合同，未真机。参数报告`3/3 pass`；仓储/应用/入口及历史兼容组合
+`149 passed, 38 subtests passed`，有重叠不累计。受影响编译、diff、
+architecture/inventory通过。仅用`/home` venv、共享锁和隔离SQLite，不跑全量、不轮询CI。
+
+本组准备白名单普通推送`develop`；用户JSON删除、goal及辅助报告不提交，线上库/部署/环境及
+`main`/Release不动。下一组由现有参数矩阵冻结为`学习宗门功法`：真实参数、资材/BuffInfo/永久
+回执、具体原因、恢复/重放及适配器合同；先隔离红复现，当前未证明该功能故障。总goal仍active。
 
 ## 最近交付：每分钟体力恢复与玩家任务交接
 
@@ -76,15 +98,9 @@ Markdown及发送失败降级为mock合同，未做真机。仓储/应用/入口
 不碰线上库、部署、共享环境或`/root/myenv`，不跑全量/轮询CI。
 
 本组已白名单普通提交推送develop：`41690951c0230e0794e95edc6902b5f50aa80abc`，
-`origin/develop`核得同SHA；未查CI。下一执行候选仍在宗门周常：沿真实活动指令到周常事件进度
-更新做隔离复现。已用临时SQLite注入`sect_weekly_goal` UPDATE前trigger副作用后`RAISE(IGNORE)`：
-`record_progress`返回`progress=1`，落库仍是`progress=0,participants={}`，trigger副作用行数为1；
-这是仓储伪正常的真实数据红证据，尚未证明实际玩家handler的回复/重复行为，也未改代码。下一步沿
-真实`宗门任务完成` dispatch/DI/handler→`safe_record_game_event(sect_task_complete)`→周常进度
-写入，核主结算/进度/回执并复现写拒绝及同消息重试是否会漏进度或重复结算，再冻结该完整修复组。
-目前只基于代码确认该命令在主结算后调事件且结果不用于成功回复；不能把它当运行证据。不得重跑
-本组已绿基线或扩大为全仓审计；不把本切片标成G2或总goal完成。用户冻结JSON删除和`.codex-goal.md`
-不暂存；G2--G5与真实客户端/发布门禁满足前不合main或发版。
+`origin/develop`核得同SHA；未查CI。随后仓储红复现成为“宗门任务完成→同门勤务可靠记账”
+完整组起点，当前实现与验收见顶部最新交付，不再是下一待办。G2--G5与真实客户端/发布门禁
+未完成，用户JSON删除和`.codex-goal.md`不暂存，不合main或发版。
 
 ## 宗门任务体力消费与永久回执（当前交付）
 

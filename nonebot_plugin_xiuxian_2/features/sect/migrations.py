@@ -139,6 +139,20 @@ def apply_sect_task_settlement_operations(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_sect_task_weekly_event_status(uow: DatabaseUnitOfWork) -> None:
+    columns = {
+        str(row["name"])
+        for row in uow.query_all("PRAGMA table_info(sect_task_settlement_operations)")
+    }
+    if not columns:
+        raise RuntimeError("sect_task_settlement_operations schema is not ready")
+    if "weekly_event_status" not in columns:
+        uow.execute(
+            "ALTER TABLE sect_task_settlement_operations "
+            "ADD COLUMN weekly_event_status TEXT NOT NULL DEFAULT 'legacy'"
+        )
+
+
 _SECT_OPERATION_DDL = (
     "CREATE TABLE IF NOT EXISTS sect_buff_search_operations("
     "operation_id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,sect_id INTEGER NOT NULL,"
@@ -212,5 +226,6 @@ __all__ = [
     "apply_sect_task_state",
     "apply_sect_task_claim_operations",
     "apply_sect_task_settlement_operations",
+    "apply_sect_task_weekly_event_status",
     "apply_sect_operations",
 ]

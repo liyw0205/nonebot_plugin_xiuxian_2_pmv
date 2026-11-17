@@ -1,9 +1,15 @@
 """Real command-path coverage for sect weekly reward claims."""
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from tests.parameter_cases_sect_body import seed_sect, sect_module
 from tests.parameter_cases_guishi_return import integrity
+from tests.parameter_cases_sect_daily import (
+    message_contract as task_message_contract,
+    setup as task_setup,
+    task_command,
+)
 
 
 def weekly_manager():
@@ -161,6 +167,354 @@ def register(case):
             adapter_contracts=4,
             integrity="ok",
         )
+
+    @case(
+        "sect-weekly-task-progress-replay",
+        "宗门任务完成",
+        "无参数完成已接取的灵石型任务，并用同message_id重放",
+        "隔离迁移三库、真实日重置与真实宗门成员/任务状态",
+        "任务结算与周常目标进度/参与者同一事件恰记一次，重放可恢复且不重复扣费",
+        group="sect-weekly-task-handoff",
+    )
+    async def task_completion_progress(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        from tests.parameter_cases_auction import fire
+        from apscheduler.events import EVENT_JOB_EXECUTED
+
+        with task_setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            with patch.object(module, "sect_application", app), patch.object(member, "sect_application", app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                stone_task = next(
+                    key for key, value in module.config["宗门任务"].items() if value["type"] == 2
+                )
+                probe.player(exp=100000, hp=100000, stone=10**12)
+                with patch.object(app.random, "choice", return_value=stone_task):
+                    accepted = await task_command(probe, "宗门任务接取", number=987001)
+                task = app.get_active_task("900001")
+                assert task and task["任务名称"] == stone_task and task["status"] == "accepted", (task, accepted)
+
+                goals, manager = weekly_manager()
+                week_key = manager.current_week_key()
+                manager.list_goals(task["sect_id"], week_key)
+                diligence = next(goal for goal in goals if goal.key == "sect_diligence")
+                game = state.database
+                probe.seed(game, "CREATE TABLE isolated_effect(name TEXT)")
+                probe.seed(
+                    game,
+                    "CREATE TRIGGER ignore_weekly_task_progress BEFORE UPDATE OF progress ON sect_weekly_goal "
+                    "BEGIN INSERT INTO isolated_effect VALUES('weekly-progress'); SELECT RAISE(IGNORE); END",
+                )
+
+                before_user = probe.rows(
+                    game,
+                    "SELECT hp,stone,exp,sect_task,sect_contribution,user_stamina "
+                    "FROM user_xiuxian WHERE user_id='900001'",
+                )
+                reply = await task_command(probe, "宗门任务完成", number=987002)
+                settled = probe.rows(
+                    game,
+                    "SELECT operation_id,cost_type,cost,weekly_event_status FROM sect_task_settlement_operations "
+                    "WHERE operation_id='sect:987002:task_complete:900001'",
+                )
+                user_after_first = probe.rows(
+                    game,
+                    "SELECT hp,stone,exp,sect_task,sect_contribution,user_stamina "
+                    "FROM user_xiuxian WHERE user_id='900001'",
+                )
+                goal_after_first = probe.rows(
+                    game,
+                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "WHERE sect_id=? AND week_key=? AND goal_key=?",
+                    (task["sect_id"], week_key, diligence.key),
+                )
+                statistics_after_first = probe.rows(
+                    probe.context.paths.player_db,
+                    "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'",
+                )
+                effects_after_first = probe.rows(game, "SELECT name FROM isolated_effect")
+                probe.evidence.update(
+                    first_reply=reply,
+                    settled_receipt=settled,
+                    user_before=before_user,
+                    user_after_first=user_after_first,
+                    weekly_goal_after_first=goal_after_first,
+                    weekly_trigger_effects_after_first=effects_after_first,
+                    statistics_after_first=statistics_after_first,
+                )
+
+                assert "同门勤务周常进度没有记入" in reply, reply
+                assert "重发同一条宗门任务完成指令" in reply, reply
+                assert len(settled) == 1 and settled[0][1] == "stone" and settled[0][3] == "pending", settled
+                assert int(user_after_first[0][1]) == int(before_user[0][1]) - settled[0][2]
+                assert int(user_after_first[0][3]) == int(before_user[0][3]) + 1
+                assert statistics_after_first == [(1,)]
+                assert effects_after_first == [], "a rejected weekly update leaked trigger effects"
+                assert goal_after_first and int(goal_after_first[0][0]) == 0, goal_after_first
+                assert json.loads(goal_after_first[0][1]) == {}, goal_after_first
+
+                probe.seed(game, "DROP TRIGGER ignore_weekly_task_progress")
+                await task_message_contract(reply, "同门勤务周常进度没有记入")
+                before_replay = (
+                    probe.rows(game, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(game, "SELECT operation_id,user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                )
+                replay = await task_command(probe, "宗门任务完成", number=987002)
+                after_replay = (
+                    probe.rows(game, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(game, "SELECT operation_id,user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                )
+                assert "已完成" in replay and after_replay == before_replay, replay
+                status = probe.rows(
+                    game,
+                    "SELECT weekly_event_status FROM sect_task_settlement_operations "
+                    "WHERE operation_id='sect:987002:task_complete:900001'",
+                )
+                goal = probe.rows(
+                    game,
+                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "WHERE sect_id=? AND week_key=? AND goal_key=?",
+                    (task["sect_id"], week_key, diligence.key),
+                )
+                assert status == [("recorded",)] and goal, (status, goal)
+                assert int(goal[0][0]) == 1 and json.loads(goal[0][1]) == {"900001": 1}, goal
+                await task_message_contract(replay, "已完成")
+                integrity(probe)
+                probe.evidence.update(
+                    replay_reply=replay,
+                    same_message_replay_zero_duplicate=True,
+                    weekly_goal_after_replay=(goal[0][0], json.loads(goal[0][1])),
+                    adapter_contracts=8,
+                    integrity="ok",
+                )
+
+    @case(
+        "sect-weekly-task-hp-progress-replay",
+        "宗门任务完成",
+        "无参数完成已接取的气血型任务，并用同message_id重放",
+        "隔离迁移三库、真实日重置与真实宗门成员/任务状态",
+        "气血结算回执进入已记账状态，同门勤务恰记一次且重放不重复扣费",
+        group="sect-weekly-task-handoff",
+    )
+    async def task_hp_completion_progress(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        from tests.parameter_cases_auction import fire
+        from tests.command_probe import run_case
+        from apscheduler.events import EVENT_JOB_EXECUTED
+
+        with task_setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            with patch.object(module, "sect_application", app), patch.object(member, "sect_application", app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                hp_task = next(
+                    key for key, value in module.config["宗门任务"].items() if value["type"] == 1
+                )
+                probe.player(exp=100000, hp=1000000, stone=10**12)
+                with patch.object(app.random, "choice", return_value=hp_task):
+                    accepted = await task_command(probe, "宗门任务接取", number=987011)
+                task = app.get_active_task("900001")
+                assert task and task["任务名称"] == hp_task and task["status"] == "accepted", (task, accepted)
+
+                goals, manager = weekly_manager()
+                week_key = manager.current_week_key()
+                manager.list_goals(task["sect_id"], week_key)
+                before = probe.rows(
+                    state.database,
+                    "SELECT hp,stone,exp,sect_task,sect_contribution,user_stamina "
+                    "FROM user_xiuxian WHERE user_id='900001'",
+                )
+                probe.seed(state.database, "CREATE TABLE isolated_weekly_abort_effect(name TEXT)")
+                probe.seed(
+                    state.database,
+                    "CREATE TRIGGER abort_hp_weekly_progress BEFORE UPDATE OF progress ON sect_weekly_goal "
+                    "WHEN OLD.goal_key='sect_diligence' BEGIN "
+                    "INSERT INTO isolated_weekly_abort_effect VALUES('written-before-abort'); "
+                    "SELECT RAISE(ABORT,'isolated weekly goal abort'); END",
+                )
+                entry = next(row for row in probe.entries if row["command"] == "宗门任务完成")
+                failure = await run_case(
+                    entry,
+                    "parameter",
+                    987012,
+                    input_text="宗门任务完成",
+                    actor="900001",
+                )
+                probe.calls.append({"command": "宗门任务完成", **failure})
+                failure_reply = "\n".join(failure["replies"])
+                receipt = probe.rows(
+                    state.database,
+                    "SELECT cost_type,cost,weekly_event_status FROM sect_task_settlement_operations "
+                    "WHERE operation_id='sect:987012:task_complete:900001'",
+                )
+                after_failure = probe.rows(
+                    state.database,
+                    "SELECT hp,stone,exp,sect_task,sect_contribution,user_stamina "
+                    "FROM user_xiuxian WHERE user_id='900001'",
+                )
+                goal_after_failure = probe.rows(
+                    state.database,
+                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'",
+                    (task["sect_id"], week_key),
+                )
+                abort_effects = probe.rows(
+                    state.database, "SELECT name FROM isolated_weekly_abort_effect"
+                )
+                abort_logs = failure["logs"]
+                assert "内部异常" in failure_reply, failure_reply
+                assert failure["status"] == "exception", failure
+                assert any("isolated weekly goal abort" in error for error in failure["errors"]), failure
+                assert receipt and receipt[0][0] == "hp" and receipt[0][2] == "pending", receipt
+                assert int(after_failure[0][0]) == int(before[0][0]) - receipt[0][1], (before, after_failure, receipt)
+                assert int(after_failure[0][3]) == int(before[0][3]) + 1, (before, after_failure)
+                assert goal_after_failure and goal_after_failure[0] == (0, "{}"), goal_after_failure
+                assert abort_effects == [], abort_effects
+                assert any("isolated weekly goal abort" in row["exception"] for row in abort_logs), abort_logs
+                await task_message_contract(failure_reply, "内部异常")
+
+                probe.seed(state.database, "DROP TRIGGER abort_hp_weekly_progress")
+                reply = await task_command(probe, "宗门任务完成", number=987012)
+                receipt = probe.rows(
+                    state.database,
+                    "SELECT cost_type,cost,weekly_event_status FROM sect_task_settlement_operations "
+                    "WHERE operation_id='sect:987012:task_complete:900001'",
+                )
+                after = probe.rows(
+                    state.database,
+                    "SELECT hp,stone,exp,sect_task,sect_contribution,user_stamina "
+                    "FROM user_xiuxian WHERE user_id='900001'",
+                )
+                goal = probe.rows(
+                    state.database,
+                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'",
+                    (task["sect_id"], week_key),
+                )
+                assert "该次宗门任务已完成" in reply and "气血减少" not in reply, reply
+                assert receipt and receipt[0][0] == "hp" and receipt[0][2] == "recorded", receipt
+                assert after == after_failure, (after_failure, after)
+                assert goal and (goal[0][0], json.loads(goal[0][1])) == (1, {"900001": 1}), goal
+                await task_message_contract(reply, "已完成")
+
+                replay_before = (
+                    probe.rows(state.database, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT * FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT progress,participants FROM sect_weekly_goal WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'", (task["sect_id"], week_key)),
+                )
+                replay = await task_command(probe, "宗门任务完成", number=987012)
+                replay_after = (
+                    probe.rows(state.database, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT * FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT progress,participants FROM sect_weekly_goal WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'", (task["sect_id"], week_key)),
+                )
+                assert "该次宗门任务已完成" in replay and replay_after == replay_before, replay
+                await task_message_contract(replay, "已完成")
+                integrity(probe)
+                probe.evidence.update(
+                    task_cost_type="hp",
+                    task_receipt=receipt,
+                    weekly_goal=goal,
+                    same_message_replay_zero_duplicate=True,
+                    adapter_contracts=8,
+                    integrity="ok",
+                )
+
+    @case(
+        "sect-weekly-task-hp-success",
+        "宗门任务完成",
+        "无参数正常完成气血型任务并核对周常进度",
+        "隔离迁移三库、真实日重置与真实宗门成员/任务状态",
+        "首次结算直接保存气血扣减、统计、结算回执及同门勤务进度",
+        group="sect-weekly-task-handoff",
+    )
+    async def task_hp_completion_success(probe):
+        from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_sect import sect_member_utils as member
+        from tests.parameter_cases_auction import fire
+        from apscheduler.events import EVENT_JOB_EXECUTED
+
+        with task_setup(probe) as state:
+            module = state.module
+            app = SectApplication(state.database, clock=state.clock)
+            with patch.object(module, "sect_application", app), patch.object(member, "sect_application", app):
+                assert (await fire(state.scheduled.daily_reset_sect_task)).code == EVENT_JOB_EXECUTED
+                hp_task = next(
+                    key for key, value in module.config["宗门任务"].items() if value["type"] == 1
+                )
+                probe.player(exp=100000, hp=1000000, stone=10**12)
+                with patch.object(app.random, "choice", return_value=hp_task):
+                    accepted = await task_command(probe, "宗门任务接取", number=987021)
+                task = app.get_active_task("900001")
+                assert task and task["任务名称"] == hp_task and task["status"] == "accepted", (task, accepted)
+
+                goals, manager = weekly_manager()
+                week_key = manager.current_week_key()
+                manager.list_goals(task["sect_id"], week_key)
+                before = probe.rows(
+                    state.database,
+                    "SELECT hp,exp,sect_task,sect_contribution FROM user_xiuxian WHERE user_id='900001'",
+                )
+                reply = await task_command(probe, "宗门任务完成", number=987022)
+                receipt = probe.rows(
+                    state.database,
+                    "SELECT cost,cost_type,weekly_event_status FROM sect_task_settlement_operations "
+                    "WHERE operation_id='sect:987022:task_complete:900001'",
+                )
+                after = probe.rows(
+                    state.database,
+                    "SELECT hp,exp,sect_task,sect_contribution FROM user_xiuxian WHERE user_id='900001'",
+                )
+                goal = probe.rows(
+                    state.database,
+                    "SELECT progress,participants FROM sect_weekly_goal "
+                    "WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'",
+                    (task["sect_id"], week_key),
+                )
+                statistics = probe.rows(
+                    probe.context.paths.player_db,
+                    "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'",
+                )
+                assert "任务完成" in reply and "气血减少" in reply, reply
+                assert receipt and receipt[0][1:] == ("hp", "recorded"), receipt
+                assert int(after[0][0]) == int(before[0][0]) - receipt[0][0], (before, after, receipt)
+                assert int(after[0][2]) == int(before[0][2]) + 1, (before, after)
+                assert goal and (goal[0][0], json.loads(goal[0][1])) == (1, {"900001": 1}), goal
+                assert statistics == [(1,)], statistics
+                await task_message_contract(reply, "气血减少")
+
+                replay_before = (
+                    probe.rows(state.database, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT * FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT progress,participants FROM sect_weekly_goal WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'", (task["sect_id"], week_key)),
+                )
+                replay = await task_command(probe, "宗门任务完成", number=987022)
+                replay_after = (
+                    probe.rows(state.database, "SELECT * FROM user_xiuxian WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT * FROM sect_task_settlement_operations ORDER BY operation_id"),
+                    probe.rows(probe.context.paths.player_db, "SELECT \"宗门任务\" FROM statistics WHERE user_id='900001'"),
+                    probe.rows(state.database, "SELECT progress,participants FROM sect_weekly_goal WHERE sect_id=? AND week_key=? AND goal_key='sect_diligence'", (task["sect_id"], week_key)),
+                )
+                assert "该次宗门任务已完成" in replay and replay_after == replay_before, replay
+                await task_message_contract(replay, "已完成")
+                integrity(probe)
+                probe.evidence.update(
+                    task_cost_type="hp",
+                    task_receipt=receipt,
+                    weekly_goal=goal,
+                    statistics=statistics,
+                    same_message_replay_zero_duplicate=True,
+                    adapter_contracts=8,
+                    integrity="ok",
+                )
 
     @case(
         "sect-weekly-name-boundaries-and-single-claim",

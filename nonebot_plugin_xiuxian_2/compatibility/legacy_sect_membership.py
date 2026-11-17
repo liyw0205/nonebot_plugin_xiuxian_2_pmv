@@ -380,6 +380,12 @@ class SectMembershipService:
             )
             """
         )
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(sect_task_settlement_operations)")}
+        if "weekly_event_status" not in columns:
+            conn.execute(
+                "ALTER TABLE sect_task_settlement_operations "
+                "ADD COLUMN weekly_event_status TEXT NOT NULL DEFAULT 'legacy'"
+            )
 
     @staticmethod
     def _ensure_task_claim_operations(conn) -> None:

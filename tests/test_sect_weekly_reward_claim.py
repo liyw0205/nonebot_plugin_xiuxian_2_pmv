@@ -214,6 +214,9 @@ class SectWeeklyRewardParameterDispatchTests(unittest.TestCase):
     def test_real_claim_parameters_recovery_and_adapters(self):
         self.check_group("sect-weekly-claim", 5, {"success": 5})
 
+    def test_task_completion_weekly_progress_recovery_and_adapters(self):
+        self.check_group("sect-weekly-task-handoff", 3, {"success": 3})
+
 
 if __name__ == "__main__":
     unittest.main()

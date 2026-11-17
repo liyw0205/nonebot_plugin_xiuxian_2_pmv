@@ -7,7 +7,10 @@ from pathlib import Path
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import build_migrations, migrations_for_database
 from ..application import SectApplication
-from ..migrations import apply_sect_task_settlement_operations
+from ..migrations import (
+    apply_sect_task_settlement_operations,
+    apply_sect_task_weekly_event_status,
+)
 from ..task_settlement_repository import SectTaskSettlementSqlRepository
 
 
@@ -38,6 +41,7 @@ def _prepare_database(database: Path, *, apply_migration: bool = True) -> None:
         )
         if apply_migration:
             apply_sect_task_settlement_operations(uow)
+            apply_sect_task_weekly_event_status(uow)
 
 
 class SectTaskSettlementRepositoryTests(unittest.TestCase):
@@ -101,11 +105,12 @@ class SectTaskSettlementRepositoryTests(unittest.TestCase):
                 "sect_reward,materials_reward) VALUES('old','user',1,'p','hp',10,20,3,30)"
             )
             apply_sect_task_settlement_operations(uow)
+            apply_sect_task_weekly_event_status(uow)
         self.assertEqual(
-            ("user", 1, "p", "hp", 10, 20, 3, 30),
+            ("user", 1, "p", "hp", 10, 20, 3, 30, "legacy"),
             self.row(
                 "SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,"
-                "materials_reward FROM sect_task_settlement_operations WHERE operation_id='old'"
+                "materials_reward,weekly_event_status FROM sect_task_settlement_operations WHERE operation_id='old'"
             ),
         )
 
@@ -143,3 +148,5 @@ class SectTaskSettlementRepositoryTests(unittest.TestCase):
         player = {item.version for item in migrations_for_database(migrations, "player_db")}
         self.assertIn("sect.018", game)
         self.assertNotIn("sect.018", player)
+        self.assertIn("sect.020", game)
+        self.assertNotIn("sect.020", player)

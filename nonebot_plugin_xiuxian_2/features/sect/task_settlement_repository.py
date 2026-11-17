@@ -23,6 +23,7 @@ class SectTaskSettlementSqlRepository:
         "exp_reward",
         "sect_reward",
         "materials_reward",
+        "weekly_event_status",
         "created_at",
     }
 
@@ -67,7 +68,7 @@ class SectTaskSettlementSqlRepository:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._schema_ready(uow):
                 raise DomainError('schema_missing', 'task settlement schema is not ready')
-            row = uow.query_one('SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward '
+            row = uow.query_one('SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward,weekly_event_status '
                                 'FROM sect_task_settlement_operations WHERE operation_id=?', (str(operation_id),))
             return self._receipt(row, user_id, operation_id) if row is not None else None
 
@@ -132,7 +133,7 @@ class SectTaskSettlementSqlRepository:
                 return {"status": "schema_missing", **base}
 
             previous = uow.query_one(
-                "SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward "
+                "SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward,weekly_event_status "
                 "FROM sect_task_settlement_operations WHERE operation_id=?",
                 (operation_id,),
             )
@@ -208,7 +209,8 @@ class SectTaskSettlementSqlRepository:
             recorded = uow.execute(
                 "INSERT INTO sect_task_settlement_operations("
                 "operation_id,user_id,sect_id,period,cost_type,cost,exp_reward,"
-                "sect_reward,materials_reward) VALUES(?,?,?,?,?,xiuxian_int_store(?),xiuxian_int_store(?),xiuxian_int_store(?),xiuxian_int_store(?))",
+                "sect_reward,materials_reward,weekly_event_status) "
+                "VALUES(?,?,?,?,?,xiuxian_int_store(?),xiuxian_int_store(?),xiuxian_int_store(?),xiuxian_int_store(?),'pending')",
                 (operation_id, user_id, sect_id, period, cost_type, str(cost), str(exp_reward), str(sect_reward), str(materials_reward)),
             )
             if recorded.rowcount != 1:
@@ -225,11 +227,11 @@ class SectTaskSettlementSqlRepository:
                                        'FROM sect_task_state WHERE user_id=? AND period=?', (user_id, period))
             if saved_task != {**task, 'status': 'completed', 'progress': task['target'], 'updated_at': now, 'completed_at': now}:
                 self._reject('state', user_id)
-            saved = uow.query_one('SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward '
+            saved = uow.query_one('SELECT user_id,sect_id,period,cost_type,cost,exp_reward,sect_reward,materials_reward,weekly_event_status '
                                   'FROM sect_task_settlement_operations WHERE operation_id=?', (operation_id,))
-            if saved is None or any(
+            if saved is None or saved["weekly_event_status"] != "pending" or any(
                 self._number(saved[field], 'sect_task_receipt', operation_id) != expected if isinstance(expected, int) else saved[field] != expected
                 for field, expected in base.items()
             ):
                 self._reject('receipt', operation_id)
-            return {"status": "settled", **base}
+            return {"status": "settled", **base, "weekly_event_status": "pending"}
