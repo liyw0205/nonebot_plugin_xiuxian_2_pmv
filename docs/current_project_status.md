@@ -20,7 +20,8 @@
 `149 passed, 38 subtests passed`，有重叠不累计。受影响编译、diff、
 architecture/inventory通过。仅用`/home` venv、共享锁和隔离SQLite，不跑全量、不轮询CI。
 
-本组准备白名单普通推送`develop`；用户JSON删除、goal及辅助报告不提交，线上库/部署/环境及
+本组已白名单普通提交`65625de2192149e66d6ccc7bc8587083220897a3`并推送`develop`，远端
+`refs/heads/develop`核得同SHA；用户JSON删除、goal及辅助报告不提交，线上库/部署/环境及
 `main`/Release不动。下一组由现有参数矩阵冻结为`学习宗门功法`：真实参数、资材/BuffInfo/永久
 回执、具体原因、恢复/重放及适配器合同；先隔离红复现，当前未证明该功能故障。总goal仍active。
 
