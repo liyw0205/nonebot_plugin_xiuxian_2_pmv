@@ -132,6 +132,31 @@ Markdown；定时通知失败可能发生在提交后，重放不重复刷新/�
 缺父行一律保留，父操作行（含总计与变更数）与 `boss.boss_*` 永不改动。
 详见 `docs/features/maintenance.md`「每日重置明细保留」。
 
+### 每日额度重置故障恢复
+
+`daily_reset_boss_limits` 保持调度时区的每日00:01:40、coalesce、单实例及300秒
+misfire宽限。默认日期用注入时钟转换调度时区，避免上海零点使用UTC前一天；显式日期
+仍用于恢复指定业务日，仓储独立默认Asia/Shanghai。未新增自动补跑历史日期的策略。
+
+冻结任务/名单独立事务，处理每个分块另用 immediate 事务。登记、冻结名单、额度清零、
+逐用户回执及汇总进度均校验行数，最后回读本块额度/完整名单/汇总；IGNORE、改写或
+末步篡改前步均拒绝并回滚当前事务及trigger副作用。已有完成分块保留，失败名单仍pending，
+故障解除后重建应用继续；不再次清掉已完成玩家的新额度。已删除玩家记skipped，冻结后
+新增玩家不加入该日。completed汇总仍是永久幂等依据，兼容30天明细清理与历史回放。
+
+具体 `world_boss_reset_{operation,freeze,limit,target,progress}_write_rejected` 分别携带
+业务日或玩家主体，坏进度明确 `world_boss_reset_progress_invalid`，坏数值保留字段原因，
+拒绝退出事务后才转结果。失败结果即使task_status仍running也停止循环，不空转；任务
+产生 `EVENT_JOB_ERROR` 并保留原因/主体。SQLite未知异常保留原链，管理员收到安全定位，
+正常流程和失败回复投递异常透传。管理员重置无参数，多余参数零写；旧兼容服务只保留
+原有schema准备，写入委派同一feature校验，不新增迁移或改永久积分/经济规则。
+
+`tests/test_world_boss_daily_reset_recovery.py` 覆盖实际声明注册/持续失败pending恢复、
+cron边界/真实触发、隔离SQLite五步拒写/改写/ABORT/后步篡改与恢复、整块回滚/跳过/
+旧完成回执和坏数据；两条 `world-boss-daily-reset` 实际dispatch/DI/handler覆盖权限、
+玩家额度读取、跨本地日期、同日新额度保留、拒写/未知异常同消息恢复与三库完整性。
+OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
+
 ## 配置项
 
 `boss_enabled`（`XIUXIAN_BOSS_ENABLED`）控制新资产边界，默认启用。

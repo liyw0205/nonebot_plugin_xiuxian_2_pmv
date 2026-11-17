@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from threading import RLock
 from typing import Any, Callable
+from zoneinfo import ZoneInfo
 
 from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
 from ..base.receipt_payload import build_payload, payload_matches
@@ -34,10 +36,17 @@ class WorldBossDailyLimitResetResult:
     completed: int = 0
     changed: int = 0
     skipped: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
+
+
+class WorldBossDailyResetError(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, f"{reason}: {subject}", {"reason": reason, "subject": subject})
 
 
 class WorldBossManualSpawnSqlRepository:
@@ -443,19 +452,24 @@ class WorldBossDailyLimitResetSqlRepository:
     """Own resumable daily limit resets without request-time schema changes."""
 
     REQUIRED_BOSS_COLUMNS = {"user_id", "boss_integral", "boss_stone", "boss_battle_count"}
-    REQUIRED_OPERATION_COLUMNS = {"business_date", "total", "completed", "changed", "skipped", "status"}
-    REQUIRED_TARGET_COLUMNS = {"business_date", "user_id", "status", "previous_integral", "previous_stone", "previous_battle_count"}
+    REQUIRED_OPERATION_COLUMNS = {"business_date", "total", "completed", "changed", "skipped", "status", "created_at", "updated_at"}
+    REQUIRED_TARGET_COLUMNS = {"business_date", "user_id", "status", "previous_integral", "previous_stone", "previous_battle_count", "updated_at"}
+    FIELDS = ("boss_integral", "boss_stone", "boss_battle_count")
+    PREVIOUS = ("previous_integral", "previous_stone", "previous_battle_count")
 
-    def __init__(self, database: str | Path, lock: RLock | None = None, *, clock: Any | None = None) -> None:
+    def __init__(self, database: str | Path, lock: RLock | None = None, *, clock: Any | None = None,
+                 business_timezone: Any = "Asia/Shanghai") -> None:
         self.database = Path(database)
         self.lock = lock or RLock()
         self.clock = clock or SystemClock()
+        self.business_timezone = ZoneInfo(business_timezone) if isinstance(business_timezone, str) else business_timezone
 
-    @staticmethod
-    def _normalize_date(value: Any) -> str:
+    def _normalize_date(self, value: Any) -> str:
         if value is None:
-            value = date.today()
+            value = self.clock.now()
         if isinstance(value, datetime):
+            if value.tzinfo is not None:
+                value = value.astimezone(self.business_timezone)
             value = value.date()
         if isinstance(value, date):
             return value.isoformat()
@@ -474,16 +488,10 @@ class WorldBossDailyLimitResetSqlRepository:
         )
 
     @staticmethod
-    def _result(uow: DatabaseUnitOfWork, business_date: str, status: str) -> WorldBossDailyLimitResetResult:
-        row = uow.query_one(
-            "SELECT status,total,completed,changed,skipped FROM world_boss_daily_limit_reset_operations WHERE business_date=?",
-            (business_date,),
-        )
-        if row is None:
-            return WorldBossDailyLimitResetResult(status, business_date)
+    def _result(row, status: str) -> WorldBossDailyLimitResetResult:
         return WorldBossDailyLimitResetResult(
             status=status,
-            business_date=business_date,
+            business_date=str(row["business_date"]),
             task_status=str(row["status"]),
             total=int(row["total"]),
             completed=int(row["completed"]),
@@ -491,45 +499,117 @@ class WorldBossDailyLimitResetSqlRepository:
             skipped=int(row["skipped"]),
         )
 
+    @staticmethod
+    def _operation(uow, business_date):
+        return uow.query_one(
+            "SELECT business_date,total,completed,changed,skipped,status,created_at,updated_at "
+            "FROM world_boss_daily_limit_reset_operations WHERE business_date=?", (business_date,))
+
+    @staticmethod
+    def _targets(uow, business_date):
+        return uow.query_all(
+            "SELECT business_date,user_id,status,previous_integral,previous_stone,previous_battle_count,updated_at "
+            "FROM world_boss_daily_limit_reset_targets WHERE business_date=? ORDER BY user_id", (business_date,))
+
+    @classmethod
+    def _validate_progress(cls, operation, targets, business_date):
+        if operation is not None and operation['status'] == 'completed':
+            counts = tuple(operation[key] for key in ('total', 'completed', 'changed', 'skipped'))
+            if (not all(isinstance(value, int) and value >= 0 for value in counts)
+                    or counts[0] != counts[1] or counts[2] + counts[3] > counts[0]):
+                raise WorldBossDailyResetError('world_boss_reset_progress_invalid', business_date)
+            # Completed receipts remain authoritative after target-detail retention.
+            return
+        completed = changed = skipped = 0
+        for target in targets:
+            status = target['status']
+            previous = tuple(target[field] for field in cls.PREVIOUS)
+            if status not in {'pending', 'applied', 'skipped'} or (
+                status != 'applied' and previous != (None, None, None)
+            ):
+                raise WorldBossDailyResetError('world_boss_reset_progress_invalid', business_date)
+            if status == 'applied':
+                try:
+                    values = tuple(require_exact_integer(value, field=field, subject=target['user_id'])
+                                   for field, value in zip(cls.PREVIOUS, previous))
+                except DomainError as exc:
+                    raise WorldBossDailyResetError(exc.details['reason'], target['user_id']) from exc
+                changed += int(any(values))
+            completed += int(status != 'pending')
+            skipped += int(status == 'skipped')
+        expected = (len(targets), completed, changed, skipped,
+                    'completed' if completed == len(targets) else 'running')
+        if operation is None or tuple(operation[key] for key in ('total', 'completed', 'changed', 'skipped', 'status')) != expected:
+            raise WorldBossDailyResetError('world_boss_reset_progress_invalid', business_date)
+
     def reset(self, business_date: Any = None, *, chunk_size: int = 500, updated_at: Any = None) -> WorldBossDailyLimitResetResult:
         business_date = self._normalize_date(business_date)
         chunk_size = max(1, int(chunk_size))
         now = self.clock.now()
         updated_at = str(updated_at or now.strftime("%Y-%m-%d %H:%M:%S"))
+        baseline = [WorldBossDailyLimitResetResult('state_changed', business_date)]
         if not self.database.is_file():
-            return WorldBossDailyLimitResetResult("schema_missing", business_date)
+            return replace(baseline[0], status='schema_missing', reason='schema_missing', subject=business_date)
+        try:
+            return self._reset(business_date, chunk_size, updated_at, baseline)
+        except WorldBossDailyResetError as exc:
+            return replace(baseline[0], status='schema_missing' if exc.code == 'schema_missing' else 'state_changed',
+                           reason=exc.code, subject=exc.details['subject'])
 
-        with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
+    def _reset(self, business_date, chunk_size, updated_at, baseline):
+        with self.lock, DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
             if not self._schema_ready(uow):
-                return WorldBossDailyLimitResetResult("schema_missing", business_date)
-            operation = uow.query_one(
-                "SELECT status FROM world_boss_daily_limit_reset_operations WHERE business_date=?",
-                (business_date,),
-            )
+                raise WorldBossDailyResetError('schema_missing', business_date)
+            operation = self._operation(uow, business_date)
             if operation is None:
+                if self._targets(uow, business_date):
+                    raise WorldBossDailyResetError('world_boss_reset_progress_invalid', business_date)
                 user_ids = tuple(str(row["user_id"]) for row in uow.query_all("SELECT user_id FROM boss ORDER BY user_id"))
                 task_status = "completed" if not user_ids else "running"
-                uow.execute(
+                inserted = uow.execute(
                     "INSERT INTO world_boss_daily_limit_reset_operations(business_date,total,status,created_at,updated_at) VALUES(?,?,?,?,?)",
                     (business_date, len(user_ids), task_status, updated_at, updated_at),
                 )
-                uow.executemany(
+                if inserted.rowcount != 1:
+                    raise WorldBossDailyResetError('world_boss_reset_operation_write_rejected', business_date)
+                frozen = uow.executemany(
                     "INSERT INTO world_boss_daily_limit_reset_targets(business_date,user_id,updated_at) VALUES(?,?,?)",
                     ((business_date, user_id, updated_at) for user_id in user_ids),
                 )
+                if frozen.rowcount != len(user_ids):
+                    raise WorldBossDailyResetError('world_boss_reset_freeze_write_rejected', business_date)
+                expected_operation = dict(business_date=business_date, total=len(user_ids), completed=0, changed=0,
+                                          skipped=0, status=task_status, created_at=updated_at, updated_at=updated_at)
+                expected_targets = [dict(business_date=business_date, user_id=user_id, status='pending',
+                                         previous_integral=None, previous_stone=None, previous_battle_count=None,
+                                         updated_at=updated_at) for user_id in user_ids]
+                operation = self._operation(uow, business_date)
+                if operation != expected_operation:
+                    raise WorldBossDailyResetError('world_boss_reset_operation_write_rejected', business_date)
+                if self._targets(uow, business_date) != expected_targets:
+                    raise WorldBossDailyResetError('world_boss_reset_freeze_write_rejected', business_date)
                 if not user_ids:
-                    return self._result(uow, business_date, "applied")
-            elif str(operation["status"]) == "completed":
-                return self._result(uow, business_date, "duplicate")
+                    return self._result(operation, "applied")
+            else:
+                targets = [] if operation['status'] == 'completed' else self._targets(uow, business_date)
+                self._validate_progress(operation, targets, business_date)
+                if operation['status'] == 'completed':
+                    return self._result(operation, "duplicate")
 
-        with self.lock, DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        # Retain only committed progress; reporting a rejection requires no further I/O.
+        baseline[0] = self._result(operation, 'state_changed')
+        with self.lock, DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
             if not self._schema_ready(uow):
-                return WorldBossDailyLimitResetResult("schema_missing", business_date)
-            pending = uow.query_all(
-                "SELECT user_id FROM world_boss_daily_limit_reset_targets WHERE business_date=? AND status='pending' ORDER BY user_id LIMIT ?",
-                (business_date, chunk_size),
-            )
+                raise WorldBossDailyResetError('schema_missing', business_date)
+            operation = self._operation(uow, business_date)
+            targets = self._targets(uow, business_date)
+            self._validate_progress(operation, targets, business_date)
+            baseline[0] = self._result(operation, 'state_changed')
+            if operation['status'] == 'completed':
+                return self._result(operation, 'duplicate')
+            pending = [row for row in targets if row['status'] == 'pending'][:chunk_size]
             changed = skipped = 0
+            reset_users = []
             for pending_row in pending:
                 user_id = str(pending_row["user_id"])
                 row = uow.query_one(
@@ -538,34 +618,55 @@ class WorldBossDailyLimitResetSqlRepository:
                 )
                 if row is None:
                     skipped += 1
-                    uow.execute(
+                    marked = uow.execute(
                         "UPDATE world_boss_daily_limit_reset_targets SET status='skipped',updated_at=? WHERE business_date=? AND user_id=? AND status='pending'",
                         (updated_at, business_date, user_id),
                     )
+                    if marked.rowcount != 1:
+                        raise WorldBossDailyResetError('world_boss_reset_target_write_rejected', user_id)
+                    pending_row.update(status='skipped', updated_at=updated_at)
                     continue
-                previous = tuple(int(row[field] or 0) for field in ("boss_integral", "boss_stone", "boss_battle_count"))
+                try:
+                    previous = tuple(require_exact_integer(row[field], field=field, subject=user_id) for field in self.FIELDS)
+                except DomainError as exc:
+                    raise WorldBossDailyResetError(exc.details['reason'], user_id) from exc
                 updated = uow.execute(
                     "UPDATE boss SET boss_integral=0,boss_stone=0,boss_battle_count=0 WHERE user_id=?",
                     (user_id,),
                 )
                 if updated.rowcount != 1:
-                    raise RuntimeError("world boss daily reset target changed")
+                    raise WorldBossDailyResetError('world_boss_reset_limit_write_rejected', user_id)
                 changed += int(any(previous))
-                uow.execute(
+                marked = uow.execute(
                     "UPDATE world_boss_daily_limit_reset_targets SET status='applied',previous_integral=?,previous_stone=?,previous_battle_count=?,updated_at=? WHERE business_date=? AND user_id=? AND status='pending'",
                     (*previous, updated_at, business_date, user_id),
                 )
-            progress = uow.query_one(
-                "SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) AS pending FROM world_boss_daily_limit_reset_targets WHERE business_date=?",
-                (business_date,),
-            )
-            completed = int(progress["total"]) - int(progress["pending"])
-            task_status = "completed" if int(progress["pending"]) == 0 else "running"
-            uow.execute(
+                if marked.rowcount != 1:
+                    raise WorldBossDailyResetError('world_boss_reset_target_write_rejected', user_id)
+                pending_row.update(status='applied', updated_at=updated_at, **dict(zip(self.PREVIOUS, previous)))
+                reset_users.append(user_id)
+            completed = operation['completed'] + len(pending)
+            task_status = "completed" if completed == operation['total'] else "running"
+            progressed = uow.execute(
                 "UPDATE world_boss_daily_limit_reset_operations SET completed=?,changed=changed+?,skipped=skipped+?,status=?,updated_at=? WHERE business_date=?",
                 (completed, changed, skipped, task_status, updated_at, business_date),
             )
-            return self._result(uow, business_date, "applied")
+            if progressed.rowcount != 1:
+                raise WorldBossDailyResetError('world_boss_reset_progress_write_rejected', business_date)
+            # Validate after the last write, including effects from SQLite triggers.
+            for user_id in reset_users:
+                current = uow.query_one('SELECT boss_integral,boss_stone,boss_battle_count FROM boss WHERE user_id=?', (user_id,))
+                if current != dict.fromkeys(self.FIELDS, 0):
+                    raise WorldBossDailyResetError('world_boss_reset_limit_write_rejected', user_id)
+            actual_targets = self._targets(uow, business_date)
+            if actual_targets != targets:
+                mismatched = next((row['user_id'] for row in targets if row not in actual_targets), business_date)
+                raise WorldBossDailyResetError('world_boss_reset_target_write_rejected', mismatched)
+            operation.update(completed=completed, changed=operation['changed']+changed, skipped=operation['skipped']+skipped,
+                             status=task_status, updated_at=updated_at)
+            if self._operation(uow, business_date) != operation:
+                raise WorldBossDailyResetError('world_boss_reset_progress_write_rejected', business_date)
+            return self._result(operation, "applied")
 
 
 __all__ = [

@@ -24,6 +24,7 @@ from ...features.base.application import BaseApplication
 from ...features.work.admin_refresh_reset_application import WorkAdminRefreshResetApplication
 from nonebot.typing import T_State
 from nonebot.permission import SUPERUSER
+from nonebot.exception import MatcherException, ProcessException
 from nonebot.log import logger
 from ..command_guard import result_failure, report_exception, guard_command
 from ...bootstrap.legacy import register_legacy_startup
@@ -1947,23 +1948,57 @@ async def tower_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     await tower_reset.finish()
 
 @boss_reset.handle(parameterless=[Cooldown(cd_time=0)])
-async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+async def boss_reset_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """重置所有用户的世界BOSS额度"""
     from ..xiuxian_boss import set_boss_limits_reset
-    result = await set_boss_limits_reset()
-    if result.status == "schema_missing":
-        msg = "世界BOSS额度重置服务尚未就绪，请检查启动迁移。"
-    elif result.status == "duplicate":
-        msg = f"今日世界BOSS额度已重置，共 {result.total} 名玩家"
-    elif result.succeeded:
-        msg = (
-            f"用户世界BOSS额度重置完成：已处理 {result.completed}/{result.total} 名玩家，"
-            f"重置 {result.changed} 名，跳过 {result.skipped} 名"
-        )
+    from ...features.boss.world_boss_repository import WorldBossDailyResetError
+    if args.extract_plain_text().strip():
+        await handle_send(bot, event, "重置世界BOSS无需参数，请直接发送指令。")
+        await boss_reset.finish()
+        return
+    try:
+        result = await set_boss_limits_reset()
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossDailyResetError as exc:
+        msg = _boss_reset_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception("世界BOSS额度重置", exc, event=event)
     else:
-        msg = f"世界BOSS额度重置未完成：{result.status}"
+        if result.status == "duplicate":
+            msg = f"今日世界BOSS额度已重置，共 {result.total} 名玩家"
+        elif result.succeeded:
+            msg = (
+                f"用户世界BOSS额度重置完成：已处理 {result.completed}/{result.total} 名玩家，"
+                f"重置 {result.changed} 名，跳过 {result.skipped} 名"
+            )
+        else:
+            msg = _boss_reset_failure(getattr(result, 'reason', '') or result.status,
+                                      getattr(result, 'subject', '') or result.business_date)
     await handle_send(bot, event, msg)
     await boss_reset.finish()
+
+
+def _boss_reset_failure(reason, subject):
+    messages = {
+        'schema_missing': '世界BOSS额度重置服务尚未就绪，请检查启动迁移。',
+        'world_boss_reset_operation_write_rejected': '重置任务写入被拒绝，本次登记已回滚。',
+        'world_boss_reset_freeze_write_rejected': '重置名单写入被拒绝，本次登记已回滚。',
+        'world_boss_reset_limit_write_rejected': '玩家额度写入被拒绝，当前分块已回滚，已完成分块保留。',
+        'world_boss_reset_target_write_rejected': '玩家处理回执写入被拒绝，当前分块已回滚，已完成分块保留。',
+        'world_boss_reset_progress_write_rejected': '重置进度写入被拒绝，当前分块已回滚，已完成分块保留。',
+        'world_boss_reset_progress_invalid': '已有重置进度不一致，请联系管理员核对。',
+    }
+    for field, label in (
+        ('boss_integral', '今日世界积分'), ('boss_stone', '今日BOSS灵石'), ('boss_battle_count', '今日讨伐次数'),
+        ('previous_integral', '重置前积分回执'), ('previous_stone', '重置前灵石回执'),
+        ('previous_battle_count', '重置前次数回执'),
+    ):
+        messages[field + '_invalid_numeric_value'] = f'{label}不是有效整数，当前分块未重置，请核对原始数据。'
+        messages[field + '_precision_lost_real'] = f'{label}的历史REAL已丢失整数精度，当前分块未重置，请核对可信记录。'
+    msg = result_failure('世界BOSS额度重置', {'status': reason, 'reason': reason}, messages=messages)
+    return f"{msg}（原因：{reason}；主体：{subject}）"
+
 
 @items_refresh.handle(parameterless=[Cooldown(cd_time=0)])
 async def items_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

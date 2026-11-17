@@ -435,19 +435,27 @@ async def save_boss_():
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
 async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
-    business_date = business_date or runtime_clock.now().date().isoformat()
+    from zoneinfo import ZoneInfo
+
+    if business_date is None:
+        moment = runtime_clock.now()
+        if moment.tzinfo is not None:
+            moment = moment.astimezone(getattr(scheduler, 'timezone', None) or ZoneInfo('Asia/Shanghai'))
+        business_date = moment.date().isoformat()
     while True:
         result = boss_application.reset_daily_limit(
             business_date, chunk_size=chunk_size
         )
-        if result.task_status != "running":
+        if not result.succeeded or result.task_status != "running":
             if result.succeeded:
                 logger.opt(colors=True).info(
                     f"<green>世界BOSS额度重置完成：{result.completed}/{result.total}，"
                     f"实际变更{result.changed}人，跳过{result.skipped}人</green>"
                 )
             else:
-                logger.error(f"世界BOSS额度重置未完成：{result.status}")
+                logger.error("世界BOSS额度重置未完成：{} subject={}",
+                             getattr(result, 'reason', '') or result.status,
+                             getattr(result, 'subject', '') or business_date)
             return result
         await asyncio.sleep(0)
 

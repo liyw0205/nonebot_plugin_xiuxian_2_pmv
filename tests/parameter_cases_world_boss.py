@@ -117,6 +117,120 @@ def register(case):
                                   cooldown_forms=['null', 'aware', 'legacy_local', 'empty'],
                                   replay_zero_writes=True, next_slot_refreshed=True, integrity='ok')
 
+    @case('world-boss-daily-reset-lifecycle', '重置世界BOSS', '上海零点重置→读取额度→同日重放→次日',
+          '真实启动迁移三库与可控UTC时钟；管理员和普通玩家真实matcher',
+          '日期跟随调度时区，三额度归零，永久积分与三库其他资产不变，同日不清零新额度',
+          group='world-boss-daily-reset')
+    async def daily_reset_lifecycle(probe):
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_scheduler as scheduled
+        from tests.command_probe import run_case
+        with setup(probe) as state:
+            player = probe.context.paths.player_db
+            probe.player(level='练气境中期', exp=1000, hp=1000)
+            state.app.daily_limit_snapshot('900001')
+            state.module.boss_integral_application.get_integral('900001')
+            probe.seed(player, "INSERT OR REPLACE INTO boss VALUES('900001',12,30,2)")
+            state.clock.moment = datetime(2026, 11, 17, 15, 59, 59, 999999, tzinfo=timezone.utc)
+            entry = next(row for row in probe.entries if row['command'] == '重置世界BOSS')
+            before = assets(probe)
+            denied = await run_case(entry, 'parameter', 982000, input_text='重置世界BOSS', actor='900001')
+            assert denied['status'] == 'blocked' and denied['reason'] == 'permission/rule rejected', denied
+            assert not denied['replies'] and not denied['errors'] and assets(probe) == before
+            probe.calls.append({'command': '重置世界BOSS', 'expected_permission_rejection': True, **denied})
+            reply = await probe.command('世界BOSS信息')
+            assert '今日已获积分：12/' in reply and '今日讨伐次数：2/' in reply, reply
+            assert (await fire(scheduled.daily_reset_boss_limits)).code == EVENT_JOB_EXECUTED
+            assert probe.rows(player, 'SELECT business_date FROM world_boss_daily_limit_reset_operations') == [('2026-11-17',)]
+            probe.seed(player, "UPDATE boss SET boss_integral=7,boss_stone=9,boss_battle_count=1 WHERE user_id='900001'")
+            state.clock.moment += timedelta(microseconds=1)
+            assert (await fire(scheduled.daily_reset_boss_limits)).code == EVENT_JOB_EXECUTED
+            assert probe.rows(player, 'SELECT business_date FROM world_boss_daily_limit_reset_operations ORDER BY business_date') == [('2026-11-17',), ('2026-11-18',)]
+            probe.clear_cooldowns()
+            reply = await probe.command('世界BOSS信息')
+            assert '今日已获积分：0/' in reply and '今日讨伐次数：0/' in reply, reply
+            assert state.app.daily_limit_snapshot('900001').stone == 0
+            after = assets(probe)
+            assert after[:7] == before[:7] and after[8:] == before[8:]
+            probe.seed(player, "UPDATE boss SET boss_integral=3,boss_stone=5,boss_battle_count=1 WHERE user_id='900001'")
+            saved = assets(probe)
+            reply = await probe.command('重置世界BOSS', '重置世界BOSS  ', actor='900003', number=982001)
+            assert '已重置' in reply and assets(probe) == saved, reply
+            reply = await probe.command('重置世界BOSS', '重置世界BOSS extra', actor='900003')
+            assert '无需参数' in reply and assets(probe) == saved, reply
+            state.clock.moment += timedelta(days=1)
+            reply = await probe.command('重置世界BOSS', actor='900003', number=982002)
+            assert '重置完成' in reply and state.app.daily_limit_snapshot('900001').stone == 0, reply
+            integrity(probe)
+            probe.evidence.update(permission_zero_write=True, local_midnight=True, new_daily_usage_preserved=True,
+                                  permanent_integral_and_assets_unchanged=True, integrity='ok')
+
+    @case('world-boss-daily-reset-recovery', '重置世界BOSS', '五步拒写/原ABORT→重建应用同消息恢复→任务重放',
+          '隔离SQLite IGNORE/副作用；保留已完成分块和新产生额度',
+          '具体原因及主体回复，失败分块回滚，恢复不重复清零已完成玩家', group='world-boss-daily-reset')
+    async def daily_reset_recovery(probe):
+        from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.features.boss.application import BossApplication
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_scheduler as scheduled
+        from tests.command_probe import run_case
+        with setup(probe) as state:
+            player = probe.context.paths.player_db
+            probe.seed(player, "INSERT OR REPLACE INTO boss VALUES('900001',12,30,2)")
+            probe.seed(player, "INSERT OR REPLACE INTO boss VALUES('900002',8,20,1)")
+            state.clock.moment = datetime(2026, 11, 17, 16, 1, 40, tzinfo=timezone.utc)
+            day = '2026-11-18'
+            tables = ('world_boss_daily_limit_reset_operations', 'world_boss_daily_limit_reset_targets')
+            entry = next(row for row in probe.entries if row['command'] == '重置世界BOSS')
+            async def rejected_command(reason):
+                result = await run_case(entry, 'parameter', 982010, input_text='重置世界BOSS', actor='900003')
+                assert result['status'] == 'exception' and result['replies'] and not result['blocked'], result
+                assert result['errors'] and all(reason in error for error in result['errors']), result
+                probe.calls.append({'command': '重置世界BOSS', 'expected_failure': reason, **result})
+                return '\n'.join(result['replies'])
+            for step, table, event in [('operation', tables[0], 'INSERT'), ('freeze', tables[1], 'INSERT')]:
+                before = assets(probe)
+                probe.seed(player, f'CREATE TRIGGER refuse_reset BEFORE {event} ON {table} BEGIN '
+                           "UPDATE boss SET boss_stone=99; SELECT RAISE(IGNORE); END")
+                reply = await rejected_command(f'world_boss_reset_{step}_write_rejected')
+                assert f'world_boss_reset_{step}_write_rejected' in reply and f'主体：{day}' in reply, reply
+                assert '重置完成' not in reply and assets(probe) == before
+                assert probe.rows(player, f'SELECT COUNT(*) FROM {tables[0]}') == [(0,)]
+                probe.seed(player, 'DROP TRIGGER refuse_reset')
+            first = state.app.reset_daily_limit(day, chunk_size=1)
+            assert first.completed == 1
+            probe.seed(player, "UPDATE boss SET boss_stone=5 WHERE user_id='900001'")
+            def snapshot():
+                return assets(probe), tuple(probe.rows(player, f'SELECT * FROM {table} ORDER BY rowid') for table in tables)
+            before = snapshot()
+            for step, table in [('limit', 'boss'), ('target', tables[1]), ('progress', tables[0])]:
+                probe.seed(player, f'CREATE TRIGGER refuse_reset BEFORE UPDATE ON {table} BEGIN '
+                           "INSERT INTO boss VALUES('side-effect',7,9,2); SELECT RAISE(IGNORE); END")
+                outcome = await fire(scheduled.daily_reset_boss_limits)
+                assert outcome.code == EVENT_JOB_ERROR and f'world_boss_reset_{step}_write_rejected' in str(outcome.exception)
+                reply = await rejected_command(f'world_boss_reset_{step}_write_rejected')
+                assert f'world_boss_reset_{step}_write_rejected' in reply and '主体：' in reply, reply
+                assert snapshot() == before
+                probe.seed(player, 'DROP TRIGGER refuse_reset')
+            probe.seed(player, f"CREATE TRIGGER refuse_reset BEFORE UPDATE ON {tables[1]} "
+                       "BEGIN SELECT RAISE(ABORT,'isolated reset abort'); END")
+            reply = await rejected_command('isolated reset abort')
+            assert '定位号' in reply and snapshot() == before, reply
+            probe.seed(player, 'DROP TRIGGER refuse_reset')
+            restarted = BossApplication(probe.context.paths.game_db, player, clock=state.clock)
+            with patch.object(state.module, 'boss_application', restarted):
+                reply = await probe.command('重置世界BOSS', actor='900003', number=982010)
+                assert '重置完成' in reply, reply
+                assert restarted.daily_limit_snapshot('900001').stone == 5
+                assert restarted.daily_limit_snapshot('900002').stone == 0
+                saved = snapshot()
+                reply = await probe.command('重置世界BOSS', actor='900003', number=982010)
+                assert '已重置' in reply and snapshot() == saved, reply
+                assert (await fire(scheduled.daily_reset_boss_limits)).code == EVENT_JOB_EXECUTED
+                assert snapshot() == saved
+            integrity(probe)
+            probe.evidence.update(reasons=['operation', 'freeze', 'limit', 'target', 'progress'], failed_chunk_zero_writes=True,
+                                  committed_chunk_preserved=True, retry_same_message=True, integrity='ok')
+
     @case('world-boss-refresh-write-recovery', '世界BOSS全部生成', '管理员刷新/两步拒写/恢复/别名重放/多余参数',
           '真实SQLite状态/回执IGNORE及副作用；重建应用同消息恢复',
           '具体原因和主体回复、拒绝全回滚、成功和重复缓存一致', group='world-boss-refresh')
