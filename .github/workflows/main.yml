@@ -56,6 +56,7 @@ jobs:
           tests/test_demon_event_lifecycle_application.py
           tests/test_guishi_schedule.py tests/test_guishi_clear.py tests/test_scheduled_job_failure_visibility.py
           tests/test_auction_schedule.py tests/test_auction_messages.py
+          tests/test_auction_start_write_rejection.py
 
       - name: Run architecture gates
         run: python scripts/check_architecture.py

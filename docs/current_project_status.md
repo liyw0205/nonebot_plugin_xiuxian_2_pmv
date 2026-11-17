@@ -2,7 +2,36 @@
 
 最后核验：2026-11-17。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
-## 拍卖调度与启动恢复完整生命周期（当前冻结范围）
+## 拍卖开场持久化交接（当前冻结范围）
+
+调度生命周期已普通提交推送ee80d0ac881f28f080adca9f39eabdc19f6cf397，远端develop
+一致、main仍5bef9e06。精确SHA CI43995218089单次查询in_progress，不watch。
+继续原goal，仅冻结开场交接四步：拍品插入、玩家等待区删除、场次创建、永久回执。
+先隔离复现IGNORE/trigger改写能否返回started却丢失/重复拍品；若证实，完整事务
+回滚与具体reason/subject贯穿实际任务和手动开启、故障解除重试/历史重放及数据/
+消息合同。复用上一切片时区/生命周期/适配器绿基线，不扩竞价经济或结算资产审计。
+只用临时SQLite/项目venv/共享锁；用户JSON删除、goal/辅助资料不提交，线上库/
+部署/环境/main/Release不动，G2--G5及总goal active。
+
+首轮12fail已证实四步IGNORE/改写仍返回started，实际任务三类伪成功；场次插入
+IGNORE虽最终产生错误，却是交接已提交后读取空结束时间的AttributeError，既未
+保留写入原因也未回滚。现四步行数与全部写入后的最终回读均校验，已知拒绝异常
+跨出UoW后才转换结果，整事务回滚game/trade及trigger副作用；四种
+auction_start_*_write_rejected带拍品/等待区/场次/操作号subject。未知SQLite异常
+继续原链透传，成功历史回放/空拍品/原规则不变，无新增迁移或历史改写。
+
+四类IGNORE及四类改写含trigger钱包/队列副作用、最后回执trigger篡改早先拍品，
+均验证两库完整回滚，解除后同操作恢复/重放、实际任务ERROR→EXECUTED和完整性。
+新增market-auction-start-write通过真实玩家上架→管理员四步拒写→同消息恢复→
+重复开启零写→实际到期任务流拍返还/重复零写，三库资产/场次/回执/历史/统计核对；
+另两条生命周期旧链继续通过。开场/调度/消息/命令/兼容/结算/Web受影响8模块
+89pass（与此前组重叠不累计）；OneBot/QQ四种新原因文本/Markdown/降级绿，未真机。
+源码质量与时区/查询既有283项基线复用，不复跑全量。architecture含inventory、
+受影响编译/diff通过，白名单普通推
+develop，上一提交ee80d0ac CI43995218089二次单点仍in_progress，不watch或重跑。
+本轮两个完整功能闭环均保留独立证据，未将其缩为文案调整或标记完整G2--G5完成。
+
+## 拍卖调度与启动恢复完整生命周期（develop checkpoint）
 
 上一轮三项交付为实质进展；最新develop `3befe21b` 的精确SHA CI43988136572已核
 completed/success，不重复全量或watch。继续原goal，按交易矩阵尚缺拍卖真实命令链，
@@ -39,9 +68,8 @@ now的状态API保持naive兼容。未知异常保留原链/定位，正常流�
 质量组合283pass（含246源码质量）；不累计成全量。最后新增坏时间和兼容reason
 透传组29pass（与前组重叠）；architecture含inventory、受影响编译/diff均通过。
 CI新增拍卖定时/消息pytest，参数包装进入unittest发现。
-当前限制：旧失败ledger哈希不重写；结算业务拒绝回执保持原语义；尚未覆盖写入被
-IGNORE/trigger改写后的场次持久化，不把正常回调当作资产正确。下一相关目标仅该
-拍卖开场持久化交接（队列/拍品/场次/回执），先隔离复现，不扩大玩法或全仓审计。
+该checkpoint当时未覆盖的IGNORE/trigger改写开场交接已在顶部下一目标补齐；
+旧失败ledger哈希不重写、结算业务拒绝回执保持原语义的限制继续保留。
 
 ## 鬼市批量清空消费者故障闭环（develop checkpoint）
 

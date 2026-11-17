@@ -167,3 +167,52 @@ def register(case):
             assert state.query.count_current_auctions() == 1
         integrity(probe)
         probe.evidence.update(orphan_error=True, command_reason_preserved=True, no_new_session=True, integrity='ok')
+
+    @case('auction-start-write-recovery', '开启拍卖', '真实上架/四步拒写/同消息恢复/流拍返还',
+          '玩家一件物品已进入等待区，四张表逐一IGNORE且产生触发器副作用',
+          '具体原因/主体和整笔回滚；恢复原消息只开一场，实际任务只返还一次',
+          group='market-auction-start-write')
+    async def start_write(probe):
+        from apscheduler.events import EVENT_JOB_EXECUTED
+        with setup(probe) as state, patch.object(state.module.auction_config, 'update_schedule'):
+            module = state.module
+            item_id, name = herb(probe, '900002')
+            price = module.auction_config.get_auction_rules()['min_price']
+            await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor='900002')
+            game, market = probe.context.paths.game_db, probe.context.paths.trade_db
+            for table, reason in (
+                ('auction_current', 'auction_start_item_write_rejected'),
+                ('auction_player_upload', 'auction_start_queue_write_rejected'),
+                ('auction_sessions', 'auction_start_session_write_rejected'),
+                ('auction_session_operations', 'auction_start_receipt_write_rejected'),
+            ):
+                database = market if table == 'auction_player_upload' else game
+                event = 'DELETE' if table == 'auction_player_upload' else 'INSERT'
+                effect = ("UPDATE auction_player_upload SET user_name='trigger-effect';" if database == market
+                          else "UPDATE user_xiuxian SET stone=1 WHERE user_id='900002';")
+                probe.seed(database, f'CREATE TRIGGER reject_start BEFORE {event} ON {table} '
+                           f'BEGIN {effect} SELECT RAISE(IGNORE); END')
+                before = assets(probe)
+                reply = await probe.command('开启拍卖', actor='900003', number=980100)
+                assert reason in reply and '主体：' in reply and '拍卖已开启' not in reply, reply
+                assert assets(probe) == before and state.config['last_auto_start_date'] == ''
+                probe.seed(database, 'DROP TRIGGER reject_start')
+            state.clock.moment += timedelta(minutes=1)
+            reply = await probe.command('开启拍卖', actor='900003', number=980100)
+            assert '拍卖已开启' in reply and '02:01' in reply, reply
+            assert state.query.count_current_auctions() == 1
+            assert not probe.rows(market, 'SELECT * FROM auction_player_upload')
+            assert probe.managers[0].goods_num('900002', item_id) == 9
+            after = assets(probe)
+            await probe.command('开启拍卖', actor='900003', number=980100)
+            assert assets(probe) == after
+            state.clock.moment += timedelta(hours=2)
+            assert (await fire(module.check_auction_end_job)).code == EVENT_JOB_EXECUTED
+            assert probe.managers[0].goods_num('900002', item_id) == 10
+            assert state.query.count_current_auctions() == 0 and state.start.get_active_session() is None
+            after = assets(probe)
+            await fire(module.check_auction_end_job)
+            assert assets(probe) == after
+        integrity(probe)
+        probe.evidence.update(rejected_steps=4, two_database_rollback=True, trigger_effects_rolled_back=True,
+                              same_message_recovery=True, started_count=1, returned_unsold_once=True, integrity='ok')

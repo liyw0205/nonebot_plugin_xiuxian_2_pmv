@@ -25,6 +25,11 @@ class AuctionSessionStartResult:
         return self.status in {"started", "duplicate"}
 
 
+class _StartRejected(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = reason, subject
+
+
 class AuctionSessionStartSqlRepository:
     """Create a session and move every queued player item in one UoW."""
 
@@ -105,6 +110,23 @@ class AuctionSessionStartSqlRepository:
         end_time: float,
         system_items: list[dict[str, Any]],
     ) -> AuctionSessionStartResult:
+        try:
+            return self._start(operation_id, session_id, start_time=start_time,
+                               end_time=end_time, system_items=system_items)
+        except _StartRejected as rejected:
+            # The exception crosses the UoW so both databases and trigger effects roll back.
+            return AuctionSessionStartResult("state_changed", str(operation_id),
+                                             reason=rejected.reason, subject=rejected.subject)
+
+    def _start(
+        self,
+        operation_id: str,
+        session_id: str,
+        *,
+        start_time: float,
+        end_time: float,
+        system_items: list[dict[str, Any]],
+    ) -> AuctionSessionStartResult:
         operation_id, session_id = str(operation_id).strip(), str(session_id).strip()
         if not operation_id or not session_id:
             raise ValueError("operation_id and session_id must not be empty")
@@ -168,13 +190,22 @@ class AuctionSessionStartSqlRepository:
             if not all_items:
                 return self._result("empty", operation_id)
 
+            expected_items = {}
             for index, item in enumerate(all_items):
-                uow.execute(
+                auction_id = self._auction_id(session_id, index)
+                expected_items[auction_id] = dict(
+                    id=auction_id, item_id=item["item_id"], name=item["name"],
+                    start_price=item["start_price"], current_price=item["start_price"],
+                    seller_id=item.get("seller_id", "0"), seller_name=item.get("seller_name", "系统"),
+                    bids="{}", bid_times="{}", is_system=0 if "seller_id" in item else 1,
+                    last_bid_time=start_time,
+                )
+                written = uow.execute(
                     "INSERT INTO auction_current(id,item_id,name,start_price,current_price,"
                     "seller_id,seller_name,bids,bid_times,is_system,last_bid_time) "
                     "VALUES(?,?,?,?,?,?,?,'{}','{}',?,?)",
                     (
-                        self._auction_id(session_id, index),
+                        auction_id,
                         item["item_id"],
                         item["name"],
                         item["start_price"],
@@ -185,23 +216,53 @@ class AuctionSessionStartSqlRepository:
                         start_time,
                     ),
                 )
-            uow.execute("DELETE FROM auction_trade.auction_player_upload")
+                if written.rowcount != 1:
+                    raise _StartRejected("auction_start_item_write_rejected", auction_id)
+            if uow.execute("DELETE FROM auction_trade.auction_player_upload").rowcount != len(queue):
+                raise _StartRejected("auction_start_queue_write_rejected", "auction_player_upload")
             result = {
                 "session_id": session_id,
                 "start_time": start_time,
                 "end_time": end_time,
                 "items_count": len(all_items),
             }
-            uow.execute(
+            session_written = uow.execute(
                 "INSERT INTO auction_sessions(session_id,status,start_time,end_time,items_count,"
                 "start_operation_id,created_at) VALUES(?,'active',?,?,?,?,CURRENT_TIMESTAMP)",
                 (session_id, start_time, end_time, len(all_items), operation_id),
             )
-            uow.execute(
+            if session_written.rowcount != 1:
+                raise _StartRejected("auction_start_session_write_rejected", session_id)
+            receipt_written = uow.execute(
                 "INSERT INTO auction_session_operations(operation_id,action,payload,result) "
                 "VALUES(?,'start',?,?)",
                 (operation_id, payload, self._payload(result)),
             )
+            if receipt_written.rowcount != 1:
+                raise _StartRejected("auction_start_receipt_write_rejected", operation_id)
+
+            # Check after all writes: a later trigger can corrupt an earlier handoff step.
+            saved_items = {str(row["id"]): row for row in uow.query_all(
+                "SELECT id,item_id,name,start_price,current_price,seller_id,seller_name,"
+                "bids,bid_times,is_system,last_bid_time FROM auction_current"
+            )}
+            if saved_items != expected_items:
+                mismatched = next((key for key in expected_items if saved_items.get(key) != expected_items[key]), session_id)
+                raise _StartRejected("auction_start_item_write_rejected", mismatched)
+            if uow.query_one("SELECT 1 AS present FROM auction_trade.auction_player_upload LIMIT 1"):
+                raise _StartRejected("auction_start_queue_write_rejected", "auction_player_upload")
+            saved_session = uow.query_one(
+                "SELECT session_id,status,start_time,end_time,items_count,start_operation_id "
+                "FROM auction_sessions WHERE session_id=?", (session_id,),
+            )
+            if saved_session != dict(session_id=session_id, status="active", start_time=start_time,
+                                     end_time=end_time, items_count=len(all_items), start_operation_id=operation_id):
+                raise _StartRejected("auction_start_session_write_rejected", session_id)
+            saved_receipt = uow.query_one(
+                "SELECT action,payload,result FROM auction_session_operations WHERE operation_id=?", (operation_id,),
+            )
+            if saved_receipt != dict(action="start", payload=payload, result=self._payload(result)):
+                raise _StartRejected("auction_start_receipt_write_rejected", operation_id)
             return self._result("started", operation_id, result)
 
 

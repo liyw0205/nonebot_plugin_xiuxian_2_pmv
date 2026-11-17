@@ -279,7 +279,7 @@ Web/命令不直接连接 trade_db。
 | 鬼市存取灵石 | 真实命令固定到本地周六零点与周一边界；钱包/账户不足、累计及单次上限相邻边界、小额手续费取整和10亿提款；非法/全角/超长参数、同消息重放/冲突；余额/回执拒写后三库零写、恢复/重放与实际统计；Web具体原因及历史拒绝重放 | 线上观察；资产提交与独立行为统计间崩溃补记未承诺 |
 | 鬼市任务注册/触发/失败状态 | live APScheduler 注册、08:00 cron 边界、独立 APScheduler 实际执行/错误事件，正常竞争跳过 | 线上运行观察、真实客户端展示 |
 | 鬼市收摊 | 真实部分成交后退未售库存；背包满/目录缺失/三步拒写保留订单及原绑定数，部分成功与恢复、逐单原因/定位、重读/回执/实际统计、重复收摊零额外写；OneBot/QQ短合同 | 线上观察 |
-| 拍卖玩家链 | 真实上架→自动开启→活动/竞拍参数→0.5秒/截止→启动结算故障/恢复/重放；三库资产/回执/历史/统计；孤儿拍品任务及管理员/玩家拒绝 | 开场持久化拒写交接另列后续范围；真机未验 |
+| 拍卖玩家链 | 真实上架→自动开启→活动/竞拍参数→0.5秒/截止→启动结算故障/恢复/重放；开场四步拒写/同消息恢复/流拍返还；三库资产/回执/历史/统计；孤儿拍品任务及管理员/玩家拒绝 | 真机未验；未涵盖所有拍卖规则与资产写路径 |
 
 六条鬼市参数场景由 `tests/test_guishi_parameter_dispatch.py` 接入 unittest CI。
 另五条 `market-guishi-take` 场景覆盖完整取物、时间/历史/参数/并发和故障恢复；
@@ -378,7 +378,17 @@ payload；SQLite异常回滚后推进时钟仍可继续。旧冲突回执不自�
 Web旧时间绕过和结算恢复。两条`market-auction-lifecycle`命令探针核对三库资产、
 回执、成交历史和统计，`test_auction_messages.py`覆盖OneBot/QQ文本/Markdown/降级
 与未知异常/正常流程/发送失败，均为隔离证据。新pytest进入定时CI，命令包装进入
-unittest CI。写入被IGNORE/改写后的开场交接尚未验证，不将上述绿证据外推。
+unittest CI。
+
+开场交接另有`test_auction_start_write_rejection.py`：拍品插入、等待区删除、场次
+插入、永久回执插入均检查行数和全部写入后的最终回读。IGNORE/trigger改写明确
+返回`auction_start_item_write_rejected`、`auction_start_queue_write_rejected`、
+`auction_start_session_write_rejected`或`auction_start_receipt_write_rejected`，保留
+拍品/等待区/场次/操作号subject；拒绝跨出UoW后才转为结果，整笔两库和触发器
+副作用回滚，故障解除后同操作可重试且成功回放不重交接。实际调度产生错误事件，
+手动开启保留具体原因。`market-auction-start-write`经真实上架/管理员四步拒写/
+同消息恢复/重复开场及实际到点流拍验证只交接和返还一次，核对三库数据/统计。
+这些测试不宣称跨库WAL在断电时原子提交，也不外推所有竞价/结算写入路径。
 
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`
