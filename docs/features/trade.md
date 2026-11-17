@@ -390,6 +390,14 @@ unittest CI。
 同消息恢复/重复开场及实际到点流拍验证只交接和返还一次，核对三库数据/统计。
 这些测试不宣称跨库WAL在断电时原子提交，也不外推所有竞价/结算写入路径。
 
+结算持久化另由`test_auction_settlement_write_rejection.py`及两条
+`market-auction-settlement-write`闭环验证：发物/寄存、卖家入账与旧败者退款、历史、
+删拍品、结束场次、永久回执的IGNORE/改写均整场回滚，具体
+`auction_settlement_*_rejected`与主体贯穿任务/应用账本/命令。新拒写记failed以便恢复，
+不改旧业务rejected回放；多拍品累计、最后写入篡改早先资产、恢复只结算和统计一次
+均在隔离SQLite验证。满背包成交的管理员回复保留成交价和待领取，不误报流拍。
+范围与限制见`docs/features/auction.md`，不代表全市场写路径或真实QQ已验。
+
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`
 - `route: POST /api/v1/trade/withdraw`

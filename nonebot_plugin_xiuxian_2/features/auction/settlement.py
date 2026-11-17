@@ -17,7 +17,7 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, Outb
 from ...infrastructure.database.ledger import OperationRecord
 from ...infrastructure.observability import trace_context
 from .settlement_effects import AuctionSettlementEffects, NullAuctionSettlementEffects
-from .settlement_repository import AuctionSettlementSqlRepository
+from .settlement_repository import AuctionSettlementSqlRepository, SETTLEMENT_WRITE_REJECTIONS
 
 
 class AuctionSettlementRepository(Protocol):
@@ -209,6 +209,7 @@ class AuctionSettlementApplication:
             "item_types": {str(int(key)): str(value) for key, value in (item_types or {}).items()},
         }
         with trace_context(operation_id=operation_id, user_scope="auction"):
+            rejected_outcome: OperationOutcome[dict[str, Any]] | None = None
             try:
                 replayed_outcome: OperationOutcome[dict[str, Any]] | None = None
                 recover_started_operation = False
@@ -240,7 +241,11 @@ class AuctionSettlementApplication:
                 if raw_results is None and isinstance(raw, dict):
                     raw_results = raw.get("results", ())
                 results = [dict(item) for item in (raw_results or ())]
+                reason = str(getattr(raw, "reason", "") or (raw.get("reason", "") if isinstance(raw, dict) else ""))
+                subject = str(getattr(raw, "subject", "") or (raw.get("subject", "") if isinstance(raw, dict) else ""))
                 data = {"status": status, "results": results}
+                if reason:
+                    data.update(reason=reason, subject=subject)
                 if status in {"settled", "duplicate", "empty"}:
                     outcome = OperationOutcome.applied(
                         operation_id,
@@ -253,15 +258,18 @@ class AuctionSettlementApplication:
                     if status == "duplicate":
                         outcome = replace(outcome, replayed=True)
                 else:
-                    outcome = OperationOutcome.rejected(
+                    reject = OperationOutcome.failed if reason in SETTLEMENT_WRITE_REJECTIONS else OperationOutcome.rejected
+                    outcome = reject(
                         operation_id,
                         self.action,
-                        f"拍卖结算未完成：{status}",
-                        code=status,
+                        f"拍卖结算未完成：{reason or status}",
+                        code=reason or status,
                         data=data,
                         audit_category="auction_settlement",
                         clock=self.ledger.clock,
                     )
+                    if reason:
+                        rejected_outcome = outcome
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                     if status != "duplicate" or recover_started_operation:
@@ -270,7 +278,14 @@ class AuctionSettlementApplication:
             except DomainError:
                 raise
             except Exception as exc:
-                self.ledger.record_failure(self.database, operation_id, self.action, payload, str(exc))
+                if rejected_outcome is not None:
+                    raise DomainError(
+                        rejected_outcome.code, rejected_outcome.message, dict(rejected_outcome.data),
+                    ) from exc
+                try:
+                    self.ledger.record_failure(self.database, operation_id, self.action, payload, str(exc))
+                except Exception as diagnostic_error:
+                    raise exc from diagnostic_error
                 raise
 
     def reply(self, **kwargs: Any) -> ReplyPlan:

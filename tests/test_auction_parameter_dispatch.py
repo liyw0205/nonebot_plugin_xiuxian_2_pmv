@@ -10,3 +10,6 @@ class AuctionParameterDispatchTests(unittest.TestCase):
 
     def test_auction_start_write_recovery(self):
         self.check_group('market-auction-start-write', 1, {'success': 1})
+
+    def test_auction_settlement_write_recovery(self):
+        self.check_group('market-auction-settlement-write', 2, {'success': 2})

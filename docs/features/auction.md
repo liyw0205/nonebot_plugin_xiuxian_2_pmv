@@ -54,6 +54,27 @@
 抛错 → 整个结算回滚、场次保持 active、`auction_current` 与背包不变，绝不静默降级为
 「已销毁」。
 
+结算逐步核对发物、寄存、卖家入账及旧竞价退款、历史、删拍品、结束场次和永久回执的
+写入行数，并在全部写入后回读累计资产及持久状态。IGNORE、trigger改写或后续写入
+篡改早先结果均拒绝整场，异常越过UoW后才转结果，包含触发器副作用的业务事务回滚。
+具体原因保留为`auction_settlement_inventory_write_rejected`、
+`auction_settlement_balance_write_rejected`、`auction_settlement_pending_write_rejected`、
+`auction_settlement_history_write_rejected`、`auction_settlement_item_delete_rejected`、
+`auction_settlement_session_write_rejected`或`auction_settlement_receipt_write_rejected`，
+subject分别指向用户/物品、账号、拍品、场次或操作号；任务、兼容DTO和命令均保留。
+这些新拒写在应用账本记failed，可在故障解除后重试；账号/目录缺失等业务拒绝及旧
+rejected回执仍按原语义回放，不改写历史。成功回放不重发物、入账、写历史或统计。
+管理员结果按是否有成交价区分成交和流拍，满背包成交仍显示成交价及物品待领取。
+若诊断账本写入再次报错，已知拒绝仍保留原reason/subject，未知异常仍抛原异常；
+诊断错误保留在异常链中。此时不宣称失败回执已落盘；保留started预约，故障解除后
+仍可按原请求恢复，不把诊断失败替代为结算成功。
+
+`test_auction_settlement_write_rejection.py`验证实际SQLite的IGNORE/改写、最后回执
+篡改资产、多拍品累计与整场回滚、流拍寄存、原SQLite异常及真实调度器ERROR→恢复。
+两条`market-auction-settlement-write`通过真实上架/竞拍/管理员命令和可控业务时钟，
+核对隔离三库资产、历史、回执、统计及integrity_check。OneBot/QQ消息合同为模拟证据，
+未验证线上数据库、真实QQ展示、断电时跨库原子性或统计投递的所有故障模式。
+
 玩家侧读取与领取由 `AuctionPendingApplication` 承担：
 
 - `list_for(user_id)` 只读返回本人未领取行（`auction_id`、物品、`role`（中标/流拍）、时间），

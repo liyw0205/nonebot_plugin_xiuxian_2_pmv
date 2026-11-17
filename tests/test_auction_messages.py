@@ -16,6 +16,13 @@ from nonebot_plugin_xiuxian_2.features.auction.domain import AuctionLifecycleErr
                                            ('start', 'auction_start_session_write_rejected'),
                                            ('start', 'auction_start_receipt_write_rejected'),
                                            ('end', 'auction_session_missing'),
+                                           ('end', 'auction_settlement_inventory_write_rejected'),
+                                           ('end', 'auction_settlement_balance_write_rejected'),
+                                           ('end', 'auction_settlement_pending_write_rejected'),
+                                           ('end', 'auction_settlement_history_write_rejected'),
+                                           ('end', 'auction_settlement_item_delete_rejected'),
+                                           ('end', 'auction_settlement_session_write_rejected'),
+                                           ('end', 'auction_settlement_receipt_write_rejected'),
                                            ('bid', 'auction_expired')))
 @pytest.mark.parametrize('onebot,markdown,send_fails', ((True, True, False), (False, False, False),
                                                      (False, True, False), (False, True, True)))

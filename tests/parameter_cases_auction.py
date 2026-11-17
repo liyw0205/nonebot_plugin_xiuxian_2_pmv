@@ -47,6 +47,8 @@ def assets(probe):
             probe.rows(game, 'SELECT * FROM auction_history ORDER BY id'),
             probe.rows(game, 'SELECT * FROM auction_bid_operations ORDER BY operation_id'),
             probe.rows(game, 'SELECT * FROM auction_session_operations ORDER BY operation_id'),
+            probe.rows(game, 'SELECT * FROM auction_pending_items ORDER BY id'),
+            probe.rows(game, 'SELECT * FROM domain_outbox ORDER BY event_id'),
             probe.rows(market, 'SELECT * FROM auction_player_upload ORDER BY user_id,item_id'),
             probe.rows(player, 'SELECT * FROM statistics ORDER BY user_id'))
 
@@ -216,3 +218,136 @@ def register(case):
         integrity(probe)
         probe.evidence.update(rejected_steps=4, two_database_rollback=True, trigger_effects_rolled_back=True,
                               same_message_recovery=True, started_count=1, returned_unsold_once=True, integrity='ok')
+
+    @case('auction-settlement-write-recovery', '结束拍卖', '真实竞拍/六步拒写/任务与管理员/重建恢复',
+          '真实玩家成交，六张表逐步IGNORE并产生副作用，另注入SQLite ABORT',
+          '具体原因和整场回滚，任务ERROR，同消息恢复只发物/入账/历史/统计一次',
+          group='market-auction-settlement-write')
+    async def settlement_write(probe):
+        import sqlite3
+        from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+        from nonebot_plugin_xiuxian_2.features.auction.settlement import AuctionSettlementApplication
+        from nonebot_plugin_xiuxian_2.compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
+        from tests.command_probe import run_case
+        from tests.parameter_exception_watch import watch_handler_catches
+        with setup(probe) as state:
+            module = state.module
+            item_id, name = herb(probe, '900002')
+            price = module.auction_config.get_auction_rules()['min_price']
+            probe.player(stone=100_000_000)
+            probe.player('900002', stone=100_000_000)
+            await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor='900002')
+            assert (await fire(module.auto_start_auction_job)).code == EVENT_JOB_EXECUTED
+            lot = state.query.get_current_auction()[0]
+            reply = await probe.command('拍卖竞拍', f"拍卖竞拍 {lot['id']} {price}")
+            assert '竞拍成功' in reply, reply
+            state.clock.moment += timedelta(hours=2)
+            game = probe.context.paths.game_db
+            for table, event, reason in (
+                ('back', 'INSERT', 'auction_settlement_inventory_write_rejected'),
+                ('user_xiuxian', 'UPDATE', 'auction_settlement_balance_write_rejected'),
+                ('auction_history', 'INSERT', 'auction_settlement_history_write_rejected'),
+                ('auction_current', 'DELETE', 'auction_settlement_item_delete_rejected'),
+                ('auction_sessions', 'UPDATE', 'auction_settlement_session_write_rejected'),
+                ('auction_session_operations', 'INSERT', 'auction_settlement_receipt_write_rejected'),
+            ):
+                # A backpack side effect also has to disappear with the refused write.
+                probe.seed(game, f'CREATE TRIGGER reject_settlement BEFORE {event} ON {table} '
+                           "BEGIN UPDATE back SET bind_num=1 WHERE user_id='900002'; SELECT RAISE(IGNORE); END")
+                before = assets(probe)
+                result = await fire(module.check_auction_end_job)
+                assert result.code == EVENT_JOB_ERROR and reason in str(result.exception), str(result.exception)
+                reply = await probe.command('结束拍卖', actor='900003', number=980200)
+                assert reason in reply and '主体：' in reply and '拍卖已结束' not in reply, reply
+                assert assets(probe) == before
+                probe.seed(game, 'DROP TRIGGER reject_settlement')
+            probe.seed(game, "CREATE TRIGGER reject_settlement BEFORE INSERT ON auction_session_operations "
+                       "BEGIN SELECT RAISE(ABORT,'isolated settlement command fault'); END")
+            before = assets(probe)
+            entry = next(row for row in probe.entries if row['command'] == '结束拍卖')
+            with patch.object(module, 'report_exception', return_value='处理失败（定位号：auction-settle-test）') as reported, \
+                    watch_handler_catches(entry) as caught:
+                result = await run_case(entry, 'parameter', 980200, input_text='结束拍卖', actor='900003')
+            assert result['status'] == 'pass' and len(caught) == 1, (result, caught)
+            assert 'sqlite3.IntegrityError: isolated settlement command fault' in caught[0]['traceback']
+            assert isinstance(reported.call_args.args[1], sqlite3.IntegrityError)
+            assert '定位号：auction-settle-test' in ''.join(result['replies'])
+            probe.calls.append({'command': '结束拍卖', 'expected_injected_fault': caught, **result})
+            assert assets(probe) == before
+            probe.seed(game, 'DROP TRIGGER reject_settlement')
+            state.clock.moment += timedelta(minutes=5)
+            restarted = AuctionSettlementApplication(game, effects=LegacyAuctionSettlementEffects(probe.context.paths.player_db))
+            with patch.object(module, '_auction_settlement_application', return_value=restarted):
+                reply = await probe.command('结束拍卖', actor='900003', number=980200)
+                assert '拍卖已结束' in reply and '成交价' in reply, reply
+                assert probe.managers[0].goods_num('900001', item_id) == 1
+                assert probe.managers[0].goods_num('900002', item_id) == 9
+                history = state.query.get_auction_history(lot['id'])[0]
+                assert history['winner_id'] == '900001' and history['final_price'] == price
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == [(100_000_000-price,)]
+                assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900002'") == [(100_000_000+history['seller_earnings'],)]
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖成交次数","拍卖消费灵石" FROM statistics WHERE user_id=\'900001\'') == [(1, price)]
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖售出次数","拍卖收入灵石" FROM statistics WHERE user_id=\'900002\'') == [(1, history['seller_earnings'])]
+                after = assets(probe)
+                await probe.command('结束拍卖', actor='900003', number=980200)
+                await fire(module.check_auction_end_job)
+                await fire(module.recover_orphan_auction_on_startup)
+                assert assets(probe) == after
+        integrity(probe)
+        probe.evidence.update(rejected_steps=6, scheduler_errors=True, original_unknown_exception=True,
+                              full_rollback=True, restart_recovery=True, assets_and_statistics_once=True, integrity='ok')
+
+    @case('auction-settlement-pending-recovery', '结束拍卖', '成交与流拍/满背包寄存拒写/真实命令恢复',
+          '两位真实卖家各上架一件，成交买家与流拍卖家背包达到注入上限',
+          '寄存失败整场回滚，解除后各保留一件待领取，回复不把成交误报流拍',
+          group='market-auction-settlement-write')
+    async def pending_write(probe):
+        from nonebot_plugin_xiuxian_2.features.auction.settlement import AuctionSettlementApplication
+        from nonebot_plugin_xiuxian_2.compatibility.auction_settlement_effects import LegacyAuctionSettlementEffects
+        with setup(probe) as state:
+            module = state.module
+            item_id, name = herb(probe)
+            herb(probe, '900002')
+            herb(probe, '900003')
+            probe.player(stone=100_000_000)
+            price = module.auction_config.get_auction_rules()['min_price']
+            for seller in ('900002', '900003'):
+                reply = await probe.command('拍卖上架', f'拍卖上架 {name} {price}', actor=seller)
+                assert '成功' in reply, reply
+            await fire(module.auto_start_auction_job)
+            lot = next(row for row in state.query.get_current_auction() if row['seller_id'] == '900002')
+            reply = await probe.command('拍卖竞拍', f"拍卖竞拍 {lot['id']} {price}")
+            assert '竞拍成功' in reply, reply
+            game = probe.context.paths.game_db
+            app = AuctionSettlementApplication(game, max_goods_num=9,
+                                               effects=LegacyAuctionSettlementEffects(probe.context.paths.player_db))
+            with patch.object(module, '_auction_settlement_application', return_value=app):
+                state.clock.moment += timedelta(hours=2)
+                probe.seed(game, 'CREATE TRIGGER reject_pending BEFORE INSERT ON auction_pending_items '
+                           'BEGIN SELECT RAISE(IGNORE); END')
+                before = assets(probe)
+                reply = await probe.command('结束拍卖', actor='900003', number=980210)
+                assert 'auction_settlement_pending_write_rejected' in reply and '主体：' in reply, reply
+                assert assets(probe) == before
+                probe.seed(game, 'DROP TRIGGER reject_pending')
+                state.clock.moment += timedelta(minutes=5)
+                reply = await probe.command('结束拍卖', actor='900003', number=980210)
+                assert '拍卖已结束' in reply and '成交价' in reply and reply.count('待领取') == 2, reply
+                assert probe.rows(game, 'SELECT owner_id,role,claimed_at FROM auction_pending_items ORDER BY owner_id') == [
+                    ('900001', 'winner', None), ('900003', 'seller', None)]
+                assert probe.managers[0].goods_num('900001', item_id) == 10
+                assert probe.managers[0].goods_num('900003', item_id) == 9
+                assert probe.rows(game, 'SELECT COUNT(*) FROM auction_history') == [(2,)]
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖成交次数" FROM statistics WHERE user_id=\'900001\'') == [(1,)]
+                assert probe.rows(probe.context.paths.player_db,
+                    'SELECT "拍卖流拍次数" FROM statistics WHERE user_id=\'900003\'') == [(1,)]
+                after = assets(probe)
+                await probe.command('结束拍卖', actor='900003', number=980210)
+                await fire(module.check_auction_end_job)
+                assert assets(probe) == after
+        integrity(probe)
+        probe.evidence.update(pending_refusal_rollback=True, pending_winner_and_seller=True,
+                              accurate_command_reply=True, pending_items=2, integrity='ok')

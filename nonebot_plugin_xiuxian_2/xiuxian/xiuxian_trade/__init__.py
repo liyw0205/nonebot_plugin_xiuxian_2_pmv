@@ -287,13 +287,18 @@ async def _end_auction_with_application(operation_id: str | None = None) -> list
         if info:
             item_types[int(item["item_id"])] = str(info["type"])
     stable_operation_id = operation_id or f"auction-finish:{session['session_id']}"
-    outcome = _auction_settlement_application().settle_active(
-        operation_id=stable_operation_id,
-        # Scheduled retries must retain their original deadline in the ledger payload.
-        end_time=min(runtime_clock.now().timestamp(), float(session["end_time"])),
-        fee_rate=auction_config.get_auction_rules()["fee_rate"],
-        item_types=item_types,
-    )
+    try:
+        outcome = _auction_settlement_application().settle_active(
+            operation_id=stable_operation_id,
+            # Scheduled retries must retain their original deadline in the ledger payload.
+            end_time=min(runtime_clock.now().timestamp(), float(session["end_time"])),
+            fee_rate=auction_config.get_auction_rules()["fee_rate"],
+            item_types=item_types,
+        )
+    except DomainError as exc:
+        if exc.details.get("reason"):
+            raise AuctionLifecycleError(exc.details["reason"], exc.details.get("subject") or session["session_id"]) from exc
+        raise
     if not outcome.ok:
         data = outcome.data or {}
         raise AuctionLifecycleError(data.get("reason") or outcome.code, data.get("subject") or session["session_id"])
@@ -3680,16 +3685,18 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     # 构造结果消息
     msg_list = ["拍卖已结束！成交结果："]
     for result in results[:5]:  # 最多显示5条结果
-        if result["status"] == "成交":
+        if result.get("final_price") is not None:
             winner_info = _sql_message().get_user_info_with_id(result["winner_id"])
             winner_name = winner_info["user_name"] if winner_info else str(result["winner_id"])
             msg_list.append(
                 f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 "
                 f"手续费: {number_to(result['fee'])}灵石 "
                 f"买家: {winner_name}"
+                + ("，物品待领取" if result.get("delivery") == "pending" else "")
             )
         else:
-            msg_list.append(f"{result['item_name']} 流拍")
+            msg_list.append(f"{result['item_name']} 流拍"
+                            + ("，物品待领取" if result.get("delivery") == "pending" else ""))
     
     if len(results) > 5:
         msg_list.append(f"...等共 {len(results)} 件拍卖品。")

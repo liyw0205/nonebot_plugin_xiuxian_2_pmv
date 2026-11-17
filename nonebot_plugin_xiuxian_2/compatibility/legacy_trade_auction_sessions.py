@@ -31,6 +31,8 @@ class AuctionSessionFinishResult:
     operation_id: str
     session_id: str = ""
     results: tuple[dict[str, Any], ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -146,6 +148,8 @@ class AuctionSessionService:
             result.operation_id,
             result.session_id or session_id,
             tuple(dict(item) for item in result.results),
+            result.reason,
+            result.subject,
         )
 
 
