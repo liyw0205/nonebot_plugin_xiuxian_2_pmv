@@ -172,7 +172,12 @@ def register(case):
                 text = await probe.command("宗门捐献", "宗门捐献 1000")
                 assert balances(probe) == before and sect_rows(probe) == sect, text
                 assert not probe.rows(database, "SELECT * FROM sect_donation_operations")
-                probe.evidence.update(rejected_write=table, complete_rollback=True)
+                assert any(token in text for token in ("捐献扣款与个人贡献保存失败", "宗门捐献储备与资材保存失败", "宗门捐献回执保存失败")), text
+                probe.seed(database, "DROP TRIGGER refuse_donation")
+                recovered = await probe.command("宗门捐献", "宗门捐献 1000")
+                assert "捐献灵石1000枚" in recovered, recovered
+                assert balances(probe)[0][1] == before[0][1] - 1000 and probe.rows(database, "SELECT COUNT(*) FROM sect_donation_operations")[0][0] == 1
+                probe.evidence.update(rejected_write=table, complete_rollback=True, recovered=True, failure=text)
             return run
         case("sect-donate-rollback-" + table, "宗门捐献", "1000，逐写拒绝", "合法成员与资源，真实SQLite触发器拒绝一处写入",
              "具体写入原因、玩家/宗门/回执完整回滚", group="sect-donation-recovery", outcome="rejection")(build(table))
