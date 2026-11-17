@@ -77,11 +77,14 @@ Markdown及发送失败降级为mock合同，未做真机。仓储/应用/入口
 
 本组已白名单普通提交推送develop：`41690951c0230e0794e95edc6902b5f50aa80abc`，
 `origin/develop`核得同SHA；未查CI。下一执行候选仍在宗门周常：沿真实活动指令到周常事件进度
-更新做隔离复现。当前源码显示该进度仓储未检查逐步`UPDATE`行数，且异常参与者JSON会回退为空对象，
-这只是待验证疑点，不能先改或称作bug。先冻结具体事件/指令与数据快照，证明IGNORE/改写是否造成
-回复正常但进度或参与者记录缺失，再决定修复范围。不得重跑本组已绿基线或扩大为全仓审计；不把
-本切片标成G2或总goal完成。用户冻结JSON删除和`.codex-goal.md`不暂存；G2--G5与真实客户端/
-发布门禁满足前不合main或发版。
+更新做隔离复现。已用临时SQLite注入`sect_weekly_goal` UPDATE前trigger副作用后`RAISE(IGNORE)`：
+`record_progress`返回`progress=1`，落库仍是`progress=0,participants={}`，trigger副作用行数为1；
+这是仓储伪正常的真实数据红证据，尚未证明实际玩家handler的回复/重复行为，也未改代码。下一步沿
+真实`宗门任务完成` dispatch/DI/handler→`safe_record_game_event(sect_task_complete)`→周常进度
+写入，核主结算/进度/回执并复现写拒绝及同消息重试是否会漏进度或重复结算，再冻结该完整修复组。
+目前只基于代码确认该命令在主结算后调事件且结果不用于成功回复；不能把它当运行证据。不得重跑
+本组已绿基线或扩大为全仓审计；不把本切片标成G2或总goal完成。用户冻结JSON删除和`.codex-goal.md`
+不暂存；G2--G5与真实客户端/发布门禁满足前不合main或发版。
 
 ## 宗门任务体力消费与永久回执（当前交付）
 
