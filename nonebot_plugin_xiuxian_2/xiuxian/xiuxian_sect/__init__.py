@@ -3508,21 +3508,24 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
-    if sect_position == owner_position:
-        result = sect_application.close_mountain(
-            _sect_operation_id(event, "close_mountain", sect_id),
-            user_info['user_id'],
-            owner_position=owner_position,
-            expected_sect_id=sect_id,
-        )
-        if result.applied:
-            msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
-        elif result.status == "already_closed":
-            msg = "宗门已经处于封闭状态。"
-        else:
-            msg = f"封闭山门失败（{result.status}）。"
-    else:
+    result = sect_application.close_mountain(
+        _sect_operation_id(event, "close_mountain", sect_id),
+        user_info['user_id'],
+        owner_position=owner_position,
+        expected_sect_id=sect_id,
+    )
+    if result.status == "duplicate":
+        msg = "这条封闭山门请求已经完成，宗门状态没有重复修改。"
+    elif result.status == "state_changed":
+        msg = result_failure("封闭山门", result)
+    elif result.applied:
+        msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
+    elif result.status == "already_closed":
+        msg = "宗门已经处于封闭状态。"
+    elif result.status == "not_owner":
         msg = "只有宗主可以封闭山门！"
+    else:
+        msg = result_failure("封闭山门", result)
     
     await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_close_mountain2.finish()
@@ -3542,44 +3545,25 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
-    sect_info = sect_application.get_sect_info(sect_id)
-    if not sect_info['closed']:
-        msg = "宗门未封闭，无需继承！"
-        await handle_send(bot, event, msg)
-        await sect_inherit.finish()
-    
-    # 检查职位是否符合继承条件
-    if user_info['sect_position'] not in [1, 2, 6, 7]:  # 1=副宗主，2=长老, 6=大师兄，7=大师姐
-        msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_inherit.finish()
-    
-    # 检查是否有更高优先级的继承人
-    members = sect_application.list_sect_members(sect_id)
-    higher_priority = [
-        m for m in members 
-        if m['sect_position'] < user_info['sect_position'] 
-        and m['sect_position'] != 0  # 排除当前宗主
-    ]
-    
-    if higher_priority:
-        msg = "存在更高优先级的继承人，请等待他们继承！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_inherit.finish()
-    
     result = sect_application.inherit_owner(
         _sect_operation_id(event, "inherit_owner", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条继承宗主请求已经完成，宗门状态没有重复修改。"
+    elif result.status == "state_changed":
+        msg = result_failure("继承宗主", result)
+    elif result.applied:
         msg = f"恭喜{result.actor_name or user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
     elif result.status == "higher_priority":
         msg = "存在更高优先级的继承人，请等待他们继承！"
     elif result.status == "ineligible":
         msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
+    elif result.status == "not_closed":
+        msg = "宗门未封闭，无需继承！"
     else:
-        msg = f"继承失败（{result.status}）。"
+        msg = result_failure("继承宗主", result)
     await handle_send(bot, event, msg)
     await sect_inherit.finish()
 

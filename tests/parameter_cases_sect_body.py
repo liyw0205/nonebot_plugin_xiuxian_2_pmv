@@ -96,6 +96,85 @@ def register(case):
             assert probe.rows(database, "SELECT COUNT(*) FROM sect_operations WHERE operation_type='transfer_owner'") == [(1,)]
             probe.evidence.update(failed=failed, recovered=True, owner="900002", receipt_count=1)
 
+    @case("sect-owner-lifecycle-replay", "宗门封闭与继承", "封闭山门/确认封闭山门/继承宗主",
+          "真实宗主、同宗长老和迁移回执表", "封闭后 owner/职位/开放状态持久化，两个入口 replay 不重复修改",
+          group="sect-owner-lifecycle-parameters")
+    async def owner_lifecycle(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        prompt = await probe.command("封闭山门", "封闭山门", actor="900001", number=960140)
+        assert "确认封闭山门" in prompt, prompt
+        closed = await probe.command("确认封闭山门", "确认封闭山门", actor="900001", number=960141)
+        assert "已封闭山门" in closed, closed
+        state = probe.rows(database, "SELECT sect_owner,closed,join_open FROM sects WHERE sect_id=?", (sid,))
+        members = probe.rows(database, "SELECT user_id,sect_position FROM user_xiuxian WHERE user_id IN ('900001','900002') ORDER BY user_id")
+        assert [tuple(str(value) if index == 0 and value is not None else value for index, value in enumerate(row)) for row in state] == [(None, 1, 0)] and members == [("900001", 2), ("900002", 12)], (closed, state, members)
+        probe.clear_cooldowns()
+        close_replay = await probe.command("确认封闭山门", "确认封闭山门", actor="900001", number=960141)
+        assert "已经完成" in close_replay, close_replay
+        inherited = await probe.command("继承宗主", "继承宗主", actor="900001", number=960142)
+        assert "继承宗主之位" in inherited, inherited
+        state = probe.rows(database, "SELECT sect_owner,closed,join_open FROM sects WHERE sect_id=?", (sid,))
+        assert [str(row[0]) for row in state] == ["900001"] and state[0][1:] == (0, 1), (inherited, state)
+        probe.clear_cooldowns()
+        inherit_replay = await probe.command("继承宗主", "继承宗主", actor="900001", number=960142)
+        assert "已经完成" in inherit_replay, inherit_replay
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900002")
+        adapter_contracts = 0
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated owner lifecycle delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "宗主状态回执合同", md_type="宗门", k1="继承", v1="继承宗主")
+            adapter_contracts += 1
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "宗主状态回执合同"
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(closed=closed, inherited=inherited, close_replay=close_replay, inherit_replay=inherit_replay, state=state, adapter_contracts=adapter_contracts)
+
+    @case("sect-owner-lifecycle-close-recovery", "确认封闭山门", "成员职位故障/解除后同消息恢复",
+          "已进入确认封闭山门，隔离数据库注入成员职位改写", "具体原因、状态回滚，解除触发器后封闭成功",
+          group="sect-owner-lifecycle-recovery", outcome="recovery")
+    async def close_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        await probe.command("封闭山门", "封闭山门", actor="900001", number=960150)
+        probe.seed(database, "CREATE TRIGGER sect_close_member_rewrite AFTER UPDATE OF sect_position ON user_xiuxian WHEN NEW.user_id='900001' AND NEW.sect_position=2 BEGIN UPDATE user_xiuxian SET sect_position=3 WHERE user_id='900001'; END")
+        failed = await probe.command("确认封闭山门", "确认封闭山门", actor="900001", number=960151)
+        assert "原宗主职位保存失败" in failed, failed
+        close_state = probe.rows(database, "SELECT sect_owner,closed,join_open FROM sects WHERE sect_id=?", (sid,))
+        assert [(str(row[0]), row[1], row[2]) for row in close_state] == [("900001", 0, 1)]
+        probe.seed(database, "DROP TRIGGER sect_close_member_rewrite")
+        probe.clear_cooldowns()
+        recovered = await probe.command("确认封闭山门", "确认封闭山门", actor="900001", number=960151)
+        assert "已封闭山门" in recovered, recovered
+        probe.evidence.update(failed=failed, recovered=True)
+
+    @case("sect-owner-lifecycle-inherit-recovery", "继承宗主", "回执故障/解除后同消息恢复",
+          "宗门已封闭且长老符合继承资格，隔离数据库注入回执 IGNORE", "具体原因、owner/职位回滚，解除触发器后继承成功",
+          group="sect-owner-lifecycle-recovery", outcome="recovery")
+    async def inherit_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        await probe.command("封闭山门", "封闭山门", actor="900001", number=960160)
+        await probe.command("确认封闭山门", "确认封闭山门", actor="900001", number=960161)
+        probe.seed(database, "CREATE TRIGGER sect_inherit_receipt_ignore BEFORE INSERT ON sect_owner_inherit_operations BEGIN SELECT RAISE(IGNORE); END")
+        failed = await probe.command("继承宗主", "继承宗主", actor="900001", number=960162)
+        assert "继承宗主回执保存失败" in failed, failed
+        assert probe.rows(database, "SELECT sect_owner,closed,join_open FROM sects WHERE sect_id=?", (sid,)) == [(None, 1, 0)]
+        probe.seed(database, "DROP TRIGGER sect_inherit_receipt_ignore")
+        probe.clear_cooldowns()
+        recovered = await probe.command("继承宗主", "继承宗主", actor="900001", number=960162)
+        assert "继承宗主之位" in recovered, recovered
+        probe.evidence.update(failed=failed, recovered=True)
+
     for command, field in (("升级攻击修炼", "atkpractice"), ("升级元血修炼", "hppractice"), ("升级灵海修炼", "mppractice")):
         for label, value in (("valid", "2"), ("zero", "0"), ("negative", "-2"), ("bad", "abc"), ("extra", "2 extra")):
             def build(command, field, label, value):
