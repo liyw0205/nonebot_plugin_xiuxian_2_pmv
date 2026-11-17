@@ -161,6 +161,107 @@ def register(case):
         assert probe.rows(probe.context.paths.game_db, "SELECT sect_name FROM sects WHERE sect_id=?", (sid,)) == [("参数新宗",)], text
         probe.evidence.update(sect_id=sid, name="参数新宗")
 
+    @case("sect-rename-replay-conflict", "宗门改名", "成功后同消息/改参重放", "真实宗主、改名费用和易名符",
+          "同消息提示已完成且不重复扣费，改参保留操作冲突原因", group="sect-rename-parameters")
+    async def rename_replay(probe):
+        sid = seed_sect(probe)
+        module = sect_module()
+        cost = module.XiuConfig().sect_rename_cost
+        probe.seed(probe.context.paths.game_db, "UPDATE sects SET sect_used_stone=? WHERE sect_id=?", (cost, sid))
+        probe.grant_item(module.SECT_RENAME_CARD_ID, 1)
+        probe.seed(probe.context.paths.game_db, "UPDATE back SET bind_num=1 WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,))
+        text = await probe.command("宗门改名", "宗门改名 参数新宗", number=960010)
+        assert "宗门改名为参数新宗" in text, text
+        before = probe.rows(probe.context.paths.game_db, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,))
+        probe.clear_cooldowns()
+        replay = await probe.command("宗门改名", "宗门改名 参数新宗", number=960010)
+        assert "未重复扣除资源" in replay and "传宗门" not in replay, replay
+        probe.clear_cooldowns()
+        conflict = await probe.command("宗门改名", "宗门改名 另一个宗门", number=960010)
+        assert "该操作号已用于不同内容" in conflict, conflict
+        assert probe.rows(probe.context.paths.game_db, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,)) == before
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated rename delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "改名回执合同", md_type="宗门", k1="宗门", v1="我的宗门")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "改名回执合同"
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(replay=replay, conflict=conflict, unchanged=True, adapter_contracts=4)
+
+    @case("sect-rename-boundaries", "宗门改名", "空白/超长/同名/费用/道具边界", "真实宗主、改名费用和易名符",
+          "拒绝参数与资源边界且名称、储备、道具不变", group="sect-rename-parameters", outcome="rejection")
+    async def rename_boundaries(probe):
+        sid = seed_sect(probe)
+        module = sect_module()
+        cost = module.XiuConfig().sect_rename_cost
+        database = probe.context.paths.game_db
+        probe.seed(database, "UPDATE sects SET sect_used_stone=? WHERE sect_id=?", (cost, sid))
+        probe.grant_item(module.SECT_RENAME_CARD_ID, 1)
+        probe.seed(database, "UPDATE back SET bind_num=1 WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,))
+        before = (
+            probe.rows(database, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,)),
+            probe.rows(database, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,)),
+        )
+        for index, value in enumerate(("", "宗" * 11, "参数测试宗"), start=1):
+            probe.clear_cooldowns()
+            text = await probe.command("宗门改名", "宗门改名" + (" " + value if value else ""), number=960030 + index)
+            assert probe.rows(database, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,)) == before[0], text
+            assert probe.rows(database, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,)) == before[1], text
+        probe.seed(database, "UPDATE sects SET sect_used_stone=? WHERE sect_id=?", (cost - 1, sid))
+        probe.clear_cooldowns()
+        stone_text = await probe.command("宗门改名", "宗门改名 费用不足宗", number=960034)
+        assert "灵石储备不足" in stone_text, stone_text
+        probe.seed(database, "UPDATE sects SET sect_used_stone=? WHERE sect_id=?", (cost, sid))
+        probe.seed(database, "UPDATE back SET goods_num=0,bind_num=0 WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,))
+        probe.clear_cooldowns()
+        card_text = await probe.command("宗门改名", "宗门改名 缺符宗", number=960035)
+        assert "需要消耗1个" in card_text, card_text
+        probe.evidence.update(unchanged=True, stone_rejection=stone_text, card_rejection=card_text)
+
+    for index, (table, verb, reason) in enumerate((
+        ("sects", "UPDATE", "宗门名称与储备保存失败"),
+        ("back", "UPDATE", "易名符消耗保存失败"),
+        ("sect_rename_operations", "INSERT", "改名回执保存失败"),
+    ), start=1):
+        def build(table, verb, reason, index):
+            async def run(probe):
+                sid = seed_sect(probe)
+                module = sect_module()
+                cost = module.XiuConfig().sect_rename_cost
+                database = probe.context.paths.game_db
+                probe.seed(database, "UPDATE sects SET sect_used_stone=? WHERE sect_id=?", (cost, sid))
+                probe.grant_item(module.SECT_RENAME_CARD_ID, 1)
+                probe.seed(database, "UPDATE back SET bind_num=1 WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,))
+                before = (
+                    probe.rows(database, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,)),
+                    probe.rows(database, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,)),
+                )
+                probe.seed(database, f"CREATE TRIGGER refuse_rename BEFORE {verb} ON {table} BEGIN SELECT RAISE(IGNORE); END")
+                failed = await probe.command("宗门改名", "宗门改名 参数恢复宗", number=960020 + index)
+                assert reason in failed, failed
+                assert probe.rows(database, "SELECT sect_name,sect_used_stone FROM sects WHERE sect_id=?", (sid,)) == before[0]
+                assert probe.rows(database, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?", (module.SECT_RENAME_CARD_ID,)) == before[1]
+                assert not probe.rows(database, "SELECT * FROM sect_rename_operations")
+                probe.seed(database, "DROP TRIGGER refuse_rename")
+                probe.clear_cooldowns()
+                recovered = await probe.command("宗门改名", "宗门改名 参数恢复宗", number=960020 + index)
+                assert "宗门改名为参数恢复宗" in recovered, recovered
+                assert probe.rows(database, "SELECT COUNT(*) FROM sect_rename_operations")[0][0] == 1
+                probe.evidence.update(rejected_table=table, complete_rollback=True, recovered=True, failure=failed)
+            return run
+        case("sect-rename-recovery-" + table, "宗门改名", "写入拒绝后恢复", "真实宗主、费用、易名符和SQLite触发器",
+             "具体原因、资产整笔回滚，解除后同消息成功", group="sect-rename-recovery", outcome="rejection")(build(table, verb, reason, index))
+
     for table in ("user_xiuxian", "sects", "sect_donation_operations"):
         def build(table):
             async def run(probe):

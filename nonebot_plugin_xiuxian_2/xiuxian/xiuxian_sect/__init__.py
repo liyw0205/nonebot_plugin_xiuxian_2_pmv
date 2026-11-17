@@ -2540,6 +2540,9 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         rename_data = rename_outcome.data or {}
         result = type("SectRenameView", (), rename_data)()
         result.applied = rename_outcome.ok
+        if rename_outcome.replayed or result.status == "duplicate":
+            await handle_send(bot, event, f"宗门已改名为{result.new_name}，本次操作未重复扣除资源。", md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
+            await sect_rename.finish()
         if result.status == "name_exists":
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")

@@ -2,6 +2,30 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门改名完整玩家组（G2 checkpoint）
+
+隔离真实 `宗门改名` dispatch 复现两类伪正常：同消息 replay 由账本返回 `replayed=True`，旧 handler
+仍渲染长成功文案；宗门名称、易名符、永久回执的 `RAISE(IGNORE)` 或 trigger 改写未被逐写核验，
+可返回成功或留下副作用。改参数冲突则需保留账本首笔并给出具体原因。
+
+现 repository 对名称/储备、易名符和永久回执逐步检查影响行数及最终投影；
+`sect_rename_state_write_rejected`、`sect_rename_card_write_rejected`、
+`sect_rename_receipt_write_rejected` 在事务回滚后携 `reason/subject` 返回，SQLite `ABORT` 原异常
+透传。应用层将已知拒写记为可恢复失败，解除故障后同操作号重试；handler 识别 replay/duplicate，
+只提示已完成且不重复扣资源。改参仍返回 `operation_conflict`，不改写首笔回执。
+
+真实参数组覆盖合法改名、空白/超长/同名、费用/易名符边界、同消息 replay/改参冲突、三处拒写恢复，
+以及 OneBot 文本、QQ Markdown、发送失败降级 mock 合同；仓储覆盖三处 `IGNORE`、trigger 改写和
+`ABORT`，核名称/宗门储备/道具/回执实际数据及完整回滚。受影响组合 `298 passed, 43 subtests`
+（含旧宗门命令/捐献回归），改名定向 `6 passed, 3 subtests`；architecture `ok=true`、inventory、
+受影响 compileall、`git diff --check` 通过。仅使用 `/home` venv、共享锁和隔离 SQLite，未访问线上
+数据库/部署/`/root/myenv`，真实 QQ 未联调；用户既有 JSON 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门职位变更。** 先在隔离 SQLite 以真实 `宗门职位变更` matcher/DI/handler
+复现成员职位写入、永久回执的 `IGNORE`/改写/ABORT 与 replay/冲突，再覆盖职位名/编号、权限与名额
+边界、具体 `reason/subject`、整笔回滚/恢复、实际成员数据和 OneBot/QQ mock 合同；不扩宗门传位、
+踢人/退宗、定时任务、性能或全仓审计。
+
 ## 最新交付：宗门捐献完整玩家组（G2 checkpoint）
 
 隔离 SQLite 与真实 `宗门捐献` dispatch 复现了两层伪正常：首次成功后的同消息回放由

@@ -44,6 +44,14 @@ SQLite 事务：玩家灵石与对应修炼等级、宗门 `sect_materials` 和 
 `sect_donation_receipt_write_rejected` 会整笔回滚，携具体 `reason/subject` 返回，SQLite
 `ABORT` 原异常透传。触发器故障解除后可用原操作号恢复。
 
+### 宗门改名
+
+`宗门改名` 通过 `SectApplication.rename` 原子更新宗门名称/储备、消耗易名符并写入永久回执。
+同消息回放只返回已完成提示；改参数由账本返回 `operation_conflict`，不改写首笔记录。
+三步写入均检查影响行数与最终投影，`sect_rename_state_write_rejected`、
+`sect_rename_card_write_rejected`、`sect_rename_receipt_write_rejected` 会携具体
+`reason/subject` 回滚名称、费用和道具，故障解除后可用原消息恢复；SQLite `ABORT` 原异常透传。
+
 ## 商店每周限购行
 `宗门商店` 的商品行渲染 `每周限购：{剩余}/{总量}个`（售罄写 `已售罄（N/N个）`，
 不限购写 `不限购`），已购数量读取本周 `sect_shop_weekly_purchases`
