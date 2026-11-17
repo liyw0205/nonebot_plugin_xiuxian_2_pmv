@@ -64,6 +64,34 @@ class _SecBuffReceiptRejectRepository(_Repository):
         }
 
 
+class _PositionRepository(_Repository):
+    def __init__(self, *, reject_once: bool = False) -> None:
+        super().__init__()
+        self.reject_once = reject_once
+
+    def change_position(self, operation_id, actor_id, target_id, requested_position, position_limits, *, manager_max_position):
+        self.calls.append((operation_id, requested_position))
+        if self.reject_once:
+            self.reject_once = False
+            return {
+                "status": "state_changed",
+                "reason": "sect_position_receipt_write_rejected",
+                "subject": operation_id,
+                "actor_id": actor_id,
+                "target_id": target_id,
+            }
+        return {
+            "status": "changed",
+            "actor_id": actor_id,
+            "target_id": target_id,
+            "sect_id": 1,
+            "actor_name": "长老",
+            "target_name": "成员",
+            "old_position": 5,
+            "new_position": requested_position,
+        }
+
+
 class SectApplicationTests(unittest.TestCase):
     def test_started_ledger_is_retried_by_frozen_mutations(self):
         cases = (
@@ -166,6 +194,34 @@ class SectApplicationTests(unittest.TestCase):
             self.assertFalse(result.ok)
             self.assertEqual("sect_secbuff_receipt_write_rejected", result.code)
             self.assertEqual(result.data["subject"], "op-sec-reject")
+
+    def test_position_write_rejection_is_specific_and_same_request_recovers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            _prepare_ledger(database)
+            repository = _PositionRepository(reject_once=True)
+            app = SectApplication(database, repository=repository)
+            args = dict(operation_id="op-position-recover", user_id="u", target_id="t", requested_position=4, position_limits={4: 2}, manager_max_position=2)
+            failed = app.change_position(**args)
+            self.assertFalse(failed.ok)
+            self.assertEqual((failed.status, failed.code, failed.data["subject"]), ("failed", "sect_position_receipt_write_rejected", "op-position-recover"))
+            recovered = app.change_position(**args)
+            self.assertTrue(recovered.ok)
+            self.assertEqual([4, 4], [call[1] for call in repository.calls])
+
+    def test_position_replay_and_changed_payload_keep_distinct_outcomes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            _prepare_ledger(database)
+            repository = _PositionRepository()
+            app = SectApplication(database, repository=repository)
+            args = dict(operation_id="op-position-replay", user_id="u", target_id="t", requested_position=4, position_limits={4: 2}, manager_max_position=2)
+            first = app.change_position(**args)
+            replay = app.change_position(**args)
+            conflict = app.change_position(**{**args, "requested_position": 5})
+            self.assertEqual((first.status, replay.status, replay.replayed), ("applied", "replayed", True))
+            self.assertEqual((conflict.status, conflict.code, conflict.data["subject"]), ("rejected", "operation_conflict", "actor"))
+            self.assertEqual([4], [call[1] for call in repository.calls])
 
     def test_weekly_claim_uses_atomic_repository_receipt_without_outer_ledger(self):
         with tempfile.TemporaryDirectory() as directory:

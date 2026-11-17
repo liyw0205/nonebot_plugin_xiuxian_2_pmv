@@ -3086,7 +3086,13 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     position_data = position_outcome.data or {}
     result = type("SectPositionView", (), position_data)()
     result.applied = position_outcome.ok
-    if result.status == "target_not_member":
+    if position_outcome.replayed or result.status == "duplicate":
+        msg = "这条宗门职位变更请求已经完成，本次没有重复修改成员职位。"
+    elif result.status == "operation_conflict":
+        msg = result_failure("宗门职位变更", position_outcome)
+    elif result.status == "state_changed":
+        msg = result_failure("宗门职位变更", position_outcome)
+    elif result.status == "target_not_member":
         msg = f"请确保变更目标道友与你在同一宗门。"
     elif result.status == "target_not_below_actor":
         target_position = result.old_position
@@ -3114,7 +3120,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         msg = f"""传{actor_title}{result.actor_name or user_info['user_name']}法旨：
 即日起{result.target_name or give_user['user_name']}由{old_title}{action_text}本宗{new_title}"""
     else:
-        msg = f"请确保变更目标道友与你在同一宗门。"
+        msg = result_failure("宗门职位变更", position_outcome)
 
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await sect_position_update.finish()

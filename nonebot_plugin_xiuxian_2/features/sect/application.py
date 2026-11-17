@@ -328,7 +328,7 @@ class SectApplication:
 
     def change_position(self, *, operation_id: str, user_id: str, target_id: str, requested_position: int, position_limits: Mapping[str, Any], manager_max_position: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "target_id": str(target_id), "requested_position": int(requested_position), "position_limits": dict(position_limits), "manager_max_position": int(manager_max_position)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.position_change", payload=payload, call=lambda: self._repository().change_position(operation_id, user_id, target_id, requested_position, position_limits, manager_max_position=manager_max_position))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.position_change", payload=payload, call=lambda: self._repository().change_position(operation_id, user_id, target_id, requested_position, position_limits, manager_max_position=manager_max_position), retry_started=True)
 
     def donate(self, *, operation_id: str, user_id: str, sect_id: int, stone: int, materials: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "stone": int(stone), "materials": int(materials)}
@@ -421,12 +421,13 @@ class SectApplication:
                 }.get(action)
                 if status in {"applied", "joined", "learned", "duplicate", success_status}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
-                elif action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary"} and str(data.get("reason", "")).endswith("_write_rejected"):
+                elif action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change"} and str(data.get("reason", "")).endswith("_write_rejected"):
                     message = ("宗门捐献写入未完成，请稍后重试。" if action == "sect.donate"
                                else "宗门改名写入未完成，请稍后重试。" if action == "sect.rename"
                                else "宗门丹药领取写入失败。" if action == "sect.claim_elixir"
                                else "宗门功法学习写入未完成，请稍后重试。" if action == "sect.learn_main"
-                               else "宗门神通学习写入未完成，请稍后重试。")
+                               else "宗门神通学习写入未完成，请稍后重试。" if action == "sect.learn_secondary"
+                               else "宗门职位变更写入未完成，请稍后重试。")
                     outcome = OperationOutcome.failed(operation_id, action, message,
                                                        code=data["reason"], data=data, audit_category="sect")
                 else:
@@ -435,7 +436,7 @@ class SectApplication:
                     with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                         self.ledger.finish(uow, outcome)
                 except Exception as exc:
-                    if action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary"} and not outcome.ok and data.get("reason"):
+                    if action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change"} and not outcome.ok and data.get("reason"):
                         raise DomainError(data["reason"], outcome.message, data) from exc
                     raise
                 return outcome

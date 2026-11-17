@@ -147,6 +147,80 @@ def register(case):
         assert probe.rows(probe.context.paths.game_db, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(int(target[0]),)], text
         probe.evidence.update(target="900002", position=target)
 
+    @case("sect-position-replay-conflict", "宗门职位变更", "职位名称成功/同消息重放/改参", "真实宗主与同宗成员，职位名额可用",
+          "职位实际持久化；重放不重复播报；改参保留operation_conflict", group="sect-position-parameters")
+    async def position_replay(probe):
+        sid = seed_sect(probe)
+        module = sect_module()
+        target = next((key, value["title"]) for key, value in module.jsondata.sect_config_data().items() if value["title"] == "长老")
+        command = "宗门职位变更 诊断对手 " + target[1]
+        text = await probe.command("宗门职位变更", command, number=960040)
+        assert probe.rows(probe.context.paths.game_db, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(int(target[0]),)], (text, sid)
+        probe.clear_cooldowns()
+        replay = await probe.command("宗门职位变更", command, number=960040)
+        assert "已经完成" in replay and "传长老" not in replay, replay
+        probe.clear_cooldowns()
+        conflict = await probe.command("宗门职位变更", "宗门职位变更 诊断对手 外门弟子", number=960040)
+        assert "该操作号已用于不同内容" in conflict, conflict
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        contracts = 0
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated position delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "职位回执合同", md_type="宗门", k1="宗门", v1="我的宗门")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+            else:
+                markdown_send.assert_awaited_once()
+            contracts += 1
+        probe.evidence.update(sect_id=sid, position=target, replay=replay, conflict=conflict, adapter_contracts=contracts)
+
+    @case("sect-position-member-write-recovery", "宗门职位变更", "成员职位 trigger 改写后同消息恢复", "真实宗主、同宗成员和可用职位",
+          "具体成员写拒绝、职位与回执回滚；解除故障后同消息成功", group="sect-position-recovery", outcome="rejection")
+    async def position_member_recovery(probe):
+        sid = seed_sect(probe)
+        module = sect_module()
+        target = next((key, value["title"]) for key, value in module.jsondata.sect_config_data().items() if value["title"] == "长老")
+        database = probe.context.paths.game_db
+        probe.seed(database, f"CREATE TRIGGER sect_position_member_rewrite AFTER UPDATE OF sect_position ON user_xiuxian WHEN NEW.user_id='900002' AND NEW.sect_position={int(target[0])} BEGIN UPDATE user_xiuxian SET sect_position=3 WHERE user_id='900002'; END")
+        first = await probe.command("宗门职位变更", "宗门职位变更 诊断对手 " + target[1], number=960050)
+        assert "成员职位保存失败" in first, first
+        assert probe.rows(database, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(12,)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_position_change_operations WHERE operation_id LIKE 'sect:960050:%'") == [(0,)]
+        probe.seed(database, "DROP TRIGGER sect_position_member_rewrite")
+        probe.clear_cooldowns()
+        recovered = await probe.command("宗门职位变更", "宗门职位变更 诊断对手 " + target[1], number=960050)
+        assert "晋升为本宗" in recovered, recovered
+        assert probe.rows(database, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(int(target[0]),)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_position_change_operations WHERE operation_id LIKE 'sect:960050:%'") == [(1,)]
+        probe.evidence.update(sect_id=sid, reason="sect_position_member_write_rejected", recovered=True)
+
+    @case("sect-position-receipt-write-recovery", "宗门职位变更", "回执 IGNORE 后同消息恢复", "真实宗主、同宗成员和可用职位",
+          "具体回执拒绝、职位与回执回滚；解除故障后同消息成功", group="sect-position-recovery", outcome="rejection")
+    async def position_receipt_recovery(probe):
+        sid = seed_sect(probe)
+        module = sect_module()
+        target = next((key, value["title"]) for key, value in module.jsondata.sect_config_data().items() if value["title"] == "长老")
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_position_receipt_ignore BEFORE INSERT ON sect_position_change_operations BEGIN SELECT RAISE(IGNORE); END")
+        first = await probe.command("宗门职位变更", "宗门职位变更 诊断对手 " + target[1], number=960060)
+        assert "职位变更回执保存失败" in first, first
+        assert probe.rows(database, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(12,)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_position_change_operations WHERE operation_id LIKE 'sect:960060:%'") == [(0,)]
+        probe.seed(database, "DROP TRIGGER sect_position_receipt_ignore")
+        probe.clear_cooldowns()
+        recovered = await probe.command("宗门职位变更", "宗门职位变更 诊断对手 " + target[1], number=960060)
+        assert "晋升为本宗" in recovered, recovered
+        assert probe.rows(database, "SELECT sect_position FROM user_xiuxian WHERE user_id='900002'") == [(int(target[0]),)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_position_change_operations WHERE operation_id LIKE 'sect:960060:%'") == [(1,)]
+        probe.evidence.update(sect_id=sid, reason="sect_position_receipt_write_rejected", recovered=True)
+
     @case("sect-rename-valid-name", "宗门改名", "合法中文新名称", "真实宗主与充足改名费用",
           "宗门名称持久化，扣除真实配置费用或道具", group="sect-body-parameters")
     async def rename(probe):

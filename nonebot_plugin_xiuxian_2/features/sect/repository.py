@@ -25,6 +25,11 @@ class _RenameRejected(Exception):
         self.reason, self.subject = reason, subject
 
 
+class _PositionRejected(Exception):
+    def __init__(self, reason, subject):
+        self.reason, self.subject = reason, subject
+
+
 def weekly_shop_key(moment) -> str:
     """本周限购的周期键：与 `purchase` 写入 `sect_shop_weekly_purchases.week_key` 同源。"""
     return str(moment.strftime("%G-W%V"))
@@ -437,8 +442,11 @@ class SectRenameSqlRepository:
         if requested_position not in limits:return {"status":"invalid_position","actor_id":actor_id,"target_id":target_id}
         if actor_id==target_id:return {"status":"self_target","actor_id":actor_id,"target_id":target_id}
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            old=uow.query_one("SELECT sect_id,actor_name,target_name,old_position,new_position FROM sect_position_change_operations WHERE operation_id=?",(operation_id,))
-            if old:return {"status":"duplicate","actor_id":actor_id,"target_id":target_id,"sect_id":old["sect_id"],"actor_name":str(old["actor_name"] or ""),"target_name":str(old["target_name"] or ""),"old_position":old["old_position"],"new_position":old["new_position"]}
+            old=uow.query_one("SELECT actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position FROM sect_position_change_operations WHERE operation_id=?",(operation_id,))
+            if old:
+                if str(old["actor_id"]) != actor_id or str(old["target_id"]) != target_id or int(old["new_position"]) != requested_position:
+                    return {"status":"operation_conflict","actor_id":actor_id,"target_id":target_id,"sect_id":old["sect_id"],"reason":"operation_conflict","subject":"actor"}
+                return {"status":"duplicate","actor_id":actor_id,"target_id":target_id,"sect_id":old["sect_id"],"actor_name":str(old["actor_name"] or ""),"target_name":str(old["target_name"] or ""),"old_position":old["old_position"],"new_position":old["new_position"]}
             actor=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(actor_id,));target=uow.query_one("SELECT sect_id,sect_position,user_name FROM user_xiuxian WHERE user_id=?",(target_id,))
             if actor is None:return {"status":"actor_missing","actor_id":actor_id,"target_id":target_id}
             if actor["sect_id"] is None:return {"status":"actor_without_sect","actor_id":actor_id,"target_id":target_id}
@@ -450,9 +458,22 @@ class SectRenameSqlRepository:
             current=int(target["sect_position"]);count=uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=? AND sect_position=? AND user_id<>?",(actor["sect_id"],requested_position,target_id))
             if limits[requested_position]>0 and int(count["n"])>=limits[requested_position]:return {"status":"position_full","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"]}
             if current==requested_position:return {"status":"unchanged","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"old_position":current,"new_position":requested_position}
-            changed=uow.execute("UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=? AND sect_position=?",(requested_position,target_id,actor["sect_id"],current))
-            if changed.rowcount!=1:return {**{"status":"state_changed","actor_id":actor_id,"target_id":target_id}, "reason": "sect_position_write_rejected", "subject": ""}
-            uow.execute("INSERT INTO sect_position_change_operations(operation_id,actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position) VALUES(?,?,?,?,?,?,?,?)",(operation_id,actor_id,target_id,actor["sect_id"],str(actor["user_name"] or ""),str(target["user_name"] or ""),current,requested_position))
+            try:
+                with uow.savepoint("sect_position_change"):
+                    changed=uow.execute("UPDATE user_xiuxian SET sect_position=? WHERE user_id=? AND sect_id=? AND sect_position=?",(requested_position,target_id,actor["sect_id"],current))
+                    saved_target=uow.query_one("SELECT sect_position FROM user_xiuxian WHERE user_id=? AND sect_id=?",(target_id,actor["sect_id"]))
+                    if changed.rowcount != 1 or saved_target is None or int(saved_target["sect_position"]) != requested_position:
+                        raise _PositionRejected("sect_position_member_write_rejected", target_id)
+                    receipt=uow.execute("INSERT INTO sect_position_change_operations(operation_id,actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position) VALUES(?,?,?,?,?,?,?,?)",(operation_id,actor_id,target_id,actor["sect_id"],str(actor["user_name"] or ""),str(target["user_name"] or ""),current,requested_position))
+                    if receipt.rowcount != 1:
+                        raise _PositionRejected("sect_position_receipt_write_rejected", operation_id)
+                    saved_receipt=uow.query_one("SELECT actor_id,target_id,sect_id,actor_name,target_name,old_position,new_position FROM sect_position_change_operations WHERE operation_id=?",(operation_id,))
+                    expected=(actor_id,target_id,int(actor["sect_id"]),str(actor["user_name"] or ""),str(target["user_name"] or ""),current,requested_position)
+                    actual=None if saved_receipt is None else (str(saved_receipt["actor_id"]),str(saved_receipt["target_id"]),int(saved_receipt["sect_id"]),str(saved_receipt["actor_name"] or ""),str(saved_receipt["target_name"] or ""),int(saved_receipt["old_position"]),int(saved_receipt["new_position"]))
+                    if actual != expected:
+                        raise _PositionRejected("sect_position_receipt_write_rejected", operation_id)
+            except _PositionRejected as exc:
+                return {"status":"state_changed","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"reason":exc.reason,"subject":str(exc.subject)}
             return {"status":"changed","actor_id":actor_id,"target_id":target_id,"sect_id":actor["sect_id"],"actor_name":str(actor["user_name"] or ""),"target_name":str(target["user_name"] or ""),"old_position":current,"new_position":requested_position}
     def kick(self, operation_id, actor_id, target_id, *, manager_max_position):
         operation_id, actor_id, target_id = str(operation_id).strip(), str(actor_id), str(target_id)
