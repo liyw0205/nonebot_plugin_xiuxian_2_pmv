@@ -181,6 +181,11 @@ OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
 三库资产/永久积分/回执/outbox/任务/统计及integrity_check。OneBot/QQ文本/Markdown/
 降级仅mock，不代表真实QQ展示。没有新增迁移或改变首领生成、奖励、经济规则。
 
+参数清单的 `planned_cases` 仅按case主命令分配，不收录场景内的全部调用。因此
+`世界BOSS列表` 虽已在刷新/人工生成场景实际执行，清单仍标pending；`世界BOSS兑换`
+虽分配了未知商品拒绝场景，也不代表正常兑换或全部边界已验证。清单用于定位证据，
+不能替代真实dispatch、资产/回执断言及对应测试结果。
+
 ## 配置项
 
 `boss_enabled`（`XIUXIAN_BOSS_ENABLED`）控制新资产边界，默认启用。

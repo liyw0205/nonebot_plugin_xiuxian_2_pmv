@@ -71,6 +71,16 @@ NewAPI 部分成功的实际历史、修复后恢复与正常幂等，不以普�
 | 宗门/傀儡/NewAPI内层显式失败与部分恢复 | 2f17b57f | 43954272571 success | test_scheduled_job_failure_visibility.py |
 | 鬼市时区/截止、pending恢复、存取及到期返还/批量清空 | d8ecefe1至3befe21b的连续切片 | 最近3befe21b/43988136572 success | test_guishi_schedule.py、test_guishi_parameter_dispatch.py各明确group及trade feature文档 |
 | 拍卖注册/触发/边界/启动对账、开场交接、结算与领取 | ee80d0ac、eac10e62、774b67ec、520a79df | 43995218089/43996331825/43999705305/44001821163均success | test_auction_schedule.py、test_auction_parameter_dispatch.py、start/settlement/pending_write_rejection.py |
+| 拍卖等待区退物/上架及竞拍资金交接拒写恢复 | 498a9f32、44d001a2 | 44005611091/44007297793 success | test_auction_queue_write_rejection.py、test_auction_bid_write_rejection.py、对应真实参数group |
+| 世界BOSS定时全量刷新、玩家查询/讨伐与同槽回放 | b9a354d1 | 44011718379 success | test_world_boss_refresh_recovery.py、world-boss-refresh参数group |
+| 世界BOSS每日重置、分块拒写保留pending及业务日 | e5c7e881、96d6d935 | 44016104819失败于旧日志静态契约；96d6d935修正该契约，44018801363运行中 | test_world_boss_daily_reset_recovery.py、world-boss-daily-reset参数group |
+| 世界BOSS人工生成与定时场次交接、参数冲突与拒写恢复 | 96d6d935 | 44018801363运行中，本地受影响验证已通过 | test_world_boss_manual_recovery.py、world-boss-manual-spawn参数group |
+
+参数探针在96d6d935的清单有280个有参入口：126个有直接场景分配、154个
+pending_semantic_cases。清单仅匹配每个case声明的主命令，不能统计场景内的其他
+真实调用；例如世界BOSS列表在刷新/人工生成场景执行，清单仍显示pending。
+这些数字不表示已通过/失败的命令数，也不证明任一完整功能已覆盖。实际证据须
+核对case内调用、断言与对应运行结果；inventory-only没有执行任何参数场景。
 
 部署只读证据显示进程和系统业务时区为Asia/Shanghai，而旧魔修源码按UTC小时
 判断；11月12至16日有刷新日志，缺少自动开启/结束成功记录。这只支持排查方向，
