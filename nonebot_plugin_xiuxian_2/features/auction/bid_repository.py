@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -18,6 +19,8 @@ class AuctionBidWriteResult:
     debit: int = 0
     refunded_bidder: str = ""
     refunded_amount: int = 0
+    reason: str = ""
+    subject: str = ""
 
 
 class AuctionBidSqlRepository:
@@ -82,6 +85,29 @@ class AuctionBidSqlRepository:
             )
             if row is None:
                 return AuctionBidWriteResult("auction_missing", operation_id, auction_id, bidder_id)
+            session = uow.query_one(
+                "SELECT session_id,start_time,end_time FROM auction_sessions WHERE status='active'"
+            )
+            reason = ""
+            if session is None:
+                reason = "auction_session_missing"
+            else:
+                try:
+                    start, end, moment = float(session["start_time"]), float(session["end_time"]), float(bid_time)
+                except (TypeError, ValueError, OverflowError):
+                    reason = "auction_session_time_invalid"
+                else:
+                    if not all(math.isfinite(value) for value in (start, end, moment)) or end <= start:
+                        reason = "auction_session_time_invalid"
+                    elif moment < start:
+                        reason = "auction_not_started"
+                    elif moment >= end:
+                        reason = "auction_expired"
+            if reason:
+                return AuctionBidWriteResult(
+                    reason, operation_id, auction_id, bidder_id, reason=reason,
+                    subject=str(session["session_id"]) if session else auction_id,
+                )
             current_bids = {
                 str(key): int(value)
                 for key, value in json.loads(str(row["bids"] or "{}")).items()

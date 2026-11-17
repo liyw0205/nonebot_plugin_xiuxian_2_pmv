@@ -107,11 +107,14 @@ class AuctionSessionStartTests(unittest.TestCase):
         self.assertEqual(first.status, "started")
         self.assertEqual(replay.status, "duplicate")
         self.assertEqual(conflict.status, "state_changed")
+        self.assertEqual(conflict.reason, "auction_start_operation_conflict")
+        self.assertEqual(conflict.subject, "start-1")
 
     def test_parallel_session_is_rejected(self) -> None:
         self.service.start("start-1", "session-1", start_time=100, end_time=200, system_items=self.system)
         result = self.service.start("start-2", "session-2", start_time=100, end_time=200, system_items=self.system)
         self.assertEqual(result.status, "already_active")
+        self.assertEqual((result.reason, result.subject), ("auction_already_active", "session-1"))
 
     def test_operation_failure_rolls_back_items_queue_and_session(self) -> None:
         self.service.get_active_session()

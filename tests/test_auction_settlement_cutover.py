@@ -26,7 +26,7 @@ def test_settlement_adapter_passes_item_types_and_returns_records():
     query = SimpleNamespace(
         get_current_auction=lambda: [{"item_id": 7}],
     )
-    session = SimpleNamespace(get_active_session=lambda: {"session_id": "s-1"})
+    session = SimpleNamespace(get_active_session=lambda: {"session_id": "s-1", "end_time": 100.0})
     settlement = SimpleNamespace(
         settle_active=lambda **kwargs: SimpleNamespace(
             ok=True,

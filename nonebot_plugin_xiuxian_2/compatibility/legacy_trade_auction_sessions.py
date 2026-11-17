@@ -15,6 +15,8 @@ class AuctionSessionStartResult:
     start_time: float = 0.0
     end_time: float = 0.0
     items_count: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -85,6 +87,8 @@ class AuctionSessionService:
             result.start_time,
             result.end_time,
             result.items_count,
+            result.reason,
+            result.subject,
         )
 
     def start(
@@ -110,6 +114,8 @@ class AuctionSessionService:
             result.start_time,
             result.end_time,
             result.items_count,
+            result.reason,
+            result.subject,
         )
 
     def finish(

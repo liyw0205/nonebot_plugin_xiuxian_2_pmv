@@ -8,7 +8,7 @@ nonebot.init()
 from nonebot_plugin_xiuxian_2.features.auction.application import AuctionBidApplication
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import apply_platform_schema
-from nonebot_plugin_xiuxian_2.features.auction.migrations import apply_auction_bid_operations
+from nonebot_plugin_xiuxian_2.features.auction.migrations import apply_auction_bid_operations, apply_auction_settlement
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade.repository import TradeRepository
 from tests.test_db_backend import db_backend
 
@@ -23,6 +23,9 @@ class AuctionApplicationBidTests(unittest.TestCase):
             with DatabaseUnitOfWork(database) as uow:
                 apply_platform_schema(uow)
                 apply_auction_bid_operations(uow)
+                apply_auction_settlement(uow)
+                uow.execute("INSERT INTO auction_sessions(session_id,status,start_time,end_time,items_count,start_operation_id) "
+                            "VALUES('session','active',1,100,1,'start')")
             repository = TradeRepository(database, max_goods_num=1000)
             repository.initialize()
             repository.set_current_auction([{

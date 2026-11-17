@@ -165,6 +165,8 @@ class AuctionBidApplication:
             debit=int(getattr(result, "debit", 0) or 0),
             refunded_bidder=str(getattr(result, "refunded_bidder", "") or ""),
             refunded_amount=int(getattr(result, "refunded_amount", 0) or 0),
+            reason=str(getattr(result, "reason", "") or ""),
+            subject=str(getattr(result, "subject", "") or ""),
         ).to_dict()
         if status in {"bid", "duplicate"}:
             outcome = OperationOutcome.applied(

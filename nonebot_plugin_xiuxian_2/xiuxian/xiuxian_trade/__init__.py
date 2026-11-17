@@ -96,7 +96,7 @@ from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.auction.pending import AuctionPendingApplication
 from ...features.auction.my_auction_view import render_live_lots, render_settlements
 from ...features.auction.query_application import AuctionQueryApplication
-from ...features.auction.domain import session_window
+from ...features.auction.domain import AuctionLifecycleError, session_window
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -258,9 +258,11 @@ def _start_auction_with_application(operation_id: str) -> bool:
         duration_hours=schedule_config["duration_hours"],
     )
     if not result.succeeded:
-        logger.warning(f"拍卖开启失败：{result.status}")
-        return False
-    current_date = runtime_clock.now().strftime("%Y-%m-%d")
+        if result.status == "empty":
+            logger.info("没有物品可供拍卖，本次未开启。")
+            return False
+        raise AuctionLifecycleError(result.reason or result.status, result.subject or operation_id)
+    current_date = _trade_business_now().strftime("%Y-%m-%d")
     auction_config.set_auction_config_value(
         "schedule", current_date, "last_auto_start_date"
     )
@@ -272,10 +274,13 @@ async def _end_auction_with_application(operation_id: str | None = None) -> list
     """Settle the active auction through the feature application by default."""
     current_auctions = _auction_query_application().get_current_auction() or []
     if not current_auctions:
+        active = _auction_session_service().get_active_session()
+        if active is not None:
+            raise AuctionLifecycleError("auction_items_missing", active["session_id"])
         return []
     session = _auction_session_service().get_active_session()
     if session is None:
-        raise RuntimeError("auction items exist without an active database session")
+        raise AuctionLifecycleError("auction_session_missing", str(current_auctions[0].get("id", "auction")))
     item_types = {}
     for item in current_auctions:
         info = items.get_data_by_item_id(item["item_id"])
@@ -284,12 +289,14 @@ async def _end_auction_with_application(operation_id: str | None = None) -> list
     stable_operation_id = operation_id or f"auction-finish:{session['session_id']}"
     outcome = _auction_settlement_application().settle_active(
         operation_id=stable_operation_id,
-        end_time=runtime_clock.now().timestamp(),
+        # Scheduled retries must retain their original deadline in the ledger payload.
+        end_time=min(runtime_clock.now().timestamp(), float(session["end_time"])),
         fee_rate=auction_config.get_auction_rules()["fee_rate"],
         item_types=item_types,
     )
     if not outcome.ok:
-        raise ValueError(f"auction session settlement blocked: status={outcome.code}")
+        data = outcome.data or {}
+        raise AuctionLifecycleError(data.get("reason") or outcome.code, data.get("subject") or session["session_id"])
     results = [dict(record) for record in (outcome.data or {}).get("results", ())]
     logger.info("拍卖已结束，结算及副作用事件已提交！")
     return results
@@ -300,6 +307,8 @@ async def _place_auction_bid_with_application(
 ) -> tuple[bool, str]:
     """Validate and place a bid through the feature application by default."""
     if not get_auction_status()["active"]:
+        if _auction_query_application().get_current_auction(auction_id):
+            return False, f"拍品缺少有效场次，竞拍未成立。（原因：auction_session_missing；主体：{auction_id}）"
         return False, "拍卖尚未开启。"
 
     item = _auction_query_application().get_current_auction(auction_id)
@@ -360,6 +369,15 @@ async def _place_auction_bid_with_application(
         item_name=str(item.get("name", auction_id)),
     )
     status = str((outcome.data or {}).get("status", outcome.code or outcome.status))
+    if status in {"auction_expired", "auction_not_started", "auction_session_missing", "auction_session_time_invalid"}:
+        description = {
+            "auction_expired": "本场竞拍时间已结束，正在等待结算。",
+            "auction_not_started": "本场尚未到竞拍开始时间。",
+            "auction_session_missing": "拍品缺少有效场次。",
+            "auction_session_time_invalid": "本场时间记录不合法。",
+        }[status]
+        data = outcome.data or {}
+        return False, f"{description}（原因：{data.get('reason') or status}；主体：{data.get('subject') or auction_id}）"
     if status == "stone_insufficient":
         return False, "灵石不足，竞拍未成立。"
     if status == "bid_too_low":
@@ -3071,7 +3089,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     # 列表
     current_auctions_list = _auction_query_application().get_current_auction()
-    auction_current_status = get_auction_status()
+    auction_current_status = get_auction_status(now=_trade_business_now())
 
     if not current_auctions_list:
         msg = "当前暂无拍品。"
@@ -3087,7 +3105,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if auction_current_status["start_time"] and auction_current_status["end_time"]:
             start_time_str = auction_current_status["start_time"].strftime("%H:%M")
             end_time_str = auction_current_status["end_time"].strftime("%H:%M")
-            status_line = f"进行中，预计{end_time_str}结束（{start_time_str}开启）"
+            status_line = f"{auction_current_status['state_label']}，预计{end_time_str}结束（{start_time_str}开启）"
         else:
             status_line = "进行中"
     else:
@@ -3164,9 +3182,14 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="列表", v1="拍卖查看", k2="帮助", v2="拍卖帮助")
         await auction_bid.finish()
 
-    success, result_msg = await _place_auction_bid_with_application(
-        str(user_info["user_id"]), auction_id, bid_price
-    )
+    try:
+        success, result_msg = await _place_auction_bid_with_application(
+            str(user_info["user_id"]), auction_id, bid_price
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        result_msg = report_exception("拍卖竞拍", exc, event=event)
     await handle_send(bot, event, result_msg, md_type="拍卖", k1="列表", v1="拍卖查看", k2="再竞", v2=f"拍卖竞拍 {auction_id}", k3="帮助", v3="拍卖帮助")
     await auction_bid.finish()
 
@@ -3483,7 +3506,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     schedule = auction_config.get_auction_schedule()
     rules = auction_config.get_auction_rules()
-    auction_current_status = get_auction_status()
+    auction_current_status = get_auction_status(now=_trade_business_now())
     
     # 获取等待上架的玩家物品数量
     total_player_items_in_queue = _auction_queue_application().count_player_items()
@@ -3493,7 +3516,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     msg_list = [
         "【拍卖信息】",
-        f"当前状态: {'运行中' if auction_current_status['active'] else '未运行'}",
+        f"当前状态: {auction_current_status['state_label']}",
         f"自动开启: {'开启' if schedule['enabled'] else '关闭'}",
         f"自动拍卖时间: 每日{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
         f"持续时间: {schedule['duration_hours']}小时",
@@ -3526,18 +3549,18 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     schedule = auction_config.get_auction_schedule()
     rules = auction_config.get_auction_rules()
     activity_config = auction_config.get_auction_activity_config()
-    auction_current_status = get_auction_status()
+    now = _trade_business_now()
+    auction_current_status = get_auction_status(now=now)
     current_auctions = _auction_query_application().get_current_auction() or []
     current_auctions_count = len(current_auctions)
     waiting_auctions_count = _auction_queue_application().count_player_items()
-    now = runtime_clock.now()
     max_user_items = _safe_auction_int(rules.get("max_user_items"), 3)
     hot_items_limit = min(_safe_auction_int(activity_config.get("hot_items_limit"), 5), 5)
     recent_deals_limit = _safe_auction_int(activity_config.get("recent_deals_limit"), 5)
 
     msg_list = [
         "【拍卖活动】",
-        f"活动状态: {'进行中' if auction_current_status['active'] else '未开启'}",
+        f"活动状态: {auction_current_status['state_label']}",
         f"计划开启: {'每日' if schedule['enabled'] else '已暂停'}{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
         f"持续时间: {schedule['duration_hours']}小时",
         f"手续费率: {int(rules['fee_rate'] * 100)}%",
@@ -3599,15 +3622,24 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     auction_config.update_schedule({"enabled": True})
     
     # 开启拍卖
-    success = _start_auction_with_application(
-        _auction_session_operation_id(event, "start")
-    )
+    try:
+        success = _start_auction_with_application(
+            _auction_session_operation_id(event, "start")
+        )
+    except AuctionLifecycleError as exc:
+        await handle_send(bot, event, f"拍卖开启未完成。（原因：{exc.reason}；主体：{exc.subject}）", md_type="拍卖")
+        await auction_start.finish()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("开启拍卖", exc, event=event), md_type="拍卖")
+        await auction_start.finish()
     if not success:
-        await handle_send(bot, event, "开启拍卖失败或没有物品可供拍卖！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
+        await handle_send(bot, event, "没有物品可供拍卖，本次未开启。", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
     
     # 重新获取最新的拍卖状态以得到准确的结束时间
-    current_auction_status = get_auction_status()
+    current_auction_status = get_auction_status(now=_trade_business_now())
     end_time_str = current_auction_status["end_time"].strftime("%H:%M")
     
     msg = f"拍卖已开启！本次拍卖将持续{auction_config.get_auction_schedule()['duration_hours']}小时，预计{end_time_str}结束。"
@@ -3629,9 +3661,18 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
-    results = await _end_auction_with_application(
-        _auction_session_operation_id(event, "finish")
-    )
+    try:
+        results = await _end_auction_with_application(
+            _auction_session_operation_id(event, "finish")
+        )
+    except AuctionLifecycleError as exc:
+        await handle_send(bot, event, f"拍卖结算未完成。（原因：{exc.reason}；主体：{exc.subject}）", md_type="拍卖")
+        await auction_end.finish()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("结束拍卖", exc, event=event), md_type="拍卖")
+        await auction_end.finish()
     if not results:
         await handle_send(bot, event, "结束拍卖失败或没有拍卖品需要结算！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
@@ -3705,7 +3746,7 @@ async def _auto_start_auction_job_impl():
         logger.info("自动拍卖功能已禁用。")
         return
     
-    current_date = runtime_clock.now().strftime('%Y-%m-%d')
+    current_date = _trade_business_now().strftime('%Y-%m-%d')
     if schedule_config.get("last_auto_start_date") == current_date:
         logger.info("今日自动拍卖已开启，跳过本次调度。")
         return  # 今日已开启过，防止重复
@@ -3716,16 +3757,22 @@ async def _auto_start_auction_job_impl():
 
     logger.info("开始执行自动拍卖开启任务...")
     
-    success = _start_auction_with_application(
-        f"auction-session:auto-start:{current_date}"
-    )
+    try:
+        success = _start_auction_with_application(
+            f"auction-session:auto-start:{current_date}"
+        )
+    except AuctionLifecycleError as exc:
+        if exc.reason != "auction_already_active":
+            raise
+        logger.info("拍卖已由其他请求开启，自动任务跳过：{}", exc)
+        return
     if success:
         # 获取最新的拍卖状态以得到准确的结束时间
-        current_auction_status = get_auction_status()
+        current_auction_status = get_auction_status(now=_trade_business_now())
         end_time_str = current_auction_status["end_time"].strftime("%H:%M")
         logger.info(f"拍卖已自动开启！本次拍卖将持续{schedule_config['duration_hours']}小时，预计{end_time_str}结束。")
     else:
-        logger.warning("自动开启拍卖失败，可能因为没有物品可供拍卖。")
+        logger.info("本次没有拍品，自动开启任务跳过。")
 
 @scheduler.scheduled_job(
     "interval",
@@ -3742,16 +3789,16 @@ async def check_auction_end_job():
 
 async def _check_auction_end_job_impl():
     current_auction_count = _auction_query_application().count_current_auctions()
+    session = _auction_session_service().get_active_session()
     if current_auction_count == 0:
+        if session is not None:
+            raise AuctionLifecycleError("auction_items_missing", session["session_id"])
         return
 
-    session = _auction_session_service().get_active_session()
     if session is None:
-        logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
-        return
+        raise AuctionLifecycleError("auction_session_missing", "auction_current")
     now_dt = runtime_clock.now()
     window = session_window(session, now_dt)
-    end_dt = window["end_time"]
     n = current_auction_count
 
     if window["expired"]:
@@ -3769,12 +3816,14 @@ async def _check_auction_end_job_impl():
 async def _reconcile_auction_with_application():
     """Reconcile an active auction through the feature-owned applications."""
     current_auctions = _auction_query_application().get_current_auction() or []
+    session = _auction_session_service().get_active_session()
     if not current_auctions:
+        if session is not None:
+            raise AuctionLifecycleError("auction_items_missing", session["session_id"])
         return
 
-    session = _auction_session_service().get_active_session()
     if session is None:
-        raise RuntimeError("auction items exist without an active database session")
+        raise AuctionLifecycleError("auction_session_missing", "auction_current")
 
     now_dt = runtime_clock.now()
     end_dt = datetime.fromtimestamp(float(session["end_time"]), tz=now_dt.tzinfo)
@@ -3799,5 +3848,4 @@ async def recover_orphan_auction_on_startup():
     await run_auction_job(
         "startup_reconcile",
         _reconcile_auction_with_application,
-        suppress=True,
     )

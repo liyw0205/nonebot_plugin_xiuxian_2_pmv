@@ -30,12 +30,18 @@ def session_window(session: Mapping[str, Any], now: datetime) -> dict[str, Any]:
     remaining = int((end_time - now).total_seconds())
     return {
         "end_time": end_time,
-        "expired": remaining <= 0,
+        "expired": now >= end_time,
         "remaining_seconds": max(remaining, 0),
     }
 
 
-__all__ = ["AuctionBidRequest", "session_end_datetime", "session_window"]
+class AuctionLifecycleError(RuntimeError):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = str(reason), str(subject)
+        super().__init__(f"auction lifecycle blocked: reason={self.reason} subject={self.subject}")
+
+
+__all__ = ["AuctionBidRequest", "AuctionLifecycleError", "session_end_datetime", "session_window"]
 
 
 @dataclass(frozen=True)

@@ -279,7 +279,7 @@ Web/命令不直接连接 trade_db。
 | 鬼市存取灵石 | 真实命令固定到本地周六零点与周一边界；钱包/账户不足、累计及单次上限相邻边界、小额手续费取整和10亿提款；非法/全角/超长参数、同消息重放/冲突；余额/回执拒写后三库零写、恢复/重放与实际统计；Web具体原因及历史拒绝重放 | 线上观察；资产提交与独立行为统计间崩溃补记未承诺 |
 | 鬼市任务注册/触发/失败状态 | live APScheduler 注册、08:00 cron 边界、独立 APScheduler 实际执行/错误事件，正常竞争跳过 | 线上运行观察、真实客户端展示 |
 | 鬼市收摊 | 真实部分成交后退未售库存；背包满/目录缺失/三步拒写保留订单及原绑定数，部分成功与恢复、逐单原因/定位、重读/回执/实际统计、重复收摊零额外写；OneBot/QQ短合同 | 线上观察 |
-| 拍卖玩家链 | 既有 repository/application 测试 | 本轮未新增真实命令链，不标为已覆盖 |
+| 拍卖玩家链 | 真实上架→自动开启→活动/竞拍参数→0.5秒/截止→启动结算故障/恢复/重放；三库资产/回执/历史/统计；孤儿拍品任务及管理员/玩家拒绝 | 开场持久化拒写交接另列后续范围；真机未验 |
 
 六条鬼市参数场景由 `tests/test_guishi_parameter_dispatch.py` 接入 unittest CI。
 另五条 `market-guishi-take` 场景覆盖完整取物、时间/历史/参数/并发和故障恢复；
@@ -358,6 +358,27 @@ pending/complete及实际statistics。故意注入的异常有精确类型/trace
 `handle_send` 的 OneBot 文本、QQ Markdown 蓝字与发送失败降级短合同；共享业务链
 只执行一次。CI 另执行魔修、鬼市和同类任务的定向 pytest 组。
 这些均为隔离库与 mock transport 证据，未验证真实 QQ/WebSocket 或线上数据。
+
+## 拍卖调度与恢复
+
+自动开场按scheduler业务日期生成操作号与last_auto_start_date，empty与已有场次竞争
+正常跳过。旧开启回执对应场次已结束、操作冲突及孤儿拍品保留具体reason/subject；
+失败进入APScheduler错误事件。收尾和启动对账同时核对场次与拍品，任一单边缺失
+明确报错，不猜测重建；默认启动回调不吞异常，生命周期桥保留失败并可重试。
+
+竞价仓储在扣款事务内检查持久场次[start_time,end_time)，距截止不足一秒仍有效，
+正好到点即拒绝新扣款。Web用服务端业务时钟，客户端bid_time不能回拨窗口。
+旧成功竞价回执先回放，不因截止重复扣款。自动收尾重试以持久截止时间形成稳定
+payload；SQLite异常回滚后推进时钟仍可继续。旧冲突回执不自动重写，业务拒绝回执
+保持原有回放语义。活动/列表/信息展示scheduler时区并标明截止待结算；未传now的
+旧状态API维持进程本地naive返回兼容。
+
+`test_auction_schedule.py` 覆盖live注册/cron/interval、实际任务事件、生命周期桥
+失败/恢复、空拍品与禁用、原异常开场回滚、孤儿/缺拍品、有效窗口/坏时间/旧回执、
+Web旧时间绕过和结算恢复。两条`market-auction-lifecycle`命令探针核对三库资产、
+回执、成交历史和统计，`test_auction_messages.py`覆盖OneBot/QQ文本/Markdown/降级
+与未知异常/正常流程/发送失败，均为隔离证据。新pytest进入定时CI，命令包装进入
+unittest CI。写入被IGNORE/改写后的开场交接尚未验证，不将上述绿证据外推。
 
 ## Manifest 清单
 - `route: POST /api/v1/trade/deposit`

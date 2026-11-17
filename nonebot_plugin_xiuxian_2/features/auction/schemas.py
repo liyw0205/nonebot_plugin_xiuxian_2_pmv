@@ -14,6 +14,8 @@ class AuctionBidResult:
     debit: int = 0
     refunded_bidder: str = ""
     refunded_amount: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def ok(self) -> bool:
@@ -29,6 +31,8 @@ class AuctionBidResult:
             "debit": self.debit,
             "refunded_bidder": self.refunded_bidder,
             "refunded_amount": self.refunded_amount,
+            "reason": self.reason,
+            "subject": self.subject,
         }
 
 

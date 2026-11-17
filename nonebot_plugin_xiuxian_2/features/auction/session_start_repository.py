@@ -17,6 +17,8 @@ class AuctionSessionStartResult:
     start_time: float = 0.0
     end_time: float = 0.0
     items_count: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -48,6 +50,8 @@ class AuctionSessionStartSqlRepository:
             float(value.get("start_time", 0.0)),
             float(value.get("end_time", 0.0)),
             int(value.get("items_count", 0)),
+            str(value.get("reason", "")),
+            str(value.get("subject", "")),
         )
 
     def get_active_session(self) -> dict[str, Any] | None:
@@ -131,12 +135,20 @@ class AuctionSessionStartSqlRepository:
             )
             if previous is not None:
                 if str(previous["action"]) != "start" or str(previous["payload"]) != payload:
-                    return self._result("state_changed", operation_id)
+                    return self._result("state_changed", operation_id, {
+                        "reason": "auction_start_operation_conflict", "subject": operation_id,
+                    })
                 return self._result("duplicate", operation_id, json.loads(previous["result"]))
-            if uow.query_one(
-                "SELECT 1 AS present FROM auction_sessions WHERE status='active'"
-            ) or uow.query_one("SELECT 1 AS present FROM auction_current LIMIT 1"):
-                return self._result("already_active", operation_id)
+            active = uow.query_one("SELECT session_id FROM auction_sessions WHERE status='active'")
+            if active:
+                return self._result("already_active", operation_id, {
+                    "reason": "auction_already_active", "subject": str(active["session_id"]),
+                })
+            orphan = uow.query_one("SELECT id FROM auction_current LIMIT 1")
+            if orphan:
+                return self._result("state_changed", operation_id, {
+                    "reason": "auction_session_missing", "subject": str(orphan["id"]),
+                })
 
             queue = uow.query_all(
                 "SELECT user_id,item_id,item_name,start_price,user_name "

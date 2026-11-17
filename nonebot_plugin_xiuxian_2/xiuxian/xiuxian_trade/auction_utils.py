@@ -30,7 +30,7 @@ def bind_auction_queue_application(application: Any) -> None:
     auction_queue_application = application
 
 
-def get_auction_status() -> Dict[str, Any]:
+def get_auction_status(*, now: datetime | None = None) -> Dict[str, Any]:
     """Return the active database session as the auction runtime status."""
     session_service = (
         auction_session_service()
@@ -49,14 +49,24 @@ def get_auction_status() -> Dict[str, Any]:
             "end_time": None,
             "last_display_refresh_time": None,
             "items_count": 0,
+            "state_label": "未开启",
         }
-    start_time = datetime.fromtimestamp(float(session["start_time"]))
+    frame = now.tzinfo if now is not None else None
+    start_time = datetime.fromtimestamp(float(session["start_time"]), tz=frame)
+    end_time = datetime.fromtimestamp(float(session["end_time"]), tz=frame)
+    state_label = "进行中"
+    if now is not None:
+        if now >= end_time:
+            state_label = "竞拍已截止，等待结算"
+        elif now < start_time:
+            state_label = "尚未到开始时间"
     return {
         "active": True,
         "start_time": start_time,
-        "end_time": datetime.fromtimestamp(float(session["end_time"])),
+        "end_time": end_time,
         "last_display_refresh_time": start_time,
         "items_count": int(session["items_count"]),
+        "state_label": state_label,
     }
 
 

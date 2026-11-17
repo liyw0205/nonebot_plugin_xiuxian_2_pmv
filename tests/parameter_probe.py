@@ -328,6 +328,10 @@ from tests.parameter_cases_market import register as register_market
 
 register_market(case)
 
+from tests.parameter_cases_auction import register as register_auction
+
+register_auction(case)
+
 from tests.parameter_cases_sect_body import register as register_sect_body
 
 register_sect_body(case)
