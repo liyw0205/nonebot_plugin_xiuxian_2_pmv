@@ -2,6 +2,29 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门功法/神通搜寻双入口完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实 `宗门功法搜寻` / `宗门神通搜寻` dispatch 复现永久回执
+`INSERT ... RAISE(IGNORE)` 伪成功：旧路径返回 `applied`，宗门目录、灵石和资材已变化，
+回执为0，更新触发副作用已提交。根因是搜寻仓储只校验目录/资产 UPDATE，未检查永久回执
+影响行数或最终回读；同时 `duplicate` 被全局 `applied` 判定遮住，重复搜寻被渲染成再次成功。
+
+现仓储校验目录版本、目录/资产写入影响行数与最终投影、永久回执影响行数与最终投影；
+已知 `sect_buff_search_state_write_rejected`、`sect_buff_search_receipt_write_rejected` 在
+事务退出后携 `reason/subject` 返回，整笔回滚并清除触发副作用，SQLite `ABORT` 原异常透传；
+故障解除后同操作号恢复，成功重放不重复扣费。两个 handler 先处理 `duplicate`，避免把已完成
+回执渲染成新成功。
+
+仓储回归覆盖目录/回执 `IGNORE`、触发器改写、`ABORT`、旧目录参数冲突、完整快照回滚与恢复；
+真实参数组覆盖双入口合法无参搜寻、同消息重放、宗主权限、灵石边界、回执拒写恢复，以及
+OneBot纯文本、QQ Markdown/发送失败降级 mock 合同。受影响组合 `45 passed, 1 deselected,
+56 subtests`；真实参数 handoff `1/1`、矩阵 `4/4`；compileall、`git diff --check`通过。
+仅使用项目 `/home` venv 与隔离SQLite，未访问线上库/部署/共享环境，真实QQ未联调；无新迁移。
+
+本组代码与测试待白名单普通提交推送 `develop` 后核远端 SHA；用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除、`.codex-goal.md` 不暂存不提交。G2/G3--G5、
+真实客户端和发布门禁仍未完成，main/Release不动；下一组仍须从现有G2矩阵冻结并先红复现。
+
 ## 最新交付：学习宗门功法完整玩家组（G2 checkpoint）
 
 隔离SQLite与真实`学习宗门功法` dispatch 复现永久回执 `INSERT ... RAISE(IGNORE)` 伪成功：旧路径

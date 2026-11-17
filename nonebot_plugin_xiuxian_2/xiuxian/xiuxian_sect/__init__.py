@@ -1395,11 +1395,11 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                     total_materials_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门功法搜寻已经完成，请刷新宗门信息。")
+                    await sect_mainbuff_get.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门功法搜寻已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("搜寻宗门功法", result))
+                    await handle_send(bot, event, result_failure("搜寻宗门功法", result))
                     await sect_mainbuff_get.finish()
 
                 # 构建结果消息
@@ -1493,11 +1493,11 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     total_materials_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
+                    await sect_secbuff_get.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("搜寻宗门神通", result))
+                    await handle_send(bot, event, result_failure("搜寻宗门神通", result))
                     await sect_secbuff_get.finish()
 
                 # 构建结果消息

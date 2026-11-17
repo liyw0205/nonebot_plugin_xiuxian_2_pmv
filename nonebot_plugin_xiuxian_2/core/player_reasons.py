@@ -233,6 +233,8 @@ REASONS = {
     "sect_donation_assets_write_rejected": "宗门捐献储备与资材保存失败，本次捐献已回滚，请联系管理员核对宗门账户。",
     "sect_donation_receipt_write_rejected": "宗门捐献回执保存失败，本次捐献已回滚，请联系管理员核对捐献记录。",
     "sect_catalog_write_rejected": "宗门藏经目录保存失败，请联系管理员核对目录记录。",
+    "sect_buff_search_state_write_rejected": "宗门传承目录保存失败，本次搜寻已回滚，请联系管理员核对宗门记录。",
+    "sect_buff_search_receipt_write_rejected": "宗门搜寻回执未保存，本次搜寻已撤销，请联系管理员核对搜寻记录。",
     "sect_owner_write_rejected": "宗主归属保存失败，请联系管理员核对宗主记录。",
     "contribution_insufficient": "宗门贡献度不足，请补足贡献度后操作。",
     "position_forbidden": "当前宗门职位无权学习这项功法或神通，请查看职位要求。",
