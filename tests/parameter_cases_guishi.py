@@ -37,6 +37,8 @@ def setup(probe):
 
 
 def register(case):
+    from tests.parameter_cases_guishi_clear import register as register_clear
+    register_clear(case)
     from tests.parameter_cases_guishi_return import register as register_return
     register_return(case)
     from tests.parameter_cases_guishi_take import register as register_take

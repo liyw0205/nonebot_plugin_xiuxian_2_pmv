@@ -305,6 +305,7 @@ REASONS = {
     "guishi_refund_order_invalid": "鬼市订单的物品编号、数量、已成交数量或价格不合法，本次未返还，请联系管理员核对原始订单。",
     "guishi_refund_balance_invalid": "鬼市余额记录为负数，本次未退款，请联系管理员核对账户。",
     "guishi_refund_receipt_invalid": "鬼市历史返还回执的物品编号或数量金额不合法，请联系管理员核对原始回执。",
+    "guishi_order_type_invalid": "鬼市订单类型无法识别，订单已保留，请联系管理员核对原始订单。",
     "gift_send_limit_write_rejected": "赠送额度保存失败，本次赠送已撤销，请联系管理员核对额度记录。",
     "gift_receive_limit_write_rejected": "接收额度保存失败，本次赠送已撤销，请联系管理员核对额度记录。",
     "gift_receipt_write_rejected": "赠送回执保存失败，本次赠送已撤销，请联系管理员核对回执记录。",

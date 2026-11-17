@@ -2646,7 +2646,13 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = "正在清空全服鬼市，请稍候..."
     await handle_send(bot, event, msg)
     
-    all_guishi_orders = trade_application.guishi_get_orders() # 获取所有鬼市订单
+    try:
+        all_guishi_orders = trade_application.guishi_get_orders()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("清空鬼市读取订单", exc, event=event))
+        await clear_all_guishi.finish()
     
     if not all_guishi_orders:
         msg = "鬼市中没有订单可供清空！"
@@ -2656,56 +2662,82 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     cleared_count = 0
     refund_stone_summary = {} # 统计退还的灵石
     refund_item_summary = {} # 统计退还的物品
+    failures = []
     
     for order in all_guishi_orders:
-        if order['item_type'] == "qiugou": # 求购订单，退还灵石
-            result = trade_application.guishi_cancel_qiugou(
-                operation_id=f"guishi-clear-all:qiugou:{order['id']}",
-                user_id=order['user_id'],
-                order_id=order['id'],
-            )
-            if not result.cancelled:
-                continue
-            if result.refunded_stone:
-                refund_stone_summary[result.user_id] = (
-                    refund_stone_summary.get(result.user_id, 0) + result.refunded_stone
+        try:
+            if order['item_type'] in {"qiugou", "求购"}:
+                result = trade_application.guishi_cancel_qiugou(
+                    operation_id=f"guishi-clear-all:qiugou:{order['id']}",
+                    user_id=order['user_id'], order_id=order['id'],
                 )
-        elif order['item_type'] == "baitan": # 摆摊订单，退还物品
-            _, item_info = items.get_data_by_item_name(order['item_name'])
-            if not item_info:
-                logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
-                continue
-            result = trade_application.guishi_clear_expired_baitan(
-                operation_id=_guishi_expired_operation_id(order['id']),
-                order_id=order['id'],
-                goods_type=item_info['type'],
-                max_goods_num=XiuConfig().max_goods_num,
-                expected_user_id=order['user_id'],
-            )
-            if not result.cleared:
-                continue
-            if result.refunded_quantity:
-                key = (result.user_id, result.item_name)
-                refund_item_summary[key] = (
-                    refund_item_summary.get(key, 0) + result.refunded_quantity
+                succeeded = result.cancelled
+            elif order['item_type'] in {"baitan", "摆摊"}:
+                _, item_info = items.get_data_by_item_name(order['item_name'])
+                if not item_info:
+                    failures.append(_guishi_order_failure("清空鬼市", SimpleNamespace(status="item_missing"), order['id']))
+                    continue
+                result = trade_application.guishi_clear_expired_baitan(
+                    operation_id=_guishi_expired_operation_id(order['id']), order_id=order['id'],
+                    goods_type=item_info['type'], max_goods_num=XiuConfig().max_goods_num,
+                    expected_user_id=order['user_id'],
                 )
-        else:
-            logger.warning(f"鬼市订单 {order['id']} 类型未知，已保留订单")
+                succeeded = result.cleared
+            else:
+                failures.append(_guishi_order_failure("清空鬼市", SimpleNamespace(status="guishi_order_type_invalid"), order['id']))
+                continue
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            failures.append(f"订单 {order['id']}：{report_exception('清空鬼市', exc, event=event)}")
             continue
-        
+        if not succeeded:
+            if result.status != "order_missing":
+                failures.append(_guishi_order_failure("清空鬼市", result, order['id']))
+            continue
+        if not result.applied:
+            continue
+        if order['item_type'] in {"qiugou", "求购"} and result.refunded_stone:
+            refund_stone_summary[result.user_id] = refund_stone_summary.get(result.user_id, 0) + result.refunded_stone
+        elif order['item_type'] in {"baitan", "摆摊"} and result.refunded_quantity:
+            key = (result.user_id, result.item_name)
+            refund_item_summary[key] = refund_item_summary.get(key, 0) + result.refunded_quantity
         cleared_count += 1
-    
-    msg_parts = [f"成功清空鬼市！共处理 {cleared_count} 条订单。"]
+
+    try:
+        remaining = trade_application.guishi_get_orders() or []
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        remaining = None
+        failures.append(report_exception("清空鬼市核对剩余订单", exc, event=event))
+    if remaining is None:
+        summary = f"本次处理 {cleared_count} 条订单，剩余订单数量未能核实。"
+    elif failures or remaining:
+        summary = f"本次处理 {cleared_count} 条订单，当前剩余 {len(remaining)} 条。"
+    else:
+        summary = f"成功清空鬼市！本次处理 {cleared_count} 条订单。"
+    msg_parts = [summary]
+    labels = {}
+    for user_id in set(refund_stone_summary) | {key[0] for key in refund_item_summary}:
+        try:
+            user_info = _sql_message().get_user_info_with_id(user_id)
+            labels[user_id] = user_info['user_name'] if user_info else user_id
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            labels[user_id] = user_id
+            msg_parts.append(report_exception("清空鬼市读取退款对象名称", exc, event=event))
+    if failures:
+        msg_parts.append("未完成订单：\n" + "\n".join(failures))
     if refund_stone_summary:
         msg_parts.append("\n☆------灵石退还------☆")
         for user_id, amount in refund_stone_summary.items():
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {number_to(amount)}灵石")
+            msg_parts.append(f"{labels[user_id]}: {number_to(amount)}灵石")
     if refund_item_summary:
         msg_parts.append("\n☆------物品退还------☆")
         for (user_id, item_name), quantity in refund_item_summary.items():
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {item_name} x{quantity}")
+            msg_parts.append(f"{labels[user_id]}: {item_name} x{quantity}")
 
     await handle_send(bot, event, "\n".join(msg_parts))
     await clear_all_guishi.finish()
