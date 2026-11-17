@@ -35,8 +35,66 @@ def register(case):
                     assert not members[1][1] and members[0][1] == sid, (text, members)
                 probe.evidence.update(membership=members, sect_id=sid)
             return run
-        case("sect-member-operation-" + command, command, "真实道号" if target else "无参数（注册声明了CommandArg）",
-             "宗主和同宗弟子，合法权限", "成员关系按操作真实更新", group="sect-extended")(build(command, target, actor))
+            case("sect-member-operation-" + command, command, "真实道号" if target else "无参数（注册声明了CommandArg）",
+                 "宗主和同宗弟子，合法权限", "成员关系按操作真实更新", group="sect-extended")(build(command, target, actor))
+
+    @case("sect-owner-transfer-replay-conflict", "宗主传位", "艾特目标/同消息重放/改参",
+          "真实宗主与同宗候选成员", "owner、双方职位和回执真实持久化；重放不重复传位并保留冲突原因",
+          group="sect-owner-transfer-parameters")
+    async def owner_transfer(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        command = "宗主传位 [CQ:at,qq=900002]"
+        text = await probe.command("宗主传位", command, actor="900001", number=960110)
+        state = probe.rows(database, "SELECT sect_owner FROM sects WHERE sect_id=?", (sid,))
+        members = probe.rows(database, "SELECT user_id,sect_position FROM user_xiuxian WHERE user_id IN ('900001','900002') ORDER BY user_id")
+        receipt = probe.rows(database, "SELECT operation_type,actor_id,target_id,sect_id FROM sect_operations")
+        assert [str(row[0]) for row in state] == ["900002"] and members == [("900001", 1), ("900002", 0)] and receipt == [("transfer_owner", "900001", "900002", sid)], (text, state, members, receipt)
+        probe.clear_cooldowns()
+        replay = await probe.command("宗主传位", command, actor="900001", number=960110)
+        assert "已经完成" in replay and "继任" not in replay, replay
+        probe.clear_cooldowns()
+        conflict = await probe.command("宗主传位", "宗主传位 [CQ:at,qq=900003]", actor="900001", number=960110)
+        assert "该操作号已用于不同内容" in conflict, conflict
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated owner transfer delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, "传位回执合同", md_type="宗门", k1="宗门", v1="我的宗门")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "传位回执合同"
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(owner=state, members=members, receipt=receipt, replay=replay, conflict=conflict, adapter_contracts=4)
+
+    for key, trigger, expected in (
+        ("sect-owner-transfer-member-recovery", "CREATE TRIGGER sect_owner_transfer_target_rewrite AFTER UPDATE OF sect_position ON user_xiuxian WHEN NEW.user_id='900002' AND NEW.sect_position=0 BEGIN UPDATE user_xiuxian SET sect_position=4 WHERE user_id='900002'; END", "候选宗主职位保存失败"),
+        ("sect-owner-transfer-receipt-recovery", "CREATE TRIGGER sect_owner_transfer_receipt_ignore BEFORE INSERT ON sect_operations BEGIN SELECT RAISE(IGNORE); END", "宗主传位回执保存失败"),
+    ):
+        @case(key, "宗主传位", "艾特目标/故障解除后同消息恢复", "隔离数据库注入一次性写拒绝触发器", "拒绝保留具体原因、owner/职位不变；解除后同操作号成功", group="sect-owner-transfer-recovery", outcome="recovery")
+        async def owner_transfer_recovery(probe, trigger=trigger, expected=expected):
+            sid = seed_sect(probe)
+            database = probe.context.paths.game_db
+            probe.seed(database, trigger)
+            command = "宗主传位 [CQ:at,qq=900002]"
+            failed = await probe.command("宗主传位", command, actor="900001", number=960120 if "target" in trigger else 960130)
+            assert expected in failed, failed
+            assert [str(row[0]) for row in probe.rows(database, "SELECT sect_owner FROM sects WHERE sect_id=?", (sid,))] == ["900001"]
+            assert probe.rows(database, "SELECT user_id,sect_position FROM user_xiuxian WHERE user_id IN ('900001','900002') ORDER BY user_id") == [("900001", 0), ("900002", 12)]
+            probe.seed(database, "DROP TRIGGER " + ("sect_owner_transfer_target_rewrite" if "target" in trigger else "sect_owner_transfer_receipt_ignore"))
+            probe.clear_cooldowns()
+            recovered = await probe.command("宗主传位", command, actor="900001", number=960120 if "target" in trigger else 960130)
+            assert "继任" in recovered
+            assert [str(row[0]) for row in probe.rows(database, "SELECT sect_owner FROM sects WHERE sect_id=?", (sid,))] == ["900002"]
+            assert probe.rows(database, "SELECT COUNT(*) FROM sect_operations WHERE operation_type='transfer_owner'") == [(1,)]
+            probe.evidence.update(failed=failed, recovered=True, owner="900002", receipt_count=1)
 
     for command, field in (("升级攻击修炼", "atkpractice"), ("升级元血修炼", "hppractice"), ("升级灵海修炼", "mppractice")):
         for label, value in (("valid", "2"), ("zero", "0"), ("negative", "-2"), ("bad", "abc"), ("extra", "2 extra")):

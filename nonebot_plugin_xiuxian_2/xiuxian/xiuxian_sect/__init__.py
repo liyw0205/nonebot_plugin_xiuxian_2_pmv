@@ -2457,11 +2457,14 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await sect_owner_change.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
-    if user_info['sect_position'] != owner_position:
+    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
+    # A completed transfer must remain replayable after the former owner has
+    # been demoted; the repository still validates new requests against live
+    # authority and only permits a matching historical receipt through.
+    if user_info['sect_position'] != owner_position and not give_qq:
         msg = f"只有宗主才能进行传位。"
         await handle_send(bot, event, msg)
         await sect_owner_change.finish()
-    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
     if give_qq:
         if give_qq == user_id:
             msg = f"无法对自己的进行传位操作。"
@@ -2469,12 +2472,23 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await sect_owner_change.finish()
         else:
             result = sect_application.transfer_owner(
-                _sect_operation_id(event, "transfer_owner", give_qq),
+                # The message id is the idempotency key; target stays in the
+                # repository payload so a reused message with another target
+                # is reported as an operation conflict.
+                _sect_operation_id(event, "transfer_owner", ""),
                 user_id,
                 give_qq,
                 owner_position=owner_position,
             )
-            if result.applied:
+            if result.status == "duplicate":
+                msg = "这条宗主传位请求已经完成，本次没有重复修改宗主和成员职位。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员")
+                await sect_owner_change.finish()
+            elif result.status in {"operation_conflict", "state_changed"}:
+                msg = result_failure("宗主传位", result)
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
+            elif result.applied:
                 msg = f"传老宗主{result.actor_name or user_info['user_name']}法旨，即日起由{result.target_name}继任{result.sect_name}宗主"
                 await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
                 await sect_owner_change.finish()
@@ -2484,6 +2498,10 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 await sect_owner_change.finish()
             elif result.status == "target_not_member":
                 msg = f"目标道友不在你管理的宗门内，请检查。"
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
+            elif result.status in {"not_owner", "sect_owner_changed", "sect_position_changed"}:
+                msg = "只有宗主才能进行传位。"
                 await handle_send(bot, event, msg)
                 await sect_owner_change.finish()
             else:
