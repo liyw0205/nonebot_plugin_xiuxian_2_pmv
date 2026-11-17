@@ -2,6 +2,25 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门加入开放/关闭双入口完整玩家组（G2 checkpoint）
+
+隔离 SQLite 红复现确认旧 `开放宗门加入`/`关闭宗门加入` 在 `join_open` trigger 改写、永久回执
+`RAISE(IGNORE)` 或回执改写时仍返回成功，状态或回执可能不符合成功语义；SQLite `ABORT` 原异常保留。
+
+现仓储在 savepoint 内核对状态写入影响行数与 `sect_owner/closed/join_open` 最终投影，再核对永久回执影响行数及
+`actor_id/sect_id` 最终回读。四类已知拒写均携具体 `reason/subject`，事务完整回滚并支持解除故障后同操作号恢复；
+历史操作号换 actor 返回 `operation_conflict`。两个 handler 先处理 `duplicate`、冲突和 `state_changed`，不再被
+`applied` 误渲染为成功。
+
+真实 `关闭宗门加入`/`开放宗门加入` dispatch 覆盖实际 `join_open`、两张永久回执、成功 replay、冲突及状态/回执故障
+恢复；OneBot 文本、QQ Markdown、发送失败降级为 mock 合同。受影响组合 `48 passed, 39 subtests`，新增参数组
+`2 passed`，compileall 与 `git diff --check` 通过。冻结清单测试因用户既有删除
+`docs/refactor_phase2_legacy_path_items.json` 单独失败；该删除按约束保留且不暂存。
+
+**下一冻结完整玩家组：宗门成员加入。** 先对真实 `加入宗门` matcher/DI/handler 在隔离 SQLite 红复现成员写入与
+永久回执的 IGNORE/改写/ABORT，再覆盖开放/封闭、容量、参数、replay/冲突、恢复和适配器合同；不扩定时任务、商店、
+性能或全仓审计。
+
 ## 最新交付：宗门改名完整玩家组（G2 checkpoint）
 
 隔离真实 `宗门改名` dispatch 复现两类伪正常：同消息 replay 由账本返回 `replayed=True`，旧 handler

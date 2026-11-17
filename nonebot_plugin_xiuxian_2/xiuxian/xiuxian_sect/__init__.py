@@ -3408,7 +3408,11 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         owner_position=owner_position,
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条关闭宗门加入请求已经完成，本次没有重复修改宗门状态。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("关闭宗门加入", result)
+    elif result.applied:
         msg = "已关闭宗门加入，其他修士将无法申请加入本宗！"
     elif result.status == "already_closed":
         msg = "宗门当前已经关闭加入。"
@@ -3446,7 +3450,11 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         owner_position=owner_position,
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条开放宗门加入请求已经完成，本次没有重复修改宗门状态。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("开放宗门加入", result)
+    elif result.applied:
         msg = "已开放宗门加入，其他修士可以申请加入本宗了！"
     elif result.status == "already_open":
         msg = "宗门当前已经开放加入。"

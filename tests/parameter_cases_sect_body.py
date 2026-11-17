@@ -175,6 +175,85 @@ def register(case):
         assert "继承宗主之位" in recovered, recovered
         probe.evidence.update(failed=failed, recovered=True)
 
+    @case("sect-join-state-replay-conflict", "宗门加入开放/关闭", "关闭、开放、同消息重放与改参",
+          "真实宗主、开放宗门和同宗成员", "join_open 与两张永久回执实际持久化；重放不重复修改，换 actor 保留冲突原因",
+          group="sect-join-state-parameters")
+    async def join_state_replay(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        closed = await probe.command("关闭宗门加入", "关闭宗门加入", actor="900001", number=960180)
+        assert "已关闭宗门加入" in closed, closed
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(0,)]
+        assert probe.rows(database, "SELECT actor_id,sect_id FROM sect_close_join_operations") == [("900001", sid)]
+        probe.clear_cooldowns()
+        close_replay = await probe.command("关闭宗门加入", "关闭宗门加入", actor="900001", number=960180)
+        assert "已经完成" in close_replay and "已关闭宗门加入" not in close_replay, close_replay
+        opened = await probe.command("开放宗门加入", "开放宗门加入", actor="900001", number=960181)
+        assert "已开放宗门加入" in opened, opened
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(1,)]
+        assert probe.rows(database, "SELECT actor_id,sect_id FROM sect_open_join_operations") == [("900001", sid)]
+        probe.clear_cooldowns()
+        open_replay = await probe.command("开放宗门加入", "开放宗门加入", actor="900001", number=960181)
+        assert "已经完成" in open_replay and "已开放宗门加入" not in open_replay, open_replay
+        probe.clear_cooldowns()
+        conflict = await probe.command("开放宗门加入", "开放宗门加入", actor="900002", number=960181)
+        assert "冲突" in conflict or "不同" in conflict, conflict
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900001")
+        adapter_contracts = 0
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated join-state delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, conflict, md_type="宗门", k1="加入", v1="宗门加入")
+            adapter_contracts += 1
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(sid=sid, closed=closed, opened=opened, close_replay=close_replay, open_replay=open_replay, conflict=conflict, adapter_contracts=adapter_contracts)
+
+    @case("sect-close-join-state-recovery", "关闭宗门加入", "状态改写/解除后同消息恢复",
+          "真实开放宗门与一次性 AFTER trigger", "具体状态拒写原因、join_open 回滚；解除 trigger 后同消息关闭并写回执",
+          group="sect-join-state-recovery", outcome="recovery")
+    async def close_join_state_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_close_join_state_rewrite AFTER UPDATE ON sects BEGIN UPDATE sects SET join_open=1 WHERE sect_id=?; END".replace("?", str(sid)))
+        failed = await probe.command("关闭宗门加入", "关闭宗门加入", actor="900001", number=960182)
+        assert "关闭宗门加入状态保存失败" in failed, failed
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(1,)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_close_join_operations") == [(0,)]
+        probe.seed(database, "DROP TRIGGER sect_close_join_state_rewrite")
+        probe.clear_cooldowns()
+        recovered = await probe.command("关闭宗门加入", "关闭宗门加入", actor="900001", number=960182)
+        assert "已关闭宗门加入" in recovered, recovered
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(0,)]
+        probe.evidence.update(sid=sid, failed=failed, recovered=recovered)
+
+    @case("sect-open-join-receipt-recovery", "开放宗门加入", "回执 IGNORE/解除后同消息恢复",
+          "真实关闭宗门与一次性永久回执 trigger", "具体回执拒写原因、状态回滚；解除 trigger 后同消息开放并写回执",
+          group="sect-join-state-recovery", outcome="recovery")
+    async def open_join_receipt_recovery(probe):
+        sid = seed_sect(probe)
+        database = probe.context.paths.game_db
+        await probe.command("关闭宗门加入", "关闭宗门加入", actor="900001", number=960183)
+        probe.seed(database, "CREATE TRIGGER sect_open_join_receipt_ignore BEFORE INSERT ON sect_open_join_operations BEGIN SELECT RAISE(IGNORE); END")
+        failed = await probe.command("开放宗门加入", "开放宗门加入", actor="900001", number=960184)
+        assert "开放宗门加入回执保存失败" in failed, failed
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(0,)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_open_join_operations") == [(0,)]
+        probe.seed(database, "DROP TRIGGER sect_open_join_receipt_ignore")
+        probe.clear_cooldowns()
+        recovered = await probe.command("开放宗门加入", "开放宗门加入", actor="900001", number=960184)
+        assert "已开放宗门加入" in recovered, recovered
+        assert probe.rows(database, "SELECT join_open FROM sects WHERE sect_id=?", (sid,)) == [(1,)]
+        probe.evidence.update(sid=sid, failed=failed, recovered=recovered)
+
     for command, field in (("升级攻击修炼", "atkpractice"), ("升级元血修炼", "hppractice"), ("升级灵海修炼", "mppractice")):
         for label, value in (("valid", "2"), ("zero", "0"), ("negative", "-2"), ("bad", "abc"), ("extra", "2 extra")):
             def build(command, field, label, value):
