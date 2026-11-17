@@ -228,6 +228,8 @@ REASONS = {
     "sect_fairyland_write_rejected": "炼体堂升级保存失败，请联系管理员核对炼体堂记录。",
     "sect_elixir_write_rejected": "丹房升级保存失败，请联系管理员核对丹房记录。",
     "sect_practice_write_rejected": "角色修炼等级保存失败，请联系管理员核对修炼记录。",
+    "sect_practice_player_write_rejected": "灵石与角色修炼等级保存失败，本次升级已回滚，请联系管理员核对修炼记录。",
+    "sect_practice_receipt_write_rejected": "修炼升级回执未保存，本次升级已撤销，请联系管理员核对修炼记录。",
     "sect_assets_write_rejected": "宗门灵石与资材保存失败，请联系管理员核对宗门账户。",
     "sect_donation_member_write_rejected": "捐献扣款与个人贡献保存失败，本次捐献已回滚，请联系管理员核对成员记录。",
     "sect_donation_assets_write_rejected": "宗门捐献储备与资材保存失败，本次捐献已回滚，请联系管理员核对宗门账户。",

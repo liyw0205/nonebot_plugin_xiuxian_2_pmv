@@ -21,6 +21,20 @@
 
 `sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录；`sect.016` 预建宗门任务状态表；`sect.017` 在 game DB 预建接取/刷新幂等回执；`sect.018` 在 game DB 预建任务结算回执。周常、手动解散及任务状态/接取/刷新/结算请求只检查已登记 schema，不建表或补列。任务结算时间由注入的 Clock 提供。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。关闭 `XIUXIAN_SECT_ENABLED` 即回退兼容入口。
 
+### 宗门三项修炼升级
+
+`升级攻击修炼`、`升级元血修炼`、`升级灵海修炼` 通过 `SectApplication.upgrade_practice` 进入同一
+SQLite 事务：玩家灵石与对应修炼等级、宗门 `sect_materials` 和 `sect_practice_operations`
+永久回执必须逐步写入并在提交前回读。玩家的 `sect_used_stone` 不是本次消耗列，不能代替
+玩家灵石；每次成功升级只扣玩家灵石与宗门资材。
+
+`RAISE(IGNORE)`、触发器改写或末步回执缺失均返回对应的
+`sect_practice_player_write_rejected`、`sect_practice_assets_write_rejected` 或
+`sect_practice_receipt_write_rejected`，携 `reason/subject` 回滚整笔事务及副作用；SQLite
+`ABORT` 原异常透传。相同消息在玩家等级已推进后按同一入口、升级步数和成本重放为
+`duplicate`，不重复扣费；改变数量则保留 `operation_conflict`。参数解析拒绝零、负数、非数字、
+多余参数和超过单次上限，职位与资材边界保持原规则。
+
 ## 商店每周限购行
 `宗门商店` 的商品行渲染 `每周限购：{剩余}/{总量}个`（售罄写 `已售罄（N/N个）`，
 不限购写 `不限购`），已购数量读取本周 `sect_shop_weekly_purchases`

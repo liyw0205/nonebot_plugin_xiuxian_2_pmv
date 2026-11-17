@@ -1679,11 +1679,11 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次攻击修炼升级已经完成，请刷新状态。")
+            await upatkpractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次攻击修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await upatkpractice.finish()
         msg = f"升级成功！\n道友当前攻击修炼等级\n> {useratkpractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1765,11 +1765,11 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
+            await uphppractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await uphppractice.finish()
         msg = f"升级成功！\n道友当前元血修炼等级\n> {userhppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1851,11 +1851,11 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次灵海修炼升级已经完成，请刷新状态。")
+            await upmppractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次灵海修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await upmppractice.finish()
         msg = f"升级成功！\n道友当前灵海修炼等级\n> {usermppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")

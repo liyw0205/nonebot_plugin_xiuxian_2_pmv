@@ -2,6 +2,31 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门三项修炼升级完整玩家组（G2 checkpoint）
+
+隔离 SQLite 与真实 `升级攻击修炼`、`升级元血修炼`、`升级灵海修炼` dispatch 复现了两类
+伪正常：永久回执 `INSERT ... RAISE(IGNORE)` 时旧仓储仍可能返回成功并提交玩家等级、
+错误的宗门资材扣减及 trigger 副作用；同一消息在玩家等级已推进后会被动态参数误判为
+`operation_conflict`。旧实现还未核玩家灵石写入，导致玩家资产链与兼容实现不一致。
+
+现 `SectPracticeSqlRepository` 在玩家灵石/等级、宗门资材和永久回执每一步检查影响行数与
+最终投影，已知 `sect_practice_player_write_rejected`、`sect_practice_assets_write_rejected`、
+`sect_practice_receipt_write_rejected` 携 `reason/subject` 退出事务并完整回滚 trigger 副作用；
+SQLite `ABORT` 原异常透传。重复操作按同一入口、升级步数和成本识别 `duplicate`，允许玩家
+当前等级已到目标后的同消息回放；改数量仍保留具体 `operation_conflict`。三个 handler 显式
+优先处理 `duplicate`，不再被全局 `applied` 误渲染为再次成功。
+
+真实参数组覆盖三入口合法数量、同消息重放/改参数冲突、空白默认值、0/负数/非数字/多余参数/
+单次上限、职位和资材边界；回读玩家灵石/三项等级、宗门资材与 `sect_used_stone`、永久回执及
+`integrity_check`。仓储覆盖三处 IGNORE/改写、ABORT、整笔回滚与故障解除恢复；OneBot 文本、
+QQ Markdown、发送失败降级为 mock 合同。受影响组合 `16 passed`，参数矩阵 `3/3`，架构、编译、
+diff 均通过；仅使用 `/home` venv 和隔离 SQLite，未触碰线上库/部署/环境，真实 QQ 未联调。
+
+本组代码与测试待白名单普通提交推送 `develop` 后核远端 SHA；用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除、`.codex-goal.md` 不暂存不提交。总 goal/G2--G5、
+真实客户端和发布门禁仍未完成，`main`/Release 不动；下一冻结组为宗门捐献完整玩家组，先做隔离
+红复现，不外推本组结论。
+
 ## 最新交付：宗门功法/神通搜寻双入口完整玩家组（G2 checkpoint）
 
 隔离SQLite与真实 `宗门功法搜寻` / `宗门神通搜寻` dispatch 复现永久回执
