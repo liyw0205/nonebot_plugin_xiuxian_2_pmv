@@ -330,6 +330,20 @@ class XianshiListingSqlRepository:
                     "xianshi_listing_receipt_write_rejected", operation_id,
                 )
 
+            saved_stock = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            )
+            if (
+                saved_stock is None
+                or int(saved_stock["goods_num"] or 0) != int(stock_row["goods_num"]) - quantity
+            ):
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stock_write_rejected", f"{seller_id}:{goods_id}",
+                )
             for listing_id in listing_ids:
                 saved_listing = uow.query_one(
                     "SELECT id,user_id,goods_id,name,type,price,quantity FROM xianshi_item WHERE id=?",

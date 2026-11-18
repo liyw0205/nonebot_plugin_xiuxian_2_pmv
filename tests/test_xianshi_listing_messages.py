@@ -8,6 +8,7 @@ import pytest
 from nonebot.exception import FinishedException
 
 from nonebot_plugin_xiuxian_2.features.trade.xianshi_listing_repository import XianshiListingResult
+from nonebot_plugin_xiuxian_2.features.trade.xianshi_plan_listing_repository import XianshiPlanListingResult
 from tests.test_guishi_schedule import trade, utils
 
 
@@ -106,3 +107,37 @@ def test_fast_listing_reason_is_not_raised_as_unknown_status():
     reply = captured.call_args.args[2]
     assert "仙肆挂单保存失败" in reply
     assert "1000000000001" in reply
+
+
+def test_auto_listing_reason_is_not_raised_as_unknown_status():
+    captured = AsyncMock()
+    event = _event()
+    bot = _bot()
+    args = SimpleNamespace(extract_plain_text=lambda: "装备 法器")
+    user = {"user_id": "seller", "stone": 1000000}
+    message_store = SimpleNamespace(
+        get_back_msg=lambda user_id: [{
+            "goods_id": 1001,
+            "goods_name": "法器",
+            "goods_type": "法器",
+            "goods_num": 2,
+            "bind_num": 0,
+        }]
+    )
+    rejected = XianshiPlanListingResult(
+        "state_changed", "seller", 1,
+        reason="xianshi_plan_listing_receipt_write_rejected", subject="auto-op",
+    )
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(bot, None))), \
+            patch.object(trade, "check_user", return_value=(True, user, "")), \
+            patch.object(trade, "_sql_message", return_value=message_store), \
+            patch.object(trade.items, "get_data_by_item_id", return_value={"type": "装备", "level": "下品法器"}), \
+            patch.object(trade, "get_trade_forbid_reason", return_value=""), \
+            patch.object(trade, "get_xianshi_min_price", return_value=600000), \
+            patch.object(trade.trade_application, "xianshi_list_plan", return_value=rejected), \
+            patch.object(trade, "handle_send", captured):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.xianshi_auto_add_(bot, event, args))
+    reply = captured.call_args.args[2]
+    assert "仙肆自动上架回执保存失败" in reply
+    assert "auto-op" in reply

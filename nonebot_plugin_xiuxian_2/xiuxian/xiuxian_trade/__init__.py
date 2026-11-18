@@ -1127,7 +1127,12 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi plan listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆自动上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
+        await xianshi_auto_add.finish()
     
     # 限制显示数量，防止消息过长
     result_messages = []

@@ -88,6 +88,31 @@ def register(case):
         assert balances(probe) == after and probe.managers[0].goods_num("900001", item_id) == 1
         probe.evidence.update(listing_id=offer["id"], item_id=item_id, price=offer["price"], before=before, after=after, replay_unchanged=True)
 
+    @case("market-auto-listing-plan", "仙肆自动上架", "真实类型 品阶 数量", "真实背包有可交易药材，手续费与体力充足",
+          "计划上架实际物品，扣30体力/手续费/背包并写永久计划回执", group="market-auto-parameters")
+    async def auto_listing(probe):
+        module = trade_module()
+        probe.player(stone=100_000_000, user_stamina=100)
+        item_id = int(next(iter(module.items.get_data_by_item_type("药材"))))
+        definition = module.items.get_data_by_item_id(item_id)
+        name = probe.grant_item(item_id, 2)
+        before_stock = probe.managers[0].goods_num("900001", item_id)
+        text = await probe.command(
+            "仙肆自动上架", "仙肆自动上架 药材 {} 1".format(definition["level"]), number=950005
+        )
+        assert name in text, text
+        assert probe.managers[0].goods_num("900001", item_id) == before_stock - 1
+        assert probe.rows(
+            probe.context.paths.game_db,
+            "SELECT user_stamina FROM user_xiuxian WHERE user_id='900001'",
+        ) == [(70,)]
+        receipts = probe.rows(
+            probe.context.paths.game_db,
+            "SELECT listed_quantity,stamina_cost FROM xianshi_plan_listing_operations",
+        )
+        assert receipts and receipts[-1] == (1, 30), (text, receipts)
+        probe.evidence.update(item_id=item_id, name=name, stock_after=before_stock - 1, receipt=receipts[-1])
+
     @case("market-fast-buy-multiple-listings", "仙肆快速购买", "实际物品名 数量2", "卖家3个同名真实挂单、买方充足灵石和体力",
           "跨2个挂单购买2件，只扣一次10体力，售罄后事件重放不多买剩余挂单", group="market-fast-parameters")
     async def fast_buy(probe):

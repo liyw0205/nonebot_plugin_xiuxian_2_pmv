@@ -137,6 +137,14 @@ class XianshiListingWriteRecoveryTests(unittest.TestCase):
                 "listing-1",
                 0,
             ),
+            (
+                "receipt_rewrites_stock",
+                "CREATE TRIGGER fault AFTER INSERT ON xianshi_listing_operations "
+                "BEGIN UPDATE back SET goods_num=99 WHERE user_id='seller' AND goods_id=1001; END",
+                "xianshi_listing_stock_write_rejected",
+                "seller:1001",
+                0,
+            ),
         )
         for name, trigger, reason, subject, stamina_cost in cases:
             with self.subTest(name=name):
