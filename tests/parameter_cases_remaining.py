@@ -10,6 +10,49 @@ def assert_dungeon_purchase_integrity(database):
         assert uow.query_one("PRAGMA integrity_check") == {"integrity_check": "ok"}
 
 
+def seed_accessory_document(probe, item_ids, *, equipped_slots=()):
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.item_json import Items
+
+    catalog = Items()
+    instances = []
+    for index, item_id in enumerate(item_ids, start=1):
+        item = catalog.get_data_by_item_id(item_id)
+        assert item and item.get("type") == "饰品", (item_id, item)
+        instances.append(
+            {
+                "uid": f"fixture-accessory-{index:02d}",
+                "item_id": item_id,
+                "name": item["name"],
+                "part": item["part"],
+                "set_type": item["set_type"],
+                "quality": 1,
+                "affixes": [],
+                "locked_affixes": [],
+                "wash_count": 0,
+            }
+        )
+    equipped = {slot: None for slot in ("手镯", "戒指", "手环", "项链")}
+    bag = instances[:]
+    for slot, instance in zip(equipped_slots, instances):
+        equipped[slot] = instance
+        bag.remove(instance)
+    probe.managers[1].save_doc(
+        "900001",
+        "player_accessory",
+        {"equipped": equipped, "bag": bag},
+        fields=["equipped", "bag"],
+        dirty_check=False,
+    )
+    return instances
+
+
+def accessory_projection(probe):
+    return probe.rows(
+        probe.context.paths.player_db,
+        "SELECT equipped,bag FROM player_accessory WHERE user_id='900001'",
+    )
+
+
 def register(case):
     @case(
         "accessory-bag-page-real",
@@ -20,10 +63,33 @@ def register(case):
         group="remaining-player-parameters",
     )
     async def accessory_bag_page(probe):
-        before, stock = balances(probe), backpack(probe)
-        text = await probe.command("饰品背包", "饰品背包 1")
-        assert "饰品背包" in text and balances(probe) == before and backpack(probe) == stock, text
-        probe.evidence.update(page=1, readonly=True)
+        item_ids = [
+            *range(19001, 19005),
+            *range(19101, 19105),
+            *range(19201, 19205),
+            *range(19301, 19305),
+            19401,
+        ]
+        instances = seed_accessory_document(probe, item_ids)
+        before = accessory_projection(probe)
+        page_one = await probe.command("饰品背包", "饰品背包 1", number=970200)
+        page_two = await probe.command("饰品背包", "饰品背包 2", number=970201)
+        filtered = await probe.command("饰品背包", "饰品背包 烈阳", number=970202)
+        clamped = await probe.command("饰品背包", "饰品背包 99", number=970203)
+        after = accessory_projection(probe)
+        assert "第 1/2 页" in page_one, page_one
+        assert "第 2/2 页" in page_two and "烈阳" not in page_two, page_two
+        assert "第 1/1 页" in filtered and "烈阳手镯" in filtered and "玄渊" not in filtered, filtered
+        assert "第 2/2 页" in clamped, clamped
+        assert after == before and len(instances) == 17
+        probe.evidence.update(
+            actual_rows=len(instances),
+            page_one=True,
+            page_two=True,
+            keyword_filter=True,
+            page_clamp=True,
+            read_only=after == before,
+        )
 
     @case(
         "accessory-collection-real-set",
@@ -34,10 +100,18 @@ def register(case):
         group="remaining-player-parameters",
     )
     async def accessory_collection(probe):
-        before, stock = balances(probe), backpack(probe)
+        instances = seed_accessory_document(
+            probe,
+            [19001, 19002, 19003, 19004],
+            equipped_slots=("手镯",),
+        )
+        before = accessory_projection(probe)
         text = await probe.command("饰品图鉴", "饰品图鉴 烈阳")
-        assert "套装图鉴" in text and balances(probe) == before and backpack(probe) == stock, text
-        probe.evidence.update(set_name="烈阳", readonly=True)
+        after = accessory_projection(probe)
+        assert "【烈阳套装图鉴】" in text and "已装备1/4件" in text, text
+        assert "一阶：已集齐" in text and "烈阳手镯" not in text, text
+        assert after == before and len(instances) == 4
+        probe.evidence.update(set_name="烈阳", actual_rows=len(instances), equipped=1, readonly=after == before)
 
     for command, query, marker in (
         ("查看饰品", "acc_missing_parameter", "未找到"),
