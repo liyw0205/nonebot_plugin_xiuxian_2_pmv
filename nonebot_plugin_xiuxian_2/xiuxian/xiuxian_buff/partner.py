@@ -1085,7 +1085,10 @@ async def two_exp_protect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         current_status,
     )
     if not changed.succeeded:
-        await handle_send(bot, event, result_failure("设置双修保护", changed, messages={"state_changed": "双修保护开关与设置前不一致，请查询双修保护状态后重新设置。"}), md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
+        subjects = {str(user_id): f"角色 {user_id}"}
+        if getattr(changed, "subject", "") and str(changed.subject) != str(user_id):
+            subjects[str(changed.subject)] = f"操作 {changed.subject}"
+        await handle_send(bot, event, result_failure("设置双修保护", changed, messages={"state_changed": "双修保护开关与设置前不一致，请查询双修保护状态后重新设置。"}, subjects=subjects), md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
         await two_exp_protect.finish()
     await handle_send(bot, event, msg, md_type="buff", k1="开启", v1="双修保护 开启", k2="关闭", v2="双修保护 关闭", k3="拒绝", v3="双修保护 拒绝", k4="状态", v4="双修保护 状态")
     await two_exp_protect.finish()

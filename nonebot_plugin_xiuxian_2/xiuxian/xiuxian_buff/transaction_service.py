@@ -33,6 +33,8 @@ class PartnerProtectionResult:
     status: str
     previous_status: str = "off"
     current_status: str = "off"
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -129,7 +131,9 @@ class PartnerProtectionService:
                         else [str(value) for value in saved_payload]
                     )
                     if saved_identity != [user_id, new_status]:
-                        return PartnerProtectionResult("operation_conflict")
+                        return PartnerProtectionResult(
+                            "operation_conflict", reason="operation_conflict", subject=operation_id
+                        )
                     return PartnerProtectionResult(
                         "duplicate", str(previous[1]), str(previous[2])
                     )
@@ -138,18 +142,43 @@ class PartnerProtectionService:
                 if current_status != expected_status:
                     conn.rollback()
                     return PartnerProtectionResult(
-                        "state_changed", current_status, current_status
+                        "state_changed", current_status, current_status,
+                        "", user_id,
                     )
                 field = db_backend.quote_ident("two_exp_protect")
                 table = self._table_ref()
+                existing = conn.execute(
+                    f"SELECT {field} FROM {table} WHERE user_id=%s",
+                    (user_id,),
+                ).fetchone()
                 changed = conn.execute(
                     f"UPDATE {table} SET {field}=%s WHERE user_id=%s",
                     (new_status, user_id),
                 )
-                if changed.rowcount == 0:
-                    conn.execute(
+                if existing is None:
+                    inserted = conn.execute(
                         f"INSERT INTO {table}(user_id,{field}) VALUES(%s,%s)",
                         (user_id, new_status),
+                    )
+                    if inserted.rowcount != 1:
+                        conn.rollback()
+                        return PartnerProtectionResult(
+                            "state_changed", current_status, current_status,
+                            "partner_protection_state_write_rejected", user_id,
+                        )
+                elif changed.rowcount != 1:
+                    conn.rollback()
+                    return PartnerProtectionResult(
+                        "state_changed", current_status, current_status,
+                        "partner_protection_state_write_rejected", user_id,
+                    )
+
+                final_status = self.read_status(conn, user_id)
+                if final_status != new_status:
+                    conn.rollback()
+                    return PartnerProtectionResult(
+                        "state_changed", current_status, current_status,
+                        "partner_protection_state_write_rejected", user_id,
                     )
                 conn.execute(
                     "INSERT INTO partner_protection_operations("
@@ -157,6 +186,27 @@ class PartnerProtectionService:
                     ") VALUES(%s,%s,%s,%s)",
                     (operation_id, payload, current_status, new_status),
                 )
+                receipt = conn.execute(
+                    "SELECT payload,previous_status,current_status FROM "
+                    "partner_protection_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if receipt is None or (
+                    str(receipt[0]) != payload
+                    or str(receipt[1]) != current_status
+                    or str(receipt[2]) != new_status
+                ):
+                    conn.rollback()
+                    return PartnerProtectionResult(
+                        "state_changed", current_status, current_status,
+                        "partner_protection_receipt_write_rejected", operation_id,
+                    )
+                if self.read_status(conn, user_id) != new_status:
+                    conn.rollback()
+                    return PartnerProtectionResult(
+                        "state_changed", current_status, current_status,
+                        "partner_protection_state_write_rejected", user_id,
+                    )
                 conn.commit()
                 return PartnerProtectionResult(
                     "applied", current_status, new_status

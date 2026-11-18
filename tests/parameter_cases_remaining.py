@@ -94,6 +94,66 @@ def register(case):
         probe.evidence.update(status="on", persisted=True)
 
     @case(
+        "partner-protection-recovery",
+        "双修保护",
+        "拒绝/关闭 + 写入拒绝恢复",
+        "真实注册入口、保护状态已有行、隔离 player SQLite",
+        "状态或永久回执拒写保留具体原因，整笔回滚后同消息恢复",
+        group="partner-protection-recovery",
+    )
+    async def partner_protection_recovery(probe):
+        player = probe.context.paths.player_db
+        probe.seed(
+            player,
+            "CREATE TRIGGER reject_partner_protection_insert "
+            "BEFORE INSERT ON status "
+            "BEGIN SELECT RAISE(IGNORE); END",
+        )
+        initial_failed = await probe.command("双修保护", "双修保护 开启", number=970010)
+        assert "双修保护状态保存失败" in initial_failed, initial_failed
+        assert probe.rows(player, "SELECT user_id FROM status WHERE user_id='900001'") == []
+        assert not probe.rows(
+            player,
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='partner_protection_operations'",
+        )
+        probe.seed(player, "DROP TRIGGER reject_partner_protection_insert")
+        initial_recovered = await probe.command("双修保护", "双修保护 开启", number=970010)
+        assert "已开启" in initial_recovered
+        assert probe.rows(player, "SELECT two_exp_protect FROM status WHERE user_id='900001'") == [("on",)]
+        probe.seed(
+            player,
+            "CREATE TRIGGER reject_partner_protection_update "
+            "BEFORE UPDATE OF two_exp_protect ON status "
+            "BEGIN SELECT RAISE(IGNORE); END",
+        )
+        failed = await probe.command("双修保护", "双修保护 拒绝", number=970011)
+        assert "双修保护状态保存失败" in failed, failed
+        assert probe.rows(player, "SELECT two_exp_protect FROM status WHERE user_id='900001'") == [("on",)]
+        assert len(probe.rows(player, "SELECT operation_id FROM partner_protection_operations")) == 1
+        probe.seed(player, "DROP TRIGGER reject_partner_protection_update")
+        recovered = await probe.command("双修保护", "双修保护 拒绝", number=970011)
+        assert "已设置为拒绝" in recovered
+        assert probe.rows(player, "SELECT two_exp_protect FROM status WHERE user_id='900001'") == [("refusal",)]
+
+        probe.seed(
+            player,
+            "CREATE TRIGGER reject_partner_protection_receipt "
+            "BEFORE INSERT ON partner_protection_operations "
+            "BEGIN SELECT RAISE(IGNORE); END",
+        )
+        receipt_failed = await probe.command("双修保护", "双修保护 关闭", number=970012)
+        assert "双修保护操作回执保存失败" in receipt_failed, receipt_failed
+        assert probe.rows(player, "SELECT two_exp_protect FROM status WHERE user_id='900001'") == [("refusal",)]
+        probe.seed(player, "DROP TRIGGER reject_partner_protection_receipt")
+        receipt_recovered = await probe.command("双修保护", "双修保护 关闭", number=970012)
+        assert "已关闭" in receipt_recovered
+        assert probe.rows(player, "SELECT two_exp_protect FROM status WHERE user_id='900001'") == [("off",)]
+        receipts = probe.rows(player, "SELECT operation_id FROM partner_protection_operations ORDER BY rowid")
+        assert [row[0] for row in receipts] == ["relation:cultivation-protection:970010:900001", "relation:cultivation-protection:970011:900001", "relation:cultivation-protection:970012:900001"], receipts
+        probe.evidence.update(status_rejection="partner_protection_state_write_rejected", receipt_rejection="partner_protection_receipt_write_rejected", recovered=True)
+
+    @case(
         "dungeon-team-create-replay",
         "创建队伍",
         "自定义队伍名",

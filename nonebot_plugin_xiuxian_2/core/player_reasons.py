@@ -133,6 +133,8 @@ REASONS = {
     "closing_player_write_rejected": "出关的角色结算保存失败，请联系管理员核对该次闭关收益。",
     "closing_session_write_rejected": "闭关结束标记保存失败，请联系管理员核对该次闭关记录。",
     "partner_usage_write_rejected": "双修次数调整保存失败，请联系管理员核对今日双修次数。",
+    "partner_protection_state_write_rejected": "双修保护状态保存失败，本次设置已撤销，请联系管理员核对保护状态。",
+    "partner_protection_receipt_write_rejected": "双修保护操作回执保存失败，本次设置已撤销，请联系管理员核对操作记录。",
     "pvp_player_write_rejected": "切磋参战角色的结算保存失败，请联系管理员核对该次切磋记录。",
     "stone_training_write_rejected": "灵石修炼结果保存失败，请联系管理员核对该次修炼记录。",
     "plant_write_rejected": "灵田作物结果保存失败，请联系管理员核对所选灵田记录。",
