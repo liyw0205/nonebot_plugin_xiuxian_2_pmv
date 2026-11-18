@@ -27,6 +27,11 @@ class RiftDemonTokenBattleResult:
         return self.status in {"applied", "duplicate"}
 
 
+class _DemonTokenWriteRejected(Exception):
+    def __init__(self, result: RiftDemonTokenBattleResult) -> None:
+        self.result = result
+
+
 class RiftDemonTokenBattleSqlRepository:
     """Persist a pre-rolled demon-token battle across game and player data."""
 
@@ -177,6 +182,15 @@ class RiftDemonTokenBattleSqlRepository:
             )
             if item is None or int(item["goods_num"]) < 1:
                 return RiftDemonTokenBattleResult("item_missing")
+            back_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
+            if "bind_num" in back_columns:
+                item = uow.query_one(
+                    "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
+                    "FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )
+            before_item_goods = int(item["goods_num"])
+            before_item_bind = int(item.get("bind_num", 0) or 0) if "bind_num" in item else 0
             count_row = uow.query_one(
                 'SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,)
             )
@@ -193,78 +207,331 @@ class RiftDemonTokenBattleSqlRepository:
                 old_metadata = metadata.setdefault(reward_id, (name, item_type))
                 if old_metadata != (name, item_type):
                     raise ValueError("conflicting reward metadata")
+            reward_snapshots: dict[int, dict[str, Any] | None] = {}
             for reward_id, amount in totals.items():
                 row = uow.query_one(
-                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                    "SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "")
+                    + " FROM back WHERE user_id=? AND goods_id=?",
                     (user_id, reward_id),
                 )
-                current_amount = int(row["goods_num"]) if row else 0
+                reward_snapshots[reward_id] = dict(row) if row is not None else None
+                current_amount = int(row["goods_num"] or 0) if row else 0
                 consumed_amount = 1 if reward_id == item_id else 0
                 if current_amount - consumed_amount + amount > max_goods_num:
                     return RiftDemonTokenBattleResult("inventory_full")
 
-            back_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
             bind_update = ",bind_num=MIN(MAX(COALESCE(bind_num,0)-1,0),goods_num-1)" if "bind_num" in back_columns else ""
-            consumed = uow.execute(
-                "UPDATE back SET goods_num=goods_num-1" + bind_update +
-                " WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=1",
-                (user_id, item_id),
-            )
-            if consumed.rowcount != 1:
-                return RiftDemonTokenBattleResult("item_missing")
-
-            uow.execute(
-                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=?,hp=?,mp=? WHERE user_id=?",
-                (delta[0], max(0, expected[1] + delta[1]), max(1, expected[2] + delta[2]), max(1, expected[3] + delta[3]), user_id),
-            )
-            now = self.clock.now().isoformat()
-            for reward_id, amount in totals.items():
-                name, item_type = metadata[reward_id]
-                insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time"]
-                values: list[Any] = [user_id, reward_id, name, item_type, amount, now, now]
-                bind_sql = ""
-                if "bind_num" in back_columns:
-                    insert_columns.append("bind_num")
-                    values.append(amount)
-                    bind_sql = ",bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num"
-                columns_sql = ",".join(f'"{column}"' for column in insert_columns)
-                placeholders = ",".join("?" for _ in values)
-                uow.execute(
-                    f"INSERT INTO back({columns_sql}) VALUES({placeholders}) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
-                    "goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,goods_num=back.goods_num+EXCLUDED.goods_num," +
-                    "update_time=EXCLUDED.update_time" + bind_sql,
-                    tuple(values),
-                )
-
             new_count = 0 if expected_count + 1 >= 10 else expected_count + 1
-            changed = uow.execute(
-                'UPDATE player_data.rift SET "explore_count"=? WHERE user_id=?', (new_count, user_id)
+            expected_user = (
+                expected[0] + delta[0],
+                max(0, expected[1] + delta[1]),
+                max(1, expected[2] + delta[2]),
+                max(1, expected[3] + delta[3]),
             )
-            if changed.rowcount == 0:
-                uow.execute(
-                    'INSERT INTO player_data.rift(user_id,"explore_count") VALUES(?,?)',
-                    (user_id, new_count),
+            entry_snapshot = json.loads(str(entry["rift_data"]))
+            stats_row_exists = uow.query_one(
+                "SELECT user_id FROM player_data.statistics WHERE user_id=?", (user_id,)
+            ) is not None
+            stats_before = {
+                key: uow.query_one(
+                    f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?',
+                    (user_id,),
                 )
-            for key, amount in statistics:
-                quoted_key = f'"{key}"'
-                changed = uow.execute(
-                    f"UPDATE player_data.statistics SET {quoted_key}=COALESCE({quoted_key},0)+? WHERE user_id=?",
-                    (amount, user_id),
-                )
-                if changed.rowcount == 0:
-                    uow.execute(
-                        f"INSERT INTO player_data.statistics(user_id,{quoted_key}) VALUES(?,?)",
-                        (user_id, amount),
+                for key, _ in statistics
+            }
+
+            try:
+                with uow.savepoint("rift_demon_token"):
+                    consumed = uow.execute(
+                        "UPDATE back SET goods_num=goods_num-1" + bind_update +
+                        " WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=1",
+                        (user_id, item_id),
                     )
-            uow.execute("UPDATE rift_entries SET status='settled' WHERE user_id=?", (user_id,))
-            uow.execute(
-                "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=? AND type=3",
-                (user_id,),
-            )
-            uow.execute(
-                f"INSERT INTO {self.operation_table}(operation_id,payload,explore_count,message) VALUES(?,?,?,?)",
-                (operation_id, payload, new_count, message),
-            )
+                    saved_item = uow.query_one(
+                        "SELECT goods_num" + (",bind_num" if "bind_num" in back_columns else "")
+                        + " FROM back WHERE user_id=? AND goods_id=?",
+                        (user_id, item_id),
+                    )
+                    expected_item_bind = min(max(before_item_bind - 1, 0), before_item_goods - 1)
+                    if (
+                        consumed.rowcount != 1
+                        or saved_item is None
+                        or int(saved_item["goods_num"] or 0) != before_item_goods - 1
+                        or ("bind_num" in back_columns and int(saved_item["bind_num"] or 0) != expected_item_bind)
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult(
+                                "state_changed", expected_count,
+                                reason="rift_demon_token_item_write_rejected", subject=user_id,
+                            )
+                        )
+
+                    changed_user = uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=?,hp=?,mp=? WHERE user_id=?",
+                        (delta[0], expected_user[1], expected_user[2], expected_user[3], user_id),
+                    )
+                    saved_user = uow.query_one(
+                        "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?", (user_id,)
+                    )
+                    if (
+                        changed_user.rowcount != 1
+                        or saved_user is None
+                        or tuple(as_int_like(saved_user[key]) for key in ("stone", "exp", "hp", "mp")) != expected_user
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult(
+                                "state_changed", expected_count,
+                                reason="rift_demon_token_user_write_rejected", subject=user_id,
+                            )
+                        )
+
+                    now = self.clock.now().isoformat()
+                    for reward_id, amount in totals.items():
+                        name, item_type = metadata[reward_id]
+                        insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time"]
+                        values: list[Any] = [user_id, reward_id, name, item_type, amount, now, now]
+                        bind_sql = ""
+                        if "bind_num" in back_columns:
+                            insert_columns.append("bind_num")
+                            values.append(amount)
+                            bind_sql = ",bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num"
+                        columns_sql = ",".join(f'"{column}"' for column in insert_columns)
+                        placeholders = ",".join("?" for _ in values)
+                        written = uow.execute(
+                            f"INSERT INTO back({columns_sql}) VALUES({placeholders}) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                            "goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,goods_num=back.goods_num+EXCLUDED.goods_num," +
+                            "update_time=EXCLUDED.update_time" + bind_sql,
+                            tuple(values),
+                        )
+                        saved_reward = uow.query_one(
+                            "SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "")
+                            + " FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, reward_id),
+                        )
+                        previous = reward_snapshots[reward_id]
+                        previous_goods = int(previous["goods_num"] or 0) if previous else 0
+                        previous_bind = int(previous.get("bind_num", 0) or 0) if previous else 0
+                        expected_goods = previous_goods - (1 if reward_id == item_id else 0) + amount
+                        consumed_bind = (
+                            min(max(previous_bind - 1, 0), previous_goods - 1)
+                            if reward_id == item_id
+                            else previous_bind
+                        )
+                        expected_bind = consumed_bind + amount
+                        if (
+                            written.rowcount != 1
+                            or saved_reward is None
+                            or int(saved_reward["goods_num"] or 0) != expected_goods
+                            or str(saved_reward["goods_name"]) != name
+                            or str(saved_reward["goods_type"]) != item_type
+                            or ("bind_num" in back_columns and int(saved_reward["bind_num"] or 0) != expected_bind)
+                        ):
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult(
+                                    "state_changed", expected_count,
+                                    reason="rift_demon_token_reward_write_rejected", subject=str(reward_id),
+                                )
+                            )
+
+                    changed = uow.execute(
+                        'UPDATE player_data.rift SET "explore_count"=? WHERE user_id=?', (new_count, user_id)
+                    )
+                    if count_row is None:
+                        if changed.rowcount != 0:
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_progress_write_rejected", subject=user_id)
+                            )
+                        inserted = uow.execute(
+                            'INSERT INTO player_data.rift(user_id,"explore_count") VALUES(?,?)',
+                            (user_id, new_count),
+                        )
+                        if inserted.rowcount != 1:
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_progress_write_rejected", subject=user_id)
+                            )
+                    elif changed.rowcount != 1:
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_progress_write_rejected", subject=user_id)
+                        )
+                    saved_progress = uow.query_one(
+                        'SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,)
+                    )
+                    if saved_progress is None or as_int_like(saved_progress["explore_count"]) != new_count:
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_progress_write_rejected", subject=user_id)
+                        )
+
+                    for key, amount in statistics:
+                        quoted_key = f'"{key}"'
+                        before_stat = stats_before[key]
+                        before_value = as_int_like(before_stat["value"]) if before_stat is not None else 0
+                        changed = uow.execute(
+                            f"UPDATE player_data.statistics SET {quoted_key}=COALESCE({quoted_key},0)+? WHERE user_id=?",
+                            (amount, user_id),
+                        )
+                        if not stats_row_exists:
+                            if changed.rowcount != 0:
+                                raise _DemonTokenWriteRejected(
+                                    RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_statistics_write_rejected", subject=key)
+                                )
+                            inserted = uow.execute(
+                                f"INSERT INTO player_data.statistics(user_id,{quoted_key}) VALUES(?,?)",
+                                (user_id, amount),
+                            )
+                            if inserted.rowcount != 1:
+                                raise _DemonTokenWriteRejected(
+                                    RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_statistics_write_rejected", subject=key)
+                                )
+                            stats_row_exists = True
+                        elif changed.rowcount != 1:
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_statistics_write_rejected", subject=key)
+                            )
+                        saved_stat = uow.query_one(
+                            f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?', (user_id,)
+                        )
+                        if saved_stat is None or as_int_like(saved_stat["value"]) != before_value + amount:
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_statistics_write_rejected", subject=key)
+                            )
+
+                    changed_entry = uow.execute("UPDATE rift_entries SET status='settled' WHERE user_id=?", (user_id,))
+                    saved_entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
+                    if (
+                        changed_entry.rowcount != 1
+                        or saved_entry is None
+                        or str(saved_entry["status"]) != "settled"
+                        or json.loads(str(saved_entry["rift_data"])) != entry_snapshot
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_entry_write_rejected", subject=user_id)
+                        )
+
+                    changed_cd = uow.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=? AND type=3",
+                        (user_id,),
+                    )
+                    saved_cd = uow.query_one(
+                        "SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,)
+                    )
+                    if (
+                        changed_cd.rowcount != 1
+                        or saved_cd is None
+                        or as_int_like(saved_cd["type"]) != 0
+                        or as_int_like(saved_cd["create_time"]) != 0
+                        or saved_cd["scheduled_time"] is not None
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_cooldown_write_rejected", subject=user_id)
+                        )
+
+                    receipt = uow.execute(
+                        f"INSERT INTO {self.operation_table}(operation_id,payload,explore_count,message) VALUES(?,?,?,?)",
+                        (operation_id, payload, new_count, message),
+                    )
+                    saved_receipt = uow.query_one(
+                        f"SELECT payload,explore_count,message FROM {self.operation_table} WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if (
+                        receipt.rowcount != 1
+                        or saved_receipt is None
+                        or str(saved_receipt["payload"]) != payload
+                        or as_int_like(saved_receipt["explore_count"]) != new_count
+                        or str(saved_receipt["message"]) != message
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_receipt_write_rejected", subject=operation_id)
+                        )
+
+                    # Receipt triggers run inside this transaction too. Re-read
+                    # every projection so a late rewrite cannot look successful.
+                    saved_item = uow.query_one(
+                        "SELECT goods_num" + (",bind_num" if "bind_num" in back_columns else "")
+                        + " FROM back WHERE user_id=? AND goods_id=?",
+                        (user_id, item_id),
+                    )
+                    if (
+                        saved_item is None
+                        or int(saved_item["goods_num"] or 0) != before_item_goods - 1 + totals.get(item_id, 0)
+                        or (
+                            "bind_num" in back_columns
+                            and int(saved_item["bind_num"] or 0) != expected_item_bind + totals.get(item_id, 0)
+                        )
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_item_write_rejected", subject=user_id)
+                        )
+                    saved_user = uow.query_one(
+                        "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?", (user_id,)
+                    )
+                    if saved_user is None or tuple(as_int_like(saved_user[key]) for key in ("stone", "exp", "hp", "mp")) != expected_user:
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_user_write_rejected", subject=user_id)
+                        )
+                    for reward_id, amount in totals.items():
+                        saved_reward = uow.query_one(
+                            "SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "")
+                            + " FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, reward_id),
+                        )
+                        previous = reward_snapshots[reward_id]
+                        previous_goods = int(previous["goods_num"] or 0) if previous else 0
+                        previous_bind = int(previous.get("bind_num", 0) or 0) if previous else 0
+                        expected_goods = previous_goods - (1 if reward_id == item_id else 0) + amount
+                        consumed_bind = min(max(previous_bind - 1, 0), previous_goods - 1) if reward_id == item_id else previous_bind
+                        expected_bind = consumed_bind + amount
+                        name, item_type = metadata[reward_id]
+                        if (
+                            saved_reward is None
+                            or int(saved_reward["goods_num"] or 0) != expected_goods
+                            or str(saved_reward["goods_name"]) != name
+                            or str(saved_reward["goods_type"]) != item_type
+                            or ("bind_num" in back_columns and int(saved_reward["bind_num"] or 0) != expected_bind)
+                        ):
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_reward_write_rejected", subject=str(reward_id))
+                            )
+                    saved_progress = uow.query_one(
+                        'SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,)
+                    )
+                    if saved_progress is None or as_int_like(saved_progress["explore_count"]) != new_count:
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_progress_write_rejected", subject=user_id)
+                        )
+                    for key, amount in statistics:
+                        saved_stat = uow.query_one(
+                            f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?', (user_id,)
+                        )
+                        before_stat = stats_before[key]
+                        before_value = as_int_like(before_stat["value"]) if before_stat is not None else 0
+                        if saved_stat is None or as_int_like(saved_stat["value"]) != before_value + amount:
+                            raise _DemonTokenWriteRejected(
+                                RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_statistics_write_rejected", subject=key)
+                            )
+                    saved_entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
+                    if (
+                        saved_entry is None
+                        or str(saved_entry["status"]) != "settled"
+                        or json.loads(str(saved_entry["rift_data"])) != entry_snapshot
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_entry_write_rejected", subject=user_id)
+                        )
+                    saved_cd = uow.query_one(
+                        "SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,)
+                    )
+                    if (
+                        saved_cd is None
+                        or as_int_like(saved_cd["type"]) != 0
+                        or as_int_like(saved_cd["create_time"]) != 0
+                        or saved_cd["scheduled_time"] is not None
+                    ):
+                        raise _DemonTokenWriteRejected(
+                            RiftDemonTokenBattleResult("state_changed", expected_count, reason="rift_demon_token_cooldown_write_rejected", subject=user_id)
+                        )
+            except _DemonTokenWriteRejected as rejected:
+                return rejected.result
             return RiftDemonTokenBattleResult("applied", new_count, message)
 
 

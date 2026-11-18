@@ -23,6 +23,17 @@ RIFT_SPEEDUP_RETRYABLE_REJECTIONS = (
     "rift_speedup_receipt_write_rejected",
 )
 
+RIFT_DEMON_TOKEN_RETRYABLE_REJECTIONS = (
+    "rift_demon_token_item_write_rejected",
+    "rift_demon_token_user_write_rejected",
+    "rift_demon_token_reward_write_rejected",
+    "rift_demon_token_progress_write_rejected",
+    "rift_demon_token_statistics_write_rejected",
+    "rift_demon_token_entry_write_rejected",
+    "rift_demon_token_cooldown_write_rejected",
+    "rift_demon_token_receipt_write_rejected",
+)
+
 
 class RiftApplication(LegacyApplication):
     def __init__(

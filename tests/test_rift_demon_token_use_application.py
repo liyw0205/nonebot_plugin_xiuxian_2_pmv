@@ -125,6 +125,70 @@ class RiftDemonTokenUseApplicationTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT status FROM rift_entries WHERE user_id='u'").fetchone()[0], "settled")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_demon_token_battle_operations").fetchone()[0], 1)
 
+    def test_registered_item_command_retries_after_receipt_rejection(self) -> None:
+        back_module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back")
+        rift_module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift")
+        registered_handler = next(
+            handler for handler in back_module.use_item.handlers if handler.call is back_module.use_item_
+        )
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_demon_token_battle_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        fake_bot = SimpleNamespace(self_id="bot")
+        fake_event = SimpleNamespace(message_id="demon-token-retry")
+        outcome = {
+            "delta": {"stone": 50, "exp": 10, "hp": -5, "mp": -2},
+            "statistics": {"秘境打怪": 1},
+            "message": "fixed battle",
+        }
+        replies = []
+
+        class MessageData:
+            @staticmethod
+            def goods_num(user_id, item_id):
+                return 1
+
+        async def capture_reply(*args, **kwargs):
+            replies.append((args, kwargs))
+
+        async def invoke():
+            with (
+                patch.object(back_module, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+                patch.object(back_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u", "stone": 1000, "exp": 500, "hp": 100, "mp": 80}, "")),
+                patch.object(rift_module, "check_user_type", return_value=(True, "")),
+                patch.object(back_module, "items") as items,
+                patch.object(back_module, "_sql_message", return_value=MessageData()),
+                patch.object(rift_module, "read_rift_data", return_value=self.rift),
+                patch.object(rift_module, "_rift_progress_snapshot", return_value=3),
+                patch.object(rift_module, "_roll_rift_progress", return_value=(None, "")),
+                patch.object(rift_module, "_roll_rift_boss_event", new=AsyncMock(return_value=("battle", "won", outcome))),
+                patch.object(rift_module, "rift_application", self.application),
+                patch.object(rift_module, "XiuConfig", return_value=SimpleNamespace(max_goods_num=1000)),
+                patch.object(rift_module, "send_msg_handler", new=AsyncMock()),
+                patch.object(rift_module, "handle_send", new=capture_reply),
+                patch.object(back_module, "handle_send", new=capture_reply),
+                patch.object(rift_module, "log_message"),
+            ):
+                items.get_data_by_item_name.return_value = (20018, {"type": "特殊道具", "name": "斩妖令"})
+                with self.assertRaises(FinishedException):
+                    await registered_handler.call(fake_bot, fake_event, args="斩妖令")
+                with db_backend.transaction(self.game_db) as conn:
+                    conn.execute("DROP TRIGGER reject_receipt")
+                with self.assertRaises(FinishedException):
+                    await registered_handler.call(fake_bot, fake_event, args="斩妖令")
+
+        asyncio.run(invoke())
+        self.assertEqual(len(replies), 2)
+        self.assertIn("斩妖令结算回执保存失败", replies[0][0][2])
+        self.assertIn("秘境 boss 已使用斩妖令结算", replies[1][0][2])
+        with db_backend.connection(self.game_db) as conn:
+            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20018").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_demon_token_battle_operations").fetchone()[0], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

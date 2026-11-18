@@ -135,6 +135,116 @@ class RiftDemonTokenRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.player_db) as conn:
             self.assertEqual(conn.execute('SELECT "explore_count" FROM rift WHERE user_id=\'u\'').fetchone()[0], 3)
 
+    def _snapshot_state(self):
+        with db_backend.connection(self.game_db) as conn:
+            game = {
+                "user": tuple(conn.execute("SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id='u'").fetchone()),
+                "item": tuple(conn.execute("SELECT goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=20018").fetchone()),
+                "loot": conn.execute("SELECT goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=300").fetchone(),
+                "entry": tuple(conn.execute("SELECT rift_data,status FROM rift_entries WHERE user_id='u'").fetchone()),
+                "cd": tuple(conn.execute("SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id='u'").fetchone()),
+                "receipt": conn.execute("SELECT COUNT(*) FROM rift_demon_token_battle_operations").fetchone()[0],
+            }
+        with db_backend.connection(self.player_db) as conn:
+            player = {
+                "rift": tuple(conn.execute("SELECT explore_count FROM rift WHERE user_id='u'").fetchone()),
+                "stats": tuple(conn.execute("SELECT \"existing_stat\",\"秘境打怪\",\"秘境次数\" FROM statistics WHERE user_id='u'").fetchone()),
+            }
+        return game, player
+
+    def test_known_write_rejections_are_specific_and_atomic(self) -> None:
+        cases = (
+            (
+                "CREATE TRIGGER reject_item BEFORE UPDATE OF goods_num ON back BEGIN SELECT RAISE(IGNORE); END",
+                "rift_demon_token_item_write_rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER rewrite_user AFTER UPDATE OF exp ON user_xiuxian BEGIN UPDATE user_xiuxian SET stone=999 WHERE user_id='u'; END",
+                "rift_demon_token_user_write_rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_reward BEFORE INSERT ON back WHEN NEW.goods_id=300 BEGIN SELECT RAISE(IGNORE); END",
+                "rift_demon_token_reward_write_rejected",
+                "300",
+            ),
+            (
+                "CREATE TRIGGER reject_progress BEFORE UPDATE OF explore_count ON rift BEGIN SELECT RAISE(IGNORE); END",
+                "rift_demon_token_progress_write_rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER rewrite_statistics AFTER UPDATE OF \"秘境打怪\" ON statistics BEGIN UPDATE statistics SET \"秘境打怪\"=99 WHERE user_id='u'; END",
+                "rift_demon_token_statistics_write_rejected",
+                "秘境打怪",
+            ),
+            (
+                "CREATE TRIGGER rewrite_entry AFTER UPDATE OF status ON rift_entries BEGIN UPDATE rift_entries SET status='active' WHERE user_id='u'; END",
+                "rift_demon_token_entry_write_rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_cd BEFORE UPDATE OF type ON user_cd BEGIN SELECT RAISE(IGNORE); END",
+                "rift_demon_token_cooldown_write_rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_demon_token_battle_operations BEGIN SELECT RAISE(IGNORE); END",
+                "rift_demon_token_receipt_write_rejected",
+                "boss-op",
+            ),
+            (
+                "CREATE TRIGGER rewrite_receipt AFTER INSERT ON rift_demon_token_battle_operations BEGIN UPDATE rift_demon_token_battle_operations SET message='rewritten' WHERE operation_id='boss-op'; END",
+                "rift_demon_token_receipt_write_rejected",
+                "boss-op",
+            ),
+            (
+                "CREATE TRIGGER rewrite_receipt_asset AFTER INSERT ON rift_demon_token_battle_operations BEGIN UPDATE user_xiuxian SET stone=999 WHERE user_id='u'; END",
+                "rift_demon_token_user_write_rejected",
+                "u",
+            ),
+        )
+        for trigger, reason, subject in cases:
+            with self.subTest(reason=reason):
+                database = self.player_db if ("statistics" in trigger or "progress" in trigger) else self.game_db
+                with db_backend.transaction(database) as conn:
+                    conn.execute(trigger)
+                before = self._snapshot_state()
+                result = self.settle()
+                self.assertEqual((result.status, result.reason, result.subject), ("state_changed", reason, subject))
+                self.assertEqual(self._snapshot_state(), before)
+                with db_backend.transaction(database) as conn:
+                    conn.execute(f"DROP TRIGGER {trigger.split()[2]}")
+
+    def test_receipt_rejection_recovers_and_replays_without_duplicate_writes(self) -> None:
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_demon_token_battle_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        first = self.settle("recover")
+        self.assertEqual((first.status, first.reason, first.subject), (
+            "state_changed", "rift_demon_token_receipt_write_rejected", "recover"
+        ))
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute("DROP TRIGGER reject_receipt")
+        recovered = self.settle("recover")
+        replayed = self.settle("recover")
+        self.assertEqual((recovered.status, recovered.explore_count, replayed.status), ("applied", 4, "duplicate"))
+        self.assertEqual(self._snapshot_state()[0]["item"], (0, 0))
+
+    def test_abort_write_errors_still_propagate_and_roll_back(self) -> None:
+        with db_backend.transaction(self.player_db) as conn:
+            conn.execute(
+                'CREATE TRIGGER fail_stats BEFORE UPDATE OF "秘境打怪" ON statistics '
+                "BEGIN SELECT RAISE(ABORT,'injected stats failure'); END"
+            )
+        before = self._snapshot_state()
+        with self.assertRaises(Exception):
+            self.settle("abort")
+        self.assertEqual(self._snapshot_state(), before)
+
 
 if __name__ == "__main__":
     unittest.main()
