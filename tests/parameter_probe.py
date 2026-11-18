@@ -368,6 +368,10 @@ from tests.parameter_cases_sect_practice import register as register_sect_practi
 
 register_sect_practice(case)
 
+from tests.parameter_cases_sect_fairyland import register as register_sect_fairyland
+
+register_sect_fairyland(case)
+
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 
 register_bag_consumers(case)

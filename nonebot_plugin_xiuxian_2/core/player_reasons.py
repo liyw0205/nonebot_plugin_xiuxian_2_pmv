@@ -239,6 +239,8 @@ REASONS = {
     "sect_practice_level_changed": "所选修炼等级与升级前不一致，请查看当前修炼等级。",
     "sect_upgrade_invalid": "请求的炼体堂目标等级不是当前等级的下一级，请重新选择。",
     "sect_fairyland_write_rejected": "炼体堂升级保存失败，请联系管理员核对炼体堂记录。",
+    "sect_fairyland_state_write_rejected": "炼体堂升级状态保存失败，本次升级已撤销，请联系管理员核对宗门记录。",
+    "sect_fairyland_receipt_write_rejected": "炼体堂升级回执保存失败，本次升级已撤销，请联系管理员核对请求记录。",
     "sect_elixir_write_rejected": "丹房升级保存失败，请联系管理员核对丹房记录。",
     "sect_practice_write_rejected": "角色修炼等级保存失败，请联系管理员核对修炼记录。",
     "sect_practice_player_write_rejected": "灵石与角色修炼等级保存失败，本次升级已回滚，请联系管理员核对修炼记录。",
