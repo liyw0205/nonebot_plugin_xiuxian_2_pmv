@@ -10,7 +10,7 @@ from nonebot_plugin_xiuxian_2.features.trade.guishi_qiugou_repository import (
     GuishiQiugouSqlRepository,
 )
 from nonebot_plugin_xiuxian_2.features.trade.migrations import (
-    apply_trade_guishi_qiugou,
+    apply_trade_guishi_immediate_match, apply_trade_guishi_qiugou,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
@@ -42,6 +42,7 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
                 ("buyer", 99, "{}"),
             )
             apply_trade_guishi_qiugou(uow)
+            apply_trade_guishi_immediate_match(uow)
         self.repository = GuishiQiugouSqlRepository(
             self.database, order_ids=FixedOrderIds("1001", "1002")
         )
@@ -74,6 +75,7 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
         price: int = 20,
         quantity: int = 3,
         max_orders: int = 10,
+        immediate: bool = False,
     ):
         return self.repository.create(
             operation_id=operation_id,
@@ -83,6 +85,7 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+            immediate_match=immediate,
         )
 
     def test_creation_freezes_stone_and_replays_without_second_order(self) -> None:
@@ -143,6 +146,26 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
             self.create("rollback")
         self.assertEqual(self.state(), (99, 0, 0))
 
+    def test_item_ignore_does_not_charge_without_an_order(self) -> None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "CREATE TRIGGER ignore_qiugou BEFORE INSERT ON guishi_item "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        result = self.create("ignored-item")
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(self.state(), (99, 0, 0))
+
+    def test_receipt_ignore_does_not_charge_without_a_receipt(self) -> None:
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute(
+                "CREATE TRIGGER ignore_qiugou_receipt BEFORE INSERT ON guishi_order_create_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        result = self.create("ignored-receipt")
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(self.state(), (99, 0, 0))
+
     def test_charge_cas_rejection_rolls_back_insert_and_trigger_changes(self) -> None:
         with DatabaseUnitOfWork(self.database) as uow:
             uow.execute(
@@ -156,6 +179,47 @@ class GuishiQiugouRepositoryTests(unittest.TestCase):
             uow.execute("DROP TRIGGER race_charge")
         self.assertEqual(self.create("cas-rejected").status, "created")
         self.assertEqual(self.state(), (39, 1, 1))
+
+    def test_immediate_request_ignore_or_rewrite_rolls_back_and_recovers(self) -> None:
+        for trigger_sql, trigger_name in (
+            (
+                "CREATE TRIGGER ignore_immediate BEFORE INSERT ON guishi_immediate_match_requests "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "ignore_immediate",
+            ),
+            (
+                "CREATE TRIGGER rewrite_immediate AFTER INSERT ON guishi_immediate_match_requests "
+                "BEGIN UPDATE guishi_immediate_match_requests SET status='complete',order_type='baitan' "
+                "WHERE order_id=NEW.order_id; END",
+                "rewrite_immediate",
+            ),
+        ):
+            with self.subTest(trigger=trigger_name):
+                if trigger_name != "ignore_immediate":
+                    with DatabaseUnitOfWork(self.database) as uow:
+                        uow.execute("DELETE FROM guishi_immediate_match_requests")
+                        uow.execute("DELETE FROM guishi_order_create_operations")
+                        uow.execute("DELETE FROM guishi_item")
+                        uow.execute("UPDATE guishi_info SET stored_stone=99 WHERE user_id='buyer'")
+                    self.repository.order_ids.values[:] = ["1001", "1002"]
+                with DatabaseUnitOfWork(self.database) as uow:
+                    uow.execute(trigger_sql)
+                failed = self.create("immediate-" + trigger_name, immediate=True)
+                self.assertEqual(
+                    (failed.status, failed.reason, failed.subject),
+                    ("state_changed", "guishi_immediate_match_write_rejected", "1001"),
+                )
+                self.assertEqual(self.state(), (99, 0, 0))
+                with DatabaseUnitOfWork(self.database) as uow:
+                    uow.execute(f"DROP TRIGGER {trigger_name}")
+                created = self.create("immediate-" + trigger_name, immediate=True)
+                replay = self.create("immediate-" + trigger_name, immediate=True)
+                self.assertEqual((created.status, replay.status), ("created", "duplicate"))
+                with DatabaseUnitOfWork(self.database) as uow:
+                    self.assertEqual(
+                        uow.query_all("SELECT order_id,order_type,user_id,status FROM guishi_immediate_match_requests"),
+                        [{"order_id": created.order_id, "order_type": "qiugou", "user_id": "buyer", "status": "pending"}],
+                    )
 
     def test_application_default_uses_feature_owned_repository(self) -> None:
         result = TradeApplication(self.database, self.database).guishi_qiugou(

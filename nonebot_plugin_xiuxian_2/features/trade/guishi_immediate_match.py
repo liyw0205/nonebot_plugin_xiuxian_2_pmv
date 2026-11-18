@@ -39,10 +39,37 @@ def _require_requests(uow: DatabaseUnitOfWork, schema: str = "main") -> None:
 def enqueue_immediate_match(uow: DatabaseUnitOfWork, *, order_id: str, order_type: str,
                             user_id: str, table: str = "guishi_immediate_match_requests") -> None:
     _require_requests(uow, table.split(".")[0] if "." in table else "main")
-    uow.execute(
+    inserted = uow.execute(
         f"INSERT INTO {table}(order_id,order_type,user_id) VALUES(?,?,?)",
         (order_id, order_type, user_id),
     )
+    if inserted.rowcount != 1:
+        raise DomainError(
+            "guishi_immediate_match_write_rejected",
+            "Guishi immediate match request was not inserted",
+            {"reason": "guishi_immediate_match_write_rejected", "subject": str(order_id)},
+        )
+    saved = uow.query_one(
+        f"SELECT order_id,order_type,user_id,status,reason,subject,qiugou_order_id,baitan_order_id "
+        f"FROM {table} WHERE order_id=?",
+        (order_id,),
+    )
+    expected = {
+        "order_id": str(order_id),
+        "order_type": str(order_type),
+        "user_id": str(user_id),
+        "status": "pending",
+        "reason": "",
+        "subject": "",
+        "qiugou_order_id": "",
+        "baitan_order_id": "",
+    }
+    if saved != expected:
+        raise DomainError(
+            "guishi_immediate_match_write_rejected",
+            "Guishi immediate match request did not persist exactly",
+            {"reason": "guishi_immediate_match_write_rejected", "subject": str(order_id)},
+        )
 
 
 class GuishiImmediateMatchRepository:

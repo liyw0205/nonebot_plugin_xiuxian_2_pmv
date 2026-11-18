@@ -10,7 +10,9 @@ from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
 from nonebot_plugin_xiuxian_2.features.trade.guishi_baitan_repository import (
     GuishiBaitanSqlRepository,
 )
-from nonebot_plugin_xiuxian_2.features.trade.migrations import apply_trade_guishi_qiugou
+from nonebot_plugin_xiuxian_2.features.trade.migrations import (
+    apply_trade_guishi_immediate_match, apply_trade_guishi_qiugou,
+)
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 
 
@@ -53,6 +55,7 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
                 "price INTEGER,quantity INTEGER,filled_quantity INTEGER DEFAULT 0)"
             )
             apply_trade_guishi_qiugou(uow)
+            apply_trade_guishi_immediate_match(uow)
         self.repository = GuishiBaitanSqlRepository(
             self.game_database,
             self.trade_database,
@@ -82,6 +85,7 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
         operation_id: str = "create",
         quantity: int = 4,
         max_orders: int = 10,
+        immediate: bool = False,
     ):
         return self.repository.create(
             operation_id=operation_id,
@@ -91,6 +95,7 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
             price=20,
             quantity=quantity,
             max_orders=max_orders,
+            immediate_match=immediate,
         )
 
     def test_creation_reserves_tradeable_inventory_and_replays(self) -> None:
@@ -130,6 +135,26 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
             self.create("rollback")
         self.assertEqual(self.state(), (8, 2, 0))
 
+    def test_item_ignore_does_not_reserve_inventory_without_an_order(self) -> None:
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            uow.execute(
+                "CREATE TRIGGER ignore_baitan BEFORE INSERT ON guishi_item "
+                "WHEN NEW.item_type='baitan' BEGIN SELECT RAISE(IGNORE); END"
+            )
+        result = self.create("ignored-item")
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(self.state(), (8, 2, 0))
+
+    def test_receipt_ignore_does_not_reserve_inventory_without_a_receipt(self) -> None:
+        with DatabaseUnitOfWork(self.trade_database) as uow:
+            uow.execute(
+                "CREATE TRIGGER ignore_baitan_receipt BEFORE INSERT ON guishi_order_create_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        result = self.create("ignored-receipt")
+        self.assertEqual(result.status, "state_changed")
+        self.assertEqual(self.state(), (8, 2, 0))
+
     def test_inventory_cas_rejection_rolls_back_trigger_changes(self) -> None:
         with DatabaseUnitOfWork(self.game_database) as uow:
             uow.execute(
@@ -145,6 +170,48 @@ class GuishiBaitanRepositoryTests(unittest.TestCase):
         replay = self.create("cas-rejected")
         self.assertEqual((result.status, replay.status), ("created", "duplicate"))
         self.assertEqual(self.state(), (4, 2, 2))
+
+    def test_immediate_request_ignore_or_rewrite_rolls_back_and_recovers(self) -> None:
+        for trigger_sql, trigger_name in (
+            (
+                "CREATE TRIGGER ignore_immediate BEFORE INSERT ON guishi_immediate_match_requests "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "ignore_immediate",
+            ),
+            (
+                "CREATE TRIGGER rewrite_immediate AFTER INSERT ON guishi_immediate_match_requests "
+                "BEGIN UPDATE guishi_immediate_match_requests SET status='complete',order_type='qiugou' "
+                "WHERE order_id=NEW.order_id; END",
+                "rewrite_immediate",
+            ),
+        ):
+            with self.subTest(trigger=trigger_name):
+                if trigger_name != "ignore_immediate":
+                    with DatabaseUnitOfWork(self.game_database) as uow:
+                        uow.execute("UPDATE back SET goods_num=8,bind_num=2 WHERE user_id='seller' AND goods_id=1001")
+                    with DatabaseUnitOfWork(self.trade_database) as uow:
+                        uow.execute("DELETE FROM guishi_immediate_match_requests")
+                        uow.execute("DELETE FROM guishi_order_create_operations")
+                        uow.execute("DELETE FROM guishi_item")
+                    self.repository.order_ids.values[:] = ["1001", "1002"]
+                with DatabaseUnitOfWork(self.trade_database) as uow:
+                    uow.execute(trigger_sql)
+                failed = self.create("immediate-" + trigger_name, immediate=True)
+                self.assertEqual(
+                    (failed.status, failed.reason, failed.subject),
+                    ("state_changed", "guishi_immediate_match_write_rejected", "1001"),
+                )
+                self.assertEqual(self.state(), (8, 2, 0))
+                with DatabaseUnitOfWork(self.trade_database) as uow:
+                    uow.execute(f"DROP TRIGGER {trigger_name}")
+                created = self.create("immediate-" + trigger_name, immediate=True)
+                replay = self.create("immediate-" + trigger_name, immediate=True)
+                self.assertEqual((created.status, replay.status), ("created", "duplicate"))
+                with DatabaseUnitOfWork(self.trade_database) as uow:
+                    self.assertEqual(
+                        uow.query_all("SELECT order_id,order_type,user_id,status FROM guishi_immediate_match_requests"),
+                        [{"order_id": created.order_id, "order_type": "baitan", "user_id": "seller", "status": "pending"}],
+                    )
 
     def test_old_message_receipt_replays_when_closed_and_out_of_inventory(self) -> None:
         first = self.create("guishi-order:baitan:message:seller:1001:20:7", quantity=7)

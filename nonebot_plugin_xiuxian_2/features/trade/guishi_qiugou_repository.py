@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...core.numeric import as_int_like
+from ...core.errors import DomainError
 import json
 import secrets
 from dataclasses import dataclass
@@ -29,6 +30,8 @@ class GuishiQiugouCreateResult:
     status: str
     order_id: str = ""
     total_cost: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def created(self) -> bool:
@@ -129,7 +132,7 @@ class GuishiQiugouSqlRepository:
                 if not candidate:
                     continue
                 try:
-                    uow.execute(
+                    inserted = uow.execute(
                         "INSERT INTO guishi_item("
                         "id,user_id,item_id,item_name,item_type,price,quantity) "
                         "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
@@ -142,7 +145,14 @@ class GuishiQiugouSqlRepository:
                             price,
                             quantity,
                         ),
-                    )
+                        )
+                    if inserted.rowcount != 1:
+                        uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                        uow.execute("RELEASE SAVEPOINT guishi_create")
+                        return GuishiQiugouCreateResult(
+                            "state_changed", total_cost=total_cost,
+                            reason="guishi_qiugou_order_write_rejected", subject=candidate,
+                        )
                     order_id = candidate
                     break
                 except Exception as exc:
@@ -166,13 +176,62 @@ class GuishiQiugouSqlRepository:
                 uow.execute("RELEASE SAVEPOINT guishi_create")
                 return GuishiQiugouCreateResult("state_changed", total_cost=total_cost)
             if operation_id:
-                uow.execute(
+                receipt = uow.execute(
                     "INSERT INTO guishi_order_create_operations("
                     "operation_id,payload,order_id,order_type,amount,created_at) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
                     (operation_id, payload, order_id, "qiugou", total_cost, self.clock.now().isoformat()),
                 )
+                saved_receipt = uow.query_one(
+                    "SELECT payload,order_id,order_type,amount FROM guishi_order_create_operations "
+                    "WHERE operation_id=?", (operation_id,)
+                )
+                if receipt.rowcount != 1 or saved_receipt != {
+                    "payload": payload, "order_id": order_id, "order_type": "qiugou", "amount": total_cost,
+                }:
+                    uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                    uow.execute("RELEASE SAVEPOINT guishi_create")
+                    return GuishiQiugouCreateResult(
+                        "state_changed", total_cost=total_cost,
+                        reason="guishi_qiugou_receipt_write_rejected", subject=operation_id,
+                    )
+            saved_order = uow.query_one(
+                "SELECT id,user_id,item_id,item_name,item_type,price,quantity,COALESCE(filled_quantity,0) AS filled_quantity "
+                "FROM guishi_item WHERE id=?", (order_id,)
+            )
+            if saved_order != {
+                "id": order_id, "user_id": user_id, "item_id": item_id,
+                "item_name": item_name, "item_type": "qiugou", "price": price,
+                "quantity": quantity, "filled_quantity": 0,
+            }:
+                uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                uow.execute("RELEASE SAVEPOINT guishi_create")
+                return GuishiQiugouCreateResult(
+                    "state_changed", total_cost=total_cost,
+                    reason="guishi_qiugou_order_write_rejected", subject=order_id,
+                )
+            saved_balance = uow.query_one(
+                "SELECT stored_stone FROM guishi_info WHERE user_id=?", (user_id,)
+            )
+            if saved_balance is None or as_int_like(saved_balance["stored_stone"]) != as_int_like(balance["stored_stone"]) - total_cost:
+                uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                uow.execute("RELEASE SAVEPOINT guishi_create")
+                return GuishiQiugouCreateResult(
+                    "state_changed", total_cost=total_cost,
+                    reason="guishi_qiugou_balance_write_rejected", subject=user_id,
+                )
             if immediate_match:
-                enqueue_immediate_match(uow, order_id=order_id, order_type="qiugou", user_id=user_id)
+                try:
+                    enqueue_immediate_match(uow, order_id=order_id, order_type="qiugou", user_id=user_id)
+                except DomainError as exc:
+                    if exc.code != "guishi_immediate_match_write_rejected":
+                        raise
+                    uow.execute("ROLLBACK TO SAVEPOINT guishi_create")
+                    uow.execute("RELEASE SAVEPOINT guishi_create")
+                    return GuishiQiugouCreateResult(
+                        "state_changed", total_cost=total_cost,
+                        reason=exc.details.get("reason") or exc.code,
+                        subject=exc.details.get("subject") or order_id,
+                    )
             uow.execute("RELEASE SAVEPOINT guishi_create")
             return GuishiQiugouCreateResult("created", order_id, total_cost)
 
