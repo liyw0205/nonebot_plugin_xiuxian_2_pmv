@@ -1672,8 +1672,14 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if result.status == "listing_conflict":
         await handle_send(bot, event, "同名仙肆记录数据不一致，请联系管理员处理！")
         await xian_shop_remove.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("仙肆下架", result, subjects=subjects), md_type="交易")
+        await xian_shop_remove.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi name removal status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("仙肆下架", result, subjects=subjects), md_type="交易")
+        await xian_shop_remove.finish()
 
     removed = result.removed_quantity
     qty_msg = f"x{removed}" if removed > 1 else ""
@@ -1961,8 +1967,14 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = "存在用户背包空间不足，仙肆未清空，请先处理背包容量！"
         await handle_send(bot, event, msg)
         await xian_shop_off_all.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("清空仙肆", result, subjects=subjects))
+        await xian_shop_off_all.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi clear status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("清空仙肆", result, subjects=subjects))
+        await xian_shop_off_all.finish()
 
     msg = (
         f"成功清空全服仙肆！共下架 {result.listing_count} 条记录，"
@@ -2080,8 +2092,14 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     if result.status == "listing_missing":
         await handle_send(bot, event, f"仙肆ID {xianshi_id} 的挂单已不存在（可能已被买走或下架）。")
         await xian_shop_remove_by_admin.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("系统仙肆下架", result, subjects=subjects))
+        await xian_shop_remove_by_admin.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi removal status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("系统仙肆下架", result, subjects=subjects))
+        await xian_shop_remove_by_admin.finish()
     msg = f"成功下架仙肆ID为 {xianshi_id} 的 {result.name}！"
     if result.refunded_quantity:
         msg += f"\n已退还给用户 x{result.refunded_quantity}。"

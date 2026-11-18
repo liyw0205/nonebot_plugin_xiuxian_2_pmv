@@ -17,6 +17,8 @@ class XianshiRemovalResult:
     name: str = ""
     goods_type: str = ""
     refunded_quantity: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -34,6 +36,8 @@ class XianshiNameRemovalResult:
     item_name: str
     requested_quantity: int
     removed_quantity: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -49,6 +53,8 @@ class XianshiClearResult:
     status: str
     listing_count: int = 0
     refunded_quantity: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -76,9 +82,9 @@ class XianshiRemovalSqlRepository:
         goods_type: str,
         quantity: int,
         max_goods_num: int,
-    ) -> bool:
+    ) -> tuple[bool, str]:
         if quantity <= 0:
-            return True
+            return True, ""
         current = uow.query_one(
             "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
             "WHERE user_id=? AND goods_id=?",
@@ -86,9 +92,9 @@ class XianshiRemovalSqlRepository:
         )
         current_quantity = int(current["goods_num"]) if current else 0
         if current_quantity + quantity > max_goods_num:
-            return False
+            return False, "inventory_full"
         now = self.clock.now()
-        uow.execute(
+        write = uow.execute(
             "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,"
             "create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,0) "
             "ON CONFLICT(user_id,goods_id) DO UPDATE SET "
@@ -105,7 +111,66 @@ class XianshiRemovalSqlRepository:
                 now,
             ),
         )
-        return True
+        saved = uow.query_one(
+            "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+            "WHERE user_id=? AND goods_id=?",
+            (seller_id, goods_id),
+        )
+        if (
+            write.rowcount != 1
+            or saved is None
+            or int(saved["goods_num"] or 0) != current_quantity + quantity
+        ):
+            return False, "xianshi_removal_inventory_write_rejected"
+        return True, ""
+
+    @staticmethod
+    def _release_savepoint(uow: DatabaseUnitOfWork) -> None:
+        uow.execute('RELEASE SAVEPOINT "xianshi_removal"')
+
+    @classmethod
+    def _reject_removal_write(
+        cls,
+        uow: DatabaseUnitOfWork,
+        result: XianshiRemovalResult,
+        reason: str,
+        subject: str,
+    ) -> XianshiRemovalResult:
+        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_removal"')
+        cls._release_savepoint(uow)
+        return XianshiRemovalResult(
+            "state_changed", result.listing_id, result.seller_id, result.goods_id,
+            result.name, result.goods_type, result.refunded_quantity, reason, subject,
+        )
+
+    @classmethod
+    def _reject_name_write(
+        cls,
+        uow: DatabaseUnitOfWork,
+        result: XianshiNameRemovalResult,
+        reason: str,
+        subject: str,
+    ) -> XianshiNameRemovalResult:
+        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_removal"')
+        cls._release_savepoint(uow)
+        return XianshiNameRemovalResult(
+            "state_changed", result.seller_id, result.item_name,
+            result.requested_quantity, result.removed_quantity, reason, subject,
+        )
+
+    @classmethod
+    def _reject_clear_write(
+        cls,
+        uow: DatabaseUnitOfWork,
+        result: XianshiClearResult,
+        reason: str,
+        subject: str,
+    ) -> XianshiClearResult:
+        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_removal"')
+        cls._release_savepoint(uow)
+        return XianshiClearResult(
+            "state_changed", result.listing_count, result.refunded_quantity, reason, subject,
+        )
 
     def remove_listing(
         self,
@@ -128,7 +193,10 @@ class XianshiRemovalSqlRepository:
             )
             if previous is not None:
                 if str(previous["listing_id"]) != listing_id:
-                    return XianshiRemovalResult("state_changed", listing_id)
+                    return XianshiRemovalResult(
+                        "state_changed", listing_id, reason="operation_conflict",
+                        subject=operation_id,
+                    )
                 return XianshiRemovalResult(
                     "duplicate",
                     str(previous["listing_id"]),
@@ -152,7 +220,17 @@ class XianshiRemovalSqlRepository:
             goods_type = str(listing["type"])
             quantity = int(listing["quantity"])
             refunded_quantity = 0 if seller_id == "0" else max(quantity, 0)
-            if not self._refund(
+            current_inventory = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            ) if refunded_quantity else None
+            expected_inventory = (
+                int(current_inventory["goods_num"] or 0) + refunded_quantity
+                if current_inventory is not None else refunded_quantity
+            ) if refunded_quantity else None
+            uow.execute('SAVEPOINT "xianshi_removal"')
+            refunded, refund_failure = self._refund(
                 uow,
                 seller_id=seller_id,
                 goods_id=goods_id,
@@ -160,14 +238,40 @@ class XianshiRemovalSqlRepository:
                 goods_type=goods_type,
                 quantity=refunded_quantity,
                 max_goods_num=max_goods_num,
-            ):
-                return XianshiRemovalResult(
-                    "inventory_full", listing_id, seller_id, goods_id, name,
-                    goods_type, refunded_quantity,
+            )
+            if not refunded:
+                if refund_failure == "inventory_full":
+                    uow.execute('RELEASE SAVEPOINT "xianshi_removal"')
+                    return XianshiRemovalResult(
+                        "inventory_full", listing_id, seller_id, goods_id, name,
+                        goods_type, refunded_quantity,
+                    )
+                return self._reject_removal_write(
+                    uow,
+                    XianshiRemovalResult(
+                        "removed", listing_id, seller_id, goods_id, name,
+                        goods_type, refunded_quantity,
+                    ),
+                    refund_failure,
+                    f"{seller_id}:{goods_id}",
                 )
 
-            uow.execute("DELETE FROM xianshi_item WHERE id=?", (listing_id,))
-            uow.execute(
+            listing_delete = uow.execute("DELETE FROM xianshi_item WHERE id=?", (listing_id,))
+            remaining_listing = uow.query_one(
+                "SELECT id FROM xianshi_item WHERE id=?", (listing_id,)
+            )
+            if listing_delete.rowcount != 1 or remaining_listing is not None:
+                return self._reject_removal_write(
+                    uow,
+                    XianshiRemovalResult(
+                        "removed", listing_id, seller_id, goods_id, name,
+                        goods_type, refunded_quantity,
+                    ),
+                    "xianshi_removal_listing_write_rejected",
+                    listing_id,
+                )
+
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_removal_operations "
                 "(operation_id,listing_id,seller_id,goods_id,name,goods_type,refunded_quantity) "
                 "VALUES(?,?,?,?,?,?,?)",
@@ -181,6 +285,50 @@ class XianshiRemovalSqlRepository:
                     refunded_quantity,
                 ),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,listing_id,seller_id,goods_id,name,goods_type,refunded_quantity "
+                "FROM xianshi_removal_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "listing_id": listing_id,
+                "seller_id": seller_id,
+                "goods_id": goods_id,
+                "name": name,
+                "goods_type": goods_type,
+                "refunded_quantity": refunded_quantity,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_removal_write(
+                    uow,
+                    XianshiRemovalResult(
+                        "removed", listing_id, seller_id, goods_id, name,
+                        goods_type, refunded_quantity,
+                    ),
+                    "xianshi_removal_receipt_write_rejected",
+                    operation_id,
+                )
+            if expected_inventory is not None:
+                saved_inventory = uow.query_one(
+                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                    "WHERE user_id=? AND goods_id=?",
+                    (seller_id, goods_id),
+                )
+                if (
+                    saved_inventory is None
+                    or int(saved_inventory["goods_num"] or 0) != expected_inventory
+                ):
+                    return self._reject_removal_write(
+                        uow,
+                        XianshiRemovalResult(
+                            "removed", listing_id, seller_id, goods_id, name,
+                            goods_type, refunded_quantity,
+                        ),
+                        "xianshi_removal_inventory_write_rejected",
+                        f"{seller_id}:{goods_id}",
+                    )
+            self._release_savepoint(uow)
             return XianshiRemovalResult(
                 "removed", listing_id, seller_id, goods_id, name, goods_type,
                 refunded_quantity,
@@ -234,6 +382,7 @@ class XianshiRemovalSqlRepository:
                 key = (seller_id, goods_id)
                 capacity_totals[key] = capacity_totals.get(key, 0) + quantity
 
+            expected_inventory: dict[tuple[str, int], int] = {}
             for (seller_id, goods_id), quantity in capacity_totals.items():
                 current = uow.query_one(
                     "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
@@ -241,13 +390,17 @@ class XianshiRemovalSqlRepository:
                     (seller_id, goods_id),
                 )
                 current_quantity = int(current["goods_num"]) if current else 0
+                expected_inventory[(seller_id, goods_id)] = current_quantity + quantity
                 if current_quantity + quantity > max_goods_num:
                     return XianshiClearResult(
                         "inventory_full", len(listings), sum(refunds.values())
                     )
 
+            listing_count = len(listings)
+            refunded_quantity = sum(refunds.values())
+            uow.execute('SAVEPOINT "xianshi_removal"')
             for (seller_id, goods_id, name, goods_type), quantity in refunds.items():
-                if not self._refund(
+                refunded, refund_failure = self._refund(
                     uow,
                     seller_id=seller_id,
                     goods_id=goods_id,
@@ -255,17 +408,69 @@ class XianshiRemovalSqlRepository:
                     goods_type=goods_type,
                     quantity=quantity,
                     max_goods_num=max_goods_num,
-                ):
-                    raise RuntimeError("xianshi clear inventory snapshot changed")
+                )
+                if not refunded:
+                    if refund_failure == "inventory_full":
+                        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_removal"')
+                        self._release_savepoint(uow)
+                        return XianshiClearResult(
+                            "inventory_full", listing_count, refunded_quantity
+                        )
+                    return self._reject_clear_write(
+                        uow,
+                        XianshiClearResult("cleared", listing_count, refunded_quantity),
+                        "xianshi_clear_inventory_write_rejected",
+                        f"{seller_id}:{goods_id}",
+                    )
 
-            listing_count = len(listings)
-            refunded_quantity = sum(refunds.values())
-            uow.execute("DELETE FROM xianshi_item")
-            uow.execute(
+            listing_delete = uow.execute("DELETE FROM xianshi_item")
+            remaining_listings = uow.query_one("SELECT 1 AS present FROM xianshi_item LIMIT 1")
+            if listing_delete.rowcount != listing_count or remaining_listings is not None:
+                return self._reject_clear_write(
+                    uow,
+                    XianshiClearResult("cleared", listing_count, refunded_quantity),
+                    "xianshi_clear_listing_write_rejected",
+                    "xianshi_item",
+                )
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_clear_operations "
                 "(operation_id,listing_count,refunded_quantity) VALUES(?,?,?)",
                 (operation_id, listing_count, refunded_quantity),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,listing_count,refunded_quantity "
+                "FROM xianshi_clear_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "listing_count": listing_count,
+                "refunded_quantity": refunded_quantity,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_clear_write(
+                    uow,
+                    XianshiClearResult("cleared", listing_count, refunded_quantity),
+                    "xianshi_clear_receipt_write_rejected",
+                    operation_id,
+                )
+            for (seller_id, goods_id), expected_quantity in expected_inventory.items():
+                saved_inventory = uow.query_one(
+                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                    "WHERE user_id=? AND goods_id=?",
+                    (seller_id, goods_id),
+                )
+                if (
+                    saved_inventory is None
+                    or int(saved_inventory["goods_num"] or 0) != expected_quantity
+                ):
+                    return self._reject_clear_write(
+                        uow,
+                        XianshiClearResult("cleared", listing_count, refunded_quantity),
+                        "xianshi_clear_inventory_write_rejected",
+                        f"{seller_id}:{goods_id}",
+                    )
+            self._release_savepoint(uow)
             return XianshiClearResult("cleared", listing_count, refunded_quantity)
 
     def remove_by_name(
@@ -287,9 +492,14 @@ class XianshiRemovalSqlRepository:
         if quantity <= 0:
             raise ValueError("quantity must be positive")
 
-        def result(status: str, removed_quantity: int = 0) -> XianshiNameRemovalResult:
+        def result(
+            status: str,
+            removed_quantity: int = 0,
+            reason: str = "",
+            subject: str = "",
+        ) -> XianshiNameRemovalResult:
             return XianshiNameRemovalResult(
-                status, seller_id, item_name, quantity, int(removed_quantity)
+                status, seller_id, item_name, quantity, int(removed_quantity), reason, subject
             )
 
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
@@ -305,7 +515,7 @@ class XianshiRemovalSqlRepository:
                     and int(previous["requested_quantity"]) == quantity
                 )
                 if not same_request:
-                    return result("state_changed")
+                    return result("state_changed", reason="operation_conflict", subject=operation_id)
                 return result("duplicate", int(previous["removed_quantity"]))
 
             listings = uow.query_all(
@@ -325,7 +535,16 @@ class XianshiRemovalSqlRepository:
                 return result("listing_conflict")
             goods_id = goods_ids.pop()
             goods_type = goods_types.pop()
-            if not self._refund(
+            current_inventory = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            )
+            expected_inventory = (
+                int(current_inventory["goods_num"] or 0) if current_inventory else 0
+            ) + remove_quantity
+            uow.execute('SAVEPOINT "xianshi_removal"')
+            refunded, refund_failure = self._refund(
                 uow,
                 seller_id=seller_id,
                 goods_id=goods_id,
@@ -333,8 +552,17 @@ class XianshiRemovalSqlRepository:
                 goods_type=goods_type,
                 quantity=remove_quantity,
                 max_goods_num=max_goods_num,
-            ):
-                return result("inventory_full", remove_quantity)
+            )
+            if not refunded:
+                if refund_failure == "inventory_full":
+                    uow.execute('RELEASE SAVEPOINT "xianshi_removal"')
+                    return result("inventory_full", remove_quantity)
+                return self._reject_name_write(
+                    uow,
+                    result("removed", remove_quantity),
+                    refund_failure,
+                    f"{seller_id}:{goods_id}",
+                )
 
             left = remove_quantity
             for listing in listings:
@@ -343,20 +571,89 @@ class XianshiRemovalSqlRepository:
                 listing_quantity = int(listing["quantity"])
                 take = min(left, listing_quantity)
                 if take == listing_quantity:
-                    uow.execute("DELETE FROM xianshi_item WHERE id=?", (str(listing["id"]),))
+                    listing_delete = uow.execute(
+                        "DELETE FROM xianshi_item WHERE id=?", (str(listing["id"]),)
+                    )
+                    remaining = uow.query_one(
+                        "SELECT quantity FROM xianshi_item WHERE id=?", (str(listing["id"]),)
+                    )
+                    if listing_delete.rowcount != 1 or remaining is not None:
+                        return self._reject_name_write(
+                            uow,
+                            result("removed", remove_quantity),
+                            "xianshi_name_removal_listing_write_rejected",
+                            str(listing["id"]),
+                        )
                 else:
-                    uow.execute(
+                    listing_update = uow.execute(
                         "UPDATE xianshi_item SET quantity=quantity-? WHERE id=?",
                         (take, str(listing["id"])),
                     )
+                    saved_listing = uow.query_one(
+                        "SELECT quantity FROM xianshi_item WHERE id=?", (str(listing["id"]),)
+                    )
+                    if (
+                        listing_update.rowcount != 1
+                        or saved_listing is None
+                        or int(saved_listing["quantity"]) != listing_quantity - take
+                    ):
+                        return self._reject_name_write(
+                            uow,
+                            result("removed", remove_quantity),
+                            "xianshi_name_removal_listing_write_rejected",
+                            str(listing["id"]),
+                        )
                 left -= take
 
-            uow.execute(
+            if left != 0:
+                return self._reject_name_write(
+                    uow,
+                    result("removed", remove_quantity),
+                    "xianshi_name_removal_listing_write_rejected",
+                    item_name,
+                )
+
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_name_removal_operations "
                 "(operation_id,seller_id,item_name,requested_quantity,removed_quantity) "
                 "VALUES(?,?,?,?,?)",
                 (operation_id, seller_id, item_name, quantity, remove_quantity),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,seller_id,item_name,requested_quantity,removed_quantity "
+                "FROM xianshi_name_removal_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "seller_id": seller_id,
+                "item_name": item_name,
+                "requested_quantity": quantity,
+                "removed_quantity": remove_quantity,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_name_write(
+                    uow,
+                    result("removed", remove_quantity),
+                    "xianshi_name_removal_receipt_write_rejected",
+                    operation_id,
+                )
+            saved_inventory = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            )
+            if (
+                saved_inventory is None
+                or int(saved_inventory["goods_num"] or 0) != expected_inventory
+            ):
+                return self._reject_name_write(
+                    uow,
+                    result("removed", remove_quantity),
+                    "xianshi_name_removal_inventory_write_rejected",
+                    f"{seller_id}:{goods_id}",
+                )
+            self._release_savepoint(uow)
             return result("removed", remove_quantity)
 
 
