@@ -27,7 +27,7 @@ class SectMemberJoinParameterDispatchTests(unittest.TestCase):
 
     def test_join_write_rejections_recover(self):
         evidence = self._run("sect-member-join-recovery")
-        self.assertEqual({"pass": 2}, evidence["summary"])
+        self.assertEqual({"pass": 3}, evidence["summary"])
         self.assertTrue(all(row["evidence"]["recovered"] for row in evidence["results"]))
 
 
