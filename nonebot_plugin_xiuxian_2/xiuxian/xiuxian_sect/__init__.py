@@ -985,11 +985,11 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                     elixir_room_level_up_sect_scale_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
+                    await sect_elixir_room_make.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("宗门建设", result))
+                    await handle_send(bot, event, result_failure("宗门建设", result))
                     await sect_elixir_room_make.finish()
                 safe_log_economy_change(
                     user_id=user_info["user_id"],

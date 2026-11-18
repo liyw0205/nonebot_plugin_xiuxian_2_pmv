@@ -372,6 +372,10 @@ from tests.parameter_cases_sect_fairyland import register as register_sect_fairy
 
 register_sect_fairyland(case)
 
+from tests.parameter_cases_sect_elixir_room import register as register_sect_elixir_room
+
+register_sect_elixir_room(case)
+
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 
 register_bag_consumers(case)

@@ -242,6 +242,8 @@ REASONS = {
     "sect_fairyland_state_write_rejected": "炼体堂升级状态保存失败，本次升级已撤销，请联系管理员核对宗门记录。",
     "sect_fairyland_receipt_write_rejected": "炼体堂升级回执保存失败，本次升级已撤销，请联系管理员核对请求记录。",
     "sect_elixir_write_rejected": "丹房升级保存失败，请联系管理员核对丹房记录。",
+    "sect_elixir_room_state_write_rejected": "丹房升级状态保存失败，本次升级已撤销，请联系管理员核对宗门记录。",
+    "sect_elixir_room_receipt_write_rejected": "丹房升级回执保存失败，本次升级已撤销，请联系管理员核对请求记录。",
     "sect_practice_write_rejected": "角色修炼等级保存失败，请联系管理员核对修炼记录。",
     "sect_practice_player_write_rejected": "灵石与角色修炼等级保存失败，本次升级已回滚，请联系管理员核对修炼记录。",
     "sect_practice_receipt_write_rejected": "修炼升级回执未保存，本次升级已撤销，请联系管理员核对修炼记录。",
