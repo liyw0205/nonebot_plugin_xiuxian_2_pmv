@@ -53,6 +53,8 @@ class WorkSettlementResult:
         success_kind: str = "",
         item_msg: str = "",
         scheduled_time: str = "",
+        reason: str = "",
+        subject: str = "",
     ) -> None:
         self.status = status
         self.exp = exp
@@ -61,15 +63,44 @@ class WorkSettlementResult:
         self.success_kind = success_kind or str(self.result.get("success_kind") or "")
         self.item_msg = item_msg or str(self.result.get("item_msg") or "")
         self.scheduled_time = scheduled_time or str(self.result.get("scheduled_time") or "")
+        self.reason = reason or str(self.result.get("reason") or "")
+        self.subject = subject or str(self.result.get("subject") or "")
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
 
 
+class _WorkSettlementWriteRejected(Exception):
+    def __init__(self, result: WorkSettlementResult) -> None:
+        self.result = result
+
+
 class WorkSettlementSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
+
+    @staticmethod
+    def _write_rejected(stage: str, subject: str) -> WorkSettlementResult:
+        reason = f"work_settlement_{stage}_write_rejected"
+        return WorkSettlementResult("state_changed", reason=reason, subject=str(subject))
+
+    @staticmethod
+    def _reward_projection(
+        row: Mapping[str, Any] | None,
+        *,
+        before: Mapping[str, Any] | None,
+        before_goods: int,
+        quantity: int,
+        item_name: str,
+        item_type: str,
+        existing: bool,
+    ) -> bool:
+        if row is None or int(row.get("goods_num") or 0) != before_goods + quantity:
+            return False
+        expected_name = str(before.get("goods_name") or "") if existing and before else item_name
+        expected_type = str(before.get("goods_type") or "") if existing and before else item_type
+        return expected_name == str(row.get("goods_name") or "") and expected_type == str(row.get("goods_type") or "")
 
     @staticmethod
     def _schema_ready(uow: DatabaseUnitOfWork) -> bool:
@@ -151,6 +182,7 @@ class WorkSettlementSqlRepository:
                 return WorkSettlementResult("user_missing")
             current_exp = as_int_like(user["exp"])
             applied_exp = max(0, min(exp_gain, max_exp - current_exp))
+            expected_exp = current_exp + applied_exp
             item_awarded = False
             result = {
                 "success_kind": success_kind,
@@ -166,35 +198,163 @@ class WorkSettlementSqlRepository:
                 if max_goods_num > 0 and current_goods + quantity > max_goods_num:
                     return WorkSettlementResult("inventory_full")
                 item_awarded = True
-                if existing is None:
-                    uow.execute(
-                        "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
-                        "VALUES(?,?,?,?,?,0)",
-                        (user_id, item_id, item_name, item_type, quantity),
+            reward_before = None
+            if reward is not None:
+                reward_id = reward[0]
+                reward_before = uow.query_one(
+                    "SELECT goods_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, reward_id),
+                )
+            active_before = uow.query_one(
+                "SELECT snapshot,updated_at FROM work_active_snapshots WHERE user_id=?", (user_id,)
+            )
+            offer_before = uow.query_one(
+                "SELECT snapshot,updated_at FROM work_offer_snapshots WHERE user_id=?", (user_id,)
+            )
+
+            try:
+                with uow.savepoint("work_settlement"):
+                    if reward is not None:
+                        item_id, item_name, item_type, quantity = reward
+                        if reward_before is None:
+                            written = uow.execute(
+                                "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
+                                "VALUES(?,?,?,?,?,0)",
+                                (user_id, item_id, item_name, item_type, quantity),
+                            )
+                        else:
+                            written = uow.execute(
+                                "UPDATE back SET goods_num=COALESCE(goods_num,0)+? "
+                                "WHERE user_id=? AND goods_id=?",
+                                (quantity, user_id, item_id),
+                            )
+                        saved_reward = uow.query_one(
+                            "SELECT goods_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id),
+                        )
+                        before_goods = int(reward_before["goods_num"] or 0) if reward_before else 0
+                        if (
+                            written.rowcount != 1
+                            or not self._reward_projection(
+                                saved_reward,
+                                before=reward_before,
+                                before_goods=before_goods,
+                                quantity=quantity,
+                                item_name=item_name,
+                                item_type=item_type,
+                                existing=reward_before is not None,
+                            )
+                        ):
+                            raise _WorkSettlementWriteRejected(self._write_rejected("reward", str(item_id)))
+
+                    changed_exp = uow.execute(
+                        "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) "
+                        "WHERE user_id=?",
+                        (applied_exp, user_id),
                     )
-                else:
-                    uow.execute(
-                        "UPDATE back SET goods_num=COALESCE(goods_num,0)+? "
-                        "WHERE user_id=? AND goods_id=?",
-                        (quantity, user_id, item_id),
+                    saved_user = uow.query_one("SELECT COALESCE(exp,0) AS exp FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if changed_exp.rowcount != 1 or saved_user is None or as_int_like(saved_user["exp"]) != expected_exp:
+                        raise _WorkSettlementWriteRejected(self._write_rejected("exp", user_id))
+
+                    changed_cd = uow.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=?",
+                        (user_id,),
                     )
-            uow.execute(
-                "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL) "
-                "WHERE user_id=?",
-                (applied_exp, user_id),
-            )
-            uow.execute(
-                "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=?",
-                (user_id,),
-            )
-            uow.execute("DELETE FROM work_active_snapshots WHERE user_id=?", (user_id,))
-            uow.execute("DELETE FROM work_offer_snapshots WHERE user_id=?", (user_id,))
-            result["exp"] = applied_exp
-            uow.execute(
-                "INSERT INTO work_settlement_operations "
-                "(operation_id,payload,exp,item_awarded,result_json) VALUES(?,?,?,?,?)",
-                (operation_id, payload, applied_exp, int(item_awarded), json.dumps(result, ensure_ascii=False)),
-            )
+                    saved_cd = uow.query_one(
+                        "SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,)
+                    )
+                    if (
+                        changed_cd.rowcount != 1
+                        or saved_cd is None
+                        or as_int_like(saved_cd["type"]) != 0
+                        or as_int_like(saved_cd["create_time"]) != 0
+                        or saved_cd["scheduled_time"] is not None
+                    ):
+                        raise _WorkSettlementWriteRejected(self._write_rejected("cooldown", user_id))
+
+                    for table, before, stage in (
+                        ("work_active_snapshots", active_before, "active_snapshot"),
+                        ("work_offer_snapshots", offer_before, "offer_snapshot"),
+                    ):
+                        if before is None:
+                            continue
+                        deleted = uow.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
+                        remaining = uow.query_one(f"SELECT user_id FROM {table} WHERE user_id=?", (user_id,))
+                        if deleted.rowcount != 1 or remaining is not None:
+                            raise _WorkSettlementWriteRejected(self._write_rejected(stage, user_id))
+
+                    result["exp"] = applied_exp
+                    result_json = json.dumps(result, ensure_ascii=False)
+                    receipt = uow.execute(
+                        "INSERT INTO work_settlement_operations "
+                        "(operation_id,payload,exp,item_awarded,result_json) VALUES(?,?,?,?,?)",
+                        (operation_id, payload, applied_exp, int(item_awarded), result_json),
+                    )
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,exp,item_awarded,result_json FROM work_settlement_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if (
+                        receipt.rowcount != 1
+                        or saved_receipt is None
+                        or not _payload_matches(saved_receipt["payload"], payload)
+                        or as_int_like(saved_receipt["exp"]) != applied_exp
+                        or bool(saved_receipt["item_awarded"]) != item_awarded
+                        or _result_from_receipt(saved_receipt["result_json"]) != result
+                    ):
+                        raise _WorkSettlementWriteRejected(self._write_rejected("receipt", operation_id))
+
+                    # Receipt triggers may rewrite any earlier projection; verify the whole settlement after the final write.
+                    saved_user = uow.query_one("SELECT COALESCE(exp,0) AS exp FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if saved_user is None or as_int_like(saved_user["exp"]) != expected_exp:
+                        raise _WorkSettlementWriteRejected(self._write_rejected("exp", user_id))
+                    saved_cd = uow.query_one(
+                        "SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,)
+                    )
+                    if (
+                        saved_cd is None
+                        or as_int_like(saved_cd["type"]) != 0
+                        or as_int_like(saved_cd["create_time"]) != 0
+                        or saved_cd["scheduled_time"] is not None
+                    ):
+                        raise _WorkSettlementWriteRejected(self._write_rejected("cooldown", user_id))
+                    if reward is not None:
+                        item_id, item_name, item_type, quantity = reward
+                        saved_reward = uow.query_one(
+                            "SELECT goods_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id),
+                        )
+                        before_goods = int(reward_before["goods_num"] or 0) if reward_before else 0
+                        if not self._reward_projection(
+                            saved_reward,
+                            before=reward_before,
+                            before_goods=before_goods,
+                            quantity=quantity,
+                            item_name=item_name,
+                            item_type=item_type,
+                            existing=reward_before is not None,
+                        ):
+                            raise _WorkSettlementWriteRejected(self._write_rejected("reward", str(item_id)))
+                    for table, before, stage in (
+                        ("work_active_snapshots", active_before, "active_snapshot"),
+                        ("work_offer_snapshots", offer_before, "offer_snapshot"),
+                    ):
+                        if before is not None and uow.query_one(f"SELECT user_id FROM {table} WHERE user_id=?", (user_id,)) is not None:
+                            raise _WorkSettlementWriteRejected(self._write_rejected(stage, user_id))
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,exp,item_awarded,result_json FROM work_settlement_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if (
+                        saved_receipt is None
+                        or not _payload_matches(saved_receipt["payload"], payload)
+                        or as_int_like(saved_receipt["exp"]) != applied_exp
+                        or bool(saved_receipt["item_awarded"]) != item_awarded
+                        or _result_from_receipt(saved_receipt["result_json"]) != result
+                    ):
+                        raise _WorkSettlementWriteRejected(self._write_rejected("receipt", operation_id))
+            except _WorkSettlementWriteRejected as rejected:
+                return rejected.result
             return WorkSettlementResult(
                 "applied",
                 applied_exp,

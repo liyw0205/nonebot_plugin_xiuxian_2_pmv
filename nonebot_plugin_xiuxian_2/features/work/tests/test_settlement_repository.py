@@ -13,6 +13,102 @@ from tests.test_db_backend import db_backend
 
 
 class WorkSettlementRepositoryTests(unittest.TestCase):
+    @staticmethod
+    def _failure_db(temp: str, *, with_reward: bool = False) -> Path:
+        db = Path(temp) / "failure.db"
+        with db_backend.transaction(db) as conn:
+            conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER)")
+            conn.execute("INSERT INTO user_xiuxian VALUES('u',90)")
+            conn.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+            conn.execute("INSERT INTO user_cd VALUES('u',2,'2026-01-01','任务')")
+            conn.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+            if with_reward:
+                conn.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) VALUES('u',1,'旧奖励','物品',2,0)")
+        with DatabaseUnitOfWork(db) as uow:
+            apply_work_offer_snapshots(uow)
+            apply_work_abort_cleanup(uow)
+            apply_work_settlement_operations(uow)
+            uow.execute(
+                "INSERT INTO work_active_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                ("u", "{}", "now"),
+            )
+            uow.execute(
+                "INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES(?,?,?)",
+                ("u", "{}", "now"),
+            )
+        return db
+
+    @staticmethod
+    def _failure_state(db: Path) -> tuple[int, int, int, int, int]:
+        with db_backend.connection(db) as conn:
+            exp = int(conn.execute("SELECT exp FROM user_xiuxian WHERE user_id='u'").fetchone()[0])
+            cd = int(conn.execute("SELECT type FROM user_cd WHERE user_id='u'").fetchone()[0])
+            reward = int(conn.execute("SELECT COALESCE(goods_num,0) FROM back WHERE user_id='u' AND goods_id=1").fetchone()[0] or 0) if conn.execute("SELECT 1 FROM back WHERE user_id='u' AND goods_id=1").fetchone() else 0
+            active = int(conn.execute("SELECT COUNT(*) FROM work_active_snapshots WHERE user_id='u'").fetchone()[0])
+            offer = int(conn.execute("SELECT COUNT(*) FROM work_offer_snapshots WHERE user_id='u'").fetchone()[0])
+            return exp, cd, reward, active, offer
+
+    def test_each_write_rejection_rolls_back_and_recovers_same_operation(self):
+        cases = (
+            ("reward", "CREATE TRIGGER reject_work BEFORE INSERT ON back BEGIN SELECT RAISE(IGNORE); END", "work_settlement_reward_write_rejected", "1"),
+            ("exp", "CREATE TRIGGER reject_work BEFORE UPDATE ON user_xiuxian BEGIN SELECT RAISE(IGNORE); END", "work_settlement_exp_write_rejected", "u"),
+            ("cooldown", "CREATE TRIGGER reject_work BEFORE UPDATE ON user_cd BEGIN SELECT RAISE(IGNORE); END", "work_settlement_cooldown_write_rejected", "u"),
+            ("active_snapshot", "CREATE TRIGGER reject_work BEFORE DELETE ON work_active_snapshots BEGIN SELECT RAISE(IGNORE); END", "work_settlement_active_snapshot_write_rejected", "u"),
+            ("offer_snapshot", "CREATE TRIGGER reject_work BEFORE DELETE ON work_offer_snapshots BEGIN SELECT RAISE(IGNORE); END", "work_settlement_offer_snapshot_write_rejected", "u"),
+            ("receipt", "CREATE TRIGGER reject_work BEFORE INSERT ON work_settlement_operations BEGIN SELECT RAISE(IGNORE); END", "work_settlement_receipt_write_rejected", "settle-failure"),
+        )
+        for stage, trigger, reason, subject in cases:
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                db = self._failure_db(temp)
+                with db_backend.transaction(db) as conn:
+                    conn.execute(trigger)
+                kwargs = {
+                    "operation_id": "settle-failure",
+                    "user_id": "u",
+                    "expected_work": {"create_time": "2026-01-01", "scheduled_time": "任务"},
+                    "exp_gain": 10,
+                    "item": {"id": 1, "name": "奖励", "type": "物品"},
+                    "max_exp": 100,
+                    "max_goods_num": 99,
+                }
+                rejected = WorkSettlementSqlRepository(db).settle(**kwargs)
+                self.assertEqual((rejected.status, rejected.reason, rejected.subject), ("state_changed", reason, subject))
+                self.assertEqual(self._failure_state(db), (90, 2, 0, 1, 1))
+                with db_backend.transaction(db) as conn:
+                    conn.execute("DROP TRIGGER reject_work")
+                applied = WorkSettlementSqlRepository(db).settle(**kwargs)
+                self.assertEqual(applied.status, "applied")
+                duplicate = WorkSettlementSqlRepository(db).settle(**kwargs)
+                self.assertEqual(duplicate.status, "duplicate")
+                self.assertEqual(self._failure_state(db), (100, 0, 1, 0, 0))
+
+    def test_after_write_rewrite_is_rejected_and_recovery_is_idempotent(self):
+        cases = (
+            ("exp", "CREATE TRIGGER rewrite_work AFTER UPDATE ON user_xiuxian BEGIN UPDATE user_xiuxian SET exp=777 WHERE user_id='u'; END", "work_settlement_exp_write_rejected", "u"),
+            ("receipt", "CREATE TRIGGER rewrite_work AFTER INSERT ON work_settlement_operations BEGIN UPDATE work_settlement_operations SET exp=999 WHERE operation_id='settle-rewrite'; END", "work_settlement_receipt_write_rejected", "settle-rewrite"),
+        )
+        for stage, trigger, reason, subject in cases:
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                db = self._failure_db(temp)
+                with db_backend.transaction(db) as conn:
+                    conn.execute(trigger)
+                kwargs = {
+                    "operation_id": "settle-rewrite",
+                    "user_id": "u",
+                    "expected_work": {"create_time": "2026-01-01", "scheduled_time": "任务"},
+                    "exp_gain": 10,
+                    "item": None,
+                    "max_exp": 100,
+                    "max_goods_num": 99,
+                }
+                rejected = WorkSettlementSqlRepository(db).settle(**kwargs)
+                self.assertEqual((rejected.status, rejected.reason, rejected.subject), ("state_changed", reason, subject))
+                self.assertEqual(self._failure_state(db), (90, 2, 0, 1, 1))
+                with db_backend.transaction(db) as conn:
+                    conn.execute("DROP TRIGGER rewrite_work")
+                self.assertEqual(WorkSettlementSqlRepository(db).settle(**kwargs).status, "applied")
+                self.assertEqual(WorkSettlementSqlRepository(db).settle(**kwargs).status, "duplicate")
+
     def test_applied_duplicate_and_state_changed(self):
         with tempfile.TemporaryDirectory() as temp:
             db = Path(temp) / "game.db"

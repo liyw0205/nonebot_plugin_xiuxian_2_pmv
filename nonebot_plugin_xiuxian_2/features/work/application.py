@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.player_reasons import reason_text
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
@@ -18,6 +19,16 @@ from .repository import (
 )
 from .claim_repository import WorkClaimSqlRepository
 from .settlement_repository import WorkSettlementSqlRepository
+
+
+WORK_SETTLEMENT_RETRYABLE_REJECTIONS = frozenset({
+    "work_settlement_reward_write_rejected",
+    "work_settlement_exp_write_rejected",
+    "work_settlement_cooldown_write_rejected",
+    "work_settlement_active_snapshot_write_rejected",
+    "work_settlement_offer_snapshot_write_rejected",
+    "work_settlement_receipt_write_rejected",
+})
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -298,6 +309,8 @@ class WorkSettlementApplication:
                     "success_kind": replay_success_kind,
                     "item_msg": replay_item_msg,
                     "scheduled_time": replay_scheduled_time,
+                    "reason": str(data.get("reason") or ""),
+                    "subject": str(data.get("subject") or ""),
                 }
                 if status == "applied":
                     outcome = OperationOutcome.applied(
@@ -322,6 +335,18 @@ class WorkSettlementApplication:
                         granted={},
                         audit_category="work",
                     ).replay()
+                elif normalized["reason"] in WORK_SETTLEMENT_RETRYABLE_REJECTIONS:
+                    diagnostic = reason_text(normalized["reason"]) or "悬赏结算写入未完成，可在故障解除后重试。"
+                    if normalized["subject"]:
+                        diagnostic += f"（原因：{normalized['reason']}；主体：{normalized['subject']}）"
+                    outcome = OperationOutcome.failed(
+                        request.operation_id,
+                        self.action,
+                        diagnostic,
+                        code=normalized["reason"],
+                        data=normalized,
+                        audit_category="work",
+                    )
                 else:
                     messages = {
                         "inventory_full": "背包物品已达上限，悬赏奖励尚未结算。",

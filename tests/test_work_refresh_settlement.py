@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import nonebot
+from nonebot.exception import FinishedException
 
 nonebot.init()
 
@@ -223,6 +224,29 @@ class WorkRefreshSettlementTests(unittest.TestCase):
 
 
 class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_registered_settlement_command_routes_real_parameter_to_settle_work(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        registered_handler = next(
+            handler for handler in xiuxian_work.do_work.handlers if handler.call is xiuxian_work.do_work_
+        )
+        event = SimpleNamespace(message_id="registered-settle-1")
+        fake_bot = SimpleNamespace(self_id="bot")
+        work_data = {"create_time": "2026-10-04 10:00:00", "scheduled_time": "采药"}
+        with (
+            patch.object(xiuxian_work, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+            patch.object(xiuxian_work, "check_user", return_value=(True, {"user_id": "u", "level": "筑基"}, "")),
+            patch.object(xiuxian_work, "convert_rank", return_value=(1, "筑基")),
+            patch.object(xiuxian_work, "update_last_check_info_time"),
+            patch.object(xiuxian_work, "check_user_type", return_value=(True, "")),
+            patch.object(xiuxian_work, "get_user_work_status", return_value=(2, work_data)),
+            patch.object(xiuxian_work, "settle_work", new=AsyncMock()) as settle,
+        ):
+            with self.assertRaises(FinishedException):
+                await registered_handler.call(fake_bot, event, args=("结算", None))
+
+        settle.assert_awaited_once_with(fake_bot, event, "u", work_data)
+
     async def test_handler_passes_matching_feature_snapshot_to_reward_calculator(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 
@@ -277,6 +301,57 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         resolve.assert_called_once()
         self.assertIs(resolve.call_args.kwargs["offer_snapshot"], active)
+
+    async def test_handler_surfaces_known_write_reason_and_subject(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        active = {
+            "tasks": {"采药": {"rate": 80, "award": 10, "time": 5, "item_id": 0}},
+            "status": 2,
+            "scheduled_time": "采药",
+            "create_time": "2026-10-04 10:00:00",
+        }
+        outcome = SimpleNamespace(
+            status="state_changed",
+            replayed=False,
+            data={
+                "status": "state_changed",
+                "reason": "work_settlement_receipt_write_rejected",
+                "subject": "work-op-1",
+            },
+        )
+        decision = SimpleNamespace(
+            exp_gain=10,
+            success=True,
+            big_success=False,
+            success_kind="ok",
+            item_id=0,
+        )
+        event = SimpleNamespace(message_id="settle-reason-1")
+
+        with (
+            patch.object(xiuxian_work.work_claim_application, "get_active_snapshot", return_value=active),
+            patch.object(xiuxian_work, "_sql_message", return_value=SimpleNamespace(
+                get_user_info_with_id=lambda user_id: {"level": "筑基", "exp": 0}
+            )),
+            patch.object(xiuxian_work.work_reward_application, "resolve_settlement", return_value=decision),
+            patch.object(xiuxian_work, "OtherSet", return_value=SimpleNamespace(set_closing_type=lambda level: 1)),
+            patch.object(xiuxian_work, "XiuConfig", return_value=SimpleNamespace(
+                closing_exp_upper_limit=100, max_goods_num=99
+            )),
+            patch.object(xiuxian_work.work_settlement_application, "settle", return_value=outcome),
+            patch.object(xiuxian_work, "handle_send", new=AsyncMock()) as send,
+            patch.object(xiuxian_work, "number_to", side_effect=str),
+        ):
+            message = await xiuxian_work.settle_work(
+                object(), event, "u",
+                {"create_time": "2026-10-04 10:00:00", "scheduled_time": "采药"},
+            )
+
+        self.assertIn("悬赏结算回执保存失败", message)
+        self.assertIn("work_settlement_receipt_write_rejected", message)
+        self.assertIn("work-op-1", message)
+        send.assert_awaited_once()
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

@@ -13,6 +13,7 @@ from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet
 from urllib.parse import quote
 from ..xiuxian_utils.utils import check_user, check_user_type, handle_send, number_to, send_help_message, update_last_check_info_time
 from ..xiuxian_utils.status_card import nav_kwargs, result_card
+from ...core.player_reasons import reason_text
 from nonebot.log import logger
 from ..xiuxian_utils.item_json import Items
 from ..xiuxian_config import convert_rank, XiuConfig
@@ -346,6 +347,15 @@ async def settle_work(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
     if result_status == "state_changed":
+        known_reason = reason_text(str(result_data.get("reason") or ""))
+        if known_reason:
+            subject = str(result_data.get("subject") or "")
+            detail = known_reason
+            if subject:
+                detail += f"（原因：{result_data.get('reason')}；主体：{subject}）"
+            msg = f"**悬赏结算**\n---\n❌ {detail}"
+            await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
+            return msg
         msg = "**悬赏结算**\n---\n⚠️ 悬赏结算未完成：悬赏进度已更新，请重新查看悬赏。"
         await handle_send(bot, event, msg, md_type="悬赏令", k1="查看", v1="悬赏令查看", k2="刷新", v2="悬赏令刷新", k3="帮助", v3="悬赏令帮助")
         return msg
