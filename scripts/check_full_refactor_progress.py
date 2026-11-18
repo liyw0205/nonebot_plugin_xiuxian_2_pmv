@@ -751,7 +751,7 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             and "INSERT INTO arena_purchase_operations" in repository_sql and "status,result_json" in repository_sql
             and calls("repository", "purchase", "ArenaStateRepository._weekly")
             and expression("state_repository", "_weekly", "reset.isocalendar()[:2] != today.isocalendar()[:2]")
-            and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle'}")
+            and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle', 'arena.challenge_ticket', 'arena.challenge_purchase'}")
             and expression("application", "_execute", "type(self.repository) is ArenaChallengePurchaseSqlRepository")
             and expression("application", "_execute", "if not recoverable:\n    raise ConflictError('操作正在处理中', reason='operation_pending')")
             and "arena.010" in literals("plugin")

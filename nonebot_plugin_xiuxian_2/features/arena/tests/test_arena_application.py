@@ -4,10 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 import sqlite3
+from datetime import date
 
 from ..application import ArenaApplication
 from ..domain import ArenaPurchaseRequest
-from ..migrations import apply_arena_challenge_ticket, apply_arena_state
+from ..migrations import apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_state
 from ....core.errors import ConflictError
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
@@ -136,6 +137,43 @@ class ArenaApplicationTests(unittest.TestCase):
                 self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM arena_challenge_ticket_operations").fetchone()[0])
             with sqlite3.connect(player) as conn:
                 self.assertEqual((1, 1), conn.execute("SELECT daily_challenges_used,daily_extra_challenges FROM arena").fetchone())
+
+    def test_challenge_purchase_write_rejection_is_retryable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',100)")
+                uow.execute("CREATE TABLE arena_challenge_purchase_operations(operation_id TEXT PRIMARY KEY,payload TEXT NOT NULL,amount INTEGER,cost INTEGER,stone INTEGER,bought INTEGER,extra INTEGER)")
+                uow.execute("CREATE TRIGGER refuse_receipt BEFORE INSERT ON arena_challenge_purchase_operations BEGIN SELECT RAISE(IGNORE); END")
+                apply_arena_challenge_purchase(uow)
+                OperationLedger().ensure_schema(uow)
+            with DatabaseUnitOfWork(player) as uow:
+                apply_arena_state(uow)
+                uow.execute("UPDATE arena SET daily_challenge_buys=1,daily_extra_challenges=1,last_buy_date='2026-09-15' WHERE user_id='u'")
+                uow.execute("INSERT INTO arena(user_id,daily_challenge_buys,daily_extra_challenges,last_buy_date) VALUES('u',1,1,'2026-09-15')")
+            app = ArenaApplication(game, player)
+            request = dict(operation_id="purchase-retry", user_id="u", amount=1, unit_cost=10,
+                           daily_limit=3, expected_stone=100, expected_bought=1,
+                           expected_extra=1, expected_last_buy_date="2026-09-15", today=date(2026, 9, 15))
+
+            failed = app.purchase_challenges(**request)
+            self.assertEqual(("failed", "arena_challenge_purchase_receipt_write_rejected"), (failed.status, failed.code))
+            with sqlite3.connect(game) as conn:
+                self.assertEqual(100, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("DROP TRIGGER refuse_receipt")
+
+            applied = app.purchase_challenges(**request)
+            replay = app.purchase_challenges(**request)
+            self.assertEqual("applied", applied.status)
+            self.assertTrue(replay.replayed)
+            with sqlite3.connect(game) as conn:
+                self.assertEqual(90, conn.execute("SELECT stone FROM user_xiuxian").fetchone()[0])
+                self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM arena_challenge_purchase_operations").fetchone()[0])
+            with sqlite3.connect(player) as conn:
+                self.assertEqual((2, 2), conn.execute("SELECT daily_challenge_buys,daily_extra_challenges FROM arena").fetchone())
 
 
 if __name__ == "__main__":

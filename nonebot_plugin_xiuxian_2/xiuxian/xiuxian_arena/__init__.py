@@ -190,6 +190,7 @@ def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
         int(data.get("bought", 0) or 0),
         int(data.get("extra", 0) or 0),
         reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "")),
     )
 
 

@@ -44,6 +44,11 @@ class _ArenaTicketWriteRejected(Exception):
         self.result = result
 
 
+class _ArenaChallengePurchaseWriteRejected(Exception):
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+
+
 class _SettlementProjections:
     """Check each settlement write now and again after the receipt write."""
 
@@ -551,6 +556,12 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         )
         return result
     def purchase_challenges(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today=None) -> dict[str, Any]:
+        try:
+            return self._purchase_challenges(operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today)
+        except _ArenaChallengePurchaseWriteRejected as rejected:
+            return rejected.result
+
+    def _purchase_challenges(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today=None) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra = map(int, (amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra))
         if not operation_id or amount <= 0 or min(unit_cost, daily_limit, expected_stone, expected_bought, expected_extra) < 0:
@@ -575,34 +586,88 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             user = uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             arena = uow.query_one("SELECT COALESCE(daily_challenge_buys,0) AS bought,COALESCE(daily_extra_challenges,0) AS extra,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,))
             if user is None or arena is None:
-                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="user_missing"))
+                return self._record_challenge_purchase(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="user_missing"))
             current_date = str(arena["last_buy_date"] or "")
             today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
-            bought = as_int_like(arena["bought"]); extra = as_int_like(arena["extra"])
+            stored_bought, stored_extra = as_int_like(arena["bought"]), as_int_like(arena["extra"])
+            bought, extra = stored_bought, stored_extra
             if current_date != today_str:
                 bought, extra = 0, 0
                 expected_bought, expected_extra, expected_last_buy_date = 0, 0, today_str
-            if (current_date == today_str and (sqlite_int_compare(arena["bought"],expected_bought)!=0 or sqlite_int_compare(arena["extra"],expected_extra)!=0)) or (as_int_like(user["stone"]), bought, extra, current_date if current_date == today_str else today_str) != (expected_stone, expected_bought, expected_extra, str(expected_last_buy_date)):
-                return self._record(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="stone_changed" if as_int_like(user["stone"]) != expected_stone else "buy_count_changed"))
+            if (current_date == today_str and (sqlite_int_compare(arena["bought"], expected_bought) != 0 or sqlite_int_compare(arena["extra"], expected_extra) != 0)) or (as_int_like(user["stone"]), bought, extra, current_date if current_date == today_str else today_str) != (expected_stone, expected_bought, expected_extra, str(expected_last_buy_date)):
+                return self._record_challenge_purchase(uow, operation_id, payload, self._result("state_changed", 0, 0, expected_stone, expected_bought, expected_extra, reason="stone_changed" if as_int_like(user["stone"]) != expected_stone else "buy_count_changed"))
             real_amount = min(amount, max(0, daily_limit - expected_bought)); cost = real_amount * unit_cost
             if real_amount == 0:
-                return self._record(uow, operation_id, payload, self._result("limit_reached", 0, 0, expected_stone, expected_bought, expected_extra))
+                return self._record_challenge_purchase(uow, operation_id, payload, self._result("limit_reached", 0, 0, expected_stone, expected_bought, expected_extra))
             if expected_stone < cost:
-                return self._record(uow, operation_id, payload, self._result("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra))
+                return self._record_challenge_purchase(uow, operation_id, payload, self._result("stone_insufficient", 0, 0, expected_stone, expected_bought, expected_extra))
             new_stone, new_bought, new_extra = expected_stone - cost, expected_bought + real_amount, expected_extra + real_amount
-            uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0", (new_stone, user_id, expected_stone))
-            uow.execute("UPDATE player_data.arena SET daily_challenge_buys=?,daily_extra_challenges=?,last_buy_date=? WHERE user_id=?", (new_bought, new_extra, today_str, user_id))
-            return self._record(uow, operation_id, payload, self._result("applied", real_amount, cost, new_stone, new_bought, new_extra))
+            result = self._result("applied", real_amount, cost, new_stone, new_bought, new_extra)
+            with uow.savepoint("arena_challenge_purchase"):
+                changed = uow.execute(
+                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                    (new_stone, user_id, expected_stone),
+                )
+                saved_user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                if changed.rowcount != 1 or saved_user is None or as_int_like(saved_user["stone"]) != new_stone:
+                    raise _ArenaChallengePurchaseWriteRejected(self._result(
+                        "state_changed", 0, 0, expected_stone, expected_bought, expected_extra,
+                        reason="arena_challenge_purchase_stone_write_rejected", subject="user",
+                    ))
+                changed = uow.execute(
+                    "UPDATE player_data.arena SET daily_challenge_buys=?,daily_extra_challenges=?,last_buy_date=? "
+                    "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(daily_challenge_buys,0),?)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(daily_extra_challenges,0),?)=0 AND COALESCE(last_buy_date,'')=?",
+                    (new_bought, new_extra, today_str, user_id, stored_bought, stored_extra, current_date),
+                )
+                saved_arena = uow.query_one("SELECT daily_challenge_buys,daily_extra_challenges,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,))
+                if changed.rowcount != 1 or not self._challenge_purchase_arena_matches(saved_arena, new_bought, new_extra, today_str):
+                    raise _ArenaChallengePurchaseWriteRejected(self._result(
+                        "state_changed", 0, 0, expected_stone, expected_bought, expected_extra,
+                        reason="arena_challenge_purchase_state_write_rejected", subject="arena",
+                    ))
+                self._record_challenge_purchase(uow, operation_id, payload, result)
+                saved_user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                saved_arena = uow.query_one("SELECT daily_challenge_buys,daily_extra_challenges,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,))
+                if saved_user is None or as_int_like(saved_user["stone"]) != new_stone:
+                    raise _ArenaChallengePurchaseWriteRejected(self._result(
+                        "state_changed", 0, 0, expected_stone, expected_bought, expected_extra,
+                        reason="arena_challenge_purchase_stone_write_rejected", subject="user",
+                    ))
+                if not self._challenge_purchase_arena_matches(saved_arena, new_bought, new_extra, today_str):
+                    raise _ArenaChallengePurchaseWriteRejected(self._result(
+                        "state_changed", 0, 0, expected_stone, expected_bought, expected_extra,
+                        reason="arena_challenge_purchase_state_write_rejected", subject="arena",
+                    ))
+            return result
 
     @staticmethod
-    def _result(status, amount, cost, stone, bought, extra, *, reason=""):
-        return {"status": status, "reason": reason, "amount": amount, "cost": cost, "stone": stone, "bought": bought, "extra": extra}
+    def _challenge_purchase_arena_matches(row, bought, extra, today):
+        return row is not None and sqlite_int_compare(row["daily_challenge_buys"], bought) == 0 and sqlite_int_compare(row["daily_extra_challenges"], extra) == 0 and str(row["last_buy_date"] or "") == str(today)
 
     @staticmethod
-    def _record(uow, operation_id, payload, result):
+    def _result(status, amount, cost, stone, bought, extra, *, reason="", subject=""):
+        return {"status": status, "reason": reason, "subject": subject, "amount": amount, "cost": cost, "stone": stone, "bought": bought, "extra": extra}
+
+    def _record_challenge_purchase(self, uow, operation_id, payload, result):
         if result["status"] not in {"applied", "duplicate"}:
             payload = json.dumps({"_payload": payload, "_rejection": result}, ensure_ascii=True, separators=(",", ":"))
-        uow.execute("INSERT INTO arena_challenge_purchase_operations(operation_id,payload,amount,cost,stone,bought,extra) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)", (operation_id, payload, result["amount"], result["cost"], result["stone"], result["bought"], result["extra"]))
+        inserted = uow.execute(
+            "INSERT INTO arena_challenge_purchase_operations(operation_id,payload,amount,cost,stone,bought,extra) "
+            "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)",
+            (operation_id, payload, result["amount"], result["cost"], result["stone"], result["bought"], result["extra"]),
+        )
+        saved = uow.query_one(
+            "SELECT payload,amount,cost,stone,bought,extra FROM arena_challenge_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        matches = saved is not None and str(saved["payload"]) == payload and sqlite_int_compare(saved["amount"], result["amount"]) == 0 and sqlite_int_compare(saved["cost"], result["cost"]) == 0 and as_int_like(saved["stone"]) == result["stone"] and sqlite_int_compare(saved["bought"], result["bought"]) == 0 and sqlite_int_compare(saved["extra"], result["extra"]) == 0
+        if inserted.rowcount != 1 or not matches:
+            raise _ArenaChallengePurchaseWriteRejected(self._result(
+                "state_changed", 0, 0, result["stone"], result["bought"], result["extra"],
+                reason="arena_challenge_purchase_receipt_write_rejected", subject="receipt",
+            ))
         return result
 
 
