@@ -12,6 +12,13 @@ from ...infrastructure.clock import SystemClock
 from .schema import SCHEMA_MISSING, table_ready
 
 
+class _ArenaWeeklyRankWriteRejected(RuntimeError):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
+        super().__init__(f"{reason}: {subject}")
+
+
 @dataclass(frozen=True)
 class ArenaWeeklyRankReductionResult:
     status: str
@@ -24,6 +31,8 @@ class ArenaWeeklyRankReductionResult:
     skipped: int = 0
     conflicted: int = 0
     last_error: str = ""
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -109,6 +118,26 @@ class ArenaWeeklyRankRepository:
         )
 
     @staticmethod
+    def _reject(reason: str, subject: str) -> None:
+        raise _ArenaWeeklyRankWriteRejected(reason, subject)
+
+    @staticmethod
+    def _target_matches(row: Any, expected: tuple[Any, ...]) -> bool:
+        if row is None:
+            return False
+        actual = (
+            str(row["user_id"]),
+            as_int_like(row["previous_score"]),
+            str(row["previous_rank"]),
+            as_int_like(row["previous_win_streak"]),
+            as_int_like(row["target_score"]),
+            str(row["target_rank"]),
+            str(row["status"]),
+            str(row["error_text"] or ""),
+        )
+        return actual == expected
+
+    @staticmethod
     def _result(uow: DatabaseUnitOfWork, week: str, status: str) -> ArenaWeeklyRankReductionResult:
         row = uow.query_one(
             "SELECT status,reduce_steps,total,completed,changed,skipped,conflicted,last_error "
@@ -151,23 +180,49 @@ class ArenaWeeklyRankRepository:
                             "FROM arena ORDER BY user_id"
                         )
                     )
-                    uow.execute(
+                    inserted_operation = uow.execute(
                         "INSERT INTO arena_weekly_rank_reduction_operations "
                         "(business_week,reduce_steps,total,status,created_at,updated_at) VALUES(?,?,?,?,?,?)",
                         (week, steps, len(users), "completed" if not users else "running", stamp, stamp),
                     )
+                    saved_operation = uow.query_one(
+                        "SELECT reduce_steps,total,status FROM arena_weekly_rank_reduction_operations "
+                        "WHERE business_week=?", (week,)
+                    )
+                    if (
+                        inserted_operation.rowcount != 1
+                        or saved_operation is None
+                        or saved_operation["reduce_steps"] != steps
+                        or saved_operation["total"] != len(users)
+                        or str(saved_operation["status"]) != ("completed" if not users else "running")
+                    ):
+                        self._reject("arena_weekly_rank_operation_write_rejected", week)
                     targets = []
                     for ordinal, (user_id, score, rank, streak) in enumerate(users):
                         target_rank, target_score = self._target(score, rank, steps)
                         targets.append(
                             (week, user_id, ordinal, score, rank, streak, target_score, target_rank, stamp)
                         )
-                    uow.executemany(
+                    inserted_targets = uow.executemany(
                         "INSERT INTO arena_weekly_rank_reduction_targets "
                         "(business_week,user_id,ordinal,previous_score,previous_rank,previous_win_streak,"
                         "target_score,target_rank,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                         targets,
                     )
+                    saved_targets = uow.query_all(
+                        "SELECT user_id,previous_score,previous_rank,previous_win_streak,target_score,target_rank,status,error_text "
+                        "FROM arena_weekly_rank_reduction_targets WHERE business_week=? ORDER BY ordinal",
+                        (week,),
+                    )
+                    expected_targets = [
+                        (user_id, score, rank, streak, target_score, target_rank, "pending", "")
+                        for _week, user_id, _ordinal, score, rank, streak, target_score, target_rank, _stamp in targets
+                    ]
+                    if inserted_targets.rowcount != len(targets) or len(saved_targets) != len(expected_targets) or any(
+                        not self._target_matches(row, expected)
+                        for row, expected in zip(saved_targets, expected_targets)
+                    ):
+                        self._reject("arena_weekly_rank_target_write_rejected", week)
                     if not users:
                         return self._result(uow, week, "applied")
                 elif int(operation["reduce_steps"]) != steps:
@@ -198,12 +253,22 @@ class ArenaWeeklyRankRepository:
                     )
                     if current is None:
                         skipped += 1
-                        uow.execute(
+                        status_update = uow.execute(
                             "UPDATE arena_weekly_rank_reduction_targets SET status='skipped',"
                             "error_text='user_missing',updated_at=? WHERE business_week=? AND user_id=? "
                             "AND status='pending'",
                             (stamp, week, user_id),
                         )
+                        saved_target = uow.query_one(
+                            "SELECT user_id,previous_score,previous_rank,previous_win_streak,target_score,target_rank,status,error_text "
+                            "FROM arena_weekly_rank_reduction_targets WHERE business_week=? AND user_id=?",
+                            (week, user_id),
+                        )
+                        if status_update.rowcount != 1 or not self._target_matches(
+                            saved_target,
+                            (user_id, previous[0], previous[1], previous[2], target[0], target[1], "skipped", "user_missing"),
+                        ):
+                            self._reject("arena_weekly_rank_target_write_rejected", f"{week}:{user_id}")
                         continue
                     actual = (
                         as_int_like(current["score"]),
@@ -215,12 +280,22 @@ class ArenaWeeklyRankRepository:
                             or sqlite_int_compare(current["win_streak"], previous[2]) != 0):
                         skipped += 1
                         conflicted += 1
-                        uow.execute(
+                        status_update = uow.execute(
                             "UPDATE arena_weekly_rank_reduction_targets SET status='conflict',"
                             "error_text='state_changed',updated_at=? WHERE business_week=? AND user_id=? "
                             "AND status='pending'",
                             (stamp, week, user_id),
                         )
+                        saved_target = uow.query_one(
+                            "SELECT user_id,previous_score,previous_rank,previous_win_streak,target_score,target_rank,status,error_text "
+                            "FROM arena_weekly_rank_reduction_targets WHERE business_week=? AND user_id=?",
+                            (week, user_id),
+                        )
+                        if status_update.rowcount != 1 or not self._target_matches(
+                            saved_target,
+                            (user_id, previous[0], previous[1], previous[2], target[0], target[1], "conflict", "state_changed"),
+                        ):
+                            self._reject("arena_weekly_rank_target_write_rejected", f"{week}:{user_id}")
                         continue
                     if actual != target:
                         updated = uow.execute(
@@ -230,14 +305,35 @@ class ArenaWeeklyRankRepository:
                             (target[0], target[1], user_id, previous[0], previous[1], previous[2]),
                         )
                         if updated.rowcount != 1:
-                            raise RuntimeError("arena weekly rank target changed")
+                            self._reject("arena_weekly_rank_player_write_rejected", user_id)
+                        saved_player = uow.query_one(
+                            "SELECT COALESCE(score,1000) AS score,COALESCE(rank,'') AS rank,"
+                            "COALESCE(win_streak,0) AS win_streak FROM arena WHERE user_id=?",
+                            (user_id,),
+                        )
+                        if saved_player is None or (
+                            as_int_like(saved_player["score"]) != target[0]
+                            or str(saved_player["rank"]) != target[1]
+                            or as_int_like(saved_player["win_streak"]) != target[2]
+                        ):
+                            self._reject("arena_weekly_rank_player_write_rejected", user_id)
                         changed += 1
-                    uow.execute(
+                    status_update = uow.execute(
                         "UPDATE arena_weekly_rank_reduction_targets SET status='applied',"
                         "error_text='',updated_at=? WHERE business_week=? AND user_id=? "
                         "AND status='pending'",
                         (stamp, week, user_id),
                     )
+                    saved_target = uow.query_one(
+                        "SELECT user_id,previous_score,previous_rank,previous_win_streak,target_score,target_rank,status,error_text "
+                        "FROM arena_weekly_rank_reduction_targets WHERE business_week=? AND user_id=?",
+                        (week, user_id),
+                    )
+                    if status_update.rowcount != 1 or not self._target_matches(
+                        saved_target,
+                        (user_id, previous[0], previous[1], previous[2], target[0], target[1], "applied", ""),
+                    ):
+                        self._reject("arena_weekly_rank_target_write_rejected", f"{week}:{user_id}")
                 progress = uow.query_one(
                     "SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END),0) "
                     "AS pending FROM arena_weekly_rank_reduction_targets WHERE business_week=?",
@@ -247,12 +343,34 @@ class ArenaWeeklyRankRepository:
                     raise RuntimeError("arena weekly rank progress is missing")
                 completed = int(progress["total"]) - int(progress["pending"])
                 task_status = "completed" if int(progress["pending"]) == 0 else "running"
-                uow.execute(
+                operation_before = uow.query_one(
+                    "SELECT completed,changed,skipped,conflicted,status,last_error "
+                    "FROM arena_weekly_rank_reduction_operations WHERE business_week=?", (week,)
+                )
+                if operation_before is None:
+                    self._reject("arena_weekly_rank_operation_write_rejected", week)
+                expected_operation = {
+                    "completed": completed,
+                    "changed": as_int_like(operation_before["changed"]) + changed,
+                    "skipped": as_int_like(operation_before["skipped"]) + skipped,
+                    "conflicted": as_int_like(operation_before["conflicted"]) + conflicted,
+                    "status": task_status,
+                }
+                operation_update = uow.execute(
                     "UPDATE arena_weekly_rank_reduction_operations SET completed=?,changed=changed+?,"
                     "skipped=skipped+?,conflicted=conflicted+?,status=?,last_error='',updated_at=? "
                     "WHERE business_week=?",
                     (completed, changed, skipped, conflicted, task_status, stamp, week),
                 )
+                saved_operation = uow.query_one(
+                    "SELECT completed,changed,skipped,conflicted,status,last_error "
+                    "FROM arena_weekly_rank_reduction_operations WHERE business_week=?", (week,)
+                )
+                if operation_update.rowcount != 1 or saved_operation is None or any(
+                    (as_int_like(saved_operation[key]) != value if isinstance(value, int) else str(saved_operation[key] or "") != value)
+                    for key, value in expected_operation.items()
+                ) or str(saved_operation["last_error"] or "") != "":
+                    self._reject("arena_weekly_rank_operation_write_rejected", week)
                 return self._result(uow, week, "applied")
         except Exception as exc:
             try:

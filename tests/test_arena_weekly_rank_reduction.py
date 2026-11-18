@@ -297,6 +297,75 @@ class ArenaWeeklyRankReductionTests(unittest.TestCase):
             ),
         )
 
+    def test_ignored_target_progress_write_is_visible_and_retryable(self):
+        first = self.reduce(chunk_size=1)
+        self.assertEqual((first.completed, first.changed), (1, 1))
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_second_rank BEFORE UPDATE OF status ON "
+                "arena_weekly_rank_reduction_targets WHEN NEW.user_id='u2' "
+                "AND NEW.status='applied' BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "arena_weekly_rank_target_write_rejected: 2026-W29:u2"):
+            self.reduce(chunk_size=1)
+        self.assertEqual(self.users()["u2"], (2000, "黄金", 3))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                "pending",
+                conn.execute(
+                    "SELECT status FROM arena_weekly_rank_reduction_targets "
+                    "WHERE business_week=%s AND user_id='u2'", (self.business_week,)
+                ).fetchone()[0],
+            )
+            self.assertIn(
+                "arena_weekly_rank_target_write_rejected",
+                conn.execute(
+                    "SELECT last_error FROM arena_weekly_rank_reduction_operations "
+                    "WHERE business_week=%s", (self.business_week,)
+                ).fetchone()[0],
+            )
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TRIGGER ignore_second_rank")
+        resumed = self.reduce(chunk_size=10)
+        self.assertEqual((resumed.task_status, resumed.completed, resumed.changed), ("completed", 4, 3))
+
+    def test_rewritten_player_state_rolls_back_chunk_and_recovers(self):
+        first = self.reduce(chunk_size=1)
+        self.assertEqual((first.completed, first.changed), (1, 1))
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_second_rank AFTER UPDATE OF score ON arena "
+                "WHEN NEW.user_id='u2' BEGIN UPDATE arena SET score=score+7 WHERE user_id=NEW.user_id; END"
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "arena_weekly_rank_player_write_rejected: u2"):
+            self.reduce(chunk_size=1)
+        self.assertEqual(self.users()["u2"], (2000, "黄金", 3))
+        self.assertEqual("pending", self.targets()[1][6])
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TRIGGER rewrite_second_rank")
+        resumed = self.reduce(chunk_size=10)
+        self.assertEqual((resumed.task_status, resumed.completed, resumed.changed), ("completed", 4, 3))
+
+    def test_ignored_operation_progress_write_is_visible_and_retryable(self):
+        first = self.reduce(chunk_size=1)
+        self.assertEqual((first.completed, first.changed), (1, 1))
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_rank_progress BEFORE UPDATE OF completed ON "
+                "arena_weekly_rank_reduction_operations BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "arena_weekly_rank_operation_write_rejected: 2026-W29"):
+            self.reduce(chunk_size=10)
+        self.assertEqual(self.users()["u2"], (2000, "黄金", 3))
+        self.assertEqual("pending", self.targets()[1][6])
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TRIGGER ignore_rank_progress")
+        resumed = self.reduce(chunk_size=10)
+        self.assertEqual((resumed.task_status, resumed.completed, resumed.changed), ("completed", 4, 3))
+
     def test_missing_frozen_user_is_skipped(self):
         first = self.reduce(chunk_size=1)
         self.assertEqual(first.completed, 1)

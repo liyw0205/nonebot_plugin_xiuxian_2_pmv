@@ -199,6 +199,43 @@ def test_arena_daily_reward_rejection_is_scheduler_error_and_retries_idempotentl
             assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
 
 
+def test_arena_weekly_rank_rejection_is_scheduler_error_and_recovers(tmp_path):
+    from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state, apply_arena_weekly_rank_reduction
+    from nonebot_plugin_xiuxian_2.features.arena.weekly_rank_application import ArenaWeeklyRankApplication
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_scheduler as scheduler
+
+    database = tmp_path / "arena-weekly-player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_arena_state(uow)
+        apply_arena_weekly_rank_reduction(uow)
+        uow.execute("INSERT INTO arena(user_id,score,rank,win_streak) VALUES('u1',1100,'青铜',2)")
+        uow.execute("INSERT INTO arena(user_id,score,rank,win_streak) VALUES('u2',2000,'黄金',3)")
+        uow.execute(
+            "CREATE TRIGGER ignore_rank_target BEFORE UPDATE OF status ON arena_weekly_rank_reduction_targets "
+            "WHEN NEW.user_id='u2' AND NEW.status='applied' BEGIN SELECT RAISE(IGNORE); END"
+        )
+    application = ArenaWeeklyRankApplication(database)
+    with patch.object(xiuxian_arena, "arena_weekly_rank_application", application):
+        failed = _execute_job(scheduler.weekly_reduce_arena_rank)
+        assert failed.code == EVENT_JOB_ERROR
+        assert "arena_weekly_rank_target_write_rejected" in str(failed.exception)
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            assert uow.query_all("SELECT user_id,score,rank,win_streak FROM arena ORDER BY user_id") == [
+                {"user_id": "u1", "score": 1100, "rank": "青铜", "win_streak": 2},
+                {"user_id": "u2", "score": 2000, "rank": "黄金", "win_streak": 3},
+            ]
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("DROP TRIGGER ignore_rank_target")
+        assert _execute_job(scheduler.weekly_reduce_arena_rank).code == EVENT_JOB_EXECUTED
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            assert uow.query_all("SELECT score,rank,win_streak FROM arena ORDER BY user_id") == [
+                {"score": 1000, "rank": "青铜", "win_streak": 0},
+                {"score": 1000, "rank": "青铜", "win_streak": 0},
+            ]
+            assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+
+
 def test_sect_batch_preserves_successful_sects_and_reports_failed_subject(tmp_path):
     from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
     from nonebot_plugin_xiuxian_2.features.sect.migrations import apply_sect_operations
