@@ -196,6 +196,109 @@ async def check_accessory_affix_writes(probe, *, unlock):
                           abort=True, recovered=True, replay_unchanged=True)
 
 
+async def check_accessory_wash_writes(probe):
+    player, game = probe.context.paths.player_db, probe.context.paths.game_db
+    command = "饰品洗练"
+    uid = "fixture-accessory-01"
+    request = f"{command} {uid}"
+    phrases = {
+        "accessory_wash_stone_write_rejected": "洗练石扣除未能保存",
+        "accessory_wash_stone_projection_mismatch": "洗练石数量与扣除请求不一致",
+        "accessory_wash_state_write_rejected": "饰品洗练状态保存失败",
+        "accessory_wash_state_projection_mismatch": "饰品洗练状态与请求不一致",
+        "accessory_wash_receipt_write_rejected": "饰品洗练操作回执保存失败",
+        "accessory_wash_receipt_projection_mismatch": "饰品洗练操作回执不一致",
+    }
+    faults = (
+        (game, "BEFORE UPDATE OF goods_num ON back", "SELECT RAISE(IGNORE)",
+         "accessory_wash_stone_write_rejected"),
+        (game, "AFTER UPDATE OF goods_num ON back",
+         "UPDATE back SET goods_num=0 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+         "accessory_wash_stone_projection_mismatch"),
+        (player, "BEFORE UPDATE OF equipped ON player_accessory", "SELECT RAISE(IGNORE)",
+         "accessory_wash_state_write_rejected"),
+        (player, "AFTER UPDATE OF equipped ON player_accessory",
+         "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+         "accessory_wash_state_projection_mismatch"),
+        (game, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+         "accessory_wash_receipt_write_rejected"),
+        (game, "AFTER INSERT ON accessory_transaction_operations",
+         "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+         "accessory_wash_receipt_projection_mismatch"),
+        (game, "BEFORE INSERT ON accessory_transaction_operations",
+         "SELECT RAISE(ABORT,'isolated accessory wash abort')", None),
+    )
+    probe.grant_item(20023, 20)
+    probe.seed(game, "CREATE TABLE isolated_wash_effect (effect INTEGER)")
+    probe.seed(player, "CREATE TABLE isolated_wash_effect (effect INTEGER)")
+    before_assets = balances(probe), backpack(probe)
+    receipt_sql = "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations ORDER BY operation_id"
+    baseline_stones = probe.rows(
+        game,
+        "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=20023",
+    )[0]
+
+    for number, (database, event, fault, reason) in enumerate(faults, start=970500):
+        accessory = seed_accessory_document(probe, [19001])[0]
+        accessory["affixes"] = [
+            {"type": "攻击", "value": 0.1},
+            {"type": "速度", "value": 20},
+        ]
+        bag = [accessory]
+        probe.seed(player, "UPDATE player_accessory SET bag=? WHERE user_id='900001'",
+                   (json.dumps(bag, ensure_ascii=False),))
+        before_state = accessory_projection(probe)
+        stone_sql = "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=20023"
+        before_stones = probe.rows(game, stone_sql)
+        before_receipts = probe.rows(game, receipt_sql)
+        probe.seed(database, f"CREATE TRIGGER reject_wash {event} "
+                   f"BEGIN INSERT INTO isolated_wash_effect VALUES(1); {fault}; END")
+        text = await probe.command(command, request, number=number, allow_exception=reason is None)
+        if reason is None:
+            errors = "\n".join(probe.calls[-1]["errors"])
+            assert "sqlite3.IntegrityError: isolated accessory wash abort" in errors, errors
+        else:
+            assert phrases[reason] in text and uid in text, text
+        assert "洗练完成：" not in text, text
+        assert accessory_projection(probe) == before_state
+        assert probe.rows(game, stone_sql) == before_stones
+        assert probe.rows(game, receipt_sql) == before_receipts
+        assert not probe.rows(database, "SELECT effect FROM isolated_wash_effect")
+
+        probe.seed(database, "DROP TRIGGER reject_wash")
+        recovered = await probe.command(command, request, number=number)
+        assert "洗练完成：" in recovered, recovered
+        after_state = accessory_projection(probe)
+        after_stones = probe.rows(game, stone_sql)
+        after_receipts = probe.rows(game, receipt_sql)
+        assert int(after_stones[0][0]) == int(before_stones[0][0]) - 1
+        updated = json.loads(after_state[0][1])[0]
+        assert updated["wash_count"] == 1 and len(updated["affixes"]) == 2
+        receipt = next(row for row in after_receipts if row not in before_receipts)
+        assert receipt[0] == f"accessory:{number}:wash:900001:{uid}"
+        assert json.loads(receipt[2])["expected_stones"] == int(before_stones[0][0])
+        assert json.loads(receipt[3])["accessory"] == updated
+        replay = await probe.command(command, request, number=number)
+        assert "洗练完成：" in replay
+        assert accessory_projection(probe) == after_state
+        assert probe.rows(game, stone_sql) == after_stones
+        assert probe.rows(game, receipt_sql) == after_receipts
+        probe.seed(
+            game,
+            "UPDATE back SET goods_num=?,bind_num=? WHERE user_id='900001' AND goods_id=20023",
+            baseline_stones,
+        )
+    assert (balances(probe), backpack(probe)) == before_assets, (
+        before_assets,
+        (balances(probe), backpack(probe)),
+    )
+    assert_dungeon_purchase_integrity(game)
+    assert_dungeon_purchase_integrity(player)
+    probe.evidence.update(stone_write=True, stone_projection=True, state_write=True,
+                          state_projection=True, receipt_write=True, receipt_projection=True,
+                          abort=True, recovery=True, replay_unchanged=True)
+
+
 def register(case):
     @case(
         "accessory-bag-page-real",
@@ -303,6 +406,18 @@ def register(case):
     )
     async def accessory_affix_unlock_write_recovery(probe):
         await check_accessory_affix_writes(probe, unlock=True)
+
+    @case(
+        "accessory-wash-write-recovery",
+        "饰品洗练",
+        "真实饰品UID，使用洗练石",
+        "合法饰品实际词条、洗练石库存、player/game隔离SQLite和永久回执",
+        "石料、饰品状态、回执拒写/改写均保留原因且整笔回滚，ABORT原样并可恢复重放",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_wash_write_recovery(probe):
+        await check_accessory_wash_writes(probe)
 
     for command, query, marker in (
         ("查看饰品", "acc_missing_parameter", "未找到"),

@@ -1133,7 +1133,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     elif result.status in {"accessory_missing", "state_changed"}:
         text = _acc_fail_msg(result, action="洗练")
     elif not result.succeeded or result.accessory is None:
-        text = "洗练失败"
+        text = _acc_fail_msg(result, action="洗练", subject=uid)
     else:
         updated = result.accessory
         q2 = max(1, min(5, int(updated.get("quality", 1))))

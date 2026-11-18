@@ -678,6 +678,13 @@ REASONS = {
     "accessory_affix_state_projection_mismatch": "饰品词条状态与请求不一致，本次未完成，请稍后重试。",
     "accessory_affix_receipt_write_rejected": "饰品词条操作回执保存失败，本次未完成，请稍后重试。",
     "accessory_affix_receipt_projection_mismatch": "饰品词条操作回执不一致，本次未完成，请稍后重试。",
+    "accessory_wash_stone_write_rejected": "洗练石扣除未能保存，本次洗练已撤销，请稍后重试。",
+    "accessory_wash_stone_projection_mismatch": "洗练石数量与扣除请求不一致，本次洗练已撤销，请联系管理员核对。",
+    "accessory_wash_state_write_rejected": "饰品洗练状态保存失败，本次洗练已撤销，请稍后重试。",
+    "accessory_wash_state_projection_mismatch": "饰品洗练状态与请求不一致，本次洗练已撤销，请联系管理员核对。",
+    "accessory_wash_receipt_write_rejected": "饰品洗练操作回执保存失败，本次洗练已撤销，请稍后重试。",
+    "accessory_wash_receipt_projection_mismatch": "饰品洗练操作回执不一致，本次洗练已撤销，请联系管理员核对。",
+    "accessory_wash_final_projection_mismatch": "饰品洗练最终数据与请求不一致，本次洗练已撤销，请联系管理员核对。",
 }
 
 

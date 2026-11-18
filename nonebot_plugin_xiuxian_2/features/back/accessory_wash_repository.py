@@ -10,6 +10,12 @@ from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from .accessory_wash_domain import AccessoryWashChange
 
 
+class _WashWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str):
+        self.reason = reason
+        self.subject = subject
+
+
 class AccessoryWashSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
@@ -29,7 +35,15 @@ class AccessoryWashSqlRepository:
     @classmethod
     def _result(cls, status: str, result_json: str) -> AccessoryWashChange:
         value = json.loads(result_json)
-        return AccessoryWashChange(status, str(value.get("action", "wash")), str(value.get("user_id", "")), int(value.get("affected", 0)), as_int_like(value.get("stone_delta", 0)), value.get("accessory"))
+        return AccessoryWashChange(
+            status,
+            str(value.get("action", "wash")),
+            str(value.get("user_id", "")),
+            int(value.get("affected", 0)),
+            as_int_like(value.get("stone_delta", 0)),
+            value.get("accessory"),
+            subject=str(value.get("subject", "")),
+        )
 
     def replay(self, operation_id: str) -> AccessoryWashChange | None:
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
@@ -44,44 +58,107 @@ class AccessoryWashSqlRepository:
             raise ValueError("operation_id must not be empty")
         payload = {"user_id": user_id, "uid": uid, "expected_accessory": expected_accessory, "expected_stones": int(expected_stones), "stone_id": int(stone_id), "stone_cost": int(stone_cost)}
         payload_json = self._json(payload)
-        with AttachedDatabaseUnitOfWork(self.game_database, attachments={"player_data": self.player_database}, immediate=True) as uow:
-            previous = uow.query_one("SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?", (operation_id,))
-            if previous is not None:
-                if str(previous["action"]) != "wash" or str(previous["payload"]) != payload_json:
-                    return AccessoryWashChange("state_changed", "wash", user_id, reason="operation_conflict")
-                return self._result("duplicate", str(previous["result_json"]))
-            row = uow.query_one("SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?", (user_id,))
-            if row is None:
-                return AccessoryWashChange("accessory_missing", "wash", user_id)
-            equipped, bag = self._decode(row["equipped"], dict), self._decode(row["bag"], list)
-            where, key, current = None, None, None
-            for index, item in enumerate(bag):
-                if isinstance(item, dict) and str(item.get("uid", "")) == uid:
-                    where, key, current = "bag", index, item
-                    break
-            if current is None:
-                for slot, item in equipped.items():
+        state_query = "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?"
+        stone_query = "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?"
+        receipt_query = (
+            "SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?"
+        )
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(receipt_query, (operation_id,))
+                if previous is not None:
+                    if str(previous["action"]) != "wash" or str(previous["payload"]) != payload_json:
+                        return AccessoryWashChange(
+                            "state_changed", "wash", user_id, reason="operation_conflict", subject=uid
+                        )
+                    return self._result("duplicate", str(previous["result_json"]))
+                row = uow.query_one(state_query, (user_id,))
+                if row is None:
+                    return AccessoryWashChange("accessory_missing", "wash", user_id, subject=uid)
+                equipped, bag = self._decode(row["equipped"], dict), self._decode(row["bag"], list)
+                where, key, current = None, None, None
+                for index, item in enumerate(bag):
                     if isinstance(item, dict) and str(item.get("uid", "")) == uid:
-                        where, key, current = "equipped", slot, item
+                        where, key, current = "bag", index, item
                         break
-            if current is None:
-                return AccessoryWashChange("accessory_missing", "wash", user_id)
-            if self._json(current) != self._json(expected_accessory):
-                return AccessoryWashChange("state_changed", "wash", user_id, reason="accessory_changed")
-            stones = uow.query_one("SELECT goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, int(stone_id)))
-            if stones is None or int(stones["goods_num"] or 0) != int(expected_stones):
-                return AccessoryWashChange("state_changed", "wash", user_id, reason="item_missing" if stones is None else "wash_stone_changed")
-            changed = uow.execute("UPDATE back SET goods_num=goods_num-?,bind_num=MIN(COALESCE(bind_num,0),goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (int(stone_cost), int(stone_cost), user_id, int(stone_id), int(stone_cost)))
-            if changed.rowcount != 1:
-                return AccessoryWashChange("item_insufficient", "wash", user_id)
-            if where == "bag":
-                bag[key] = updated_accessory
-            else:
-                equipped[key] = updated_accessory
-            uow.execute("UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?", (json.dumps(equipped, ensure_ascii=False), json.dumps(bag, ensure_ascii=False), user_id))
-            result_json = self._json({"action": "wash", "user_id": user_id, "affected": 1, "stone_delta": -int(stone_cost), "accessory": updated_accessory, "details": None})
-            uow.execute("INSERT INTO accessory_transaction_operations(operation_id,action,payload,result_json) VALUES(?,?,?,?)", (operation_id, "wash", payload_json, result_json))
-            return AccessoryWashChange("applied", "wash", user_id, 1, -int(stone_cost), updated_accessory)
+                if current is None:
+                    for slot, item in equipped.items():
+                        if isinstance(item, dict) and str(item.get("uid", "")) == uid:
+                            where, key, current = "equipped", slot, item
+                            break
+                if current is None:
+                    return AccessoryWashChange("accessory_missing", "wash", user_id, subject=uid)
+                if self._json(current) != self._json(expected_accessory):
+                    return AccessoryWashChange(
+                        "state_changed", "wash", user_id, reason="accessory_changed", subject=uid
+                    )
+                stone_row = uow.query_one(stone_query, (user_id, int(stone_id)))
+                if stone_row is None or int(stone_row["goods_num"] or 0) != int(expected_stones):
+                    return AccessoryWashChange(
+                        "state_changed", "wash", user_id,
+                        reason="item_missing" if stone_row is None else "wash_stone_changed",
+                        subject=uid,
+                    )
+                before_stones = int(stone_row["goods_num"] or 0)
+                before_bound = int(stone_row["bind_num"] or 0)
+                after_stones = before_stones - int(stone_cost)
+                after_bound = min(before_bound, after_stones)
+                changed = uow.execute(
+                    "UPDATE back SET goods_num=goods_num-?,bind_num=MIN(COALESCE(bind_num,0),goods_num-?) "
+                    "WHERE user_id=? AND goods_id=? AND goods_num>=?",
+                    (int(stone_cost), int(stone_cost), user_id, int(stone_id), int(stone_cost)),
+                )
+                if changed.rowcount != 1:
+                    raise _WashWriteRejected("accessory_wash_stone_write_rejected", uid)
+                if uow.query_one(stone_query, (user_id, int(stone_id))) != {
+                    "goods_num": after_stones, "bind_num": after_bound
+                }:
+                    raise _WashWriteRejected("accessory_wash_stone_projection_mismatch", uid)
+                if where == "bag":
+                    bag[key] = updated_accessory
+                else:
+                    equipped[key] = updated_accessory
+                expected_state = {
+                    "equipped": json.dumps(equipped, ensure_ascii=False),
+                    "bag": json.dumps(bag, ensure_ascii=False),
+                }
+                saved_state = uow.execute(
+                    "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
+                    (expected_state["equipped"], expected_state["bag"], user_id),
+                )
+                if saved_state.rowcount != 1:
+                    raise _WashWriteRejected("accessory_wash_state_write_rejected", uid)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _WashWriteRejected("accessory_wash_state_projection_mismatch", uid)
+                result_json = self._json({
+                    "action": "wash", "user_id": user_id, "affected": 1,
+                    "stone_delta": -int(stone_cost), "accessory": updated_accessory,
+                    "details": None,
+                })
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations(operation_id,action,payload,result_json) "
+                    "VALUES(?,?,?,?)",
+                    (operation_id, "wash", payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _WashWriteRejected("accessory_wash_receipt_write_rejected", uid)
+                if uow.query_one(receipt_query, (operation_id,)) != {
+                    "action": "wash", "payload": payload_json, "result_json": result_json
+                }:
+                    raise _WashWriteRejected("accessory_wash_receipt_projection_mismatch", uid)
+                if uow.query_one(stone_query, (user_id, int(stone_id))) != {
+                    "goods_num": after_stones, "bind_num": after_bound
+                } or uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _WashWriteRejected("accessory_wash_final_projection_mismatch", uid)
+                return AccessoryWashChange(
+                    "applied", "wash", user_id, 1, -int(stone_cost), updated_accessory, subject=uid
+                )
+        except _WashWriteRejected as exc:
+            return AccessoryWashChange("failed", "wash", user_id, reason=exc.reason, subject=exc.subject)
 
 
 __all__ = ["AccessoryWashSqlRepository"]
