@@ -309,6 +309,76 @@ def register(case):
         assert rows == [(sid, 12)], (text, rows)
         probe.evidence.update(sect_id=sid, membership=rows)
 
+    @case("sect-member-join-replay-conflict", "加入宗门", "宗门名/同消息重放/改参",
+          "目标尚未入宗，另有可用宗门", "成员职位、人数和永久回执实际持久化；重放不重复加入，换目标保留冲突原因",
+          group="sect-member-join-parameters")
+    async def member_join_replay(probe):
+        sid = seed_sect(probe, members=False)
+        database = probe.context.paths.game_db
+        first = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960190)
+        assert "欢迎" in first, first
+        assert probe.rows(database, "SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id='900002'") == [(sid, 12)]
+        assert probe.rows(database, "SELECT user_id,sect_id,member_count,member_limit FROM sect_member_join_operations") == [("900002", sid, 2, 20)]
+        probe.clear_cooldowns()
+        replay = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960190)
+        assert "已经完成" in replay and "欢迎" not in replay, replay
+        probe.clear_cooldowns()
+        conflict = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900001", number=960190)
+        assert "该操作号已用于不同内容" in conflict, conflict
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, patch
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+        event = SimpleNamespace(get_user_id=lambda: "900002")
+        adapter_contracts = 0
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated member-join delivery failure") if send_fails else None)
+            with patch.object(utils, "XiuConfig", return_value=config), patch.object(utils, "get_chat_scene", return_value="group"), patch.object(utils, "is_group_event", return_value=True), patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), patch.object(utils, "_send_event_message", plain), patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                await utils.handle_send(bot, event, conflict, md_type="宗门", k1="加入", v1="宗门加入")
+            adapter_contracts += 1
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+            else:
+                markdown_send.assert_awaited_once()
+        probe.evidence.update(sid=sid, first=first, replay=replay, conflict=conflict, adapter_contracts=adapter_contracts)
+
+    @case("sect-member-join-member-recovery", "加入宗门", "成员写改写/解除后同消息恢复",
+          "目标尚未入宗，隔离数据库注入成员职位改写", "具体成员拒写原因与关系回滚；解除 trigger 后同消息成功",
+          group="sect-member-join-recovery", outcome="recovery")
+    async def member_join_member_recovery(probe):
+        sid = seed_sect(probe, members=False)
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_member_join_member_rewrite AFTER UPDATE OF sect_id ON user_xiuxian WHEN NEW.user_id='900002' BEGIN UPDATE user_xiuxian SET sect_position=4 WHERE user_id='900002'; END")
+        failed = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960191)
+        assert "加入宗门成员记录保存失败" in failed, failed
+        assert probe.rows(database, "SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id='900002'") == [(None, None)]
+        probe.seed(database, "DROP TRIGGER sect_member_join_member_rewrite")
+        probe.clear_cooldowns()
+        recovered = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960191)
+        assert "欢迎" in recovered, recovered
+        assert probe.rows(database, "SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id='900002'") == [(sid, 12)]
+        probe.evidence.update(sid=sid, failed=failed, recovered=recovered)
+
+    @case("sect-member-join-receipt-recovery", "加入宗门", "回执 IGNORE/解除后同消息恢复",
+          "目标尚未入宗，隔离数据库注入永久加入回执 IGNORE", "具体回执拒写原因与关系回滚；解除 trigger 后同消息成功",
+          group="sect-member-join-recovery", outcome="recovery")
+    async def member_join_receipt_recovery(probe):
+        sid = seed_sect(probe, members=False)
+        database = probe.context.paths.game_db
+        probe.seed(database, "CREATE TRIGGER sect_member_join_receipt_ignore BEFORE INSERT ON sect_member_join_operations BEGIN SELECT RAISE(IGNORE); END")
+        failed = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960192)
+        assert "加入宗门回执保存失败" in failed, failed
+        assert probe.rows(database, "SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id='900002'") == [(None, None)]
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_member_join_operations") == [(0,)]
+        probe.seed(database, "DROP TRIGGER sect_member_join_receipt_ignore")
+        probe.clear_cooldowns()
+        recovered = await probe.command("加入宗门", "加入宗门 参数测试宗", actor="900002", number=960192)
+        assert "欢迎" in recovered, recovered
+        assert probe.rows(database, "SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id='900002'") == [(sid, 12)]
+        probe.evidence.update(sid=sid, failed=failed, recovered=recovered)
+
     @case("sect-donate-valid-amount", "宗门捐献", "正整数灵石数量", "真实宗主、宗门和充足灵石",
           "扣款、贡献/建设/资材增加和回执持久化，重放不重复且提示已完成", group="sect-donation-parameters")
     async def donate(probe):

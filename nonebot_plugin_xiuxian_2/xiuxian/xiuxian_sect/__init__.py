@@ -3163,17 +3163,14 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await join_sect.finish()
     
-    # 检查是否已有宗门
-    sect_id = user_info['sect_id']
-    if user_info['sect_id']:
-        current_sect = sect_application.get_sect_info(sect_id)
-        current_sect_name = current_sect['sect_name'] if current_sect else sect_id
-        msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
-        await handle_send(bot, event, msg)
-        await join_sect.finish()
-    
     sect_input = args.extract_plain_text().strip()
     if not sect_input:
+        if user_info['sect_id']:
+            current_sect = sect_application.get_sect_info(user_info['sect_id'])
+            current_sect_name = current_sect['sect_name'] if current_sect else user_info['sect_id']
+            msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
+            await handle_send(bot, event, msg)
+            await join_sect.finish()
         msg = "请输入宗门编号或宗门名称！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await join_sect.finish()
@@ -3208,13 +3205,19 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     result = type("SectJoinView", (), join_data)()
     result.applied = join_outcome.ok
     target_sect_name = getattr(result, "sect_name", None) or target_sect_name or sect_input
-    if result.applied:
+    if join_outcome.replayed or result.status == "duplicate":
+        msg = "这条加入宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("加入宗门", join_outcome)
+    elif result.applied:
         msg = (
             f"欢迎{user_info['user_name']}道友加入【{target_sect_name}】！"
             f"当前宗门人数：{result.member_count}/{result.member_limit}"
         )
     elif result.status == "already_in_sect":
-        msg = "道友已经加入其他宗门，无法重复加入！"
+        current_sect = sect_application.get_sect_info(user_info['sect_id']) if user_info['sect_id'] else None
+        current_sect_name = current_sect['sect_name'] if current_sect else user_info['sect_id']
+        msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
     elif result.status == "sect_closed":
         msg = f"宗门【{target_sect_name}】已封闭，无法加入！"
     elif result.status == "join_closed":

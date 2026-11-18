@@ -2,6 +2,30 @@
 
 最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
 
+## 最新交付：宗门成员加入完整玩家组（G2 checkpoint）
+
+隔离 SQLite 红复现确认旧 `加入宗门` 在成员 `UPDATE` 被 trigger 改写、永久加入回执
+`RAISE(IGNORE)` 或回执改写时仍返回成功，成员关系、职位或回执可能不符合成功语义；SQLite
+`ABORT` 原异常保留。现仓储在保存点内逐步核成员写入影响行数与最终投影、开放/封闭状态、人数
+及永久回执影响行数和最终投影；`sect_member_join_member_write_rejected`、
+`sect_member_join_state_write_rejected`、`sect_member_join_receipt_write_rejected` 携具体
+`reason/subject` 回滚整笔 trigger 副作用，解除故障后同操作号可恢复，改 actor 保留
+`operation_conflict`。应用层把已知拒写保留为可重试失败，handler 先处理 replay/duplicate 和
+失败原因，不再被已有宗门前置检查截断有效带参重放。
+
+真实 `加入宗门` dispatch 覆盖名称参数、成员职位/人数/永久回执实际数据、同消息重放、同号冲突、
+成员写改写与回执 `IGNORE` 恢复，以及开放/封闭、容量、已有宗门和 SQLite `ABORT` 契约。
+OneBot 文本、QQ Markdown、发送失败降级为 mock 合同。受影响组合 `48 passed, 41 subtests`，
+新增参数组 `2 passed`；受影响 compileall 与 `git diff --check` 通过。仅使用 `/home` venv、
+共享锁和隔离 SQLite，未访问线上数据库、部署、`/root/myenv` 或真实 QQ；用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门商店兑换。** 先在隔离 SQLite 以真实 `宗门兑换` matcher/DI/handler
+红复现背包写入、周限购、宗门贡献/资材和永久回执的 `IGNORE`、改写、ABORT，核旧路径是否伪成功、
+资产/物品/回执是否部分提交；再覆盖正整数/默认/0/负数/非数字/多余参数、限购/资源/背包边界、
+重放/改参冲突、具体 `reason/subject`、完整回滚与同消息恢复、三库实际数据和 OneBot/QQ mock
+合同。不扩定时任务、商店之外玩法、性能或全仓审计。
+
 ## 最新交付：宗门加入开放/关闭双入口完整玩家组（G2 checkpoint）
 
 隔离 SQLite 红复现确认旧 `开放宗门加入`/`关闭宗门加入` 在 `join_open` trigger 改写、永久回执
@@ -17,9 +41,7 @@
 `2 passed`，compileall 与 `git diff --check` 通过。冻结清单测试因用户既有删除
 `docs/refactor_phase2_legacy_path_items.json` 单独失败；该删除按约束保留且不暂存。
 
-**下一冻结完整玩家组：宗门成员加入。** 先对真实 `加入宗门` matcher/DI/handler 在隔离 SQLite 红复现成员写入与
-永久回执的 IGNORE/改写/ABORT，再覆盖开放/封闭、容量、参数、replay/冲突、恢复和适配器合同；不扩定时任务、商店、
-性能或全仓审计。
+**本组后续冻结已转为宗门商店兑换；成员加入证据见文档顶部。**
 
 ## 最新交付：宗门改名完整玩家组（G2 checkpoint）
 

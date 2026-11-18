@@ -8,7 +8,7 @@ from typing import Any, Mapping, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
-from .schema import table_ready
+from .schema import SCHEMA_MISSING, table_ready
 
 
 class _StateChanged(Exception):
@@ -32,6 +32,11 @@ class _PositionRejected(Exception):
 
 class _RemovalRejected(Exception):
     def __init__(self, reason, subject):
+        self.reason, self.subject = reason, subject
+
+
+class _MemberJoinRejected(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
         self.reason, self.subject = reason, subject
 
 
@@ -555,10 +560,16 @@ class SectRenameSqlRepository:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         sect_id, member_position = int(sect_id), int(member_position)
         with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if not table_ready(
+                uow,
+                "sect_member_join_operations",
+                frozenset({"operation_id", "user_id", "sect_id", "member_count", "member_limit"}),
+            ):
+                return {"status": SCHEMA_MISSING, "user_id": user_id, "sect_id": sect_id}
             old = uow.query_one("SELECT o.user_id,o.sect_id,o.member_count,o.member_limit,s.sect_name FROM sect_member_join_operations o LEFT JOIN sects s ON s.sect_id=o.sect_id WHERE o.operation_id=?", (operation_id,))
             if old:
                 if str(old["user_id"]) != user_id or int(old["sect_id"]) != sect_id:
-                    return {"status": "operation_conflict", "user_id": user_id, "sect_id": sect_id}
+                    return {"status": "operation_conflict", "user_id": user_id, "sect_id": sect_id, "reason": "operation_conflict", "subject": "actor"}
                 return {"status": "duplicate", "user_id": user_id, "sect_id": sect_id, "sect_name": str(old["sect_name"] or ""), "member_count": int(old["member_count"]), "member_limit": int(old["member_limit"])}
             user = uow.query_one("SELECT sect_id FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None: return {"status": "user_missing", "user_id": user_id, "sect_id": sect_id}
@@ -569,11 +580,43 @@ class SectRenameSqlRepository:
             if int(sect["join_open"] or 0) != 1: return {"status": "join_closed", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or "")}
             limit = self._member_limit(int(sect["sect_scale"] or 0));count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
             if count >= limit: return {"status": "sect_full", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
-            changed = uow.execute("UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=? AND sect_id IS NULL", (sect_id,member_position,user_id))
-            if changed.rowcount != 1: return {**{"status": "state_changed", "user_id": user_id, "sect_id": sect_id}, "reason": "sect_member_write_rejected", "subject": ""}
-            count += 1
-            uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,count,limit))
-            return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": count, "member_limit": limit}
+            try:
+                with uow.savepoint("sect_member_join"):
+                    changed = uow.execute("UPDATE user_xiuxian SET sect_id=?,sect_position=? WHERE user_id=? AND sect_id IS NULL", (sect_id,member_position,user_id))
+                    expected_count = count + 1
+                    saved_user = uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    saved_sect = uow.query_one("SELECT join_open,closed FROM sects WHERE sect_id=?", (sect_id,))
+                    current_count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
+                    if (
+                        changed.rowcount != 1
+                        or saved_user is None
+                        or saved_user["sect_id"] is None
+                        or int(saved_user["sect_id"]) != sect_id
+                        or saved_user["sect_position"] is None
+                        or int(saved_user["sect_position"]) != member_position
+                        or current_count != expected_count
+                    ):
+                        raise _MemberJoinRejected("sect_member_join_member_write_rejected", user_id)
+                    if saved_sect is None or int(saved_sect["join_open"] or 0) != 1 or int(saved_sect["closed"] or 0) != 0:
+                        raise _MemberJoinRejected("sect_member_join_state_write_rejected", "sect")
+                    receipt = uow.execute("INSERT INTO sect_member_join_operations(operation_id,user_id,sect_id,member_count,member_limit) VALUES(?,?,?,?,?)", (operation_id,user_id,sect_id,expected_count,limit))
+                    if receipt.rowcount != 1:
+                        raise _MemberJoinRejected("sect_member_join_receipt_write_rejected", operation_id)
+                    saved_receipt = uow.query_one("SELECT user_id,sect_id,member_count,member_limit FROM sect_member_join_operations WHERE operation_id=?", (operation_id,))
+                    expected_receipt = (user_id, sect_id, expected_count, limit)
+                    actual_receipt = None if saved_receipt is None else (str(saved_receipt["user_id"]), int(saved_receipt["sect_id"]), int(saved_receipt["member_count"]), int(saved_receipt["member_limit"]))
+                    if actual_receipt != expected_receipt:
+                        raise _MemberJoinRejected("sect_member_join_receipt_write_rejected", operation_id)
+                    saved_user = uow.query_one("SELECT sect_id,sect_position FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    saved_sect = uow.query_one("SELECT join_open,closed FROM sects WHERE sect_id=?", (sect_id,))
+                    current_count = int(uow.query_one("SELECT COUNT(*) AS n FROM user_xiuxian WHERE sect_id=?", (sect_id,))["n"])
+                    if saved_user is None or saved_user["sect_id"] is None or int(saved_user["sect_id"]) != sect_id or saved_user["sect_position"] is None or int(saved_user["sect_position"]) != member_position or current_count != expected_count:
+                        raise _MemberJoinRejected("sect_member_join_member_write_rejected", user_id)
+                    if saved_sect is None or int(saved_sect["join_open"] or 0) != 1 or int(saved_sect["closed"] or 0) != 0:
+                        raise _MemberJoinRejected("sect_member_join_state_write_rejected", "sect")
+            except _MemberJoinRejected as exc:
+                return {"status": "state_changed", "user_id": user_id, "sect_id": sect_id, "reason": exc.reason, "subject": exc.subject}
+            return {"status": "joined", "user_id": user_id, "sect_id": sect_id, "sect_name": str(sect["sect_name"] or ""), "member_count": expected_count, "member_limit": limit}
 
     def rename(self, operation_id, actor_id, sect_id, new_name, cost, card_id):
         operation_id, actor_id, new_name = str(operation_id).strip(), str(actor_id), str(new_name).strip()

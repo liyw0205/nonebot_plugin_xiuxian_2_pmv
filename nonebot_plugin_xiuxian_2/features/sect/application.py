@@ -421,9 +421,10 @@ class SectApplication:
                 }.get(action)
                 if status in {"applied", "joined", "learned", "duplicate", success_status}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
-                elif action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and str(data.get("reason", "")).endswith("_write_rejected"):
+                elif action in {"sect.join", "sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and str(data.get("reason", "")).endswith("_write_rejected"):
                     message = ("宗门捐献写入未完成，请稍后重试。" if action == "sect.donate"
                                else "宗门改名写入未完成，请稍后重试。" if action == "sect.rename"
+                               else "加入宗门写入未完成，请稍后重试。" if action == "sect.join"
                                else "宗门丹药领取写入失败。" if action == "sect.claim_elixir"
                                else "宗门功法学习写入未完成，请稍后重试。" if action == "sect.learn_main"
                                else "宗门神通学习写入未完成，请稍后重试。" if action == "sect.learn_secondary"
@@ -438,7 +439,7 @@ class SectApplication:
                     with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                         self.ledger.finish(uow, outcome)
                 except Exception as exc:
-                    if action in {"sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and not outcome.ok and data.get("reason"):
+                    if action in {"sect.join", "sect.donate", "sect.rename", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and not outcome.ok and data.get("reason"):
                         raise DomainError(data["reason"], outcome.message, data) from exc
                     raise
                 return outcome
