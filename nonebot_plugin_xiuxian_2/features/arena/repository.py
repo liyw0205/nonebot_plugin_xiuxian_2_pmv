@@ -34,6 +34,61 @@ _PURCHASE_RECEIPT_COLUMNS = frozenset({"payload", "status", "result_json"})
 _CHALLENGE_PURCHASE_RECEIPT_COLUMNS = frozenset({"payload", "amount", "cost", "stone", "bought", "extra"})
 
 
+class _ArenaSettlementWriteRejected(Exception):
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+
+
+class _SettlementProjections:
+    """Check each settlement write now and again after the receipt write."""
+
+    def __init__(self, uow: DatabaseUnitOfWork) -> None:
+        self.uow = uow
+        self.rows: list[tuple[str, tuple, dict[str, Any], str, str]] = []
+
+    @staticmethod
+    def _matches(row: Any, expected: dict[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            if key not in row:
+                return False
+            if isinstance(value, int):
+                try:
+                    if int(row[key]) != value:
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif str(row[key]) != str(value):
+                return False
+        return True
+
+    def reject(self, reason: str, subject: str) -> None:
+        raise _ArenaSettlementWriteRejected({
+            "status": "state_changed",
+            "reason": reason,
+            "subject": subject,
+        })
+
+    def affected(self, cursor: Any, reason: str, subject: str) -> None:
+        if cursor.rowcount != 1:
+            self.reject(reason, subject)
+
+    def expect(self, sql: str, params: tuple, expected: dict[str, Any], reason: str, subject: str) -> None:
+        item = (sql, params, expected, reason, subject)
+        self.rows.append(item)
+        self.verify_one(item)
+
+    def verify_one(self, item: tuple[str, tuple, dict[str, Any], str, str]) -> None:
+        sql, params, expected, reason, subject = item
+        if not self._matches(self.uow.query_one(sql, params), expected):
+            self.reject(reason, subject)
+
+    def verify(self) -> None:
+        for item in self.rows:
+            self.verify_one(item)
+
+
 class ArenaRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
     def purchase_result(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -103,7 +158,13 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             return {"status": "operation_conflict"}
         return self._replay_result(row["result_json"])
 
-    def settle(self, operation_id, challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, expected_challenger_arena, expected_opponent_arena, expected_challenger_player, expected_opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points) -> dict[str, Any]:
+    def settle(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        try:
+            return self._settle(*args, **kwargs)
+        except _ArenaSettlementWriteRejected as rejected:
+            return rejected.result
+
+    def _settle(self, operation_id, challenger_id, opponent_id, outcome, challenge_cap, stamina_cost, challenged_at, expected_challenger_arena, expected_opponent_arena, expected_challenger_player, expected_opponent_player, final_challenger_hp, final_challenger_mp, final_opponent_hp, final_opponent_mp, win_points, lose_points, no_match_points) -> dict[str, Any]:
         self._require_databases()
         operation_id, challenger_id = str(operation_id).strip(), str(challenger_id)
         opponent_id = "" if opponent_id is None else str(opponent_id)
@@ -130,6 +191,7 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
                 uow, "arena", _SETTLEMENT_COLUMNS, prefix="player_data."
             ):
                 return result(SCHEMA_MISSING)
+            writes = _SettlementProjections(uow)
             old = uow.query_one("SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?", (operation_id,))
             if old:
                 if str(old["challenger_id"]) != challenger_id or str(old["payload"]) != payload:
@@ -140,17 +202,17 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             actual = dict(arena) if arena else None
             reason = self._battle_reason(actual, player, challenger, challenger_player)
             if reason:
-                return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="challenger"))
+                return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="challenger"), writes)
             if opponent is not None:
                 if opponent_player is None:
-                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason="user_missing", subject="opponent"))
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason="user_missing", subject="opponent"), writes)
                 opponent_actual = uow.query_one("SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank FROM player_data.arena WHERE user_id=?", (opponent_id,))
                 opponent_vitals = uow.query_one("SELECT COALESCE(hp,0) AS hp,COALESCE(mp,0) AS mp FROM user_xiuxian WHERE user_id=?", (opponent_id,))
                 reason = self._battle_reason(opponent_actual, opponent_vitals, opponent, opponent_player)
                 if reason:
-                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="opponent"))
-            if challenger["daily_challenges_used"] >= challenge_cap: return self._record_settlement(uow, operation_id, challenger_id, payload, result("limit_reached"))
-            if challenger_player["user_stamina"] < stamina_cost: return self._record_settlement(uow, operation_id, challenger_id, payload, result("stamina_insufficient"))
+                    return self._record_settlement(uow, operation_id, challenger_id, payload, result("state_changed", reason=reason, subject="opponent"), writes)
+            if challenger["daily_challenges_used"] >= challenge_cap: return self._record_settlement(uow, operation_id, challenger_id, payload, result("limit_reached"), writes)
+            if challenger_player["user_stamina"] < stamina_cost: return self._record_settlement(uow, operation_id, challenger_id, payload, result("stamina_insufficient"), writes)
             challenger_new = dict(challenger); opponent_new = None if opponent is None else dict(opponent)
             if outcome == "win":
                 challenger_new["score"] += win_points; challenger_new["total_wins"] += 1; challenger_new["win_streak"] += 1; challenger_new["max_win_streak"] = max(challenger_new["max_win_streak"], challenger_new["win_streak"]); opponent_new["score"] = max(0, opponent_new["score"] - lose_points); opponent_new["total_losses"] += 1; opponent_new["win_streak"] = 0
@@ -159,16 +221,38 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             challenger_new["rank"] = self._rank(challenger_new["score"]); challenger_new["daily_challenges_used"] += 1; challenger_new["last_challenge_time"] = challenged_at
             if opponent_new is not None: opponent_new["rank"] = self._rank(opponent_new["score"])
             challenger_update = uow.execute("UPDATE player_data.arena SET score=?,total_wins=?,total_losses=?,win_streak=?,max_win_streak=?,rank=?,daily_challenges_used=?,last_challenge_time=? WHERE user_id=?", tuple(challenger_new[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank", "daily_challenges_used", "last_challenge_time")) + (challenger_id,))
-            if challenger_update.rowcount != 1: raise RuntimeError("challenger arena state changed")
+            challenger_reason = "arena_settlement_challenger_write_rejected"
+            writes.affected(challenger_update, challenger_reason, challenger_id)
+            writes.expect(
+                "SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank,daily_challenges_used,daily_extra_challenges,last_challenge_time FROM player_data.arena WHERE user_id=?",
+                (challenger_id,), challenger_new, challenger_reason, challenger_id,
+            )
             if opponent_new is not None:
                 opponent_update = uow.execute("UPDATE player_data.arena SET score=?,total_wins=?,total_losses=?,win_streak=?,max_win_streak=?,rank=? WHERE user_id=?", tuple(opponent_new[key] for key in ("score", "total_wins", "total_losses", "win_streak", "max_win_streak", "rank")) + (opponent_id,))
-                if opponent_update.rowcount != 1: raise RuntimeError("opponent arena state changed")
+                opponent_reason = "arena_settlement_opponent_write_rejected"
+                writes.affected(opponent_update, opponent_reason, opponent_id)
+                writes.expect(
+                    "SELECT score,total_wins,total_losses,win_streak,max_win_streak,rank FROM player_data.arena WHERE user_id=?",
+                    (opponent_id,), opponent_new, opponent_reason, opponent_id,
+                )
             stamina = challenger_player["user_stamina"] - stamina_cost; challenger_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=?,user_stamina=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(hp,0),?)=0 AND xiuxian_int_cmp(COALESCE(mp,0),?)=0 AND COALESCE(user_stamina,0)=?", (final_challenger_hp, final_challenger_mp, stamina, challenger_id, challenger_player["hp"], challenger_player["mp"], challenger_player["user_stamina"]))
-            if challenger_vitals_update.rowcount != 1: raise RuntimeError("challenger player state changed")
+            challenger_vitals_reason = "arena_settlement_challenger_vitals_write_rejected"
+            writes.affected(challenger_vitals_update, challenger_vitals_reason, challenger_id)
+            writes.expect(
+                "SELECT hp,mp,user_stamina FROM user_xiuxian WHERE user_id=?",
+                (challenger_id,), {"hp": final_challenger_hp, "mp": final_challenger_mp, "user_stamina": stamina},
+                challenger_vitals_reason, challenger_id,
+            )
             if opponent_player is not None:
                 opponent_vitals_update = uow.execute("UPDATE user_xiuxian SET hp=?,mp=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(hp,0),?)=0 AND xiuxian_int_cmp(COALESCE(mp,0),?)=0", (final_opponent_hp, final_opponent_mp, opponent_id, opponent_player["hp"], opponent_player["mp"]))
-                if opponent_vitals_update.rowcount != 1: raise RuntimeError("opponent player state changed")
-            final = result("applied", challenger_new["score"], challenger_new["rank"], None if opponent_new is None else opponent_new["score"], challenger_new["daily_challenges_used"], stamina); return self._record_settlement(uow, operation_id, challenger_id, payload, final)
+                opponent_vitals_reason = "arena_settlement_opponent_vitals_write_rejected"
+                writes.affected(opponent_vitals_update, opponent_vitals_reason, opponent_id)
+                writes.expect(
+                    "SELECT hp,mp FROM user_xiuxian WHERE user_id=?",
+                    (opponent_id,), {"hp": final_opponent_hp, "mp": final_opponent_mp},
+                    opponent_vitals_reason, opponent_id,
+                )
+            final = result("applied", challenger_new["score"], challenger_new["rank"], None if opponent_new is None else opponent_new["score"], challenger_new["daily_challenges_used"], stamina); return self._record_settlement(uow, operation_id, challenger_id, payload, final, writes)
 
     @staticmethod
     def _battle_reason(actual, player, expected, vitals):
@@ -191,8 +275,20 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
     @staticmethod
     def _rank(score): return "王者" if score >= 3200 else "钻石" if score >= 2700 else "铂金" if score >= 2300 else "黄金" if score >= 1900 else "白银" if score >= 1500 else "青铜"
     @staticmethod
-    def _record_settlement(uow, operation_id, challenger_id, payload, result):
-        uow.execute("INSERT INTO arena_challenge_settlement_operations(operation_id,challenger_id,payload,result_json) VALUES(?,?,?,?)", (operation_id, challenger_id, payload, json.dumps(result, ensure_ascii=True, sort_keys=True, separators=(",", ":"))))
+    def _record_settlement(uow, operation_id, challenger_id, payload, result, writes):
+        encoded = json.dumps(result, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        receipt_reason = "arena_settlement_receipt_write_rejected"
+        receipt = uow.execute(
+            "INSERT INTO arena_challenge_settlement_operations(operation_id,challenger_id,payload,result_json) VALUES(?,?,?,?)",
+            (operation_id, challenger_id, payload, encoded),
+        )
+        writes.affected(receipt, receipt_reason, operation_id)
+        writes.expect(
+            "SELECT challenger_id,payload,result_json FROM arena_challenge_settlement_operations WHERE operation_id=?",
+            (operation_id,), {"challenger_id": challenger_id, "payload": payload, "result_json": encoded},
+            receipt_reason, operation_id,
+        )
+        writes.verify()
         return result
     def use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
         operation_id,user_id=str(operation_id).strip(),str(user_id); item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap=map(int,(item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap));payload=json.dumps([user_id,item_id,requested_count,challenge_cap],ensure_ascii=True,separators=(",",":"))

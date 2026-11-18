@@ -322,6 +322,32 @@ def test_real_rejected_settlement_receipt_never_becomes_duplicate_success_in_han
     handlers.fight.assert_not_called()
 
 
+def test_real_challenge_receipt_rejection_keeps_reason_and_same_message_recovers(tmp_path):
+    context = _context(tmp_path, opponent=True)
+    handlers = _handlers(context)
+    context.opponents.set_cache("u", [{"user_id": "v", "score": 1100}])
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute(
+            "CREATE TRIGGER reject_arena_receipt BEFORE INSERT ON arena_challenge_settlement_operations "
+            "BEGIN SELECT RAISE(IGNORE); END"
+        )
+    before = _battle_state(context)
+    rejected = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert "竞技场结算回执保存失败" in rejected
+    ledger = json.loads(_query(context.game,
+        "SELECT result_json FROM operation_ledger WHERE action='arena.settle'"
+    )[0][0])
+    assert ledger["code"] == "arena_settlement_receipt_write_rejected"
+    assert "挑战胜利" not in rejected and _battle_state(context) == before
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("DROP TRIGGER reject_arena_receipt")
+    recovered = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert VICTORY in recovered
+    replay = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert replay == recovered
+    assert _query(context.game, "SELECT COUNT(*) FROM arena_challenge_settlement_operations") == [(1,)]
+
+
 @pytest.mark.parametrize("fault", ["candidate_read", "profile_missing", "settlement_storage"])
 def test_challenge_read_or_storage_failure_does_not_award_consolation_or_claim_success(tmp_path, fault):
     context = _context(tmp_path, opponent=fault == "profile_missing")

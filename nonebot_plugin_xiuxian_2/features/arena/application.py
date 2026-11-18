@@ -13,6 +13,15 @@ from .domain import ArenaChallengePurchaseRequest, ArenaPurchaseRequest, ArenaSe
 from .repository import ArenaChallengePurchaseSqlRepository, ArenaRepository
 
 
+ARENA_SETTLEMENT_RETRYABLE_REJECTIONS = frozenset({
+    "arena_settlement_challenger_write_rejected",
+    "arena_settlement_opponent_write_rejected",
+    "arena_settlement_challenger_vitals_write_rejected",
+    "arena_settlement_opponent_vitals_write_rejected",
+    "arena_settlement_receipt_write_rejected",
+})
+
+
 def _data(raw: Any) -> dict[str, Any]:
     if is_dataclass(raw):
         return dict(asdict(raw))
@@ -53,6 +62,15 @@ class ArenaApplication:
                 status = str(data.get("status", "failed"))
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, consumed={"stone": int(data.get("cost", 0) or 0)}, granted={"score": int(data.get("score_delta", 0) or 0)}, audit_category="arena")
+                elif action == "arena.settle" and str(data.get("reason") or "") in ARENA_SETTLEMENT_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场结算写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, "竞技场操作未完成。", code=status, data=data, audit_category="arena")
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
