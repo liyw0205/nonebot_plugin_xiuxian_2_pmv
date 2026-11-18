@@ -86,6 +86,7 @@ class LegacyApplication:
         call: Callable[[], Any],
         success_statuses: frozenset[str] | None = None,
         zero_write_rejections: tuple[str, ...] = (),
+        retryable_rejections: tuple[str, ...] = (),
     ) -> OperationOutcome[dict[str, Any]]:
         operation_id = str(operation_id).strip()
         user_id = str(user_id).strip()
@@ -95,14 +96,14 @@ class LegacyApplication:
             reservation = None
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    prior = self.ledger.get(uow, operation_id, action) if zero_write_rejections else None
+                    prior = self.ledger.get(uow, operation_id, action) if (zero_write_rejections or retryable_rejections) else None
                     existing = self.ledger.begin(uow, operation_id, action, dict(payload))
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中", reason="operation_pending")
-                    if zero_write_rejections and prior is None:
+                    if (zero_write_rejections or retryable_rejections) and prior is None:
                         reservation = self.ledger.get(uow, operation_id, action)
                 execute_callback = getattr(self.repository, "execute_callback", None)
                 if callable(execute_callback):
@@ -113,6 +114,19 @@ class LegacyApplication:
                     raw = result_data(call())
                 status = str(raw.get("status", "failed")).casefold()
                 raw.setdefault("status", status)
+                reason = str(raw.get("reason") or "")
+                if reason in retryable_rejections or status in retryable_rejections:
+                    if reservation is not None:
+                        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        str(raw.get("message") or raw.get("response") or f"{self.feature} 操作未完成。"),
+                        code=reason or status,
+                        data=raw,
+                        audit_category=self.feature,
+                    )
                 accepted = success_statuses or self.success_statuses
                 if status in accepted:
                     outcome = OperationOutcome.applied(
@@ -136,7 +150,7 @@ class LegacyApplication:
                     self.ledger.finish(uow, outcome)
                 return outcome
             except DomainError as exc:
-                if reservation is not None and exc.code in zero_write_rejections:
+                if reservation is not None and exc.code in (*zero_write_rejections, *retryable_rejections):
                     with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                         self.ledger.release_unsettled(uow, reservation)
                 raise

@@ -187,6 +187,109 @@ class RiftSpeedupRepositoryTests(unittest.TestCase):
                 self.assertEqual(conn.execute("SELECT scheduled_time FROM user_cd WHERE user_id='u'").fetchone()[0], 100)
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_speedup_operations").fetchone()[0], 0)
 
+    def test_known_write_rejections_roll_back_all_speedup_state(self):
+        cases = (
+            (
+                "CREATE TRIGGER reject_item BEFORE UPDATE OF goods_num ON back "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_item_write_rejected",
+                "item-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER rewrite_entry AFTER UPDATE OF duration ON rift_entries "
+                "BEGIN UPDATE rift_entries SET duration=99 WHERE user_id='u'; END",
+                "rift_speedup_entry_write_rejected",
+                "entry-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_cd BEFORE UPDATE OF scheduled_time ON user_cd "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_cooldown_write_rejected",
+                "cd-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_speedup_operations "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_receipt_write_rejected",
+                "receipt-rejected",
+                "receipt-rejected",
+            ),
+            (
+                "CREATE TRIGGER rewrite_receipt AFTER INSERT ON rift_speedup_operations "
+                "BEGIN UPDATE rift_speedup_operations SET new_time=99 WHERE operation_id='receipt-rewritten'; END",
+                "rift_speedup_receipt_write_rejected",
+                "receipt-rewritten",
+                "receipt-rewritten",
+            ),
+        )
+        for trigger, reason, operation_id, subject in cases:
+            with self.subTest(reason=reason):
+                with tempfile.TemporaryDirectory() as temp:
+                    database = Path(temp) / "game.db"
+                    self._create_state(database)
+                    with db_backend.transaction(database) as conn:
+                        conn.execute(trigger)
+
+                    result = RiftSpeedupSqlRepository(database).apply(
+                        operation_id, "u", 9, None, None, 50
+                    )
+
+                    self.assertEqual((result.status, result.reason, result.subject), (
+                        "state_changed", reason, subject,
+                    ))
+                    with db_backend.connection(database) as conn:
+                        self.assertEqual(tuple(conn.execute(
+                            "SELECT goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=9"
+                        ).fetchone()), (1, 1))
+                        self.assertEqual(tuple(conn.execute(
+                            "SELECT duration,rift_data FROM rift_entries WHERE user_id='u'"
+                        ).fetchone()), (100, '{"name":"test","time":100}'))
+                        self.assertEqual(conn.execute(
+                            "SELECT scheduled_time FROM user_cd WHERE user_id='u'"
+                        ).fetchone()[0], 100)
+                        self.assertEqual(conn.execute(
+                            "SELECT COUNT(*) FROM rift_speedup_operations"
+                        ).fetchone()[0], 0)
+
+    def test_receipt_rejection_recovers_with_same_operation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            self._create_state(database)
+            with db_backend.transaction(database) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_speedup_operations "
+                    "BEGIN SELECT RAISE(IGNORE); END"
+                )
+
+            first = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            self.assertEqual((first.status, first.reason, first.subject), (
+                "state_changed", "rift_speedup_receipt_write_rejected", "recover"
+            ))
+            with db_backend.transaction(database) as conn:
+                conn.execute("DROP TRIGGER reject_receipt")
+
+            recovered = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            replayed = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            self.assertEqual((recovered.status, recovered.new_time, replayed.status), (
+                "applied", 50, "duplicate"
+            ))
+            with db_backend.connection(database) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT goods_num FROM back WHERE user_id='u' AND goods_id=9"
+                ).fetchone()[0], 0)
+                self.assertEqual(conn.execute(
+                    "SELECT duration FROM rift_entries WHERE user_id='u'"
+                ).fetchone()[0], 50)
+                self.assertEqual(conn.execute(
+                    "SELECT scheduled_time FROM user_cd WHERE user_id='u'"
+                ).fetchone()[0], 50)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM rift_speedup_operations"
+                ).fetchone()[0], 1)
+
     def test_bound_item_decrement_preserves_inventory_invariant(self):
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "game.db"

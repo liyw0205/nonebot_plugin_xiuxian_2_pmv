@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import nonebot
+from nonebot.exception import FinishedException
 
 nonebot.init()
 
@@ -142,6 +143,78 @@ class RiftSpeedupSettlementTests(unittest.TestCase):
                     ).fetchall()],
                 [(20012, 0), (20013, 0)],
             )
+
+    def test_registered_item_command_retries_after_receipt_rejection(self):
+        back_module = __import__(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back", fromlist=["use_item"]
+        )
+        rift_module = __import__(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift", fromlist=["use_rift_speedup"]
+        )
+        registered = next(
+            handler for handler in back_module.use_item.handlers if handler.call is back_module.use_item_
+        )
+        with DatabaseUnitOfWork(self.database) as uow:
+            apply_platform_schema(uow)
+            apply_rift_speedup_operations(uow)
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_speedup_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        application = RiftApplication(self.database, Path(self.temp_dir.name) / "player.db")
+        bot = SimpleNamespace(self_id="bot")
+        event = SimpleNamespace(message_id="same-speedup-message")
+        replies = []
+
+        class Items:
+            @staticmethod
+            def get_data_by_item_name(name):
+                return (20012, {"type": "特殊道具", "name": "秘境加速券"})
+
+        class MessageData:
+            @staticmethod
+            def goods_num(user_id, item_id):
+                return 1
+
+        async def capture_reply(*args, **kwargs):
+            replies.append((args, kwargs))
+
+        async def invoke():
+            with (
+                patch.object(back_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(back_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(back_module, "items", Items()),
+                patch.object(back_module, "_sql_message", return_value=MessageData()),
+                patch.object(back_module, "handle_send", new=capture_reply),
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(rift_module, "rift_application", application),
+                patch.object(rift_module, "save_rift_data"),
+                patch.object(rift_module, "handle_send", new=capture_reply),
+            ):
+                with self.assertRaises(FinishedException):
+                    await registered.call(bot, event, args="秘境加速券")
+                with db_backend.transaction(self.database) as conn:
+                    conn.execute("DROP TRIGGER reject_receipt")
+                with self.assertRaises(FinishedException):
+                    await registered.call(bot, event, args="秘境加速券")
+
+        asyncio.run(invoke())
+        self.assertEqual(len(replies), 2)
+        self.assertIn("回执保存失败", replies[0][0][2])
+        self.assertIn("减少50%", replies[1][0][2])
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT goods_num FROM back WHERE user_id='u' AND goods_id=20012"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT duration FROM rift_entries WHERE user_id='u'"
+            ).fetchone()[0], 30)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM rift_speedup_operations"
+            ).fetchone()[0], 1)
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
