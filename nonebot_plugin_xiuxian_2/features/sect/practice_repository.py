@@ -200,4 +200,27 @@ class SectPracticeSqlRepository:
                 user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost
             ):
                 self._reject("receipt", operation_id)
+
+            # A receipt trigger can still rewrite an earlier row after its first
+            # projection check; verify the business rows again before committing.
+            final_user = uow.query_one(
+                f"SELECT sect_id,stone,{column} AS level FROM user_xiuxian WHERE user_id=?",
+                (user_id,),
+            )
+            if (
+                final_user is None
+                or int(final_user["sect_id"] or 0) != sect_id
+                or as_int_like(final_user["stone"]) != before_stone - stone_cost
+                or int(final_user["level"]) != next_level
+            ):
+                self._reject("player", user_id)
+            final_sect = uow.query_one(
+                "SELECT COALESCE(sect_materials,0) AS materials FROM sects WHERE sect_id=?",
+                (sect_id,),
+            )
+            if (
+                final_sect is None
+                or as_int_like(final_sect["materials"]) != before_materials - materials_cost
+            ):
+                self._reject("assets", sect_id)
             return {"status": "upgraded", **base}

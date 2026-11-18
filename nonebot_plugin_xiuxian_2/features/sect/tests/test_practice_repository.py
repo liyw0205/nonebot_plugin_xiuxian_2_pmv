@@ -98,6 +98,38 @@ class SectPracticeRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.database) as conn:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM sect_practice_operations").fetchone()[0], 0)
 
+    def test_receipt_late_player_rewrite_is_rejected_and_rolled_back(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER late_practice_player_rewrite AFTER INSERT ON sect_practice_operations "
+                "BEGIN UPDATE user_xiuxian SET stone=stone+777 WHERE user_id='user'; END"
+            )
+        before = self.state()
+        result = self.repository.upgrade("late-player", "user", 1, "attack", 2, 3, 100, 1000)
+        self.assertEqual(
+            (result["reason"], result["subject"]),
+            ("sect_practice_player_write_rejected", "user"),
+        )
+        self.assertEqual(self.state(), before)
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM sect_practice_operations").fetchone()[0], 0)
+
+    def test_receipt_late_assets_rewrite_is_rejected_and_rolled_back(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER late_practice_assets_rewrite AFTER INSERT ON sect_practice_operations "
+                "BEGIN UPDATE sects SET sect_materials=sect_materials+777 WHERE sect_id=1; END"
+            )
+        before = self.state()
+        result = self.repository.upgrade("late-assets", "user", 1, "attack", 2, 3, 100, 1000)
+        self.assertEqual(
+            (result["reason"], result["subject"]),
+            ("sect_practice_assets_write_rejected", "1"),
+        )
+        self.assertEqual(self.state(), before)
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM sect_practice_operations").fetchone()[0], 0)
+
     def test_assets_rewrite_is_rejected_and_rolled_back(self):
         with db_backend.transaction(self.database) as conn:
             conn.execute(

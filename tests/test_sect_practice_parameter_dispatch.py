@@ -22,10 +22,9 @@ class SectPracticeParameterDispatchTests(unittest.TestCase):
 
     def test_receipt_ignore_recovers_same_practice_command(self):
         evidence = self._run_group("sect-practice-handoff", "sect-practice-fixed")
-        self.assertEqual({"pass": 1}, evidence["summary"])
-        row = evidence["results"][0]
-        self.assertEqual(row["status"], "pass", row)
-        self.assertTrue(row["evidence"]["rollback"])
+        self.assertEqual({"pass": 2}, evidence["summary"])
+        self.assertTrue(all(row["status"] == "pass" for row in evidence["results"]), evidence)
+        self.assertTrue(all(row["evidence"]["rollback"] for row in evidence["results"]), evidence)
 
     def test_three_practice_commands_and_boundaries(self):
         evidence = self._run_group("sect-practice-parameters", "sect-practice-parameters-fixed")

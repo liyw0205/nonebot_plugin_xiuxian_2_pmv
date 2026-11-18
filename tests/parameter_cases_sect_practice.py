@@ -116,6 +116,38 @@ def register(case):
         probe.evidence.update(failed=failed, recovered=recovered, rollback=True, receipt_count=1)
 
     @case(
+        "sect-practice-late-player-rewrite",
+        "升级攻击修炼",
+        "永久回执触发器改写玩家资产",
+        "真实宗门成员、充足玩家灵石/贡献/宗门资材，回执 INSERT 后改写玩家灵石",
+        "具体玩家写拒绝原因，等级/灵石/宗门资材/回执整笔回滚",
+        group="sect-practice-handoff",
+        outcome="rejection",
+    )
+    async def late_player_rewrite(probe):
+        _, sid, database = prepare(probe)
+        before = probe.rows(
+            database,
+            "SELECT stone,atkpractice FROM user_xiuxian WHERE user_id='900001'",
+        )
+        sect_before = probe.rows(
+            database,
+            "SELECT sect_materials FROM sects WHERE sect_id=?",
+            (sid,),
+        )
+        probe.seed(
+            database,
+            "CREATE TRIGGER late_practice_player_rewrite AFTER INSERT ON sect_practice_operations "
+            "BEGIN UPDATE user_xiuxian SET stone=stone+777 WHERE user_id='900001'; END",
+        )
+        failed = await probe.command("升级攻击修炼", "升级攻击修炼 1", number=989102)
+        assert "灵石与角色修炼等级保存失败" in failed and "回滚" in failed, failed
+        assert probe.rows(database, "SELECT stone,atkpractice FROM user_xiuxian WHERE user_id='900001'") == before
+        assert probe.rows(database, "SELECT sect_materials FROM sects WHERE sect_id=?", (sid,)) == sect_before
+        assert probe.rows(database, "SELECT COUNT(*) FROM sect_practice_operations") == [(0,)]
+        probe.evidence.update(failed=failed, rollback=True)
+
+    @case(
         "sect-practice-three-types-replay-conflict",
         "升级攻击修炼",
         "攻击/元血/灵海三入口合法数量并重放、改参冲突",
