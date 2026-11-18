@@ -1,5 +1,7 @@
 """Focused semantic coverage for ordinary parameterized commands not in core groups."""
 
+import json
+
 from tests.parameter_cases_assets import balances, backpack
 
 
@@ -51,6 +53,58 @@ def accessory_projection(probe):
         probe.context.paths.player_db,
         "SELECT equipped,bag FROM player_accessory WHERE user_id='900001'",
     )
+
+
+async def check_accessory_equipment_writes(probe, *, equip):
+    player = probe.context.paths.player_db
+    command = "装备饰品" if equip else "卸下饰品"
+    subject = "fixture-accessory-02" if equip else "手镯"
+    request = f"{command} {subject}"
+    success = "已装备：" if equip else "已卸下："
+    unchanged_assets = balances(probe), backpack(probe)
+    probe.seed(player, "CREATE TABLE isolated_accessory_effect (effect TEXT)")
+    faults = (
+        ("BEFORE", "SELECT RAISE(IGNORE)", "player_document_write_rejected"),
+        ("AFTER", "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+         "player_document_projection_mismatch"),
+        ("BEFORE", "SELECT RAISE(ABORT,'isolated accessory write abort')", None),
+    )
+    for index, (timing, fault, reason) in enumerate(faults, start=970300):
+        instances = seed_accessory_document(
+            probe, [19101, 19001, 19002], equipped_slots=("手镯",),
+        )
+        before = accessory_projection(probe)
+        probe.seed(
+            player,
+            f"CREATE TRIGGER reject_accessory_write {timing} UPDATE OF equipped ON player_accessory "
+            f"BEGIN INSERT INTO isolated_accessory_effect VALUES('trigger'); {fault}; END",
+        )
+        text = await probe.command(command, request, number=index, allow_exception=reason is None)
+        assert accessory_projection(probe) == before, text
+        assert not probe.rows(player, "SELECT effect FROM isolated_accessory_effect"), text
+        assert success not in text, text
+        if reason is None:
+            errors = "\n".join(probe.calls[-1]["errors"])
+            assert "sqlite3.IntegrityError: isolated accessory write abort" in errors, errors
+        else:
+            assert reason in text and subject in text, text
+
+        probe.seed(player, "DROP TRIGGER reject_accessory_write")
+        recovered = await probe.command(command, request, number=index)
+        assert success in recovered, recovered
+        equipped_value, bag_value = accessory_projection(probe)[0]
+        expected_equipped = {"手镯": instances[1] if equip else None, "戒指": None, "手环": None, "项链": None}
+        expected_bag = [instances[2], instances[0]] if equip else [instances[1], instances[2], instances[0]]
+        assert json.loads(equipped_value) == expected_equipped
+        assert json.loads(bag_value) == expected_bag
+        after = accessory_projection(probe)
+        replay = await probe.command(command, request, number=index)
+        assert ("未找到该饰品UID" if equip else "手镯未装备饰品") in replay, replay
+        assert accessory_projection(probe) == after
+
+    assert (balances(probe), backpack(probe)) == unchanged_assets
+    assert_dungeon_purchase_integrity(player)
+    probe.evidence.update(ignore=True, rewrite=True, abort=True, recovered=True, replay_unchanged=True)
 
 
 def register(case):
@@ -112,6 +166,30 @@ def register(case):
         assert "一阶：已集齐" in text and "烈阳手镯" not in text, text
         assert after == before and len(instances) == 4
         probe.evidence.update(set_name="烈阳", actual_rows=len(instances), equipped=1, readonly=after == before)
+
+    @case(
+        "accessory-equip-write-rejection",
+        "装备饰品",
+        "有效背包UID",
+        "隔离player_accessory已有装备、待替换饰品和写入故障",
+        "拒写完整回滚并可重试替换装备，重放不改变状态",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_equip_write_rejection(probe):
+        await check_accessory_equipment_writes(probe, equip=True)
+
+    @case(
+        "accessory-unequip-write-rejection",
+        "卸下饰品",
+        "有效已装备部位",
+        "隔离player_accessory已有装备、背包数据和写入故障",
+        "拒写完整回滚并可重试卸下装备，重放不改变状态",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_unequip_write_rejection(probe):
+        await check_accessory_equipment_writes(probe, equip=False)
 
     for command, query, marker in (
         ("查看饰品", "acc_missing_parameter", "未找到"),
