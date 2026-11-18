@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -19,6 +21,7 @@ from nonebot_plugin_xiuxian_2.features.arena.migrations import (
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 from nonebot_plugin_xiuxian_2.features.arena.season_reward_repository import ArenaSeasonRewardRepository
+from nonebot_plugin_xiuxian_2.features.arena.season_reward_application import ArenaSeasonRewardResetError
 
 
 class ArenaSeasonRewardServiceTests(unittest.TestCase):
@@ -82,6 +85,19 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         self.assertEqual(settled, ({"user_id": "user", "total": 800, "base": 300, "bonus": 500, "status": "applied"},))
         self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), None))
 
+    def test_same_business_day_scheduler_replay_is_duplicate(self):
+        class FixedClock:
+            def now(self):
+                return datetime(2026, 7, 13, 20, 0, tzinfo=timezone.utc)
+
+        application = ArenaSeasonRewardApplication(self.game, self.player, clock=FixedClock())
+        first = application.reset_daily()
+        second = application.reset_daily()
+
+        self.assertEqual(first[0]["status"], "applied")
+        self.assertEqual(second[0]["status"], "duplicate")
+        self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), None))
+
     def test_duplicate_conflict_and_other_operation_cannot_double_claim(self):
         first, duplicate = self.claim("same"), self.claim("same")
         conflict = self.claim("same", score=1999)
@@ -96,6 +112,132 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         with self.assertRaises(db_backend.IntegrityError):
             self.claim("rollback")
         self.assertEqual(self.state(), ((10, 20, 3, 1, 1, "old", "old"), None))
+
+    def test_honor_write_rejection_rolls_back_and_retries(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_reward_honor AFTER UPDATE OF honor_points ON arena "
+                "BEGIN UPDATE arena SET total_honor_earned=total_honor_earned+1 WHERE user_id='user'; END"
+            )
+        before = self.snapshot()
+        failed = self.claim("honor-retry")
+        self.assertEqual((failed.status, failed.reason, failed.subject), (
+            "state_changed", "arena_season_reward_honor_write_rejected", "user"
+        ))
+        self.assertEqual(before, self.snapshot())
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TRIGGER rewrite_reward_honor")
+        self.assertEqual("applied", self.claim("honor-retry").status)
+        self.assertEqual("duplicate", self.claim("honor-retry").status)
+
+    def test_daily_reset_write_rejection_rolls_back_and_retries(self):
+        class FixedClock:
+            def now(self):
+                return datetime(2026, 7, 13, 20, 0, tzinfo=timezone.utc)
+
+        application = ArenaSeasonRewardApplication(self.game, self.player, clock=FixedClock())
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_reward_reset AFTER UPDATE OF daily_challenges_used ON arena "
+                "BEGIN UPDATE arena SET daily_extra_challenges=7 WHERE user_id='user'; END"
+            )
+        before = self.snapshot()
+        with self.assertRaisesRegex(ArenaSeasonRewardResetError, "arena_season_reward_reset_write_rejected: user"):
+            application.reset_daily()
+        self.assertEqual(before, self.snapshot())
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TRIGGER rewrite_reward_reset")
+        self.assertEqual(("user",), tuple(row["user_id"] for row in application.reset_daily()))
+        self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), None))
+
+    def test_inventory_write_rejection_rolls_back_and_retries(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_reward_inventory AFTER INSERT ON back "
+                "BEGIN UPDATE back SET goods_num=goods_num+1 WHERE user_id='user' AND goods_id=1; END"
+            )
+        before = self.snapshot()
+        failed = self.claim("inventory-retry")
+        self.assertEqual((failed.status, failed.reason, failed.subject), (
+            "state_changed", "arena_season_reward_inventory_write_rejected", "user:1"
+        ))
+        self.assertEqual(before, self.snapshot())
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DROP TRIGGER rewrite_reward_inventory")
+        self.assertEqual("applied", self.claim("inventory-retry").status)
+        self.assertEqual("duplicate", self.claim("inventory-retry").status)
+
+    def test_receipt_ignore_is_visible_to_scheduler_and_retries(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TRIGGER refuse_reward_receipt BEFORE INSERT ON arena_season_reward_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        before = self.snapshot()
+        failed = self.claim("receipt-retry")
+        self.assertEqual((failed.status, failed.reason, failed.subject), (
+            "state_changed", "arena_season_reward_receipt_write_rejected", "receipt"
+        ))
+        self.assertEqual(before, self.snapshot())
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
+
+        with patch.object(xiuxian_arena, "arena_season_reward_application", self.service):
+            with self.assertRaisesRegex(ArenaSeasonRewardResetError, "arena_season_reward_receipt_write_rejected: receipt"):
+                asyncio.run(xiuxian_arena.reset_arena_daily_challenges())
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DROP TRIGGER refuse_reward_receipt")
+        self.assertEqual("applied", self.claim("receipt-retry").status)
+        self.assertEqual("duplicate", self.claim("receipt-retry").status)
+
+    def test_receipt_after_rewrite_is_rejected_without_partial_state(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_reward_receipt AFTER INSERT ON arena_season_reward_operations "
+                "BEGIN UPDATE arena_season_reward_operations SET total_honor_earned=total_honor_earned+1 WHERE operation_id='receipt-rewrite'; END"
+            )
+        before = self.snapshot()
+        failed = self.claim("receipt-rewrite")
+        self.assertEqual((failed.status, failed.reason, failed.subject), (
+            "state_changed", "arena_season_reward_receipt_write_rejected", "receipt"
+        ))
+        self.assertEqual(before, self.snapshot())
+
+    def test_ignore_rejections_for_each_write_are_specific_and_atomic(self):
+        cases = (
+            (self.player, "CREATE TRIGGER ignore_reward_honor BEFORE UPDATE OF honor_points ON arena BEGIN SELECT RAISE(IGNORE); END", "DROP TRIGGER ignore_reward_honor", "arena_season_reward_honor_write_rejected"),
+            (self.player, "CREATE TRIGGER ignore_reward_reset BEFORE UPDATE OF daily_challenges_used ON arena BEGIN SELECT RAISE(IGNORE); END", "DROP TRIGGER ignore_reward_reset", "arena_season_reward_reset_write_rejected"),
+            (self.game, "CREATE TRIGGER ignore_reward_inventory BEFORE INSERT ON back BEGIN SELECT RAISE(IGNORE); END", "DROP TRIGGER ignore_reward_inventory", "arena_season_reward_inventory_write_rejected"),
+            (self.game, "CREATE TRIGGER ignore_reward_receipt BEFORE INSERT ON arena_season_reward_operations BEGIN SELECT RAISE(IGNORE); END", "DROP TRIGGER ignore_reward_receipt", "arena_season_reward_receipt_write_rejected"),
+        )
+        for index, (database, create_trigger, drop_trigger, reason) in enumerate(cases):
+            with self.subTest(reason=reason):
+                with db_backend.transaction(database) as conn:
+                    conn.execute(create_trigger)
+                before = self.snapshot()
+                result = self.claim(f"ignore-{index}")
+                self.assertEqual((result.status, result.reason), ("state_changed", reason))
+                self.assertEqual(before, self.snapshot())
+                with db_backend.transaction(database) as conn:
+                    conn.execute(drop_trigger)
+                with db_backend.transaction(self.player) as conn:
+                    conn.execute(
+                        "UPDATE arena SET honor_points=10,total_honor_earned=20,daily_challenges_used=3,"
+                        "daily_extra_challenges=1,daily_challenge_buys=1,last_reset_date='old',last_buy_date='old' WHERE user_id='user'"
+                    )
+                with db_backend.transaction(self.game) as conn:
+                    conn.execute("DELETE FROM back WHERE user_id='user' AND goods_id=1")
+                    conn.execute("DELETE FROM arena_season_reward_operations")
+
+    def test_aborted_asset_write_preserves_original_sqlite_exception(self):
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER abort_reward_reset BEFORE UPDATE OF daily_challenges_used ON arena "
+                "BEGIN SELECT RAISE(ABORT,'isolated arena reset abort'); END"
+            )
+        before = self.snapshot()
+        with self.assertRaisesRegex(db_backend.IntegrityError, "isolated arena reset abort"):
+            self.claim("abort-reset")
+        self.assertEqual(before, self.snapshot())
 
     def legacy_text(self):
         with db_backend.transaction(self.player) as conn:

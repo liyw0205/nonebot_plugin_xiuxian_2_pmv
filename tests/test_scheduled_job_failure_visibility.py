@@ -140,6 +140,65 @@ def test_sect_daily_reset_rejection_reports_specific_reason_without_writes(tmp_p
             assert _sect_snapshot(database) == settled
 
 
+def test_arena_daily_reward_rejection_is_scheduler_error_and_retries_idempotently(tmp_path):
+    from datetime import datetime
+    from nonebot_plugin_xiuxian_2.features.arena.migrations import (
+        apply_arena_daily_reward_player,
+        apply_arena_season_reward,
+    )
+    from nonebot_plugin_xiuxian_2.features.arena.season_reward_application import ArenaSeasonRewardApplication
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_arena
+    from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_scheduler as scheduler
+
+    game, player = tmp_path / "arena-game.db", tmp_path / "arena-player.db"
+    with DatabaseUnitOfWork(game, immediate=True) as uow:
+        uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)")
+        uow.execute("INSERT INTO user_xiuxian VALUES('u1')")
+        uow.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+        apply_arena_season_reward(uow)
+        uow.execute(
+            "CREATE TRIGGER refuse_arena_receipt BEFORE INSERT ON arena_season_reward_operations "
+            "BEGIN SELECT RAISE(IGNORE); END"
+        )
+    with DatabaseUnitOfWork(player, immediate=True) as uow:
+        apply_arena_daily_reward_player(uow)
+        uow.execute("INSERT INTO arena VALUES('u1',2000,'黄金',10,20,3,1,1,'old','old')")
+
+    class FixedClock:
+        def now(self):
+            return datetime(2026, 11, 18, 16, 0, tzinfo=timezone.utc)
+
+    application = ArenaSeasonRewardApplication(game, player, clock=FixedClock())
+    with patch.object(xiuxian_arena, "arena_season_reward_application", application):
+        failed = _execute_job(scheduler.daily_reset_arena)
+        assert failed.code == EVENT_JOB_ERROR
+        assert "arena_season_reward_receipt_write_rejected: receipt" in str(failed.exception)
+        with DatabaseUnitOfWork(player, read_only=True) as uow:
+            assert uow.query_one("SELECT honor_points,total_honor_earned,daily_challenges_used,last_reset_date FROM arena WHERE user_id='u1'") == {
+                "honor_points": 10, "total_honor_earned": 20,
+                "daily_challenges_used": 3, "last_reset_date": "old",
+            }
+        with DatabaseUnitOfWork(game, read_only=True) as uow:
+            assert uow.query_one("SELECT COUNT(*) AS n FROM back")["n"] == 0
+            assert uow.query_one("SELECT COUNT(*) AS n FROM arena_season_reward_operations")["n"] == 0
+        with DatabaseUnitOfWork(game) as uow:
+            uow.execute("DROP TRIGGER refuse_arena_receipt")
+        assert _execute_job(scheduler.daily_reset_arena).code == EVENT_JOB_EXECUTED
+        settled = application.reset_daily()
+        assert settled[0]["status"] == "duplicate"
+        with DatabaseUnitOfWork(player, read_only=True) as uow:
+            assert uow.query_one("SELECT honor_points,total_honor_earned,daily_challenges_used,last_reset_date FROM arena WHERE user_id='u1'") == {
+                "honor_points": 810, "total_honor_earned": 820,
+                "daily_challenges_used": 0, "last_reset_date": "2026-11-18",
+            }
+        with DatabaseUnitOfWork(game, read_only=True) as uow:
+            assert uow.query_one("SELECT COUNT(*) AS n FROM back")["n"] == 0
+            assert uow.query_one("SELECT COUNT(*) AS n FROM arena_season_reward_operations")["n"] == 1
+            assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+        with DatabaseUnitOfWork(player, read_only=True) as uow:
+            assert uow.query_all("PRAGMA integrity_check") == [{"integrity_check": "ok"}]
+
+
 def test_sect_batch_preserves_successful_sects_and_reports_failed_subject(tmp_path):
     from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
     from nonebot_plugin_xiuxian_2.features.sect.migrations import apply_sect_operations
