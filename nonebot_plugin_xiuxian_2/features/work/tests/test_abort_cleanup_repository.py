@@ -13,24 +13,28 @@ from tests.test_db_backend import db_backend
 
 
 class WorkAbortCleanupRepositoryTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
-        self.database = Path(self.temp.name) / "game.sqlite3"
-        with db_backend.transaction(self.database) as conn:
+    @staticmethod
+    def _seed_database(database: Path, offer: dict) -> None:
+        with db_backend.transaction(database) as conn:
             conn.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
             conn.execute(
                 "CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time,scheduled_time)"
             )
             conn.execute("INSERT INTO user_xiuxian VALUES('u',5000000)")
             conn.execute("INSERT INTO user_cd VALUES('u',2,'start','镇妖')")
-        with DatabaseUnitOfWork(self.database) as uow:
+        with DatabaseUnitOfWork(database) as uow:
             apply_work_offer_snapshots(uow)
             apply_work_abort_cleanup(uow)
             uow.execute(
                 "INSERT INTO work_offer_snapshots VALUES(?,?,?)",
-                ("u", json.dumps(self.offer), "old"),
+                ("u", json.dumps(offer), "old"),
             )
             uow.execute("INSERT INTO work_active_snapshots VALUES('u','{}','start')")
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.database = Path(self.temp.name) / "game.sqlite3"
+        self._seed_database(self.database, self.offer)
         self.application = WorkAbortCleanupApplication(self.database)
         self.expected_cd = {"type": 2, "create_time": "start", "scheduled_time": "镇妖"}
 
@@ -154,6 +158,107 @@ class WorkAbortCleanupRepositoryTests(unittest.TestCase):
             self.cleanup("failure")
 
         self.assertEqual(self.state(), (5_000_000, (2, "start", "镇妖"), 1, 1))
+
+    def test_ignore_cleanup_writes_are_rejected_and_recoverable(self):
+        cases = (
+            (
+                "stone",
+                "CREATE TRIGGER reject_cleanup BEFORE UPDATE ON user_xiuxian "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "work_abort_cleanup_stone_write_rejected",
+                "u",
+            ),
+            (
+                "cooldown",
+                "CREATE TRIGGER reject_cleanup BEFORE UPDATE ON user_cd "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "work_abort_cleanup_cooldown_write_rejected",
+                "u",
+            ),
+            (
+                "active_snapshot",
+                "CREATE TRIGGER reject_cleanup BEFORE DELETE ON work_active_snapshots "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "work_abort_cleanup_active_snapshot_write_rejected",
+                "u",
+            ),
+            (
+                "offer_snapshot",
+                "CREATE TRIGGER reject_cleanup BEFORE DELETE ON work_offer_snapshots "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "work_abort_cleanup_offer_snapshot_write_rejected",
+                "u",
+            ),
+            (
+                "receipt",
+                "CREATE TRIGGER reject_cleanup BEFORE INSERT ON work_abort_cleanup_operations "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "work_abort_cleanup_receipt_write_rejected",
+                "reject-receipt",
+            ),
+        )
+        for stage, trigger, reason, subject in cases:
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                self.database = Path(temp) / "case.sqlite3"
+                self._seed_database(self.database, self.offer)
+                self.application = WorkAbortCleanupApplication(self.database)
+                with db_backend.transaction(self.database) as conn:
+                    conn.execute(trigger)
+
+                rejected = self.cleanup(f"reject-{stage}")
+                self.assertEqual(
+                    (rejected.status, rejected.reason, rejected.subject),
+                    ("state_changed", reason, subject),
+                )
+                self.assertEqual(
+                    self.state(), (5_000_000, (2, "start", "镇妖"), 1, 1)
+                )
+
+                with db_backend.transaction(self.database) as conn:
+                    conn.execute("DROP TRIGGER reject_cleanup")
+                self.assertEqual(self.cleanup(f"reject-{stage}").status, "applied")
+
+    def test_after_rewrite_of_penalty_or_receipt_is_rejected(self):
+        cases = (
+            (
+                "stone",
+                "CREATE TRIGGER rewrite_cleanup AFTER UPDATE ON user_xiuxian "
+                "BEGIN UPDATE user_xiuxian SET stone=123 WHERE user_id='u'; END",
+                "work_abort_cleanup_stone_write_rejected",
+                "u",
+            ),
+            (
+                "receipt",
+                "CREATE TRIGGER rewrite_cleanup AFTER INSERT ON work_abort_cleanup_operations "
+                "BEGIN UPDATE work_abort_cleanup_operations SET penalty=1 "
+                "WHERE operation_id='rewrite-receipt'; END",
+                "work_abort_cleanup_receipt_write_rejected",
+                "rewrite-receipt",
+            ),
+        )
+        for stage, trigger, reason, subject in cases:
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                self.database = Path(temp) / "case.sqlite3"
+                self._seed_database(self.database, self.offer)
+                self.application = WorkAbortCleanupApplication(self.database)
+                with db_backend.transaction(self.database) as conn:
+                    conn.execute(trigger)
+
+                rejected = self.cleanup("rewrite-receipt" if stage == "receipt" else "rewrite-stone")
+                self.assertEqual(
+                    (rejected.status, rejected.reason, rejected.subject),
+                    ("state_changed", reason, subject),
+                )
+                self.assertEqual(
+                    self.state(), (5_000_000, (2, "start", "镇妖"), 1, 1)
+                )
+
+                with db_backend.transaction(self.database) as conn:
+                    conn.execute("DROP TRIGGER rewrite_cleanup")
+                self.assertEqual(
+                    self.cleanup("rewrite-receipt" if stage == "receipt" else "rewrite-stone").status,
+                    "applied",
+                )
 
 
 if __name__ == "__main__":

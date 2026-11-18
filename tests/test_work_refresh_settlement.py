@@ -302,6 +302,70 @@ class WorkSettlementHandlerTests(unittest.IsolatedAsyncioTestCase):
         resolve.assert_called_once()
         self.assertIs(resolve.call_args.kwargs["offer_snapshot"], active)
 
+    async def test_registered_abort_command_surfaces_cleanup_reason(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        registered_handler = next(
+            handler for handler in xiuxian_work.do_work.handlers if handler.call is xiuxian_work.do_work_
+        )
+        event = SimpleNamespace(message_id="abort-reason-1")
+        fake_bot = SimpleNamespace(self_id="bot")
+        work_data = {"scheduled_time": "采药", "create_time": "2026-10-04 10:00:00"}
+        rejected = SimpleNamespace(
+            status="state_changed",
+            succeeded=False,
+            reason="work_abort_cleanup_receipt_write_rejected",
+            subject="abort-reason-1",
+            penalty=0,
+        )
+        with (
+            patch.object(xiuxian_work, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+            patch.object(xiuxian_work, "check_user", return_value=(True, {"user_id": "u", "level": "筑基", "stone": 5_000_000}, "")),
+            patch.object(xiuxian_work, "convert_rank", return_value=(1, "筑基")),
+            patch.object(xiuxian_work, "update_last_check_info_time"),
+            patch.object(xiuxian_work, "get_user_work_status", return_value=(1, work_data)),
+            patch.object(xiuxian_work.work_status_application, "get_offer", return_value={"status": 2}),
+            patch.object(xiuxian_work, "_work_cd_snapshot", return_value={"type": 2, "create_time": "start", "scheduled_time": "采药"}),
+            patch.object(xiuxian_work.work_abort_cleanup_application, "cleanup", return_value=rejected),
+            patch.object(xiuxian_work, "handle_send", new=AsyncMock()) as send,
+        ):
+            with self.assertRaises(FinishedException):
+                await registered_handler.call(fake_bot, event, args=("终止", None))
+
+        self.assertIn("work_abort_cleanup_receipt_write_rejected", send.await_args.args[2])
+        self.assertIn("abort-reason-1", send.await_args.args[2])
+
+    async def test_registered_reset_command_surfaces_cleanup_reason(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
+
+        registered_handler = next(
+            handler for handler in xiuxian_work.do_work.handlers if handler.call is xiuxian_work.do_work_
+        )
+        event = SimpleNamespace(message_id="reset-reason-1")
+        fake_bot = SimpleNamespace(self_id="bot")
+        rejected = SimpleNamespace(
+            status="state_changed",
+            succeeded=False,
+            reason="work_abort_cleanup_offer_snapshot_write_rejected",
+            subject="u",
+            penalty=0,
+        )
+        with (
+            patch.object(xiuxian_work, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+            patch.object(xiuxian_work, "check_user", return_value=(True, {"user_id": "u", "level": "筑基"}, "")),
+            patch.object(xiuxian_work, "convert_rank", return_value=(1, "筑基")),
+            patch.object(xiuxian_work, "update_last_check_info_time"),
+            patch.object(xiuxian_work.work_status_application, "get_offer", return_value={"status": 3}),
+            patch.object(xiuxian_work, "_work_cd_snapshot", return_value={"type": 0, "create_time": 0, "scheduled_time": None}),
+            patch.object(xiuxian_work.work_abort_cleanup_application, "cleanup", return_value=rejected),
+            patch.object(xiuxian_work, "handle_send", new=AsyncMock()) as send,
+        ):
+            with self.assertRaises(FinishedException):
+                await registered_handler.call(fake_bot, event, args=("重置", None))
+
+        self.assertIn("work_abort_cleanup_offer_snapshot_write_rejected", send.await_args.args[2])
+        self.assertIn("u", send.await_args.args[2])
+
     async def test_handler_surfaces_known_write_reason_and_subject(self):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_work
 

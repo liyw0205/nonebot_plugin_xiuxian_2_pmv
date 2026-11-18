@@ -14,10 +14,17 @@ class WorkAbortCleanupResult:
     status: str
     penalty: int = 0
     stone_remaining: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
+
+
+class _WorkAbortCleanupWriteRejected(Exception):
+    def __init__(self, result: WorkAbortCleanupResult) -> None:
+        self.result = result
 
 
 class WorkAbortCleanupSqlRepository:
@@ -65,6 +72,20 @@ class WorkAbortCleanupSqlRepository:
             return json.loads(str(stored)) == json.loads(expected)
         except (TypeError, ValueError):
             return False
+
+    @staticmethod
+    def _write_rejected(stage: str, subject: str) -> WorkAbortCleanupResult:
+        return WorkAbortCleanupResult(
+            "state_changed",
+            reason=f"work_abort_cleanup_{stage}_write_rejected",
+            subject=str(subject),
+        )
+
+    @staticmethod
+    def _raise_write_rejected(stage: str, subject: str) -> None:
+        raise _WorkAbortCleanupWriteRejected(
+            WorkAbortCleanupSqlRepository._write_rejected(stage, subject)
+        )
 
     def cleanup(
         self,
@@ -146,25 +167,95 @@ class WorkAbortCleanupSqlRepository:
                 return WorkAbortCleanupResult("state_changed")
             applied_penalty = min(penalty, stone) if reason == "active_abort" else 0
             remaining = stone - applied_penalty
-            if applied_penalty:
-                changed = uow.execute(
-                    "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
-                    "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
-                    (remaining, user_id, stone),
-                )
-                if changed.rowcount < 1:
-                    return WorkAbortCleanupResult("state_changed")
-            uow.execute(
-                "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=?",
-                (user_id,),
+            active_before = uow.query_one(
+                "SELECT user_id FROM work_active_snapshots WHERE user_id=?", (user_id,)
             )
-            uow.execute("DELETE FROM work_offer_snapshots WHERE user_id=?", (user_id,))
-            uow.execute("DELETE FROM work_active_snapshots WHERE user_id=?", (user_id,))
-            uow.execute(
-                "INSERT INTO work_abort_cleanup_operations "
-                "(operation_id,payload,reason,penalty,stone_remaining) VALUES(?,?,?,?,?)",
-                (operation_id, payload, reason, applied_penalty, remaining),
-            )
+            try:
+                with uow.savepoint("work_abort_cleanup"):
+                    if applied_penalty:
+                        changed = uow.execute(
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
+                            "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                            (remaining, user_id, stone),
+                        )
+                        saved_user = uow.query_one(
+                            "SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",
+                            (user_id,),
+                        )
+                        if (
+                            changed.rowcount != 1
+                            or saved_user is None
+                            or as_int_like(saved_user["stone"]) != remaining
+                        ):
+                            self._raise_write_rejected("stone", user_id)
+
+                    changed_cd = uow.execute(
+                        "UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=?",
+                        (user_id,),
+                    )
+                    saved_cd = uow.query_one(
+                        "SELECT COALESCE(type,0) AS type,create_time,scheduled_time "
+                        "FROM user_cd WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if (
+                        changed_cd.rowcount != 1
+                        or saved_cd is None
+                        or int(saved_cd["type"] or 0) != 0
+                        or str(saved_cd["create_time"]) != "0"
+                        or saved_cd["scheduled_time"] is not None
+                    ):
+                        self._raise_write_rejected("cooldown", user_id)
+
+                    if stored is not None:
+                        changed_offer = uow.execute(
+                            "DELETE FROM work_offer_snapshots WHERE user_id=?", (user_id,)
+                        )
+                        if (
+                            changed_offer.rowcount != 1
+                            or uow.query_one(
+                                "SELECT user_id FROM work_offer_snapshots WHERE user_id=?",
+                                (user_id,),
+                            )
+                            is not None
+                        ):
+                            self._raise_write_rejected("offer_snapshot", user_id)
+
+                    if active_before is not None:
+                        changed_active = uow.execute(
+                            "DELETE FROM work_active_snapshots WHERE user_id=?", (user_id,)
+                        )
+                        if (
+                            changed_active.rowcount != 1
+                            or uow.query_one(
+                                "SELECT user_id FROM work_active_snapshots WHERE user_id=?",
+                                (user_id,),
+                            )
+                            is not None
+                        ):
+                            self._raise_write_rejected("active_snapshot", user_id)
+
+                    written = uow.execute(
+                        "INSERT INTO work_abort_cleanup_operations "
+                        "(operation_id,payload,reason,penalty,stone_remaining) VALUES(?,?,?,?,?)",
+                        (operation_id, payload, reason, applied_penalty, remaining),
+                    )
+                    receipt = uow.query_one(
+                        "SELECT payload,reason,penalty,stone_remaining "
+                        "FROM work_abort_cleanup_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if (
+                        written.rowcount != 1
+                        or receipt is None
+                        or not self._payload_matches(receipt["payload"], payload)
+                        or str(receipt["reason"]) != reason
+                        or as_int_like(receipt["penalty"]) != applied_penalty
+                        or as_int_like(receipt["stone_remaining"]) != remaining
+                    ):
+                        self._raise_write_rejected("receipt", operation_id)
+            except _WorkAbortCleanupWriteRejected as exc:
+                return exc.result
             return WorkAbortCleanupResult("applied", applied_penalty, remaining)
 
 

@@ -507,6 +507,21 @@ def _schedule_work_reminder(
         context=(bot, event),
     )
 
+
+def _work_cleanup_failure(result, fallback: str) -> str:
+    known_reason = reason_text(str(getattr(result, "reason", "") or ""))
+    if not known_reason:
+        return fallback
+    detail = known_reason
+    reason = str(getattr(result, "reason", "") or "")
+    subject = str(getattr(result, "subject", "") or "")
+    if reason:
+        detail += f"（原因：{reason}"
+        if subject:
+            detail += f"；主体：{subject}"
+        detail += "）"
+    return detail
+
 __work_help__ = f"""
 **悬赏令帮助**
 ---
@@ -752,7 +767,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
                 await do_work.finish()
             if not result.succeeded:
-                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏加速未完成：灵石或悬赏进度已更新，请重新查看悬赏。"), **nav_kwargs("work", md_type="悬赏令"))
+                summary = _work_cleanup_failure(
+                    result,
+                    "悬赏终止未完成：灵石或悬赏进度已更新，请重新查看悬赏。",
+                )
+                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary=summary), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
             msg = (
                 f"道友终止了悬赏令【{work_data['scheduled_time']}】\n"
@@ -772,7 +791,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
                 await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
                 await do_work.finish()
             if not result.succeeded:
-                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
+                summary = _work_cleanup_failure(
+                    result,
+                    "悬赏终止未完成：悬赏信息已更新，请先发送【悬赏令】再操作。",
+                )
+                await handle_send(bot, event, result_card("悬赏令", kind="warn", summary=summary), **nav_kwargs("work", md_type="悬赏令"))
                 await do_work.finish()
             msg = "未接取的悬赏令已终止！"
         else:
@@ -877,7 +900,11 @@ async def do_work_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
             await handle_send(bot, event, "悬赏数据结构尚未完成升级，请联系管理员。")
             await do_work.finish()
         if not result.succeeded:
-            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary="悬赏信息已更新，请先发送【悬赏令】再操作。"), **nav_kwargs("work", md_type="悬赏令"))
+            summary = _work_cleanup_failure(
+                result,
+                "悬赏重置未完成：悬赏信息已更新，请先发送【悬赏令】再操作。",
+            )
+            await handle_send(bot, event, result_card("悬赏令", kind="warn", summary=summary), **nav_kwargs("work", md_type="悬赏令"))
             await do_work.finish()
         msg = "已重置悬赏令"
         work_reminder_application.cancel(user_id)
