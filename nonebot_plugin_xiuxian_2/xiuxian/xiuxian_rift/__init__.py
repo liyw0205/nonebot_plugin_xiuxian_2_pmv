@@ -1032,9 +1032,9 @@ async def use_rift_key(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         outcome["message"] = f"{outcome['message']}{progress_msg}"
         result = rift_application.event_settle(
             operation_id=operation_id, user_id=str(user_id), item_id=item_id,
-            rift_info=rift_info,
-            user_state={key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
-            explore_count=explore_count, outcome=outcome,
+            expected_rift=rift_info,
+            expected_user={key: int(user_info.get(key, 0)) for key in ("stone", "exp", "hp", "mp")},
+            expected_explore_count=explore_count, outcome=outcome,
             max_goods_num=XiuConfig().max_goods_num,
         )
     except Exception as exc:
