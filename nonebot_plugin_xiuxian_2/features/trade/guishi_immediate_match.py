@@ -89,6 +89,14 @@ class GuishiImmediateMatchRepository:
     def finish(self, order_id: str, failure: GuishiMatchFailure | None = None) -> None:
         with DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
             _require_requests(uow)
+            expected = {
+                "order_id": str(order_id),
+                "status": "pending" if failure else "complete",
+                "reason": failure.reason if failure else "",
+                "subject": failure.subject if failure else "",
+                "qiugou_order_id": failure.qiugou_order_id if failure else "",
+                "baitan_order_id": failure.baitan_order_id if failure else "",
+            }
             written = uow.execute(
                 "UPDATE guishi_immediate_match_requests SET status=?,reason=?,subject=?,qiugou_order_id=?,baitan_order_id=? "
                 "WHERE order_id=? AND status='pending'",
@@ -97,8 +105,22 @@ class GuishiImmediateMatchRepository:
                  failure.qiugou_order_id if failure else "", failure.baitan_order_id if failure else "", order_id),
             )
             if written.rowcount != 1:
-                current = uow.query_one("SELECT status FROM guishi_immediate_match_requests WHERE order_id=?", (order_id,))
+                current = uow.query_one(
+                    "SELECT order_id,status,reason,subject,qiugou_order_id,baitan_order_id "
+                    "FROM guishi_immediate_match_requests WHERE order_id=?",
+                    (order_id,),
+                )
                 # Another continuation may already have completed this request.
-                if current is None or current['status'] != 'complete':
+                if current is None or current != {**expected, "status": "complete", "reason": "", "subject": "",
+                                                  "qiugou_order_id": "", "baitan_order_id": ""}:
                     raise DomainError("request_write_rejected", "Guishi continuation update was rejected",
                                       {"reason": "request_write_rejected", "subject": order_id})
+                return
+            saved = uow.query_one(
+                "SELECT order_id,status,reason,subject,qiugou_order_id,baitan_order_id "
+                "FROM guishi_immediate_match_requests WHERE order_id=?",
+                (order_id,),
+            )
+            if saved != expected:
+                raise DomainError("request_write_rejected", "Guishi continuation update was not persisted exactly",
+                                  {"reason": "request_write_rejected", "subject": order_id})

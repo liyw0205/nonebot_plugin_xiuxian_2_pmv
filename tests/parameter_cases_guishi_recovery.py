@@ -8,6 +8,105 @@ from tests.parameter_cases_market import herb
 
 def register(case):
     @case(
+        "guishi-match-state-write-recovery",
+        "鬼市求购",
+        "即时撮合完成状态改写/同消息恢复/重放",
+        "真实求购入口无对手订单，finish UPDATE 被隔离 trigger 改写",
+        "具体 request_write_rejected 可见且请求保留 pending；解除故障后同消息完成，重放零写",
+        group="market-guishi-match-state-recovery",
+    )
+    async def match_state_recovery(probe):
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+        module, clock, application = setup(probe)
+        _, name = herb(probe, "900002")
+        price = module.MIN_PRICE * 10
+        probe.player(stone=100_000_000)
+        with patch.object(module, "runtime_clock", clock), patch.object(module, "trade_application", application):
+            await probe.command("鬼市存灵石", "鬼市存灵石 20000000", number=967040)
+            with DatabaseUnitOfWork(probe.context.paths.trade_db) as uow:
+                uow.execute(
+                    "CREATE TRIGGER rewrite_guishi_match_complete AFTER UPDATE ON guishi_immediate_match_requests "
+                    "WHEN NEW.status='complete' BEGIN UPDATE guishi_immediate_match_requests SET status='complete',"
+                    "reason='wrong',subject='wrong',qiugou_order_id='wrong',baitan_order_id='wrong' "
+                    "WHERE order_id=NEW.order_id; END"
+                )
+            text = f"鬼市求购 {name} {price} 1"
+            with patch.object(module, "report_exception", return_value="定位号：match-state-test"):
+                failed = await probe.command("鬼市求购", text, number=967041)
+            assert "request_write_rejected" in failed and "即时撮合未完成" in failed, failed
+            pending = probe.rows(
+                probe.context.paths.trade_db,
+                "SELECT status,reason,subject FROM guishi_immediate_match_requests",
+            )
+            assert pending == [("pending", "", "")], pending
+            assert len(application.guishi_get_orders(user_id="900001", order_type="qiugou")) == 1
+            before_recovery = (
+                probe.rows(probe.context.paths.trade_db, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_order_create_operations"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_item"),
+                probe.rows(probe.context.paths.trade_db, "SELECT status,reason,subject FROM guishi_immediate_match_requests"),
+            )
+
+            event = SimpleNamespace(get_user_id=lambda: "900001")
+            for onebot, markdown, send_fails in (
+                (True, True, False), (False, False, False),
+                (False, True, False), (False, True, True),
+            ):
+                bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+                config = SimpleNamespace(
+                    markdown_status=markdown, markdown_id="", markdown_id2="",
+                    markdown_button_status=False, at_sender=False,
+                    message_optimization=False, img=False,
+                )
+                plain = AsyncMock()
+                markdown_send = AsyncMock(
+                    side_effect=RuntimeError("isolated match-state delivery failure") if send_fails else None
+                )
+                with patch.object(utils, "XiuConfig", return_value=config), \
+                        patch.object(utils, "get_chat_scene", return_value="group"), \
+                        patch.object(utils, "is_group_event", return_value=True), \
+                        patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")), \
+                        patch.object(utils, "_send_event_message", plain), \
+                        patch.object(utils, "_send_markdown_or_keyboard", markdown_send):
+                    await utils.handle_send(bot, event, failed, md_type="交易", k1="求购", v1="鬼市求购")
+                if onebot or not markdown or send_fails:
+                    plain.assert_awaited_once()
+                    assert plain.call_args.kwargs["message"] == failed
+                else:
+                    markdown_send.assert_awaited_once()
+                    assert "request_write_rejected" in str(markdown_send.call_args.args[2])
+
+            probe.seed(probe.context.paths.trade_db, "DROP TRIGGER rewrite_guishi_match_complete")
+            recovered = await probe.command("鬼市求购", text, number=967041)
+            assert "成功发布求购订单" in recovered and "即时撮合未完成" not in recovered, recovered
+            assert probe.rows(probe.context.paths.trade_db, "SELECT status,reason,subject FROM guishi_immediate_match_requests") == [("complete", "", "")]
+            after_recovery = (
+                probe.rows(probe.context.paths.trade_db, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_order_create_operations"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_item"),
+                probe.rows(probe.context.paths.trade_db, "SELECT status,reason,subject FROM guishi_immediate_match_requests"),
+            )
+            assert after_recovery != before_recovery
+            replay = await probe.command("鬼市求购", text, number=967041)
+            assert "成功发布求购订单" in replay
+            assert (
+                probe.rows(probe.context.paths.trade_db, "SELECT stored_stone FROM guishi_info WHERE user_id='900001'"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_order_create_operations"),
+                probe.rows(probe.context.paths.trade_db, "SELECT COUNT(*) FROM guishi_item"),
+                probe.rows(probe.context.paths.trade_db, "SELECT status,reason,subject FROM guishi_immediate_match_requests"),
+            ) == after_recovery
+        probe.evidence.update(
+            rewritten_completion_rejected=True,
+            failure_reason="request_write_rejected",
+            pending_preserved=True,
+            recovered_once=True,
+            replay_zero_write=True,
+            adapters="onebot/plain/qq-markdown/fallback",
+        )
+
+    @case(
         "guishi-create-request-write-recovery",
         "鬼市求购",
         "求购/摆摊真实参数与即时撮合请求故障恢复",

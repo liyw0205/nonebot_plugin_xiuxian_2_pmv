@@ -28,6 +28,9 @@ class GuishiParameterDispatchTests(unittest.TestCase):
     def test_creation_request_write_failure_recovery_and_adapters(self):
         self.check_group("market-guishi-create-recovery", 1, {"success": 1})
 
+    def test_match_state_write_failure_recovery_and_adapters(self):
+        self.check_group("market-guishi-match-state-recovery", 1, {"success": 1})
+
     def test_creation_replay_and_partial_cancellation_lifecycle(self):
         self.check_group("market-guishi-lifecycle", 5, {"success": 5})
 

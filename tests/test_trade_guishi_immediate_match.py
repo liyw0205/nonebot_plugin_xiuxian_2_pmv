@@ -236,6 +236,47 @@ class GuishiImmediateMatchTests(unittest.TestCase):
         self.assertEqual(caught.exception.details, {"reason": "request_write_rejected", "subject": created.order_id})
         self.assertEqual(len(self.app.guishi_pending_immediate_matches()), 1)
 
+    def test_rewritten_failure_marker_is_rejected_and_recovers(self):
+        created = self.create()
+        self.seed_counterpart("sell", "baitan", quantity=1)
+        conflict = f"guishi-match:{created.order_id}:sell"
+        self.write(self.trade, "INSERT INTO guishi_match_operations(operation_id,payload,result) VALUES(?,?,?)",
+                   (conflict, '["bad","pair"]', "{}"))
+        self.write(self.trade, "CREATE TRIGGER rewrite_failure AFTER UPDATE ON guishi_immediate_match_requests "
+                   "WHEN NEW.reason='operation_conflict' BEGIN UPDATE guishi_immediate_match_requests "
+                   "SET status='complete',reason='',subject='',qiugou_order_id='',baitan_order_id='' "
+                   "WHERE order_id=NEW.order_id; END")
+        with self.assertRaises(GuishiMatchFailure) as caught:
+            self.app.guishi_resume_immediate_match(order_id=created.order_id)
+        self.assertIsInstance(caught.exception.__cause__, DomainError)
+        self.assertEqual(caught.exception.__cause__.details,
+                         {"reason": "request_write_rejected", "subject": created.order_id})
+        self.assertEqual(self.query(self.trade,
+                                     "SELECT status,reason,subject,qiugou_order_id,baitan_order_id "
+                                     "FROM guishi_immediate_match_requests"),
+                         [("pending", "", "", "", "")])
+        self.write(self.trade, "DROP TRIGGER rewrite_failure")
+        result = self.restart().guishi_resume_immediate_match(order_id=created.order_id)
+        self.assertEqual((result.status, result.failure.reason), ("pending", "operation_conflict"))
+
+    def test_rewritten_complete_marker_is_rejected_and_recovers(self):
+        created = self.create()
+        self.write(self.trade, "CREATE TRIGGER rewrite_complete AFTER UPDATE ON guishi_immediate_match_requests "
+                   "WHEN NEW.status='complete' BEGIN UPDATE guishi_immediate_match_requests "
+                   "SET status='complete',reason='wrong',subject='wrong',qiugou_order_id='wrong',baitan_order_id='wrong' "
+                   "WHERE order_id=NEW.order_id; END")
+        with self.assertRaises(DomainError) as caught:
+            self.app.guishi_resume_immediate_match(order_id=created.order_id)
+        self.assertEqual(caught.exception.details,
+                         {"reason": "request_write_rejected", "subject": created.order_id})
+        self.assertEqual(self.query(self.trade,
+                                     "SELECT status,reason,subject,qiugou_order_id,baitan_order_id "
+                                     "FROM guishi_immediate_match_requests"),
+                         [("pending", "", "", "", "")])
+        self.write(self.trade, "DROP TRIGGER rewrite_complete")
+        result = self.restart().guishi_resume_immediate_match(order_id=created.order_id)
+        self.assertEqual((result.status, result.failure), ("complete", None))
+
     def test_ignored_statistics_update_does_not_commit_match_or_buyer_statistics(self):
         created = self.create()
         self.seed_counterpart("sell", "baitan", quantity=2)
