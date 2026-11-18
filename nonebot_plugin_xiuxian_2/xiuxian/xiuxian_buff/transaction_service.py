@@ -229,6 +229,8 @@ class PartnerInvite:
 class PartnerInviteResult:
     status: str
     invite: PartnerInvite | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -264,10 +266,32 @@ class PartnerInviteService:
 
     @staticmethod
     def expire_stale(conn, now: float) -> None:
-        conn.execute(
+        stale = conn.execute(
+            "SELECT invite_id FROM partner_cultivation_invites "
+            "WHERE status='pending' AND expires_at<=%s", (now,),
+        ).fetchall()
+        if not stale:
+            return
+        changed = conn.execute(
             "UPDATE partner_cultivation_invites SET status='expired',resolved_at=%s "
             "WHERE status='pending' AND expires_at<=%s", (now, now),
         )
+        if changed.rowcount != len(stale):
+            raise DomainError(
+                "partner_invite_expiry_write_rejected",
+                "partner invite expiry did not affect every stale invitation",
+                {"reason": "partner_invite_expiry_write_rejected", "subject": "target"},
+            )
+        remaining = conn.execute(
+            "SELECT invite_id FROM partner_cultivation_invites "
+            "WHERE status='pending' AND expires_at<=%s", (now,),
+        ).fetchone()
+        if remaining is not None:
+            raise DomainError(
+                "partner_invite_expiry_write_rejected",
+                "partner invite expiry did not persist",
+                {"reason": "partner_invite_expiry_write_rejected", "subject": "target"},
+            )
 
     def create(
         self, invite_id, inviter_id, target_id, count, *, ttl_seconds=60,
@@ -313,10 +337,27 @@ class PartnerInviteService:
                 if busy is not None:
                     conn.rollback()
                     return PartnerInviteResult("busy", self.from_row(busy))
-                conn.execute(
+                changed = conn.execute(
                     "INSERT INTO partner_cultivation_invites VALUES(%s,%s,%s,%s,'pending',%s,%s,NULL)",
                     (invite_id, inviter_id, target_id, count, created_at, expires_at),
                 )
+                stored = conn.execute(
+                    "SELECT invite_id,inviter_id,target_id,count,status,created_at,expires_at "
+                    "FROM partner_cultivation_invites WHERE invite_id=%s", (invite_id,),
+                ).fetchone()
+                if changed.rowcount != 1 or stored is None or (
+                    str(stored[1]) != inviter_id
+                    or str(stored[2]) != target_id
+                    or int(stored[3]) != count
+                    or str(stored[4]) != "pending"
+                    or float(stored[5]) != created_at
+                    or float(stored[6]) != expires_at
+                ):
+                    conn.rollback()
+                    return PartnerInviteResult(
+                        "state_changed", self.from_row(stored),
+                        "partner_invite_create_write_rejected", "actor",
+                    )
                 conn.commit()
                 return PartnerInviteResult("applied", PartnerInvite(invite_id, inviter_id, target_id, count, "pending", created_at, expires_at))
             except Exception:
@@ -360,15 +401,39 @@ class PartnerInviteService:
                 (status, resolved_at, str(invite_id), str(target_id)),
             )
             row = conn.execute(
-                "SELECT invite_id,inviter_id,target_id,count,status,created_at,expires_at "
+                "SELECT invite_id,inviter_id,target_id,count,status,created_at,expires_at,resolved_at "
                 "FROM partner_cultivation_invites WHERE invite_id=%s", (str(invite_id),),
             ).fetchone()
-        invite = self.from_row(row)
-        if changed.rowcount == 1:
-            return PartnerInviteResult("applied", invite)
-        if invite is not None and invite.status == status:
-            return PartnerInviteResult("duplicate", invite)
-        return PartnerInviteResult("state_changed", invite)
+            invite = self.from_row(row)
+            if changed.rowcount == 1:
+                if (
+                    invite is not None
+                    and invite.status == status
+                    and row[7] is not None
+                    and float(row[7]) == resolved_at
+                ):
+                    return PartnerInviteResult("applied", invite)
+                conn.rollback()
+                return PartnerInviteResult(
+                    "state_changed", invite,
+                    "partner_invite_resolve_write_rejected", "target",
+                )
+            if invite is not None and invite.status == status:
+                return PartnerInviteResult("duplicate", invite)
+            if invite is not None and invite.status == "pending":
+                conn.rollback()
+                return PartnerInviteResult(
+                    "state_changed", invite,
+                    "partner_invite_resolve_write_rejected", "target",
+                )
+            if invite is not None:
+                reason = {
+                    "accepted": "invite_accepted",
+                    "rejected": "invite_rejected",
+                    "expired": "invite_expired",
+                }.get(invite.status, "invite_resolved")
+                return PartnerInviteResult("state_changed", invite, reason, "target")
+            return PartnerInviteResult("state_changed", invite)
 
 @dataclass(frozen=True)
 class PartnerCultivationResult:

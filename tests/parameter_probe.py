@@ -56,7 +56,7 @@ class Probe:
         self.calls = []
         self.evidence = {}
 
-    async def command(self, name, text=None, *, actor="900001", number=None):
+    async def command(self, name, text=None, *, actor="900001", number=None, allow_exception=False):
         from tests.parameter_exception_watch import watch_handler_catches
         candidates = [entry for entry in self.entries if entry["command"] == name or name in entry["aliases"]]
         assert len(candidates) == 1, (name, [entry["module"] for entry in candidates])
@@ -68,7 +68,7 @@ class Probe:
         self.calls.append({"command": name, **result})
         if result["status"] == "blocked":
             raise ProbeBlocked(json.dumps(result, ensure_ascii=False))
-        assert result["status"] == "pass", json.dumps(result, ensure_ascii=False)
+        assert result["status"] == "pass" or (allow_exception and result["status"] == "exception"), json.dumps(result, ensure_ascii=False)
         return "\n".join(result["replies"])
 
     def player(self, uid="900001", **values):

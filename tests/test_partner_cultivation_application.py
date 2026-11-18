@@ -375,6 +375,273 @@ class PartnerCultivationApplicationTests(unittest.TestCase):
                     "SELECT status FROM partner_cultivation_invites WHERE invite_id='valid'"
                 ).fetchone()[0],
             )
+            self.assertEqual(
+                1000.0,
+                conn.execute(
+                    "SELECT resolved_at FROM partner_cultivation_invites WHERE invite_id='valid'"
+                ).fetchone()[0],
+            )
+
+    def test_invite_settlement_write_rejections_roll_back_and_recover(self) -> None:
+        cases = (
+            (
+                "reject_user",
+                "CREATE TRIGGER reject_user BEFORE UPDATE OF exp ON user_xiuxian "
+                "WHEN OLD.user_id='a' BEGIN SELECT RAISE(IGNORE); END",
+                "partner_cultivation_user_write_rejected",
+            ),
+            (
+                "rewrite_user",
+                "CREATE TRIGGER rewrite_user AFTER UPDATE OF exp ON user_xiuxian "
+                "WHEN OLD.user_id='a' BEGIN UPDATE user_xiuxian SET power=999 WHERE user_id='a'; END",
+                "partner_cultivation_user_write_rejected",
+            ),
+            (
+                "reject_statistics_insert",
+                'CREATE TRIGGER reject_statistics_insert BEFORE INSERT ON statistics '
+                'BEGIN SELECT RAISE(IGNORE); END',
+                "partner_cultivation_statistics_write_rejected",
+            ),
+            (
+                "rewrite_statistics",
+                'CREATE TRIGGER rewrite_statistics AFTER INSERT ON statistics '
+                "WHEN NEW.user_id='a' BEGIN UPDATE statistics SET \"双修次数\"=99 WHERE user_id='a'; END",
+                "partner_cultivation_statistics_write_rejected",
+            ),
+            (
+                "rewrite_statistics_update",
+                'CREATE TRIGGER rewrite_statistics_update AFTER UPDATE OF "双修次数" ON statistics '
+                "WHEN OLD.user_id='a' BEGIN UPDATE statistics SET \"双修次数\"=99 WHERE user_id='a'; END",
+                "partner_cultivation_statistics_write_rejected",
+            ),
+            (
+                "rewrite_affection",
+                "CREATE TRIGGER rewrite_affection AFTER UPDATE OF affection ON partner "
+                "WHEN OLD.user_id='a' BEGIN UPDATE partner SET affection=99 WHERE user_id='a'; END",
+                "partner_affection_write_rejected",
+            ),
+            (
+                "reject_usage",
+                "CREATE TRIGGER reject_usage BEFORE UPDATE OF used_count ON partner_two_exp_usage "
+                "WHEN OLD.user_id='a' BEGIN SELECT RAISE(IGNORE); END",
+                "partner_cultivation_usage_write_rejected",
+            ),
+            (
+                "rewrite_usage",
+                "CREATE TRIGGER rewrite_usage AFTER UPDATE OF used_count ON partner_two_exp_usage "
+                "WHEN OLD.user_id='a' BEGIN UPDATE partner_two_exp_usage SET used_count=99 WHERE user_id='a'; END",
+                "partner_cultivation_usage_write_rejected",
+            ),
+            (
+                "reject_invite",
+                "CREATE TRIGGER reject_invite BEFORE UPDATE OF status ON partner_cultivation_invites "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "partner_cultivation_invite_write_rejected",
+            ),
+            (
+                "rewrite_invite_timestamp",
+                "CREATE TRIGGER rewrite_invite_timestamp AFTER UPDATE OF status ON partner_cultivation_invites "
+                "WHEN NEW.status='accepted' BEGIN UPDATE partner_cultivation_invites "
+                "SET resolved_at=NULL WHERE invite_id=NEW.invite_id; END",
+                "partner_cultivation_invite_write_rejected",
+            ),
+            (
+                "reject_receipt",
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON partner_cultivation_operations "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "partner_cultivation_receipt_write_rejected",
+            ),
+            (
+                "rewrite_receipt",
+                "CREATE TRIGGER rewrite_receipt AFTER INSERT ON partner_cultivation_operations "
+                "BEGIN UPDATE partner_cultivation_operations SET exp_1=999 WHERE operation_id='invite-write'; END",
+                "partner_cultivation_receipt_write_rejected",
+            ),
+        )
+        for name, trigger, reason in cases:
+            with self.subTest(trigger=name):
+                self.temp.cleanup()
+                self.setUp()
+                with db_backend.transaction(self.player) as conn:
+                    conn.execute(
+                        "INSERT INTO partner_cultivation_invites VALUES"
+                        "('valid','a','b',2,'pending',900,1100,NULL)"
+                    )
+                    if name == "rewrite_statistics_update":
+                        conn.execute('INSERT INTO statistics(user_id,"双修次数") VALUES(\'a\',0)')
+                database = self.player if name in {
+                    "reject_statistics_insert", "rewrite_statistics", "rewrite_statistics_update",
+                    "rewrite_affection", "reject_usage", "rewrite_usage", "reject_invite",
+                    "rewrite_invite_timestamp",
+                } else self.game
+                with db_backend.transaction(database) as conn:
+                    conn.execute(trigger)
+                before = self.full_snapshot()
+                try:
+                    with self.assertRaises(DomainError) as caught:
+                        self.apply("invite-write", invite_id="valid", expected_target_protection=None)
+                    self.assertEqual(reason, caught.exception.code)
+                    self.assertEqual(reason, caught.exception.details["reason"])
+                    self.assertEqual(before, self.full_snapshot())
+                finally:
+                    with db_backend.transaction(database) as conn:
+                        conn.execute(f"DROP TRIGGER {name}")
+                self.assertEqual(
+                    "applied",
+                    self.apply("invite-write", invite_id="valid", expected_target_protection=None).status,
+                )
+                settled = self.full_snapshot()
+                self.assertEqual(
+                    "duplicate",
+                    self.apply("invite-write", invite_id="valid", expected_target_protection=None).status,
+                )
+                self.assertEqual(settled, self.full_snapshot())
+
+    def test_invite_usage_first_insert_rejection_is_not_reported_as_success(self) -> None:
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DELETE FROM partner_two_exp_usage WHERE user_id='a'")
+            conn.execute(
+                "INSERT INTO partner_cultivation_invites VALUES"
+                "('valid','a','b',2,'pending',900,1100,NULL)"
+            )
+            conn.execute(
+                "CREATE TRIGGER reject_usage_insert BEFORE INSERT ON partner_two_exp_usage "
+                "WHEN NEW.user_id='a' BEGIN SELECT RAISE(IGNORE); END"
+            )
+        before = self.full_snapshot()
+        try:
+            with self.assertRaises(DomainError) as caught:
+                self.apply("usage-insert", invite_id="valid", expected_target_protection=None)
+            self.assertEqual("partner_cultivation_usage_write_rejected", caught.exception.code)
+            self.assertEqual(before, self.full_snapshot())
+        finally:
+            with db_backend.transaction(self.player) as conn:
+                conn.execute("DROP TRIGGER reject_usage_insert")
+
+    def test_partner_invite_create_ignore_is_detected_and_recoverable(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerInviteService
+
+        service = PartnerInviteService(self.player)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_invite_create BEFORE INSERT ON partner_cultivation_invites "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        try:
+            before = self.full_snapshot()
+            rejected = service.create("create-op", "a", "b", 2, now=1000)
+            self.assertEqual(
+                ("state_changed", "partner_invite_create_write_rejected", "actor"),
+                (rejected.status, rejected.reason, rejected.subject),
+            )
+            self.assertEqual(before, self.full_snapshot())
+        finally:
+            with db_backend.transaction(self.player) as conn:
+                conn.execute("DROP TRIGGER reject_invite_create")
+        created = service.create("create-op", "a", "b", 2, now=1000)
+        self.assertEqual("applied", created.status)
+        self.assertEqual("duplicate", service.create("create-op", "a", "b", 2, now=1000).status)
+
+    def test_partner_invite_create_rewrite_is_not_reported_as_success(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerInviteService
+
+        service = PartnerInviteService(self.player)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_invite_create AFTER INSERT ON partner_cultivation_invites "
+                "BEGIN UPDATE partner_cultivation_invites SET count=99 WHERE invite_id='rewrite-op'; END"
+            )
+        result = service.create("rewrite-op", "a", "b", 2, now=1000)
+        self.assertEqual("partner_invite_create_write_rejected", result.reason)
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual(0, conn.execute("SELECT COUNT(*) FROM partner_cultivation_invites").fetchone()[0])
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TRIGGER rewrite_invite_create")
+        self.assertEqual("applied", service.create("rewrite-op", "a", "b", 2, now=1000).status)
+
+    def test_partner_invite_resolve_ignore_is_specific_and_recoverable(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerInviteService
+
+        service = PartnerInviteService(self.player)
+        service.create("resolve-op", "a", "b", 2, now=1000)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_invite_resolve BEFORE UPDATE OF status ON partner_cultivation_invites "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        try:
+            rejected = service.resolve("resolve-op", "b", "rejected", now=1010)
+            self.assertEqual(
+                ("state_changed", "partner_invite_resolve_write_rejected", "target"),
+                (rejected.status, rejected.reason, rejected.subject),
+            )
+            self.assertEqual("pending", service.pending_for_target("b", now=1011).status)
+        finally:
+            with db_backend.transaction(self.player) as conn:
+                conn.execute("DROP TRIGGER reject_invite_resolve")
+        self.assertEqual("applied", service.resolve("resolve-op", "b", "rejected", now=1012).status)
+        self.assertEqual("duplicate", service.resolve("resolve-op", "b", "rejected", now=1013).status)
+
+    def test_partner_invite_resolve_rewrite_is_a_specific_rejection(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerInviteService
+
+        service = PartnerInviteService(self.player)
+        service.create("resolve-rewrite", "a", "b", 2, now=1000)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_invite_resolve AFTER UPDATE OF status ON partner_cultivation_invites "
+                "WHEN NEW.status='rejected' BEGIN UPDATE partner_cultivation_invites "
+                "SET status='pending',resolved_at=NULL WHERE invite_id=NEW.invite_id; END"
+            )
+        before = self.full_snapshot()
+        result = service.resolve("resolve-rewrite", "b", "rejected", now=1010)
+        self.assertEqual(
+            ("state_changed", "partner_invite_resolve_write_rejected", "target"),
+            (result.status, result.reason, result.subject),
+        )
+        self.assertEqual(before, self.full_snapshot())
+        self.assertEqual("pending", service.pending_for_target("b", now=1011).status)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute("DROP TRIGGER rewrite_invite_resolve")
+        self.assertEqual("applied", service.resolve("resolve-rewrite", "b", "rejected", now=1012).status)
+
+    def test_partner_invite_expiry_boundary_and_failed_persistence(self) -> None:
+        self.ensure_nonebot_initialized()
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.transaction_service import PartnerInviteService
+
+        service = PartnerInviteService(self.player)
+        service.create("expiry-boundary", "a", "b", 1, ttl_seconds=10, now=1000)
+        self.assertEqual("pending", service.pending_for_target("b", now=1009).status)
+        self.assertIsNone(service.pending_for_target("b", now=1010))
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual(
+                "expired",
+                conn.execute(
+                    "SELECT status FROM partner_cultivation_invites WHERE invite_id='expiry-boundary'"
+                ).fetchone()[0],
+            )
+
+        service.create("expiry-rejected", "a", "b", 1, ttl_seconds=10, now=2000)
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_invite_expiry BEFORE UPDATE OF status ON partner_cultivation_invites "
+                "WHEN NEW.status='expired' BEGIN SELECT RAISE(IGNORE); END"
+            )
+        before = self.full_snapshot()
+        try:
+            with self.assertRaises(DomainError) as caught:
+                service.pending_for_target("b", now=2010)
+            self.assertEqual("partner_invite_expiry_write_rejected", caught.exception.code)
+            self.assertEqual("target", caught.exception.details["subject"])
+            self.assertEqual(before, self.full_snapshot())
+        finally:
+            with db_backend.transaction(self.player) as conn:
+                conn.execute("DROP TRIGGER reject_invite_expiry")
+        self.assertIsNone(service.pending_for_target("b", now=2010))
 
     def test_failure_rolls_back_game_and_player_writes(self) -> None:
         with db_backend.transaction(self.player) as conn:

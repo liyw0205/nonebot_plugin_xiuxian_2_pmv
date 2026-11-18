@@ -1010,8 +1010,15 @@ async def expire_invite(user_id, invite_id, bot, event):
         # 发送过期提示
         msg = f"双修邀请已过期！"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
+    elif result.reason:
+        await handle_send(
+            bot, event, result_failure("双修邀请过期", result),
+            md_type="buff", k1="双修", v1="双修",
+            k2="次数", v2="我的双修次数", k3="修为", v3="我的修为",
+        )
 
 @two_exp_reject.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("拒绝双修")
 async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """拒绝双修"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1031,9 +1038,11 @@ async def two_exp_reject_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     inviter_id = invite.inviter_id
     
     inviter_info = get_user_profile(inviter_id)
-    msg = f"你拒绝了{inviter_info['user_name']}的双修邀请！"
-    
-    _partner_invite_service().resolve(invite.invite_id, user_id, "rejected")
+    resolved = _partner_invite_service().resolve(invite.invite_id, user_id, "rejected")
+    if not resolved.succeeded:
+        msg = result_failure("拒绝双修", resolved)
+    else:
+        msg = f"你拒绝了{inviter_info['user_name']}的双修邀请！"
     
     await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
     await two_exp_reject.finish()
