@@ -107,6 +107,95 @@ async def check_accessory_equipment_writes(probe, *, equip):
     probe.evidence.update(ignore=True, rewrite=True, abort=True, recovered=True, replay_unchanged=True)
 
 
+async def check_accessory_affix_writes(probe, *, unlock):
+    player, game = probe.context.paths.player_db, probe.context.paths.game_db
+    command, action = ("饰品解锁", "unlock") if unlock else ("饰品锁定", "lock")
+    index_token = "1" if unlock else "2"
+    request = f"{command} fixture-accessory-01 {index_token}"
+    success = "已解锁：" if unlock else "已锁定："
+    phrases = {
+        "accessory_affix_state_write_rejected": "饰品词条状态保存失败",
+        "accessory_affix_state_projection_mismatch": "饰品词条状态与请求不一致",
+        "accessory_affix_receipt_write_rejected": "饰品词条操作回执保存失败",
+        "accessory_affix_receipt_projection_mismatch": "饰品词条操作回执不一致",
+    }
+    faults = (
+        (player, "BEFORE UPDATE OF equipped ON player_accessory",
+         "SELECT RAISE(IGNORE)", "accessory_affix_state_write_rejected"),
+        (player, "AFTER UPDATE OF equipped ON player_accessory",
+         "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+         "accessory_affix_state_projection_mismatch"),
+        (game, "BEFORE INSERT ON accessory_transaction_operations",
+         "SELECT RAISE(IGNORE)", "accessory_affix_receipt_write_rejected"),
+        (game, "AFTER INSERT ON accessory_transaction_operations",
+         "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+         "accessory_affix_receipt_projection_mismatch"),
+        (game, "BEFORE INSERT ON accessory_transaction_operations",
+         "SELECT RAISE(ABORT,'isolated accessory affix abort')", None),
+    )
+    unchanged_assets = balances(probe), backpack(probe)
+    for database in (game, player):
+        probe.seed(database, "CREATE TABLE isolated_affix_effect (effect INTEGER)")
+    receipt_sql = (
+        "SELECT operation_id,action,payload,result_json "
+        "FROM accessory_transaction_operations ORDER BY operation_id"
+    )
+    for number, (database, event, fault, reason) in enumerate(faults, start=970400):
+        instances = seed_accessory_document(probe, [19001])
+        accessory = instances[0]
+        accessory["affixes"] = [
+            {"type": "攻击", "value": 0.1},
+            {"type": "速度", "value": 20},
+        ]
+        if unlock:
+            accessory["locked_affixes"] = [0]
+        bag = json.loads(accessory_projection(probe)[0][1])
+        bag[0] = accessory
+        probe.seed(player, "UPDATE player_accessory SET bag=? WHERE user_id='900001'",
+                   (json.dumps(bag, ensure_ascii=False),))
+        before = accessory_projection(probe)
+        prior_receipts = probe.rows(game, receipt_sql)
+        probe.seed(
+            database,
+            f"CREATE TRIGGER reject_affix {event} "
+            f"BEGIN INSERT INTO isolated_affix_effect VALUES(1); {fault}; END",
+        )
+        text = await probe.command(command, request, number=number, allow_exception=reason is None)
+        failed_state = accessory_projection(probe)
+        failed_receipts = probe.rows(game, receipt_sql)
+        probe.evidence["last_failure"] = {
+            "fault": fault,
+            "state_unchanged": failed_state == before,
+            "receipt_delta": len(failed_receipts) - len(prior_receipts),
+        }
+        if reason is None:
+            errors = "\n".join(probe.calls[-1]["errors"])
+            assert "sqlite3.IntegrityError: isolated accessory affix abort" in errors, errors
+        else:
+            assert phrases[reason] in text and "fixture-accessory-01" in text, text
+        assert success not in text and failed_state == before, (text, before, failed_state)
+        assert failed_receipts == prior_receipts and not probe.rows(database, "SELECT effect FROM isolated_affix_effect")
+        probe.seed(database, "DROP TRIGGER reject_affix")
+        recovered = await probe.command(command, request, number=number)
+        assert success in recovered, recovered
+        stored = json.loads(accessory_projection(probe)[0][1])[0]
+        assert stored.get("locked_affixes", []) == ([1] if not unlock else []), stored
+        receipt = probe.rows(game, receipt_sql)
+        [(operation_id, saved_action, payload, result)] = [row for row in receipt if row not in prior_receipts]
+        assert operation_id == f"accessory:{number}:{action}:900001:fixture-accessory-01"
+        assert saved_action == action and json.loads(payload)["locked_indexes"] == stored.get("locked_affixes", [])
+        assert json.loads(result)["accessory"] == stored
+        after = accessory_projection(probe)
+        replay = await probe.command(command, request, number=number)
+        assert success in replay and accessory_projection(probe) == after
+        assert probe.rows(game, receipt_sql) == receipt
+    assert (balances(probe), backpack(probe)) == unchanged_assets
+    assert_dungeon_purchase_integrity(game)
+    assert_dungeon_purchase_integrity(player)
+    probe.evidence.update(state_ignore=True, state_rewrite=True, receipt_ignore=True, receipt_rewrite=True,
+                          abort=True, recovered=True, replay_unchanged=True)
+
+
 def register(case):
     @case(
         "accessory-bag-page-real",
@@ -190,6 +279,30 @@ def register(case):
     )
     async def accessory_unequip_write_rejection(probe):
         await check_accessory_equipment_writes(probe, equip=False)
+
+    @case(
+        "accessory-affix-lock-write-recovery",
+        "饰品锁定",
+        "真实UID与可锁定词条序号",
+        "合法饰品、实际词条、player SQLite和永久操作回执",
+        "拒写/改写保留具体原因、整笔回滚，ABORT原异常并可恢复重放",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_affix_lock_write_recovery(probe):
+        await check_accessory_affix_writes(probe, unlock=False)
+
+    @case(
+        "accessory-affix-unlock-write-recovery",
+        "饰品解锁",
+        "真实UID与当前锁定词条序号",
+        "合法饰品、既有锁定词条、player SQLite和永久操作回执",
+        "拒写/改写保留具体原因、整笔回滚，ABORT原异常并可恢复重放",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_affix_unlock_write_recovery(probe):
+        await check_accessory_affix_writes(probe, unlock=True)
 
     for command, query, marker in (
         ("查看饰品", "acc_missing_parameter", "未找到"),

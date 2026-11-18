@@ -172,7 +172,7 @@ def configure_quick_equip_application(application: AccessoryQuickEquipApplicatio
     _accessory_quick_equip_application = application
 
 
-def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
+def _acc_fail_msg(result, *, action: str = "饰品操作", subject: str = "") -> str:
     from ..command_guard import result_failure
     status = getattr(result, "status", None) or "unknown"
     mapping = {
@@ -183,7 +183,12 @@ def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
         "user_missing": "未找到修仙数据。",
         "duplicate": "该请求已处理，无需重复提交。",
     }
-    return result_failure(action, result, messages=mapping)
+    return result_failure(
+        action,
+        result,
+        messages=mapping,
+        subjects={str(subject): f"饰品 {subject}"} if subject else None,
+    )
 
 
 def _accessory_operation_id(event, action, user_id, target):
@@ -969,7 +974,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                             deepcopy(target), tuple(new_locked),
                         )
                         if not result.succeeded or result.accessory is None:
-                            result_msg = _acc_fail_msg(result, action="锁定")
+                            result_msg = _acc_fail_msg(result, action="锁定", subject=uid)
                         else:
                             updated = result.accessory
                             result_msg = (
@@ -1037,7 +1042,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                         deepcopy(target), tuple(new_locked),
                     )
                     if not result.succeeded or result.accessory is None:
-                        result_msg = _acc_fail_msg(result, action="解锁")
+                        result_msg = _acc_fail_msg(result, action="解锁", subject=uid)
                     else:
                         updated = result.accessory
                         q = max(1, min(5, int(updated.get("quality", 1))))

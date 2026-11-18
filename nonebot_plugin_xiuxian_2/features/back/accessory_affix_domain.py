@@ -12,6 +12,7 @@ class AccessoryAffixChange:
     user_id: str
     accessory: dict[str, Any] | None = None
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:

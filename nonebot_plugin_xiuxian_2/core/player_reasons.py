@@ -674,6 +674,10 @@ REASONS = {
     "mp_changed": "真元与发起时不一致，请查看当前真元后重新操作。",
     "legacy_rejection": "这条旧请求回执没有记录拒绝细项，请查询当前状态后发送一条新命令。",
     "boss_purchase_receipt_invalid": "世界商店历史购买回执的请求、数量、扣费或余额投影不一致，未再次结算；请管理员核对该操作记录。",
+    "accessory_affix_state_write_rejected": "饰品词条状态保存失败，本次未完成，请稍后重试。",
+    "accessory_affix_state_projection_mismatch": "饰品词条状态与请求不一致，本次未完成，请稍后重试。",
+    "accessory_affix_receipt_write_rejected": "饰品词条操作回执保存失败，本次未完成，请稍后重试。",
+    "accessory_affix_receipt_projection_mismatch": "饰品词条操作回执不一致，本次未完成，请稍后重试。",
 }
 
 
