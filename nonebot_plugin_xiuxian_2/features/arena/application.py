@@ -30,6 +30,12 @@ ARENA_CHALLENGE_PURCHASE_RETRYABLE_REJECTIONS = frozenset({
     "arena_challenge_purchase_state_write_rejected",
     "arena_challenge_purchase_receipt_write_rejected",
 })
+ARENA_PURCHASE_RETRYABLE_REJECTIONS = frozenset({
+    "arena_purchase_honor_write_rejected",
+    "arena_purchase_weekly_write_rejected",
+    "arena_purchase_inventory_write_rejected",
+    "arena_purchase_receipt_write_rejected",
+})
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -95,6 +101,15 @@ class ArenaApplication:
                         operation_id,
                         action,
                         "竞技场购买次数写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
+                elif action == "arena.purchase" and str(data.get("reason") or "") in ARENA_PURCHASE_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场兑换写入未完成，可在故障解除后重试。",
                         code=str(data["reason"]),
                         data=data,
                         audit_category="arena",

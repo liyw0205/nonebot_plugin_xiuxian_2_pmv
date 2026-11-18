@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import tests  # Establish isolated paths before importing plugin modules.
 import pytest
@@ -193,6 +193,50 @@ def test_real_purchase_handler_debits_honor_grants_bound_inventory_and_replays_o
         assert handlers.run("arena_buy_", "1 2") == first
     assert _purchase_state(context)[0] == 80
     assert _query(context.game, "SELECT COUNT(*) FROM arena_purchase_operations") == [(1,)]
+
+
+def test_purchase_receipt_rejection_replies_specific_reason_and_recovers(tmp_path):
+    context = _context(tmp_path)
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("CREATE TRIGGER refuse_arena_receipt BEFORE INSERT ON arena_purchase_operations BEGIN SELECT RAISE(IGNORE); END")
+    handlers = _handlers(context)
+    failed = handlers.run("arena_buy_", "1 2", event_id="receipt-failure")
+    assert "回执保存失败" in failed
+    assert "竞技场兑换写入未完成" not in failed
+    assert _purchase_state(context) == (100, {"_last_reset": "2026-10-07", "1": 1}, [])
+    assert _query(context.game, "SELECT status FROM operation_ledger WHERE operation_id='arena-purchase:receipt-failure:u'") == [("failed",)]
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("DROP TRIGGER refuse_arena_receipt")
+    recovered = handlers.run("arena_buy_", "1 2", event_id="receipt-failure")
+    assert SUCCESS in recovered
+    assert _purchase_state(context) == (80, {"_last_reset": "2026-10-07", "1": 3}, [(1, 2, 2)])
+
+
+def test_purchase_reason_reply_keeps_onebot_qq_markdown_and_send_failure_contracts():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+    async def run_contracts():
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated arena purchase delivery failure") if send_fails else None)
+            with (
+                patch.object(utils, "XiuConfig", return_value=config),
+                patch.object(utils, "get_chat_scene", return_value="group"),
+                patch.object(utils, "is_group_event", return_value=True),
+                patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")),
+                patch.object(utils, "_send_event_message", plain),
+                patch.object(utils, "_send_markdown_or_keyboard", markdown_send),
+            ):
+                await utils.handle_send(bot, SimpleNamespace(get_user_id=lambda: "u"), "竞技场兑换回执保存失败", md_type="竞技场", k1="竞技场", v1="竞技场查看")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "竞技场兑换回执保存失败"
+            else:
+                markdown_send.assert_awaited_once()
+
+    asyncio.run(run_contracts())
 
 
 def test_original_quantity_clamps_once_and_successful_receipt_precedes_current_rank_limit_and_catalog(tmp_path):

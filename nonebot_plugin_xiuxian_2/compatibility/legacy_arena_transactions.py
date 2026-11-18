@@ -327,6 +327,7 @@ class ArenaPurchaseResult:
     purchased: int
     inventory: int
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:

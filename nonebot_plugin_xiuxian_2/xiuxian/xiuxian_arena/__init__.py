@@ -164,6 +164,7 @@ def _arena_purchase_result(outcome) -> ArenaPurchaseResult:
         int(data.get("purchased", 0) or 0),
         int(data.get("inventory", 0) or 0),
         reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "")),
     )
 
 

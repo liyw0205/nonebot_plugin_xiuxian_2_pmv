@@ -32,6 +32,16 @@ class ArenaPurchaseSqlRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.game) as c:item=c.execute("SELECT goods_num,bind_num FROM back").fetchone()
         with db_backend.connection(self.player) as c:a=c.execute("SELECT honor_points,weekly_purchases FROM arena").fetchone()
         return (int(a[0]),json.loads(a[1]),tuple(item) if item else None)
+
+    @staticmethod
+    def _trigger(database, sql):
+        with db_backend.transaction(database) as c:
+            c.execute(sql)
+
+    @staticmethod
+    def _drop_trigger(database, name):
+        with db_backend.transaction(database) as c:
+            c.execute(f"DROP TRIGGER {name}")
     def test_success_duplicate_conflict(self):
         a=self.buy();b=self.buy();c=self.buy(quantity=1);self.assertEqual((a['status'],b['status'],c['status']),('applied','duplicate','state_changed'));self.assertEqual(self.state(),(80,{'_last_reset':'2026-09-15','1':3},(2,2)))
     def test_rejections_and_rollback(self):
@@ -39,6 +49,62 @@ class ArenaPurchaseSqlRepositoryTests(unittest.TestCase):
         with db_backend.transaction(self.game) as c:c.execute("CREATE TRIGGER fail_ap BEFORE INSERT ON arena_purchase_operations BEGIN SELECT RAISE(ABORT,'failed'); END")
         with self.assertRaises(Exception):self.buy('fail')
         self.assertEqual(self.state(),(100,{'_last_reset':'2026-09-15','1':1},None))
+
+    def test_ignored_and_rewritten_purchase_writes_are_rejected_and_rolled_back(self):
+        initial = self.state()
+        cases = (
+            (
+                "honor_ignore", self.player,
+                "CREATE TRIGGER honor_ignore BEFORE UPDATE OF honor_points ON arena BEGIN SELECT RAISE(IGNORE); END",
+                "arena_purchase_honor_write_rejected", "u",
+            ),
+            (
+                "honor_rewrite", self.player,
+                "CREATE TRIGGER honor_rewrite AFTER UPDATE OF honor_points ON arena BEGIN UPDATE arena SET honor_points=honor_points+7 WHERE user_id=NEW.user_id; END",
+                "arena_purchase_honor_write_rejected", "u",
+            ),
+            (
+                "weekly_ignore", self.player,
+                "CREATE TRIGGER weekly_ignore BEFORE UPDATE OF weekly_purchases ON arena BEGIN SELECT RAISE(IGNORE); END",
+                "arena_purchase_honor_write_rejected", "u",
+            ),
+            (
+                "weekly_rewrite", self.player,
+                "CREATE TRIGGER weekly_rewrite AFTER UPDATE OF weekly_purchases ON arena BEGIN UPDATE arena SET weekly_purchases='{\"_last_reset\":\"2026-09-15\",\"1\":99}' WHERE user_id=NEW.user_id; END",
+                "arena_purchase_weekly_write_rejected", "u",
+            ),
+            (
+                "inventory_ignore", self.game,
+                "CREATE TRIGGER inventory_ignore BEFORE INSERT ON back BEGIN SELECT RAISE(IGNORE); END",
+                "arena_purchase_inventory_write_rejected", "u:1",
+            ),
+            (
+                "inventory_rewrite", self.game,
+                "CREATE TRIGGER inventory_rewrite AFTER INSERT ON back BEGIN UPDATE back SET goods_num=goods_num+7 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id; END",
+                "arena_purchase_inventory_write_rejected", "u:1",
+            ),
+            (
+                "receipt_ignore", self.game,
+                "CREATE TRIGGER receipt_ignore BEFORE INSERT ON arena_purchase_operations BEGIN SELECT RAISE(IGNORE); END",
+                "arena_purchase_receipt_write_rejected", "receipt",
+            ),
+            (
+                "receipt_rewrite", self.game,
+                "CREATE TRIGGER receipt_rewrite AFTER INSERT ON arena_purchase_operations BEGIN UPDATE arena_purchase_operations SET result_json='{}' WHERE operation_id=NEW.operation_id; END",
+                "arena_purchase_receipt_write_rejected", "receipt",
+            ),
+        )
+        for name, database, create_sql, reason, subject in cases:
+            with self.subTest(name=name):
+                self._trigger(database, create_sql)
+                try:
+                    result = self.buy(f"reject-{name}")
+                finally:
+                    self._drop_trigger(database, name)
+                self.assertEqual((result["status"], result["reason"], result["subject"]), ("state_changed", reason, subject))
+                self.assertEqual(self.state(), initial)
+                with db_backend.connection(self.game) as c:
+                    self.assertEqual(0, c.execute("SELECT COUNT(*) FROM arena_purchase_operations").fetchone()[0])
 
     def test_rejected_receipt_cannot_become_success_on_retry(self):
         for operation, options, status in (

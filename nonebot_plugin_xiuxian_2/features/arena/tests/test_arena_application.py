@@ -8,7 +8,7 @@ from datetime import date
 
 from ..application import ArenaApplication
 from ..domain import ArenaPurchaseRequest
-from ..migrations import apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_state
+from ..migrations import apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_purchase, apply_arena_purchase_receipt, apply_arena_state
 from ....core.errors import ConflictError
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
@@ -174,6 +174,45 @@ class ArenaApplicationTests(unittest.TestCase):
                 self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM arena_challenge_purchase_operations").fetchone()[0])
             with sqlite3.connect(player) as conn:
                 self.assertEqual((2, 2), conn.execute("SELECT daily_challenge_buys,daily_extra_challenges FROM arena").fetchone())
+
+    def test_purchase_write_rejection_preserves_reason_and_recovers_same_operation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u')")
+                uow.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+                apply_arena_purchase(uow)
+                apply_arena_purchase_receipt(uow)
+                OperationLedger().ensure_schema(uow)
+                uow.execute("CREATE TRIGGER refuse_receipt BEFORE INSERT ON arena_purchase_operations BEGIN SELECT RAISE(IGNORE); END")
+            with DatabaseUnitOfWork(player) as uow:
+                apply_arena_state(uow)
+                uow.execute("INSERT INTO arena(user_id,honor_points,weekly_purchases) VALUES('u',100,?)", ('{"_last_reset":"2026-09-15","1":1}',))
+            app = ArenaApplication(game, player)
+            request = dict(operation_id="purchase-retry", user_id="u", item_id=1, item_name="item", item_type="type", quantity=2, unit_cost=10, weekly_limit=5, expected_honor=100, expected_weekly_purchases={"_last_reset": "2026-09-15", "1": 1}, max_goods_num=99, bind_flag=1, today=date(2026, 9, 15))
+
+            failed = app.purchase(**request)
+            self.assertEqual((failed.status, failed.code, failed.data["subject"]), ("failed", "arena_purchase_receipt_write_rejected", "receipt"))
+            with sqlite3.connect(game) as conn:
+                self.assertEqual(0, conn.execute("SELECT COUNT(*) FROM arena_purchase_operations").fetchone()[0])
+                self.assertEqual("failed", conn.execute("SELECT status FROM operation_ledger WHERE operation_id='purchase-retry'").fetchone()[0])
+            with sqlite3.connect(player) as conn:
+                self.assertEqual(100, conn.execute("SELECT honor_points FROM arena WHERE user_id='u'").fetchone()[0])
+
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("DROP TRIGGER refuse_receipt")
+            applied = app.purchase(**request)
+            replay = app.purchase(**request)
+            self.assertEqual("applied", applied.status)
+            self.assertTrue(replay.replayed)
+            with sqlite3.connect(game) as conn:
+                self.assertEqual((2, 2, 1), conn.execute("SELECT goods_num,bind_num,(SELECT COUNT(*) FROM arena_purchase_operations) FROM back").fetchone())
+                self.assertEqual("ok", conn.execute("PRAGMA integrity_check").fetchone()[0])
+            with sqlite3.connect(player) as conn:
+                self.assertEqual((80, '{"_last_reset": "2026-09-15", "1": 3}'), conn.execute("SELECT honor_points,weekly_purchases FROM arena WHERE user_id='u'").fetchone())
+                self.assertEqual("ok", conn.execute("PRAGMA integrity_check").fetchone()[0])
 
 
 if __name__ == "__main__":

@@ -49,6 +49,11 @@ class _ArenaChallengePurchaseWriteRejected(Exception):
         self.result = result
 
 
+class _ArenaPurchaseWriteRejected(Exception):
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+
+
 class _SettlementProjections:
     """Check each settlement write now and again after the receipt write."""
 
@@ -470,6 +475,39 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         return result
 
     def purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None, *, clamp_quantity=False) -> dict[str, Any]:
+        try:
+            return self._purchase(
+                operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost,
+                weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num,
+                bind_flag, today, clamp_quantity=clamp_quantity,
+            )
+        except _ArenaPurchaseWriteRejected as rejected:
+            return rejected.result
+
+    @staticmethod
+    def _purchase_values_match(row, expected: dict[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            try:
+                if isinstance(value, int):
+                    if as_int_like(row[key]) != value:
+                        return False
+                elif str(row[key] or "") != str(value):
+                    return False
+            except (KeyError, TypeError, ValueError):
+                return False
+        return True
+
+    @staticmethod
+    def _purchase_rejected(quantity, honor, purchased, inventory, reason, subject):
+        return {
+            **ArenaChallengePurchaseSqlRepository._purchase_result("state_changed", quantity, 0, honor, purchased, inventory),
+            "reason": reason,
+            "subject": subject,
+        }
+
+    def _purchase(self, operation_id, user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, expected_honor, expected_weekly_purchases, max_goods_num, bind_flag=1, today=None, *, clamp_quantity=False) -> dict[str, Any]:
         self._require_databases()
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         item_name, item_type = str(item_name), str(item_type)
@@ -520,29 +558,47 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
             cost = quantity * unit_cost
             if expected_honor < cost:
                 return record(uow, "honor_insufficient", purchased=purchased)
-            item = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-            inventory = int(item["goods_num"]) if item else 0
-            if inventory + quantity > max_goods_num:
-                return record(uow, "inventory_full", purchased=purchased, inventory=inventory)
-            honor, purchased, inventory = expected_honor - cost, purchased + quantity, inventory + quantity
+            item = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+            previous_inventory = int(item["goods_num"]) if item else 0
+            previous_bind = int(item["bind_num"]) if item else 0
+            inventory = previous_inventory + quantity
+            if inventory > max_goods_num:
+                return record(uow, "inventory_full", purchased=purchased, inventory=previous_inventory)
+            honor, purchased = expected_honor - cost, purchased + quantity
             weekly[str(item_id)] = purchased
-            updated = uow.execute(
-                "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0",
-                (bind_sqlite_param(honor, exact=True), json.dumps(weekly, ensure_ascii=True), user_id, bind_sqlite_param(expected_honor, exact=True)),
-            )
-            if updated.rowcount != 1:
-                raise DomainError("arena_honor_write_rejected", "arena honor write did not affect one row")
-            saved = uow.query_one("SELECT honor_points FROM player_data.arena WHERE user_id=?", (user_id,))
-            if saved is None or require_exact_integer(saved["honor_points"], field="arena_honor", subject=user_id) != honor:
-                raise DomainError("arena_honor_write_rejected", "arena honor did not persist exactly", {"reason": "arena_honor_write_rejected", "subject": user_id})
-            uow.execute(
-                "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
-                "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
-                "goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,"
-                "goods_name=excluded.goods_name,goods_type=excluded.goods_type,update_time=excluded.update_time",
-                (user_id, item_id, item_name, item_type, quantity, today_key, today_key, quantity if int(bind_flag) else 0),
-            )
-            return record(uow, "applied", cost=cost, honor=honor, purchased=purchased, inventory=inventory)
+            weekly_payload = json.dumps(weekly, ensure_ascii=True)
+            expected_inventory = {"goods_num": inventory, "bind_num": previous_bind + (quantity if int(bind_flag) else 0)}
+            expected_arena = {"honor_points": honor, "weekly_purchases": weekly_payload}
+            result = self._purchase_result("applied", quantity, cost, honor, purchased, inventory)
+            result["item_name"] = item_name
+            with uow.savepoint("arena_purchase"):
+                updated = uow.execute(
+                    "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),weekly_purchases=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0",
+                    (bind_sqlite_param(honor, exact=True), weekly_payload, user_id, bind_sqlite_param(expected_honor, exact=True)),
+                )
+                saved = uow.query_one("SELECT honor_points,weekly_purchases FROM player_data.arena WHERE user_id=?", (user_id,))
+                if updated.rowcount != 1 or not self._purchase_values_match(saved, {"honor_points": honor}):
+                    raise _ArenaPurchaseWriteRejected(self._purchase_rejected(quantity, expected_honor, purchased, previous_inventory, "arena_purchase_honor_write_rejected", user_id))
+                if saved is None or str(saved["weekly_purchases"] or "") != weekly_payload:
+                    raise _ArenaPurchaseWriteRejected(self._purchase_rejected(quantity, expected_honor, purchased, previous_inventory, "arena_purchase_weekly_write_rejected", user_id))
+                changed = uow.execute(
+                    "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                    "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                    "goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,"
+                    "goods_name=excluded.goods_name,goods_type=excluded.goods_type,update_time=excluded.update_time",
+                    (user_id, item_id, item_name, item_type, quantity, today_key, today_key, quantity if int(bind_flag) else 0),
+                )
+                saved_item = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                if changed.rowcount != 1 or not self._purchase_values_match(saved_item, expected_inventory):
+                    raise _ArenaPurchaseWriteRejected(self._purchase_rejected(quantity, expected_honor, purchased, previous_inventory, "arena_purchase_inventory_write_rejected", f"{user_id}:{item_id}"))
+                self._record_purchase(uow, operation_id, payload, result)
+                saved = uow.query_one("SELECT honor_points,weekly_purchases FROM player_data.arena WHERE user_id=?", (user_id,))
+                if not self._purchase_values_match(saved, expected_arena):
+                    reason = "arena_purchase_honor_write_rejected" if not self._purchase_values_match(saved, {"honor_points": honor}) else "arena_purchase_weekly_write_rejected"
+                    raise _ArenaPurchaseWriteRejected(self._purchase_rejected(quantity, expected_honor, purchased, previous_inventory, reason, user_id))
+                if not self._purchase_values_match(uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)), expected_inventory):
+                    raise _ArenaPurchaseWriteRejected(self._purchase_rejected(quantity, expected_honor, purchased, previous_inventory, "arena_purchase_inventory_write_rejected", f"{user_id}:{item_id}"))
+            return result
 
     @staticmethod
     def _purchase_result(status, quantity, cost, honor_points, purchased, inventory):
@@ -550,10 +606,15 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
 
     @staticmethod
     def _record_purchase(uow, operation_id, payload, result):
-        uow.execute(
+        encoded = json.dumps(result, ensure_ascii=True, sort_keys=True)
+        inserted = uow.execute(
             "INSERT INTO arena_purchase_operations(operation_id,payload,quantity,cost,honor_points,purchased,inventory,status,result_json) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'arena_honor','actor'),?,?,?,?)",
-            (operation_id, payload, result["quantity"], bind_sqlite_param(result["cost"], exact=True), bind_sqlite_param(result["honor_points"], exact=True), result["purchased"], result["inventory"], result["status"], json.dumps(result, ensure_ascii=True, sort_keys=True)),
+            (operation_id, payload, result["quantity"], bind_sqlite_param(result["cost"], exact=True), bind_sqlite_param(result["honor_points"], exact=True), result["purchased"], result["inventory"], result["status"], encoded),
         )
+        saved = uow.query_one("SELECT payload,quantity,cost,honor_points,purchased,inventory,status,result_json FROM arena_purchase_operations WHERE operation_id=?", (operation_id,))
+        expected = {"payload": payload, "quantity": result["quantity"], "cost": result["cost"], "honor_points": result["honor_points"], "purchased": result["purchased"], "inventory": result["inventory"], "status": result["status"], "result_json": encoded}
+        if inserted.rowcount != 1 or not ArenaChallengePurchaseSqlRepository._purchase_values_match(saved, expected):
+            raise _ArenaPurchaseWriteRejected({**ArenaChallengePurchaseSqlRepository._purchase_result("state_changed", result["quantity"], 0, result["honor_points"], result["purchased"], result["inventory"]), "reason": "arena_purchase_receipt_write_rejected", "subject": "receipt"})
         return result
     def purchase_challenges(self, operation_id, user_id, amount, unit_cost, daily_limit, expected_stone, expected_bought, expected_extra, expected_last_buy_date, today=None) -> dict[str, Any]:
         try:
