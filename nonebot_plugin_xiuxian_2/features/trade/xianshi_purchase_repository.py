@@ -101,6 +101,22 @@ class XianshiPurchaseSqlRepository:
         )
 
     @staticmethod
+    def _release_purchase_savepoint(uow: DatabaseUnitOfWork) -> None:
+        uow.execute('RELEASE SAVEPOINT "xianshi_purchase"')
+
+    @classmethod
+    def _reject_purchase_write(
+        cls,
+        uow: DatabaseUnitOfWork,
+        result: XianshiPurchaseResult,
+        reason: str,
+        subject: str,
+    ) -> XianshiPurchaseResult:
+        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_purchase"')
+        cls._release_purchase_savepoint(uow)
+        return replace(result, status="state_changed", reason=reason, subject=subject)
+
+    @staticmethod
     def _from_row(row: Mapping[str, object], status: PurchaseStatus) -> XianshiPurchaseResult:
         return XianshiPurchaseResult(
             status=status,
@@ -204,13 +220,14 @@ class XianshiPurchaseSqlRepository:
                 seller_stone = require_exact_integer(sellers[0]["stone"], field="stone", subject="seller")
 
             inventory = uow.query_one(
-                "SELECT goods_num FROM back WHERE user_id=? AND goods_id=?",
+                "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
                 (buyer_id, goods_id),
             )
             current_quantity = int(inventory["goods_num"] or 0) if inventory else 0
             if current_quantity + quantity > max_goods_num:
                 return replace(result, status="inventory_full")
 
+            uow.execute('SAVEPOINT "xianshi_purchase"')
             if stamina_operation_id:
                 stamina_operation = uow.query_one(
                     "SELECT buyer_id,stamina_cost FROM xianshi_stamina_operations "
@@ -222,21 +239,60 @@ class XianshiPurchaseSqlRepository:
                         str(stamina_operation["buyer_id"]) != buyer_id
                         or int(stamina_operation["stamina_cost"]) != stamina_cost
                     ):
+                        self._release_purchase_savepoint(uow)
                         return replace(result, status="state_changed", reason="operation_conflict")
                 else:
+                    stamina_before = uow.query_one(
+                        "SELECT user_stamina FROM user_xiuxian WHERE user_id=?",
+                        (buyer_id,),
+                    )
+                    expected_stamina = (
+                        int(stamina_before["user_stamina"] or 0) - stamina_cost
+                        if stamina_before is not None else None
+                    )
                     if not self._consume_stamina(uow, buyer_id, stamina_cost):
+                        self._release_purchase_savepoint(uow)
                         return replace(result, status="stamina_insufficient")
+                    saved_stamina = uow.query_one(
+                        "SELECT user_stamina FROM user_xiuxian WHERE user_id=?",
+                        (buyer_id,),
+                    )
+                    if (
+                        saved_stamina is None
+                        or expected_stamina is None
+                        or int(saved_stamina["user_stamina"] or 0) != expected_stamina
+                    ):
+                        return self._reject_purchase_write(
+                            uow, result,
+                            "xianshi_purchase_stamina_write_rejected", buyer_id,
+                        )
                     uow.execute(
                         "INSERT INTO xianshi_stamina_operations "
                         "(operation_id,buyer_id,stamina_cost) VALUES(?,?,?)",
                         (stamina_operation_id, buyer_id, stamina_cost),
                     )
+                    saved_stamina_receipt = uow.query_one(
+                        "SELECT buyer_id,stamina_cost FROM xianshi_stamina_operations "
+                        "WHERE operation_id=?",
+                        (stamina_operation_id,),
+                    )
+                    if saved_stamina_receipt != {
+                        "buyer_id": buyer_id,
+                        "stamina_cost": stamina_cost,
+                    }:
+                        return self._reject_purchase_write(
+                            uow, result,
+                            "xianshi_purchase_stamina_receipt_write_rejected",
+                            stamina_operation_id,
+                        )
                     result = replace(result, stamina_charged=stamina_cost)
 
-            settlements = [(buyer_id, buyer_stone, buyer_stone - total_cost, "buyer")]
+            expected_wallets = {buyer_id: buyer_stone - total_cost}
             if seller_id != "0":
-                settlements.append((seller_id, seller_stone, seller_stone + total_cost, "seller"))
-            for uid, before, after, subject in settlements:
+                expected_wallets[seller_id] = seller_stone + total_cost
+            for uid, after in expected_wallets.items():
+                before = buyer_stone if uid == buyer_id else seller_stone
+                subject = "buyer" if uid == buyer_id else "seller"
                 changed = uow.execute(
                     "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? "
                     "AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
@@ -244,19 +300,37 @@ class XianshiPurchaseSqlRepository:
                 )
                 saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (uid,))
                 if changed.rowcount != 1 or saved is None or require_exact_integer(saved["stone"], field="stone", subject=subject) != after:
-                    raise DomainError("stone_write_rejected", "Xianshi wallet settlement was not saved", {"reason": "stone_write_rejected", "subject": subject})
+                    return self._reject_purchase_write(uow, result, "stone_write_rejected", subject)
 
+            expected_listing_quantity = None if stock == quantity else (stock - quantity if stock != -1 else stock)
             if stock != -1:
                 if stock == quantity:
-                    uow.execute("DELETE FROM xianshi_item WHERE id=?", (listing_id,))
+                    changed = uow.execute("DELETE FROM xianshi_item WHERE id=?", (listing_id,))
+                    saved_listing = uow.query_one(
+                        "SELECT id FROM xianshi_item WHERE id=?", (listing_id,)
+                    )
                 else:
-                    uow.execute(
+                    changed = uow.execute(
                         "UPDATE xianshi_item SET quantity=quantity-? WHERE id=?",
                         (quantity, listing_id),
                     )
+                    saved_listing = uow.query_one(
+                        "SELECT quantity FROM xianshi_item WHERE id=?", (listing_id,)
+                    )
+                if (
+                    changed.rowcount != 1
+                    or (expected_listing_quantity is None and saved_listing is not None)
+                    or (expected_listing_quantity is not None and (
+                        saved_listing is None
+                        or int(saved_listing["quantity"]) != expected_listing_quantity
+                    ))
+                ):
+                    return self._reject_purchase_write(
+                        uow, result, "xianshi_purchase_listing_write_rejected", listing_id
+                    )
 
             now = self.clock.now()
-            uow.execute(
+            inventory_write = uow.execute(
                 "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,"
                 "create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) "
                 "ON CONFLICT(user_id,goods_id) DO UPDATE SET "
@@ -266,7 +340,32 @@ class XianshiPurchaseSqlRepository:
                 "update_time=excluded.update_time",
                 (buyer_id, goods_id, name, goods_type, quantity, now, now, quantity),
             )
-            uow.execute(
+            expected_inventory = {
+                "goods_name": name,
+                "goods_type": goods_type,
+                "goods_num": current_quantity + quantity,
+                "bind_num": int((inventory or {}).get("bind_num") or 0) + quantity,
+            }
+            saved_inventory = uow.query_one(
+                "SELECT goods_name,goods_type,goods_num,bind_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (buyer_id, goods_id),
+            )
+            if saved_inventory is not None:
+                saved_inventory = {
+                    "goods_name": str(saved_inventory["goods_name"]),
+                    "goods_type": str(saved_inventory["goods_type"]),
+                    "goods_num": int(saved_inventory["goods_num"] or 0),
+                    "bind_num": int(saved_inventory["bind_num"] or 0),
+                }
+            if inventory_write.rowcount != 1 or saved_inventory != expected_inventory:
+                return self._reject_purchase_write(
+                    uow, result,
+                    "xianshi_purchase_inventory_write_rejected",
+                    f"{buyer_id}:{goods_id}",
+                )
+
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_operations(operation_id,listing_id,buyer_id,seller_id,goods_id,"
                 "name,goods_type,quantity,total_cost,stamina_operation_id,stamina_cost,stamina_charged) "
                 "VALUES(?,?,?,?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,?)",
@@ -276,6 +375,47 @@ class XianshiPurchaseSqlRepository:
                     stamina_cost, result.stamina_charged,
                 ),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,listing_id,buyer_id,seller_id,goods_id,name,goods_type,"
+                "quantity,total_cost,stamina_operation_id,stamina_cost,stamina_charged "
+                "FROM xianshi_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "listing_id": listing_id,
+                "buyer_id": buyer_id,
+                "seller_id": seller_id,
+                "goods_id": goods_id,
+                "name": name,
+                "goods_type": goods_type,
+                "quantity": quantity,
+                "total_cost": total_cost,
+                "stamina_operation_id": stamina_operation_id,
+                "stamina_cost": stamina_cost,
+                "stamina_charged": result.stamina_charged,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_purchase_write(
+                    uow, result, "xianshi_purchase_receipt_write_rejected", operation_id
+                )
+
+            # Validate the complete projection after the final write as later triggers
+            # may alter an earlier wallet, listing, or inventory row.
+            for uid, expected in expected_wallets.items():
+                saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (uid,))
+                if saved is None or require_exact_integer(saved["stone"], field="stone", subject=uid) != expected:
+                    return self._reject_purchase_write(
+                        uow, result, "stone_write_rejected",
+                        "buyer" if uid == buyer_id else "seller",
+                    )
+            if stamina_operation_id and result.stamina_charged:
+                saved = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (buyer_id,))
+                if saved is None or int(saved["user_stamina"] or 0) != expected_stamina:
+                    return self._reject_purchase_write(
+                        uow, result, "xianshi_purchase_stamina_write_rejected", buyer_id
+                    )
+            self._release_purchase_savepoint(uow)
             return result
 
 

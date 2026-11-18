@@ -794,7 +794,12 @@ def buy_xianshi_item_safely(
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
     }
     if not result.succeeded:
-        return False, result_failure("仙肆购买", result, messages=messages), None
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        return False, result_failure(
+            "仙肆购买", result, messages=messages, subjects=subjects
+        ), None
 
     if result.applied:
         trace_id = operation_id or f"xianshi:{result.listing_id}:{buyer_id}"
