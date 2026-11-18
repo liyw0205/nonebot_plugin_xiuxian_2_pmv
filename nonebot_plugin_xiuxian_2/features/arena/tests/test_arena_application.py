@@ -3,9 +3,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+import sqlite3
 
 from ..application import ArenaApplication
 from ..domain import ArenaPurchaseRequest
+from ..migrations import apply_arena_challenge_ticket, apply_arena_state
 from ....core.errors import ConflictError
 from ....infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
@@ -99,6 +101,41 @@ class ArenaApplicationTests(unittest.TestCase):
             with self.assertRaises(ConflictError):
                 app.purchase(**request)
             self.assertEqual(repository.calls, [])
+
+    def test_ticket_write_rejection_is_failed_and_retries_after_receipt_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game.db"
+            player = Path(directory) / "player.db"
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+                uow.execute("INSERT INTO back VALUES('u',9,3,3)")
+                apply_arena_challenge_ticket(uow)
+                OperationLedger().ensure_schema(uow)
+                uow.execute("CREATE TRIGGER refuse_receipt BEFORE INSERT ON arena_challenge_ticket_operations BEGIN SELECT RAISE(IGNORE); END")
+            with DatabaseUnitOfWork(player) as uow:
+                apply_arena_state(uow)
+                uow.execute("INSERT INTO arena(user_id,daily_challenges_used,daily_extra_challenges) VALUES('u',2,1)")
+            app = ArenaApplication(game, player)
+            request = dict(operation_id="ticket-retry", user_id="u", item_id=9, requested_count=1,
+                           expected_item_count=3, expected_challenges_used=2,
+                           expected_extra_challenges=1, challenge_cap=11)
+
+            failed = app.use_challenge_ticket(**request)
+            self.assertEqual(("failed", "arena_ticket_receipt_write_rejected"), (failed.status, failed.code))
+            with sqlite3.connect(game) as conn:
+                self.assertEqual((3, 0), conn.execute("SELECT goods_num,(SELECT COUNT(*) FROM arena_challenge_ticket_operations) FROM back").fetchone())
+            with DatabaseUnitOfWork(game) as uow:
+                uow.execute("DROP TRIGGER refuse_receipt")
+
+            applied = app.use_challenge_ticket(**request)
+            replay = app.use_challenge_ticket(**request)
+            self.assertEqual("applied", applied.status)
+            self.assertTrue(replay.replayed)
+            with sqlite3.connect(game) as conn:
+                self.assertEqual((2, 2), conn.execute("SELECT goods_num,bind_num FROM back").fetchone())
+                self.assertEqual(1, conn.execute("SELECT COUNT(*) FROM arena_challenge_ticket_operations").fetchone()[0])
+            with sqlite3.connect(player) as conn:
+                self.assertEqual((1, 1), conn.execute("SELECT daily_challenges_used,daily_extra_challenges FROM arena").fetchone())
 
 
 if __name__ == "__main__":

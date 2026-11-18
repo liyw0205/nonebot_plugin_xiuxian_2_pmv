@@ -195,7 +195,7 @@ def _arena_challenge_purchase_result(outcome) -> ArenaChallengePurchaseResult:
 
 def _arena_challenge_ticket_result(outcome) -> ArenaChallengeTicketResult:
     data = outcome.data or {}
-    return ArenaChallengeTicketResult(str(data.get("status", outcome.code or "failed")), int(data.get("used_tickets", 0) or 0), int(data.get("item_remaining", 0) or 0), int(data.get("challenges_used", 0) or 0), int(data.get("challenges_remaining", 0) or 0), int(data.get("challenge_cap", 0) or 0), reason=str(data.get("reason", "")))
+    return ArenaChallengeTicketResult(str(data.get("status", outcome.code or "failed")), int(data.get("used_tickets", 0) or 0), int(data.get("item_remaining", 0) or 0), int(data.get("challenges_used", 0) or 0), int(data.get("challenges_remaining", 0) or 0), int(data.get("challenge_cap", 0) or 0), reason=str(data.get("reason", "")), subject=str(data.get("subject", "")))
 
 
 def _arena_settlement_result(outcome) -> ArenaChallengeSettlementResult:

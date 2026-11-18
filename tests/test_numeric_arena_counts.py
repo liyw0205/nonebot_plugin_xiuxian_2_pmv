@@ -7,7 +7,6 @@ from tests import test_arena_challenge_purchase_service as legacy_fixtures
 from nonebot_plugin_xiuxian_2.features.arena.tests import test_arena_challenge_purchase_repository as purchase_fixtures
 from nonebot_plugin_xiuxian_2.features.arena.tests import test_arena_challenge_ticket_repository as ticket_fixtures
 from nonebot_plugin_xiuxian_2.features.arena.repository import ArenaChallengePurchaseSqlRepository
-from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from tests.test_db_backend import db_backend
 
 
@@ -45,11 +44,10 @@ class NumericArenaCountsTests(unittest.TestCase):
                 def use():
                     return fixture.use(expected_challenges_used=20, expected_extra_challenges=20, challenge_cap=30)
                 if scenario.endswith('ignore'):
-                    with self.assertRaises(DomainError) as caught:
-                        use()
+                    result = use()
                     expected_reason = ('arena_ticket_item_write_rejected' if scenario == 'item_ignore'
                                        else 'arena_ticket_count_write_rejected')
-                    self.assertEqual(expected_reason, caught.exception.code)
+                    self.assertEqual(("state_changed", expected_reason), tuple(result[k] for k in ('status', 'reason')))
                 elif scenario == 'receipt':
                     with self.assertRaisesRegex(sqlite3.IntegrityError, 'receipt refused'):
                         use()

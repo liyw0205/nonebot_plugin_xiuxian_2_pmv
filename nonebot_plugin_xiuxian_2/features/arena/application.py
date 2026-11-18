@@ -20,6 +20,11 @@ ARENA_SETTLEMENT_RETRYABLE_REJECTIONS = frozenset({
     "arena_settlement_opponent_vitals_write_rejected",
     "arena_settlement_receipt_write_rejected",
 })
+ARENA_TICKET_RETRYABLE_REJECTIONS = frozenset({
+    "arena_ticket_item_write_rejected",
+    "arena_ticket_count_write_rejected",
+    "arena_ticket_receipt_write_rejected",
+})
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -42,7 +47,7 @@ class ArenaApplication:
         return self.repository or ArenaChallengePurchaseSqlRepository(self.game_database, self.player_database, clock=self.clock)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
-        recoverable = action in {"arena.purchase", "arena.settle"} and (
+        recoverable = action in {"arena.purchase", "arena.settle", "arena.challenge_ticket"} and (
             self.repository is None or type(self.repository) is ArenaChallengePurchaseSqlRepository
         )
         if recoverable and not all(Path(path).is_file() for path in (self.game_database, self.player_database)):
@@ -67,6 +72,15 @@ class ArenaApplication:
                         operation_id,
                         action,
                         "竞技场结算写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
+                elif action == "arena.challenge_ticket" and str(data.get("reason") or "") in ARENA_TICKET_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场挑战券写入未完成，可在故障解除后重试。",
                         code=str(data["reason"]),
                         data=data,
                         audit_category="arena",

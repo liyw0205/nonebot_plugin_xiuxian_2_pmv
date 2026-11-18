@@ -39,6 +39,11 @@ class _ArenaSettlementWriteRejected(Exception):
         self.result = result
 
 
+class _ArenaTicketWriteRejected(Exception):
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+
+
 class _SettlementProjections:
     """Check each settlement write now and again after the receipt write."""
 
@@ -291,43 +296,144 @@ class ArenaChallengePurchaseSqlRepository(LegacyArenaRepository):
         writes.verify()
         return result
     def use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
-        operation_id,user_id=str(operation_id).strip(),str(user_id); item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap=map(int,(item_id,requested_count,expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap));payload=json.dumps([user_id,item_id,requested_count,challenge_cap],ensure_ascii=True,separators=(",",":"))
-        if not operation_id or requested_count<=0 or min(expected_item_count,expected_challenges_used,expected_extra_challenges,challenge_cap)<0: raise ValueError("valid arena ticket operation is required")
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,"player_data")
-            if not table_ready(uow,"arena_challenge_ticket_operations",_TICKET_RECEIPT_COLUMNS) or not table_ready(
-                uow,"arena",_TICKET_ARENA_COLUMNS,prefix="player_data."
+        try:
+            return self._use_challenge_ticket(operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap)
+        except _ArenaTicketWriteRejected as rejected:
+            return rejected.result
+
+    def _use_challenge_ticket(self, operation_id, user_id, item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap = map(
+            int, (item_id, requested_count, expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap)
+        )
+        payload = json.dumps([user_id, item_id, requested_count, challenge_cap], ensure_ascii=True, separators=(",", ":"))
+        if not operation_id or requested_count <= 0 or min(expected_item_count, expected_challenges_used, expected_extra_challenges, challenge_cap) < 0:
+            raise ValueError("valid arena ticket operation is required")
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            if not table_ready(uow, "arena_challenge_ticket_operations", _TICKET_RECEIPT_COLUMNS) or not table_ready(
+                uow, "arena", _TICKET_ARENA_COLUMNS, prefix="player_data."
             ):
-                return self._ticket_result(SCHEMA_MISSING,expected_item_count,expected_challenges_used,challenge_cap)
-            old=uow.query_one("SELECT payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap FROM arena_challenge_ticket_operations WHERE operation_id=?",(operation_id,))
+                return self._ticket_result(SCHEMA_MISSING, expected_item_count, expected_challenges_used, challenge_cap)
+            old = uow.query_one(
+                "SELECT payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap "
+                "FROM arena_challenge_ticket_operations WHERE operation_id=?", (operation_id,)
+            )
             if old:
                 saved = json.loads(old["payload"])
                 old_payload = saved.get("_payload") if isinstance(saved, dict) else str(old["payload"])
-                if old_payload!=payload:return self._ticket_result("operation_conflict",expected_item_count,expected_challenges_used,challenge_cap)
+                if old_payload != payload:
+                    return self._ticket_result("operation_conflict", expected_item_count, expected_challenges_used, challenge_cap)
                 if isinstance(saved, dict):
                     return saved["_rejection"]
-                return self._ticket_result("duplicate",int(old["item_remaining"]),int(old["challenges_used"]),int(old["challenge_cap"]),int(old["used_tickets"]))
-            arena=uow.query_one("SELECT COALESCE(daily_challenges_used,0) AS used,COALESCE(daily_extra_challenges,0) AS extra FROM player_data.arena WHERE user_id=?",(user_id,));item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id))
-            if arena is None or sqlite_int_compare(arena["used"],expected_challenges_used)!=0 or sqlite_int_compare(arena["extra"],expected_extra_challenges)!=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap,reason="user_missing" if arena is None else "challenge_count_changed"))
-            if item is None or int(item["goods_num"])<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("item_missing",expected_item_count,expected_challenges_used,challenge_cap))
-            if int(item["goods_num"])!=expected_item_count:return self._record_ticket(uow,operation_id,payload,self._ticket_result("state_changed",expected_item_count,expected_challenges_used,challenge_cap,reason="item_changed"))
-            if expected_challenges_used<=0:return self._record_ticket(uow,operation_id,payload,self._ticket_result("no_challenges_used",expected_item_count,expected_challenges_used,challenge_cap))
-            used=min(requested_count,expected_item_count,expected_challenges_used);remaining=expected_item_count-used;new_used=expected_challenges_used-used;new_remaining=max(0,challenge_cap-new_used);bound=min(max(0,int(item["bind_num"])-used),remaining)
-            changed = uow.execute("UPDATE back SET goods_num=?,bind_num=? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",(remaining,bound,user_id,item_id,expected_item_count))
-            if changed.rowcount != 1:
-                raise DomainError("arena_ticket_item_write_rejected", "arena ticket item write did not affect one row")
-            changed = uow.execute("UPDATE player_data.arena SET daily_challenges_used=? WHERE user_id=? AND xiuxian_int_cmp(COALESCE(daily_challenges_used,0),?)=0 AND xiuxian_int_cmp(COALESCE(daily_extra_challenges,0),?)=0",(new_used,user_id,expected_challenges_used,expected_extra_challenges))
-            if changed.rowcount != 1:
-                raise DomainError("arena_ticket_count_write_rejected", "arena ticket count write did not affect one row")
-            return self._record_ticket(uow,operation_id,payload,self._ticket_result("applied",remaining,new_used,challenge_cap,used))
+                return self._ticket_result(
+                    "duplicate", int(old["item_remaining"]), int(old["challenges_used"]),
+                    int(old["challenge_cap"]), int(old["used_tickets"]),
+                )
+            arena = uow.query_one(
+                "SELECT COALESCE(daily_challenges_used,0) AS used,COALESCE(daily_extra_challenges,0) AS extra "
+                "FROM player_data.arena WHERE user_id=?", (user_id,)
+            )
+            item = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
+                "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)
+            )
+            if arena is None or sqlite_int_compare(arena["used"], expected_challenges_used) != 0 or sqlite_int_compare(arena["extra"], expected_extra_challenges) != 0:
+                return self._record_ticket(uow, operation_id, payload, self._ticket_result(
+                    "state_changed", expected_item_count, expected_challenges_used, challenge_cap,
+                    reason="user_missing" if arena is None else "challenge_count_changed",
+                ))
+            if item is None or sqlite_int_compare(item["goods_num"], 0) <= 0:
+                return self._record_ticket(uow, operation_id, payload, self._ticket_result(
+                    "item_missing", expected_item_count, expected_challenges_used, challenge_cap,
+                ))
+            if sqlite_int_compare(item["goods_num"], expected_item_count) != 0:
+                return self._record_ticket(uow, operation_id, payload, self._ticket_result(
+                    "state_changed", expected_item_count, expected_challenges_used, challenge_cap, reason="item_changed",
+                ))
+            if expected_challenges_used <= 0:
+                return self._record_ticket(uow, operation_id, payload, self._ticket_result(
+                    "no_challenges_used", expected_item_count, expected_challenges_used, challenge_cap,
+                ))
+            used = min(requested_count, expected_item_count, expected_challenges_used)
+            remaining = expected_item_count - used
+            new_used = expected_challenges_used - used
+            bound = min(max(0, int(item["bind_num"]) - used), remaining)
+            result = self._ticket_result("applied", remaining, new_used, challenge_cap, used)
+            with uow.savepoint("arena_ticket"):
+                changed = uow.execute(
+                    "UPDATE back SET goods_num=?,bind_num=? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",
+                    (remaining, bound, user_id, item_id, expected_item_count),
+                )
+                saved_item = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                if changed.rowcount != 1 or not self._ticket_values_match(saved_item, {"goods_num": remaining, "bind_num": bound}):
+                    raise _ArenaTicketWriteRejected(self._ticket_result(
+                        "state_changed", expected_item_count, expected_challenges_used, challenge_cap,
+                        reason="arena_ticket_item_write_rejected", subject="item",
+                    ))
+                changed = uow.execute(
+                    "UPDATE player_data.arena SET daily_challenges_used=? WHERE user_id=? "
+                    "AND xiuxian_int_cmp(COALESCE(daily_challenges_used,0),?)=0 "
+                    "AND xiuxian_int_cmp(COALESCE(daily_extra_challenges,0),?)=0",
+                    (new_used, user_id, expected_challenges_used, expected_extra_challenges),
+                )
+                saved_arena = uow.query_one("SELECT daily_challenges_used,daily_extra_challenges FROM player_data.arena WHERE user_id=?", (user_id,))
+                if changed.rowcount != 1 or not self._ticket_values_match(saved_arena, {"daily_challenges_used": new_used, "daily_extra_challenges": expected_extra_challenges}):
+                    raise _ArenaTicketWriteRejected(self._ticket_result(
+                        "state_changed", expected_item_count, expected_challenges_used, challenge_cap,
+                        reason="arena_ticket_count_write_rejected", subject="arena",
+                    ))
+                self._record_ticket(uow, operation_id, payload, result)
+                saved_item = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                saved_arena = uow.query_one("SELECT daily_challenges_used,daily_extra_challenges FROM player_data.arena WHERE user_id=?", (user_id,))
+                if not self._ticket_values_match(saved_item, {"goods_num": remaining, "bind_num": bound}):
+                    raise _ArenaTicketWriteRejected(self._ticket_result(
+                        "state_changed", expected_item_count, expected_challenges_used, challenge_cap,
+                        reason="arena_ticket_item_write_rejected", subject="item",
+                    ))
+                if not self._ticket_values_match(saved_arena, {"daily_challenges_used": new_used, "daily_extra_challenges": expected_extra_challenges}):
+                    raise _ArenaTicketWriteRejected(self._ticket_result(
+                        "state_changed", expected_item_count, expected_challenges_used, challenge_cap,
+                        reason="arena_ticket_count_write_rejected", subject="arena",
+                    ))
+            return result
 
     @staticmethod
-    def _ticket_result(status,item_remaining,challenges_used,challenge_cap,used_tickets=0, *, reason=""): return {"status":status,"reason":reason,"used_tickets":used_tickets,"item_remaining":item_remaining,"challenges_used":challenges_used,"challenges_remaining":max(0,challenge_cap-challenges_used),"challenge_cap":challenge_cap}
+    def _ticket_values_match(row, expected):
+        if row is None:
+            return False
+        return all(key in row and sqlite_int_compare(row[key], value) == 0 for key, value in expected.items())
+
     @staticmethod
-    def _record_ticket(uow,operation_id,payload,result):
+    def _ticket_result(status, item_remaining, challenges_used, challenge_cap, used_tickets=0, *, reason="", subject=""):
+        return {
+            "status": status, "reason": reason, "subject": subject, "used_tickets": used_tickets,
+            "item_remaining": item_remaining, "challenges_used": challenges_used,
+            "challenges_remaining": max(0, challenge_cap - challenges_used), "challenge_cap": challenge_cap,
+        }
+
+    def _record_ticket(self, uow, operation_id, payload, result):
         if result["status"] not in {"applied", "duplicate"}:
             payload = json.dumps({"_payload": payload, "_rejection": result}, ensure_ascii=True, separators=(",", ":"))
-        uow.execute("INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) VALUES(?,?,?,?,?,?,?)",(operation_id,payload,result["used_tickets"],result["item_remaining"],result["challenges_used"],result["challenges_remaining"],result["challenge_cap"]));return result
+        inserted = uow.execute(
+            "INSERT INTO arena_challenge_ticket_operations(operation_id,payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (operation_id, payload, result["used_tickets"], result["item_remaining"], result["challenges_used"], result["challenges_remaining"], result["challenge_cap"]),
+        )
+        saved = uow.query_one(
+            "SELECT payload,used_tickets,item_remaining,challenges_used,challenges_remaining,challenge_cap "
+            "FROM arena_challenge_ticket_operations WHERE operation_id=?", (operation_id,)
+        )
+        matches = saved is not None and str(saved["payload"]) == payload and all(
+            sqlite_int_compare(saved[key], result[key]) == 0
+            for key in ("used_tickets", "item_remaining", "challenges_used", "challenges_remaining", "challenge_cap")
+        )
+        if inserted.rowcount != 1 or not matches:
+            raise _ArenaTicketWriteRejected(self._ticket_result(
+                "state_changed", result["item_remaining"], result["challenges_used"], result["challenge_cap"],
+                result["used_tickets"], reason="arena_ticket_receipt_write_rejected", subject="receipt",
+            ))
+        return result
     def purchase_result(self, operation_id, user_id, item_id, quantity) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
             if not table_ready(uow, "arena_purchase_operations", _PURCHASE_RECEIPT_COLUMNS):

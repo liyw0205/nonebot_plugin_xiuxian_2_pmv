@@ -528,6 +528,7 @@ class ArenaChallengeTicketResult:
     challenges_remaining: int
     challenge_cap: int
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:

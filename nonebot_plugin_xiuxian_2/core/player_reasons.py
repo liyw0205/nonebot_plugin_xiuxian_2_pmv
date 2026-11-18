@@ -53,6 +53,7 @@ REASONS = {
     "arena_ticket_write_rejected": "竞技场挑战券使用记录保存失败，本次使用已撤销，请联系管理员核对背包和次数记录。",
     "arena_ticket_item_write_rejected": "竞技场挑战券扣除保存失败，本次使用已撤销，请联系管理员核对挑战券记录。",
     "arena_ticket_count_write_rejected": "竞技场挑战次数返还保存失败，本次使用已撤销，请联系管理员核对挑战次数记录。",
+    "arena_ticket_receipt_write_rejected": "竞技场挑战券使用回执保存失败，本次使用已撤销，请联系管理员核对请求记录。",
     "arena_settlement_challenger_write_rejected": "竞技场挑战者状态保存失败，本次挑战已撤销，请联系管理员核对挑战者记录。",
     "arena_settlement_opponent_write_rejected": "竞技场对手状态保存失败，本次挑战已撤销，请联系管理员核对对手记录。",
     "arena_settlement_challenger_vitals_write_rejected": "竞技场挑战者气血体力保存失败，本次挑战已撤销，请联系管理员核对角色记录。",
