@@ -943,7 +943,12 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
+        await xian_shop_add.finish()
     success_count = result.listed_quantity
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
@@ -1251,7 +1256,12 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi fast listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆快速上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
+        await xianshi_fast_add.finish()
     success_count = result.listed_quantity
     
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
@@ -2017,13 +2027,17 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
             quantity=quantity,
         )
         if not result.succeeded:
-            raise RuntimeError(f"unexpected system xianshi listing status: {result.status}")
-        if quantity == -1:
-            quantity_msg = "无限"
+            subjects = {}
+            if getattr(result, "subject", ""):
+                subjects[str(result.subject)] = f"对象 {result.subject}"
+            msg = result_failure("系统仙肆上架", result, subjects=subjects)
         else:
-            quantity_msg = f"x{quantity}"
-        msg = f"\n成功上架 {goods_name} {quantity_msg} 到仙肆！\n"
-        msg += f"单价: {number_to(price)} 灵石"
+            if quantity == -1:
+                quantity_msg = "无限"
+            else:
+                quantity_msg = f"x{quantity}"
+            msg = f"\n成功上架 {goods_name} {quantity_msg} 到仙肆！\n"
+            msg += f"单价: {number_to(price)} 灵石"
         await handle_send(bot, event, msg)
     except Exception as e:
         logger.error(f"系统仙肆上架失败: {e}")
