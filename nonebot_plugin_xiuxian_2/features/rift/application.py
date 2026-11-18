@@ -34,6 +34,16 @@ RIFT_DEMON_TOKEN_RETRYABLE_REJECTIONS = (
     "rift_demon_token_receipt_write_rejected",
 )
 
+RIFT_SETTLEMENT_RETRYABLE_REJECTIONS = (
+    "rift_settlement_user_write_rejected",
+    "rift_settlement_reward_write_rejected",
+    "rift_settlement_progress_write_rejected",
+    "rift_settlement_statistics_write_rejected",
+    "rift_settlement_entry_write_rejected",
+    "rift_settlement_cooldown_write_rejected",
+    "rift_settlement_receipt_write_rejected",
+)
+
 
 class RiftApplication(LegacyApplication):
     def __init__(

@@ -117,6 +117,66 @@ class RiftSettlementRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.player_db) as conn:
             self.assertEqual(conn.execute('SELECT "explore_count" FROM rift').fetchone()[0], 7)
 
+    @staticmethod
+    def _snapshot(case):
+        with db_backend.connection(case.game_db) as conn:
+            game = {
+                "user": tuple(conn.execute("SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id='u'").fetchone()),
+                "loot": conn.execute("SELECT goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=300").fetchone(),
+                "entry": tuple(conn.execute("SELECT rift_data,status FROM rift_entries WHERE user_id='u'").fetchone()),
+                "cd": tuple(conn.execute("SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id='u'").fetchone()),
+                "receipt": conn.execute("SELECT COUNT(*) FROM rift_settlement_operations").fetchone()[0],
+            }
+        with db_backend.connection(case.player_db) as conn:
+            player = {
+                "rift": tuple(conn.execute("SELECT explore_count FROM rift WHERE user_id='u'").fetchone()),
+                "stats": tuple(conn.execute("SELECT \"existing_stat\",\"秘境次数\" FROM statistics WHERE user_id='u'").fetchone()),
+            }
+        return game, player
+
+    def test_known_write_rejections_are_specific_and_atomic(self) -> None:
+        cases = (
+            ("game", "CREATE TRIGGER rewrite_user AFTER UPDATE OF exp ON user_xiuxian BEGIN UPDATE user_xiuxian SET stone=999 WHERE user_id='u'; END", "rift_settlement_user_write_rejected", "u"),
+            ("game", "CREATE TRIGGER reject_reward BEFORE INSERT ON back WHEN NEW.goods_id=300 BEGIN SELECT RAISE(IGNORE); END", "rift_settlement_reward_write_rejected", "300"),
+            ("player", "CREATE TRIGGER reject_progress BEFORE UPDATE OF explore_count ON rift BEGIN SELECT RAISE(IGNORE); END", "rift_settlement_progress_write_rejected", "u"),
+            ("player", "CREATE TRIGGER rewrite_statistics AFTER UPDATE OF \"秘境次数\" ON statistics BEGIN UPDATE statistics SET \"秘境次数\"=99 WHERE user_id='u'; END", "rift_settlement_statistics_write_rejected", "秘境次数"),
+            ("game", "CREATE TRIGGER reject_entry BEFORE UPDATE OF status ON rift_entries BEGIN SELECT RAISE(IGNORE); END", "rift_settlement_entry_write_rejected", "u"),
+            ("game", "CREATE TRIGGER reject_cooldown BEFORE UPDATE OF type ON user_cd BEGIN SELECT RAISE(IGNORE); END", "rift_settlement_cooldown_write_rejected", "u"),
+            ("game", "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_settlement_operations BEGIN SELECT RAISE(IGNORE); END", "rift_settlement_receipt_write_rejected", "settle-op"),
+            ("game", "CREATE TRIGGER rewrite_receipt AFTER INSERT ON rift_settlement_operations BEGIN UPDATE rift_settlement_operations SET message='rewritten' WHERE operation_id='settle-op'; END", "rift_settlement_receipt_write_rejected", "settle-op"),
+            ("game", "CREATE TRIGGER rewrite_receipt_asset AFTER INSERT ON rift_settlement_operations BEGIN UPDATE user_xiuxian SET stone=999 WHERE user_id='u'; END", "rift_settlement_user_write_rejected", "u"),
+        )
+        for where, trigger, reason, subject in cases:
+            with self.subTest(reason=reason):
+                case = type(self)(self._testMethodName)
+                case.setUp()
+                try:
+                    database = case.game_db if where == "game" else case.player_db
+                    with db_backend.transaction(database) as conn:
+                        conn.execute(trigger)
+                    before = self._snapshot(case)
+                    result = case.settle()
+                    self.assertEqual((result.status, result.reason, result.subject), ("state_changed", reason, subject))
+                    self.assertEqual(self._snapshot(case), before)
+                finally:
+                    case.tearDown()
+
+    def test_receipt_rejection_recovers_and_replays_without_duplicate_writes(self) -> None:
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_settlement_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        first = self.settle("recover")
+        self.assertEqual((first.status, first.reason, first.subject), (
+            "state_changed", "rift_settlement_receipt_write_rejected", "recover"
+        ))
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute("DROP TRIGGER reject_receipt")
+        recovered = self.settle("recover")
+        replayed = self.settle("recover")
+        self.assertEqual((recovered.status, recovered.explore_count, replayed.status), ("applied", 8, "duplicate"))
+
 
 if __name__ == "__main__":
     unittest.main()

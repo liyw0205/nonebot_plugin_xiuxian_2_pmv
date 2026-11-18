@@ -28,6 +28,11 @@ class RiftSettlementResult:
         return self.status in {"applied", "duplicate"}
 
 
+class _RiftSettlementWriteRejected(Exception):
+    def __init__(self, result: RiftSettlementResult) -> None:
+        self.result = result
+
+
 class RiftSettlementSqlRepository(RiftDemonTokenBattleSqlRepository):
     """Persist a pre-rolled ordinary rift settlement across both databases."""
 
@@ -167,50 +172,201 @@ class RiftSettlementSqlRepository(RiftDemonTokenBattleSqlRepository):
                 previous = metadata.setdefault(reward_id, (name, item_type))
                 if previous != (name, item_type):
                     raise ValueError("conflicting reward metadata")
+            back_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
+            reward_snapshots: dict[int, dict[str, Any] | None] = {}
             for reward_id, amount in totals.items():
-                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, reward_id))
-                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
+                row = uow.query_one(
+                    "SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "")
+                    + " FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, reward_id),
+                )
+                reward_snapshots[reward_id] = dict(row) if row is not None else None
+                if (int(row["goods_num"] or 0) if row else 0) + amount > max_goods_num:
                     return RiftSettlementResult("inventory_full")
 
-            uow.execute(
-                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=?,hp=?,mp=? WHERE user_id=?",
-                (delta[0], max(0, expected[1] + delta[1]), max(1, expected[2] + delta[2]), max(1, expected[3] + delta[3]), user_id),
-            )
-            now = self.clock.now().isoformat()
-            back_columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
-            for reward_id, amount in totals.items():
-                name, item_type = metadata[reward_id]
-                columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time"]
-                values: list[Any] = [user_id, reward_id, name, item_type, amount, now, now]
-                bind_sql = ""
-                if "bind_num" in back_columns:
-                    columns.append("bind_num")
-                    values.append(amount)
-                    bind_sql = ",bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num"
-                columns_sql = ",".join(f'"{column}"' for column in columns)
-                placeholders = ",".join("?" for _ in values)
-                uow.execute(
-                    f"INSERT INTO back({columns_sql}) VALUES({placeholders}) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
-                    "goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,goods_num=back.goods_num+EXCLUDED.goods_num,"
-                    "update_time=EXCLUDED.update_time" + bind_sql,
-                    tuple(values),
-                )
-
             new_count = 0 if expected_count + 1 >= 10 else expected_count + 1
-            uow.execute('UPDATE player_data.rift SET "explore_count"=? WHERE user_id=?', (new_count, user_id))
-            for key, amount in statistics:
-                changed = uow.execute(
-                    f'UPDATE player_data.statistics SET "{key}"=COALESCE("{key}",0)+? WHERE user_id=?',
-                    (amount, user_id),
-                )
-                if changed.rowcount == 0:
-                    uow.execute(f'INSERT INTO player_data.statistics(user_id,"{key}") VALUES(?,?)', (user_id, amount))
-            uow.execute("UPDATE rift_entries SET status='settled' WHERE user_id=?", (user_id,))
-            uow.execute("UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=? AND type=3", (user_id,))
-            uow.execute(
-                f"INSERT INTO {self.operation_table}(operation_id,payload,explore_count,message) VALUES(?,?,?,?)",
-                (operation_id, payload, new_count, message),
+            expected_user = (
+                expected[0] + delta[0],
+                max(0, expected[1] + delta[1]),
+                max(1, expected[2] + delta[2]),
+                max(1, expected[3] + delta[3]),
             )
+            entry_snapshot = json.loads(str(entry["rift_data"]))
+            stats_row_exists = uow.query_one(
+                "SELECT user_id FROM player_data.statistics WHERE user_id=?", (user_id,)
+            ) is not None
+            stats_before = {
+                key: uow.query_one(
+                    f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?', (user_id,)
+                )
+                for key, _ in statistics
+            }
+
+            try:
+                with uow.savepoint("rift_settlement"):
+                    changed_user = uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')),exp=?,hp=?,mp=? WHERE user_id=?",
+                        (delta[0], expected_user[1], expected_user[2], expected_user[3], user_id),
+                    )
+                    saved_user = uow.query_one("SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if (
+                        changed_user.rowcount != 1
+                        or saved_user is None
+                        or tuple(as_int_like(saved_user[key]) for key in ("stone", "exp", "hp", "mp")) != expected_user
+                    ):
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_user_write_rejected", subject=user_id)
+                        )
+
+                    now = self.clock.now().isoformat()
+                    for reward_id, amount in totals.items():
+                        name, item_type = metadata[reward_id]
+                        columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num", "create_time", "update_time"]
+                        values: list[Any] = [user_id, reward_id, name, item_type, amount, now, now]
+                        bind_sql = ""
+                        if "bind_num" in back_columns:
+                            columns.append("bind_num")
+                            values.append(amount)
+                            bind_sql = ",bind_num=COALESCE(back.bind_num,0)+EXCLUDED.bind_num"
+                        columns_sql = ",".join(f'"{column}"' for column in columns)
+                        placeholders = ",".join("?" for _ in values)
+                        written = uow.execute(
+                            f"INSERT INTO back({columns_sql}) VALUES({placeholders}) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                            "goods_name=EXCLUDED.goods_name,goods_type=EXCLUDED.goods_type,goods_num=back.goods_num+EXCLUDED.goods_num,"
+                            "update_time=EXCLUDED.update_time" + bind_sql,
+                            tuple(values),
+                        )
+                        saved_reward = uow.query_one(
+                            "SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "")
+                            + " FROM back WHERE user_id=? AND goods_id=?", (user_id, reward_id)
+                        )
+                        previous = reward_snapshots[reward_id]
+                        before_goods = int(previous["goods_num"] or 0) if previous else 0
+                        before_bind = int(previous.get("bind_num", 0) or 0) if previous else 0
+                        if (
+                            written.rowcount != 1
+                            or saved_reward is None
+                            or int(saved_reward["goods_num"] or 0) != before_goods + amount
+                            or str(saved_reward["goods_name"]) != name
+                            or str(saved_reward["goods_type"]) != item_type
+                            or ("bind_num" in back_columns and int(saved_reward["bind_num"] or 0) != before_bind + amount)
+                        ):
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_reward_write_rejected", subject=str(reward_id))
+                            )
+
+                    changed = uow.execute('UPDATE player_data.rift SET "explore_count"=? WHERE user_id=?', (new_count, user_id))
+                    if count_row is None:
+                        if changed.rowcount != 0:
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_progress_write_rejected", subject=user_id)
+                            )
+                        inserted = uow.execute('INSERT INTO player_data.rift(user_id,"explore_count") VALUES(?,?)', (user_id, new_count))
+                        if inserted.rowcount != 1:
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_progress_write_rejected", subject=user_id)
+                            )
+                    elif changed.rowcount != 1:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_progress_write_rejected", subject=user_id)
+                        )
+                    saved_progress = uow.query_one('SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,))
+                    if saved_progress is None or as_int_like(saved_progress["explore_count"]) != new_count:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_progress_write_rejected", subject=user_id)
+                        )
+
+                    for key, amount in statistics:
+                        before_stat = stats_before[key]
+                        before_value = as_int_like(before_stat["value"]) if before_stat is not None else 0
+                        changed = uow.execute(
+                            f'UPDATE player_data.statistics SET "{key}"=COALESCE("{key}",0)+? WHERE user_id=?',
+                            (amount, user_id),
+                        )
+                        if not stats_row_exists:
+                            if changed.rowcount != 0:
+                                raise _RiftSettlementWriteRejected(
+                                    RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_statistics_write_rejected", subject=key)
+                                )
+                            inserted = uow.execute(f'INSERT INTO player_data.statistics(user_id,"{key}") VALUES(?,?)', (user_id, amount))
+                            if inserted.rowcount != 1:
+                                raise _RiftSettlementWriteRejected(
+                                    RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_statistics_write_rejected", subject=key)
+                                )
+                            stats_row_exists = True
+                        elif changed.rowcount != 1:
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_statistics_write_rejected", subject=key)
+                            )
+                        saved_stat = uow.query_one(f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?', (user_id,))
+                        if saved_stat is None or as_int_like(saved_stat["value"]) != before_value + amount:
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_statistics_write_rejected", subject=key)
+                            )
+
+                    changed_entry = uow.execute("UPDATE rift_entries SET status='settled' WHERE user_id=?", (user_id,))
+                    saved_entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
+                    if changed_entry.rowcount != 1 or saved_entry is None or str(saved_entry["status"]) != "settled" or json.loads(str(saved_entry["rift_data"])) != entry_snapshot:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_entry_write_rejected", subject=user_id)
+                        )
+                    changed_cd = uow.execute("UPDATE user_cd SET type=0,create_time=0,scheduled_time=NULL WHERE user_id=? AND type=3", (user_id,))
+                    saved_cd = uow.query_one("SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,))
+                    if changed_cd.rowcount != 1 or saved_cd is None or as_int_like(saved_cd["type"]) != 0 or as_int_like(saved_cd["create_time"]) != 0 or saved_cd["scheduled_time"] is not None:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_cooldown_write_rejected", subject=user_id)
+                        )
+                    receipt = uow.execute(
+                        f"INSERT INTO {self.operation_table}(operation_id,payload,explore_count,message) VALUES(?,?,?,?)",
+                        (operation_id, payload, new_count, message),
+                    )
+                    saved_receipt = uow.query_one(f"SELECT payload,explore_count,message FROM {self.operation_table} WHERE operation_id=?", (operation_id,))
+                    if receipt.rowcount != 1 or saved_receipt is None or str(saved_receipt["payload"]) != payload or as_int_like(saved_receipt["explore_count"]) != new_count or str(saved_receipt["message"]) != message:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_receipt_write_rejected", subject=operation_id)
+                        )
+
+                    # Recheck projections after the receipt trigger has run.
+                    saved_user = uow.query_one("SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if saved_user is None or tuple(as_int_like(saved_user[key]) for key in ("stone", "exp", "hp", "mp")) != expected_user:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_user_write_rejected", subject=user_id)
+                        )
+                    saved_progress = uow.query_one('SELECT "explore_count" FROM player_data.rift WHERE user_id=?', (user_id,))
+                    if saved_progress is None or as_int_like(saved_progress["explore_count"]) != new_count:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_progress_write_rejected", subject=user_id)
+                        )
+                    for reward_id, amount in totals.items():
+                        saved_reward = uow.query_one("SELECT goods_num,goods_name,goods_type" + (",bind_num" if "bind_num" in back_columns else "") + " FROM back WHERE user_id=? AND goods_id=?", (user_id, reward_id))
+                        previous = reward_snapshots[reward_id]
+                        before_goods = int(previous["goods_num"] or 0) if previous else 0
+                        before_bind = int(previous.get("bind_num", 0) or 0) if previous else 0
+                        name, item_type = metadata[reward_id]
+                        if saved_reward is None or int(saved_reward["goods_num"] or 0) != before_goods + amount or str(saved_reward["goods_name"]) != name or str(saved_reward["goods_type"]) != item_type or ("bind_num" in back_columns and int(saved_reward["bind_num"] or 0) != before_bind + amount):
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_reward_write_rejected", subject=str(reward_id))
+                            )
+                    for key, amount in statistics:
+                        saved_stat = uow.query_one(f'SELECT "{key}" AS value FROM player_data.statistics WHERE user_id=?', (user_id,))
+                        before_stat = stats_before[key]
+                        before_value = as_int_like(before_stat["value"]) if before_stat is not None else 0
+                        if saved_stat is None or as_int_like(saved_stat["value"]) != before_value + amount:
+                            raise _RiftSettlementWriteRejected(
+                                RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_statistics_write_rejected", subject=key)
+                            )
+                    saved_entry = uow.query_one("SELECT rift_data,status FROM rift_entries WHERE user_id=?", (user_id,))
+                    if saved_entry is None or str(saved_entry["status"]) != "settled" or json.loads(str(saved_entry["rift_data"])) != entry_snapshot:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_entry_write_rejected", subject=user_id)
+                        )
+                    saved_cd = uow.query_one("SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,))
+                    if saved_cd is None or as_int_like(saved_cd["type"]) != 0 or as_int_like(saved_cd["create_time"]) != 0 or saved_cd["scheduled_time"] is not None:
+                        raise _RiftSettlementWriteRejected(
+                            RiftSettlementResult("state_changed", expected_count, reason="rift_settlement_cooldown_write_rejected", subject=user_id)
+                        )
+            except _RiftSettlementWriteRejected as rejected:
+                return rejected.result
             return RiftSettlementResult("applied", new_count, message)
 
 

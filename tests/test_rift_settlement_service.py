@@ -3,15 +3,23 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import asyncio
+import importlib
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import nonebot
+from nonebot.exception import FinishedException
 
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import (
     RiftSettlementService,
 )
+from nonebot_plugin_xiuxian_2.features.rift.application import RiftApplication
+from nonebot_plugin_xiuxian_2.features.rift.migrations import apply_rift_settlement_operations
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from tests.test_db_backend import db_backend
 
 
@@ -291,6 +299,51 @@ class RiftSettlementServiceTests(unittest.TestCase):
                 ),
             )
 
+
+    def test_registered_settlement_command_retries_after_receipt_rejection(self):
+        rift_module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift")
+        with DatabaseUnitOfWork(self.game_db) as uow:
+            apply_rift_settlement_operations(uow)
+        application = RiftApplication(self.game_db, self.player_db)
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute("CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_settlement_operations BEGIN SELECT RAISE(IGNORE); END")
+        bot = SimpleNamespace(self_id="bot")
+        event = SimpleNamespace(message_id="rift-settlement-retry")
+        outcome = {"delta": {"stone": 15, "exp": 20, "hp": -10}, "items": [{"id": 300, "name": "loot", "type": "weapon", "amount": 1}], "statistics": {"秘境次数": 1}, "message": "fixed event"}
+        replies = []
+
+        async def capture_reply(*args, **kwargs):
+            replies.append((args, kwargs))
+
+        async def invoke():
+            with (
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(bot, None))),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u", **self.user}, "")),
+                patch.object(rift_module, "check_user_type", return_value=(True, "")),
+                patch.object(rift_module, "read_rift_data", return_value=self.rift),
+                patch.object(rift_module, "rift_application", application),
+                patch.object(application, "read_cooldown", return_value={"create_time": "2000-01-01 00:00:00", "scheduled_time": "30", "type": 3}),
+                patch.object(rift_module, "_roll_rift_event", new=AsyncMock(return_value=(None, None, outcome))),
+                patch.object(rift_module, "_rift_progress_snapshot", return_value=7),
+                patch.object(rift_module, "_roll_rift_progress", return_value=(None, "")),
+                patch.object(rift_module, "XiuConfig", return_value=SimpleNamespace(max_goods_num=1000)),
+                patch.object(rift_module, "handle_send", new=capture_reply),
+                patch.object(rift_module, "log_message"),
+            ):
+                with self.assertRaises(FinishedException):
+                    await rift_module.complete_rift_(bot, event)
+                with db_backend.transaction(self.game_db) as conn:
+                    conn.execute("DROP TRIGGER reject_receipt")
+                with self.assertRaises(FinishedException):
+                    await rift_module.complete_rift_(bot, event)
+
+        asyncio.run(invoke())
+        self.assertEqual(len(replies), 2)
+        self.assertIn("秘境结算回执保存失败", replies[0][0][2])
+        self.assertIn("fixed event", replies[1][0][2])
+        with db_backend.connection(self.game_db) as conn:
+            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=300").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_settlement_operations").fetchone()[0], 1)
 
 if __name__ == "__main__":
     unittest.main()
