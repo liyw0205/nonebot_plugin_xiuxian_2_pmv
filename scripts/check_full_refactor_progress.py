@@ -702,9 +702,9 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             and purchase_keywords.get("quantity") == "quantity"
             and purchase_keywords.get("clamp_quantity") == "True"
             and expression("repository", "purchase_result", "(str(payload[0]), int(payload[1]), int(payload[4])) != (str(user_id), int(item_id), int(quantity))")
-            and expression("repository", "purchase", "quantity = min(quantity, max(0, weekly_limit - purchased))")
-            and expression("repository", "purchase", "payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]")
-            and calls("repository", "purchase", "self._purchase_replay")
+            and expression("repository", "_purchase", "quantity = min(quantity, max(0, weekly_limit - purchased))")
+            and expression("repository", "_purchase", "payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]")
+            and calls("repository", "_purchase", "self._purchase_replay")
         ),
         "opponent_queries_and_all_cache_consumers_share_one_bounded_owner": (
             len(calls("handlers", None, "ArenaOpponentRepository")) == 1
@@ -749,7 +749,7 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             expression("repository", "_replay_result", "result['status'] in {'applied', 'duplicate'}")
             and expression("repository", "_purchase_replay", "row['status'] == 'needs_reconcile' or row['result_json'] is None")
             and "INSERT INTO arena_purchase_operations" in repository_sql and "status,result_json" in repository_sql
-            and calls("repository", "purchase", "ArenaStateRepository._weekly")
+            and calls("repository", "_purchase", "ArenaStateRepository._weekly")
             and expression("state_repository", "_weekly", "reset.isocalendar()[:2] != today.isocalendar()[:2]")
             and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle', 'arena.challenge_ticket', 'arena.challenge_purchase'}")
             and expression("application", "_execute", "type(self.repository) is ArenaChallengePurchaseSqlRepository")
