@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.player_reasons import reason_text
 from ...core.ports import Clock
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
@@ -13,6 +14,15 @@ from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
 from .repository import DungeonRepository, DungeonSessionSqlRepository
 from .reset_repository import DungeonResetSqlRepository
+
+
+DUNGEON_PURCHASE_RETRYABLE_REJECTIONS = frozenset(
+    {
+        "dungeon_purchase_stone_write_rejected",
+        "dungeon_purchase_inventory_write_rejected",
+        "dungeon_purchase_receipt_write_rejected",
+    }
+)
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -58,7 +68,24 @@ class DungeonApplication:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if exc.code in DUNGEON_PURCHASE_RETRYABLE_REJECTIONS:
+                    details = exc.details if isinstance(exc.details, Mapping) else {}
+                    reason = str(details.get("reason") or exc.code)
+                    subject = str(details.get("subject") or "actor")
+                    message = reason_text(reason) or "副本兑换写入未完成，可在故障解除后重试。"
+                    message += f"（原因：{reason}；主体：{subject}）"
+                    outcome = OperationOutcome.failed(
+                        request.operation_id,
+                        action,
+                        message,
+                        code=reason,
+                        data={"status": "state_changed", "reason": reason, "subject": subject},
+                        audit_category="dungeon",
+                    )
+                    with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                        self.ledger.finish(uow, outcome)
+                    return outcome
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.game_database, request.operation_id, action, request.payload(), str(exc))

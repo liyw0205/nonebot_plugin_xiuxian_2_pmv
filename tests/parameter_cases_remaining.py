@@ -3,6 +3,13 @@
 from tests.parameter_cases_assets import balances, backpack
 
 
+def assert_dungeon_purchase_integrity(database):
+    from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert uow.query_one("PRAGMA integrity_check") == {"integrity_check": "ok"}
+
+
 def register(case):
     @case(
         "accessory-bag-page-real",
@@ -310,3 +317,192 @@ def register(case):
         assert before == balances(probe) and stock == backpack(probe), text
         assert any(token in text for token in ("不存在", "商品", "无效", "兑换")), text
         probe.evidence.update(invalid_item_id=999999, assets_unchanged=True)
+
+    @case(
+        "dungeon-purchase-receipt-ignore-recovery",
+        "副本兑换",
+        "合法商品 1999，数量 2",
+        "注册玩家、真实副本商店商品和隔离 game SQLite",
+        "回执拒写返回具体失败；灵石/背包零写，解除故障后同消息恢复且重放不二次兑换",
+        group="dungeon-purchase-parameters",
+        outcome="rejection",
+    )
+    async def dungeon_purchase_receipt_ignore_recovery(probe):
+        import json
+
+        database = probe.context.paths.game_db
+        operation_id = "dungeon-purchase:970100:900001"
+        probe.player(stone=1_000_000)
+        stone_sql = "SELECT stone FROM user_xiuxian WHERE user_id='900001'"
+        inventory_sql = "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=1999"
+        before = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        probe.seed(
+            database,
+            "CREATE TRIGGER reject_dungeon_purchase_receipt BEFORE INSERT ON dungeon_purchase_operations "
+            "WHEN NEW.operation_id='dungeon-purchase:970100:900001' "
+            "BEGIN SELECT RAISE(IGNORE); END",
+        )
+        failed = await probe.command("副本兑换", "副本兑换 1999 2", number=970100)
+        after_rejection = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        receipt_rows = probe.rows(database, "SELECT operation_id FROM dungeon_purchase_operations")
+        probe.evidence.update(
+            red_reply=failed,
+            before=before,
+            after_rejection=after_rejection,
+            receipt_rows=receipt_rows,
+        )
+        assert "回执未能完整保存" in failed, failed
+        assert after_rejection == before
+        assert receipt_rows == []
+        assert_dungeon_purchase_integrity(database)
+        ledger = probe.rows(
+            database,
+            "SELECT status,result_json FROM operation_ledger WHERE operation_id=? AND action='dungeon.purchase'",
+            (operation_id,),
+        )
+        assert len(ledger) == 1 and ledger[0][0] == "failed", ledger
+        failure = json.loads(ledger[0][1])
+        assert failure["code"] == "dungeon_purchase_receipt_write_rejected", failure
+        assert failure["data"]["subject"] == "actor", failure
+        probe.seed(database, "DROP TRIGGER reject_dungeon_purchase_receipt")
+
+        recovered = await probe.command("副本兑换", "副本兑换 1999 2", number=970100)
+        assert "成功兑换" in recovered, recovered
+        after = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        assert after[0] == [(800_000,)] and after[1] == [(2, 2)], after
+        receipt = probe.rows(
+            database,
+            "SELECT result_status,quantity,cost,stone,inventory,response "
+            "FROM dungeon_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        assert receipt == [("applied", 2, 200_000, 800_000, 2, "成功兑换渡厄丹×2，消耗200000灵石。")], receipt
+        replay = await probe.command("副本兑换", "副本兑换 1999 2", number=970100)
+        assert "成功兑换" in replay and (probe.rows(database, stone_sql), probe.rows(database, inventory_sql)) == after
+        assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(
+            reason="dungeon_purchase_receipt_write_rejected",
+            subject="actor",
+            rolled_back=True,
+            recovered=True,
+            replay_unchanged=True,
+        )
+
+    async def dungeon_purchase_write_rejection(
+        probe,
+        *,
+        number,
+        trigger_name,
+        trigger_sql,
+        reason,
+        expected_subject,
+        expected_reply,
+        seed_inventory=False,
+    ):
+        import json
+
+        database = probe.context.paths.game_db
+        operation_id = f"dungeon-purchase:{number}:900001"
+        probe.player(stone=1_000_000)
+        if seed_inventory:
+            probe.grant_item(1999, 1)
+        stone_sql = "SELECT stone FROM user_xiuxian WHERE user_id='900001'"
+        inventory_sql = "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=1999"
+        receipt_sql = "SELECT operation_id FROM dungeon_purchase_operations WHERE operation_id=?"
+        before = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        probe.seed(database, trigger_sql)
+        failed = await probe.command("副本兑换", "副本兑换 1999 2", number=number)
+        after_rejection = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        receipts = probe.rows(database, receipt_sql, (operation_id,))
+        assert expected_reply in failed, failed
+        assert after_rejection == before, (before, after_rejection)
+        assert receipts == [], receipts
+        assert_dungeon_purchase_integrity(database)
+        ledger = probe.rows(
+            database,
+            "SELECT status,result_json FROM operation_ledger WHERE operation_id=? AND action='dungeon.purchase'",
+            (operation_id,),
+        )
+        assert len(ledger) == 1 and ledger[0][0] == "failed", ledger
+        failure = json.loads(ledger[0][1])
+        assert failure["code"] == reason, failure
+        assert failure["data"]["reason"] == reason and failure["data"]["subject"] == expected_subject, failure
+        probe.seed(database, f"DROP TRIGGER {trigger_name}")
+
+        recovered = await probe.command("副本兑换", "副本兑换 1999 2", number=number)
+        after = (probe.rows(database, stone_sql), probe.rows(database, inventory_sql))
+        assert "成功兑换" in recovered, recovered
+        assert after[0] == [(800_000,)], after
+        initial_goods, initial_bound = before[1][0] if before[1] else (0, 0)
+        assert after[1] == [(initial_goods + 2, initial_bound + 2)], after
+        receipt = probe.rows(
+            database,
+            "SELECT result_status,quantity,cost,stone,inventory,response "
+            "FROM dungeon_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        expected_inventory = initial_goods + 2
+        assert receipt == [
+            ("applied", 2, 200_000, 800_000, expected_inventory,
+             f"成功兑换渡厄丹×2，消耗200000灵石。")
+        ], receipt
+        replay = await probe.command("副本兑换", "副本兑换 1999 2", number=number)
+        assert "成功兑换" in replay
+        assert (probe.rows(database, stone_sql), probe.rows(database, inventory_sql)) == after
+        assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(
+            reason=reason,
+            subject=failure["data"]["subject"],
+            before=before,
+            after_rejection=after_rejection,
+            rolled_back=True,
+            recovered=True,
+            replay_unchanged=True,
+        )
+
+    @case(
+        "dungeon-purchase-stone-ignore-recovery",
+        "副本兑换",
+        "合法商品 1999，数量 2",
+        "注册玩家、真实副本商店商品和隔离 game SQLite",
+        "灵石拒写返回具体失败；灵石/背包零写，解除故障后同消息恢复且重放不二次兑换",
+        group="dungeon-purchase-parameters",
+        outcome="rejection",
+    )
+    async def dungeon_purchase_stone_ignore_recovery(probe):
+        await dungeon_purchase_write_rejection(
+            probe,
+            number=970101,
+            trigger_name="reject_dungeon_purchase_stone",
+            trigger_sql=(
+                "CREATE TRIGGER reject_dungeon_purchase_stone BEFORE UPDATE OF stone ON user_xiuxian "
+                "WHEN NEW.user_id='900001' BEGIN SELECT RAISE(IGNORE); END"
+            ),
+            reason="dungeon_purchase_stone_write_rejected",
+            expected_subject="actor",
+            expected_reply="扣除灵石未能保存",
+        )
+
+    @case(
+        "dungeon-purchase-inventory-ignore-recovery",
+        "副本兑换",
+        "合法商品 1999，数量 2",
+        "注册玩家、已有一件同商品和隔离 game SQLite",
+        "背包拒写返回具体失败；灵石/原库存零写，解除故障后同消息恢复且重放不二次兑换",
+        group="dungeon-purchase-parameters",
+        outcome="rejection",
+    )
+    async def dungeon_purchase_inventory_ignore_recovery(probe):
+        await dungeon_purchase_write_rejection(
+            probe,
+            number=970102,
+            trigger_name="reject_dungeon_purchase_inventory",
+            trigger_sql=(
+                "CREATE TRIGGER reject_dungeon_purchase_inventory BEFORE INSERT ON back "
+                "WHEN NEW.user_id='900001' AND NEW.goods_id=1999 BEGIN SELECT RAISE(IGNORE); END"
+            ),
+            reason="dungeon_purchase_inventory_write_rejected",
+            expected_subject="inventory",
+            expected_reply="物品入库未能保存",
+            seed_inventory=True,
+        )
