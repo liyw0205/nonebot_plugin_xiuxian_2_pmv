@@ -240,7 +240,15 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
             else:
                 target = _sql_message().get_user_info_with_id(result.target_id) or {}
                 subjects[result.subject] = f"被邀请者【{target.get('user_name', result.target_id)}】"
-        return result_failure({"create": "创建队伍", "invite": "邀请组队"}.get(action, "队伍操作"), result, subjects=subjects)
+        if action == "join" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_join_invite_"):
+                subjects[result.subject] = f"邀请【{result.subject}】"
+            elif result.reason.startswith("dungeon_team_join_cooldown_"):
+                target = _sql_message().get_user_info_with_id(result.target_id) or {}
+                subjects[result.subject] = f"入队玩家【{target.get('user_name', result.target_id)}】"
+            else:
+                subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队"}.get(action, "队伍操作"), result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -529,6 +537,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @agree_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("同意组队")
 async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -540,6 +549,8 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     operation_id = _team_operation_id(event, "join", user_id)
     replay = dungeon_team_application.operation_result(operation_id, "join")
     if replay is not None:
+        if isinstance(event, GroupMessageEvent) and replay.group_id and replay.group_id != str(event.group_id):
+            replay = TeamMutationResult("state_changed", reason="operation_conflict")
         await handle_send(bot, event, _team_mutation_message("join", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 

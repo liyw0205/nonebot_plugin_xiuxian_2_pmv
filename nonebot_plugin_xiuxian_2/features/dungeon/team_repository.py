@@ -86,6 +86,11 @@ class _TeamInviteWriteRejected(DomainError):
         super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
+class _TeamJoinWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
+
+
 class DungeonTeamRepository:
     @staticmethod
     def _snapshot_reason(current, expected):
@@ -689,45 +694,113 @@ class DungeonTeamRepository:
 
     def join(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, user_id: str, group_id: str, now_timestamp: float) -> TeamMutationResult:
         payload = self._json({"action":"join","invite_id":invite_id,"team_id":team_id,"inviter_id":inviter_id,"user_id":user_id,"group_id":group_id})
+        base = dict(team_id=team_id, invite_id=invite_id, target_id=user_id, group_id=group_id)
         if not self._database_exists():
-            return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._mutation_schema_ready(uow):
-                return TeamMutationResult("schema_missing", team_id=str(team_id), invite_id=str(invite_id), target_id=str(user_id), group_id=str(group_id))
-            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
-            invite = uow.query_one("SELECT team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at FROM dungeon_team_invites WHERE invite_id=?", (invite_id,))
-            base = dict(team_id=team_id, invite_id=invite_id, target_id=user_id, group_id=group_id)
-            invite_reason = ""
-            if invite is None:
-                invite_reason = "team_invite_missing"
-            elif (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id):
-                invite_reason = "invite_subject_mismatch"
-            elif str(invite["status"]) != "pending" or invite["consumed_at"] is not None:
-                invite_reason = "team_invite_resolved"
-            elif float(invite["expires_at"]) <= float(now_timestamp):
-                invite_reason = "team_invite_expired"
-            if invite_reason:
-                return self._finish(uow, operation_id, "join", payload, TeamMutationResult("invite_invalid", reason=invite_reason, **base))
-            user_exists = self._user_exists(uow, user_id)
-            if user_exists is None: return TeamMutationResult("schema_missing", **base)
-            if not user_exists: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_missing", **base))
-            if self._user_team(uow, user_id): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("user_has_team", **base))
-            team = uow.query_one("SELECT team_name,leader,members,max_members,version FROM teams WHERE user_id=?", (team_id,))
-            if team is None: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("team_disbanded", **base))
-            members, maximum = self._members(team["members"]), max(int(team["max_members"] or 4), 1)
-            base.update(team_name=str(team["team_name"] or ""), leader_id=str(team["leader"] or ""), member_count=len(members), max_members=maximum, expires_at=float(invite["expires_at"]), version=int(team["version"] or 0))
-            if len(members) >= maximum: return self._finish(uow, operation_id, "join", payload, TeamMutationResult("team_full", **base))
-            if self._active_session(uow, user_id) or any(self._active_session(uow, member) for member in members): return self._finish(uow, operation_id, "join", payload, TeamMutationResult("session_active", **base))
-            members.append(user_id)
-            changed = uow.execute("UPDATE teams SET members=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), team_id, int(team["version"] or 0)))
-            if changed.rowcount != 1: raise DomainError("team_members_write_rejected", "team mutation write count mismatch")
-            self._sync_membership(uow, team_id, members, int(team["version"] or 0) + 1)
-            uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET had_first_join=1", (user_id, ""))
-            uow.execute("UPDATE dungeon_team_invites SET consumed_at=CURRENT_TIMESTAMP,status='joined',resolved_operation_id=? WHERE invite_id=? AND status='pending'", (operation_id, invite_id))
-            base["member_count"] = len(members)
-            base["version"] = int(team["version"] or 0) + 1
-            return self._finish(uow, operation_id, "join", payload, TeamMutationResult("applied", **base))
+            return TeamMutationResult("schema_missing", **base)
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._mutation_schema_ready(uow):
+                    return TeamMutationResult("schema_missing", **base)
+                old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                if old is not None:
+                    return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", reason="operation_conflict", **base)
+                checks = []
+
+                def verify_join() -> None:
+                    for sql, params, expected, reason, subject in checks:
+                        actual = uow.query_all(sql, params) if isinstance(expected, list) else uow.query_one(sql, params)
+                        if actual != expected:
+                            raise _TeamJoinWriteRejected(reason, subject)
+
+                def finish(result: TeamMutationResult) -> TeamMutationResult:
+                    receipt_json = self._json(result.__dict__)
+                    write = uow.execute(
+                        "INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)",
+                        (operation_id, payload, result.status, result.team_id, receipt_json, "join"),
+                    )
+                    if write.rowcount != 1:
+                        raise _TeamJoinWriteRejected("dungeon_team_join_receipt_write_rejected", team_id)
+                    receipt = uow.query_one("SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                    if receipt != {"payload": payload, "result_status": result.status, "team_id": result.team_id, "result_json": receipt_json, "action": "join"}:
+                        raise _TeamJoinWriteRejected("dungeon_team_join_receipt_projection_mismatch", team_id)
+                    verify_join()
+                    return result
+
+                invite_columns = "invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at,created_at,resolved_operation_id"
+                if {"bot_id", "source_message_id", "notification_scene"} <= self._columns(uow, "dungeon_team_invites"):
+                    invite_columns += ",bot_id,source_message_id,notification_scene"
+                invite_sql = f"SELECT {invite_columns} FROM dungeon_team_invites WHERE invite_id=?"
+                invite = uow.query_one(invite_sql, (invite_id,))
+                invite_reason = ""
+                if invite is None:
+                    invite_reason = "team_invite_missing"
+                elif (str(invite["team_id"]), str(invite["inviter_id"]), str(invite["invitee_id"]), str(invite["group_id"])) != (team_id, inviter_id, user_id, group_id):
+                    invite_reason = "invite_subject_mismatch"
+                elif str(invite["status"]) != "pending" or invite["consumed_at"] is not None:
+                    invite_reason = "team_invite_resolved"
+                elif float(invite["expires_at"]) <= float(now_timestamp):
+                    invite_reason = "team_invite_expired"
+                if invite_reason:
+                    return finish(TeamMutationResult("invite_invalid", reason=invite_reason, **base))
+                user_exists = self._user_exists(uow, user_id)
+                if user_exists is None: return TeamMutationResult("schema_missing", **base)
+                if not user_exists: return finish(TeamMutationResult("user_missing", **base))
+                if self._user_team(uow, user_id): return finish(TeamMutationResult("user_has_team", **base))
+                team_sql = f"SELECT {self._TEAM_COLUMNS} FROM teams WHERE user_id=?"
+                team = uow.query_one(team_sql, (team_id,))
+                if team is None: return finish(TeamMutationResult("team_disbanded", **base))
+                members, maximum = self._members(team["members"]), max(int(team["max_members"] or 4), 1)
+                base.update(team_name=str(team["team_name"] or ""), leader_id=str(team["leader"] or ""), member_count=len(members), max_members=maximum, expires_at=float(invite["expires_at"]), version=int(team["version"] or 0))
+                if len(members) >= maximum: return finish(TeamMutationResult("team_full", **base))
+                if self._active_session(uow, user_id) or any(self._active_session(uow, member) for member in members): return finish(TeamMutationResult("session_active", **base))
+
+                # Freeze every input before writes so an early trigger cannot redefine a later expectation.
+                member_sql = "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=? ORDER BY member_id"
+                old_members = uow.query_all(member_sql, (team_id,))
+                cooldown_sql = "SELECT user_id,join_cd_until,had_first_join FROM team_cd WHERE user_id=?"
+                cooldown = uow.query_one(cooldown_sql, (user_id,))
+                expected_cooldown = dict(cooldown) if cooldown is not None else dict(user_id=user_id, join_cd_until="")
+                expected_cooldown["had_first_join"] = 1
+                consumed_at = uow.query_one("SELECT CURRENT_TIMESTAMP AS consumed_at")["consumed_at"]
+                expected_invite = {**invite, "status": "joined", "consumed_at": consumed_at, "resolved_operation_id": operation_id}
+                members.append(user_id)
+                version = int(team["version"] or 0) + 1
+                expected_team = {**team, "members": json.dumps(members), "version": version}
+                expected_members = [{"team_id": team_id, "member_id": member, "version": version} for member in sorted(set(members))]
+
+                write = uow.execute("UPDATE teams SET members=?,version=version+1 WHERE user_id=? AND version=?", (expected_team["members"], team_id, int(team["version"] or 0)))
+                if write.rowcount != 1:
+                    raise _TeamJoinWriteRejected("dungeon_team_join_state_write_rejected", team_id)
+                checks.append((team_sql, (team_id,), expected_team, "dungeon_team_join_state_projection_mismatch", team_id))
+                verify_join()
+
+                removed = uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (team_id,))
+                if removed.rowcount != len(old_members):
+                    raise _TeamJoinWriteRejected("dungeon_team_join_members_write_rejected", team_id)
+                if uow.query_all(member_sql, (team_id,)):
+                    raise _TeamJoinWriteRejected("dungeon_team_join_members_projection_mismatch", team_id)
+                write = uow.executemany("INSERT INTO dungeon_team_members(team_id,member_id,version) VALUES(?,?,?)",
+                                        [(team_id, row["member_id"], version) for row in expected_members])
+                if write.rowcount != len(expected_members):
+                    raise _TeamJoinWriteRejected("dungeon_team_join_members_write_rejected", team_id)
+                checks.append((member_sql, (team_id,), expected_members, "dungeon_team_join_members_projection_mismatch", team_id))
+                verify_join()
+
+                write = uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET had_first_join=1", (user_id, ""))
+                if write.rowcount != 1:
+                    raise _TeamJoinWriteRejected("dungeon_team_join_cooldown_write_rejected", user_id)
+                checks.append((cooldown_sql, (user_id,), expected_cooldown, "dungeon_team_join_cooldown_projection_mismatch", user_id))
+                verify_join()
+
+                write = uow.execute("UPDATE dungeon_team_invites SET consumed_at=?,status='joined',resolved_operation_id=? WHERE invite_id=? AND status='pending'", (consumed_at, operation_id, invite_id))
+                if write.rowcount != 1:
+                    raise _TeamJoinWriteRejected("dungeon_team_join_invite_write_rejected", invite_id)
+                checks.append((invite_sql, (invite_id,), expected_invite, "dungeon_team_join_invite_projection_mismatch", invite_id))
+                verify_join()
+                base.update(member_count=len(members), version=version)
+                return finish(TeamMutationResult("applied", subject=team_id, **base))
+        except _TeamJoinWriteRejected as exc:
+            return TeamMutationResult("failed", reason=exc.code, subject=str(exc.details.get("subject") or team_id), **base)
 
     def _resolve_invite(self, action: str, operation_id: str, invite_id: str, user_id: str, group_id: str, now_timestamp: float, *, lock_timeout: float = 30) -> TeamMutationResult:
         payload = self._json({"action":action,"invite_id":invite_id,"user_id":user_id,"group_id":group_id})
