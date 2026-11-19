@@ -22,6 +22,9 @@ class AccessoryDecomposeApplication:
     def replay(self, operation_id: str) -> AccessoryDecomposeChange | None:
         return self.repository.replay(operation_id)
 
+    def replay_batch(self, operation_id: str) -> AccessoryDecomposeChange | None:
+        return self.repository.replay_batch(operation_id)
+
     def decompose(
         self,
         operation_id: str,

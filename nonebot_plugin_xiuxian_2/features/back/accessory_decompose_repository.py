@@ -10,6 +10,12 @@ from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from .accessory_decompose_domain import AccessoryDecomposeChange
 
 
+class _DecomposeWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str):
+        self.reason = reason
+        self.subject = subject
+
+
 class AccessoryDecomposeSqlRepository:
     """Atomically exchange one bag accessory for wash stones."""
 
@@ -61,13 +67,25 @@ class AccessoryDecomposeSqlRepository:
                 return None
             return self._result("duplicate", str(row["result_json"]))
 
-    @staticmethod
-    def _stone_quantity(uow: AttachedDatabaseUnitOfWork, user_id: str, stone_id: int) -> int:
-        row = uow.query_one(
-            "SELECT goods_num FROM back WHERE user_id=? AND goods_id=?",
-            (user_id, stone_id),
-        )
-        return int(row["goods_num"] or 0) if row else 0
+    def replay_batch(self, operation_id: str) -> AccessoryDecomposeChange | None:
+        operation_id = str(operation_id).strip()
+        if not operation_id:
+            raise ValueError("operation_id must not be empty")
+        legacy_prefix = operation_id + ":"
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            # Older batch ids append the selected UIDs; replay them before reading a new bag.
+            rows = uow.query_all(
+                "SELECT result_json FROM accessory_transaction_operations WHERE action='batch_decompose' "
+                "AND (operation_id=? OR substr(operation_id,1,?)=?) LIMIT 2",
+                (operation_id, len(legacy_prefix), legacy_prefix),
+            )
+            if not rows:
+                return None
+            if len(rows) != 1:
+                return AccessoryDecomposeChange(
+                    "failed", "batch_decompose", "", reason="receipt_unreadable", subject=operation_id
+                )
+            return self._result("duplicate", str(rows[0]["result_json"]))
 
     @classmethod
     def _add_stones(
@@ -78,11 +96,19 @@ class AccessoryDecomposeSqlRepository:
         stone_name: str,
         amount: int,
         max_goods_num: int,
-    ) -> bool:
-        current = cls._stone_quantity(uow, user_id, stone_id)
+        subject: str,
+    ) -> dict[str, Any] | None:
+        stone_query = "SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?"
+        row = uow.query_one(stone_query, (user_id, stone_id))
+        current = int(row["goods_num"] or 0) if row else 0
+        bound = int(row["bind_num"] or 0) if row else 0
         if current + amount > max_goods_num:
-            return False
-        uow.execute(
+            return None
+        expected_stones = {
+            "goods_name": stone_name, "goods_type": "特殊道具", "goods_num": current + amount,
+            "bind_num": min(bound + amount, current + amount),
+        }
+        write = uow.execute(
             "INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
             "VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
             "goods_name=excluded.goods_name,goods_type=excluded.goods_type, "
@@ -91,7 +117,11 @@ class AccessoryDecomposeSqlRepository:
             "COALESCE(back.goods_num,0)+excluded.goods_num)",
             (user_id, stone_id, stone_name, "特殊道具", amount, amount),
         )
-        return True
+        if write.rowcount != 1:
+            raise _DecomposeWriteRejected("accessory_batch_decompose_stone_write_rejected", subject)
+        if uow.query_one(stone_query, (user_id, stone_id)) != expected_stones:
+            raise _DecomposeWriteRejected("accessory_batch_decompose_stone_projection_mismatch", subject)
+        return expected_stones
 
     def decompose(
         self,
@@ -124,62 +154,107 @@ class AccessoryDecomposeSqlRepository:
             "max_goods_num": max_goods_num,
         }
         payload_json = self._json(payload)
-        with AttachedDatabaseUnitOfWork(
-            self.game_database,
-            attachments={"player_data": self.player_database},
-            immediate=True,
-        ) as uow:
-            previous = uow.query_one(
-                "SELECT action,payload,result_json FROM accessory_transaction_operations "
-                "WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["action"]) != "decompose" or str(previous["payload"]) != payload_json:
-                    return AccessoryDecomposeChange("state_changed", "decompose", user_id, reason="operation_conflict")
-                return self._result("duplicate", str(previous["result_json"]))
+        receipt_query = (
+            "SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?"
+        )
+        state_query = "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?"
+        stone_query = (
+            "SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?"
+        )
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(receipt_query, (operation_id,))
+                if previous is not None:
+                    if str(previous["action"]) != "decompose" or str(previous["payload"]) != payload_json:
+                        return AccessoryDecomposeChange(
+                            "state_changed", "decompose", user_id, reason="operation_conflict", subject=uid
+                        )
+                    return self._result("duplicate", str(previous["result_json"]))
 
-            row = uow.query_one(
-                "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?",
-                (user_id,),
-            )
-            if row is None:
-                return AccessoryDecomposeChange("accessory_missing", "decompose", user_id)
-            equipped = self._decode(row["equipped"], dict)
-            bag = self._decode(row["bag"], list)
-            index, current = self._find_bag(bag, uid)
-            if index is None or current is None:
-                return AccessoryDecomposeChange("accessory_missing", "decompose", user_id)
-            if self._json(current) != self._json(expected_accessory):
-                return AccessoryDecomposeChange("state_changed", "decompose", user_id, reason="accessory_changed")
-            if not self._add_stones(
-                uow, user_id, stone_id, stone_name, stone_gain, max_goods_num
-            ):
-                return AccessoryDecomposeChange("inventory_full", "decompose", user_id)
-
-            del bag[index]
-            uow.execute(
-                "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
-                (json.dumps(equipped, ensure_ascii=False), json.dumps(bag, ensure_ascii=False), user_id),
-            )
-            result_json = self._json(
-                {
-                    "action": "decompose",
-                    "user_id": user_id,
-                    "affected": 1,
-                    "stone_delta": stone_gain,
-                    "accessory": current,
-                    "details": None,
+                row = uow.query_one(state_query, (user_id,))
+                if row is None:
+                    return AccessoryDecomposeChange("accessory_missing", "decompose", user_id, subject=uid)
+                equipped = self._decode(row["equipped"], dict)
+                bag = self._decode(row["bag"], list)
+                index, current = self._find_bag(bag, uid)
+                if index is None or current is None:
+                    return AccessoryDecomposeChange("accessory_missing", "decompose", user_id, subject=uid)
+                if self._json(current) != self._json(expected_accessory):
+                    return AccessoryDecomposeChange(
+                        "state_changed", "decompose", user_id, reason="accessory_changed", subject=uid
+                    )
+                stone_row = uow.query_one(stone_query, (user_id, stone_id))
+                before_stones = int(stone_row["goods_num"] or 0) if stone_row else 0
+                before_bound = int(stone_row["bind_num"] or 0) if stone_row else 0
+                if before_stones + stone_gain > max_goods_num:
+                    return AccessoryDecomposeChange("inventory_full", "decompose", user_id, subject=uid)
+                expected_stones = {
+                    "goods_name": stone_name,
+                    "goods_type": "特殊道具",
+                    "goods_num": before_stones + stone_gain,
+                    "bind_num": min(before_bound + stone_gain, before_stones + stone_gain),
                 }
-            )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, "decompose", payload_json, result_json),
-            )
-            return AccessoryDecomposeChange(
-                "applied", "decompose", user_id, 1, stone_gain, current
-            )
+                stones = uow.execute(
+                    "INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
+                    "VALUES (?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                    "goods_name=excluded.goods_name,goods_type=excluded.goods_type, "
+                    "goods_num=COALESCE(back.goods_num,0)+excluded.goods_num, "
+                    "bind_num=MIN(COALESCE(back.bind_num,0)+excluded.goods_num, "
+                    "COALESCE(back.goods_num,0)+excluded.goods_num)",
+                    (user_id, stone_id, stone_name, "特殊道具", stone_gain, stone_gain),
+                )
+                if stones.rowcount != 1:
+                    raise _DecomposeWriteRejected("accessory_decompose_stone_write_rejected", uid)
+                if uow.query_one(stone_query, (user_id, stone_id)) != expected_stones:
+                    raise _DecomposeWriteRejected("accessory_decompose_stone_projection_mismatch", uid)
+
+                del bag[index]
+                expected_state = {
+                    "equipped": json.dumps(equipped, ensure_ascii=False),
+                    "bag": json.dumps(bag, ensure_ascii=False),
+                }
+                state = uow.execute(
+                    "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
+                    (expected_state["equipped"], expected_state["bag"], user_id),
+                )
+                if state.rowcount != 1:
+                    raise _DecomposeWriteRejected("accessory_decompose_state_write_rejected", uid)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _DecomposeWriteRejected("accessory_decompose_state_projection_mismatch", uid)
+                result_json = self._json(
+                    {
+                        "action": "decompose",
+                        "user_id": user_id,
+                        "affected": 1,
+                        "stone_delta": stone_gain,
+                        "accessory": current,
+                        "details": None,
+                    }
+                )
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations "
+                    "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                    (operation_id, "decompose", payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _DecomposeWriteRejected("accessory_decompose_receipt_write_rejected", uid)
+                if uow.query_one(receipt_query, (operation_id,)) != {
+                    "action": "decompose", "payload": payload_json, "result_json": result_json
+                }:
+                    raise _DecomposeWriteRejected("accessory_decompose_receipt_projection_mismatch", uid)
+                if uow.query_one(stone_query, (user_id, stone_id)) != expected_stones:
+                    raise _DecomposeWriteRejected("accessory_decompose_stone_projection_mismatch", uid)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _DecomposeWriteRejected("accessory_decompose_state_projection_mismatch", uid)
+                return AccessoryDecomposeChange(
+                    "applied", "decompose", user_id, 1, stone_gain, current, subject=uid
+                )
+        except _DecomposeWriteRejected as exc:
+            return AccessoryDecomposeChange("failed", "decompose", user_id, reason=exc.reason, subject=exc.subject)
 
     def batch_decompose(
         self,
@@ -212,63 +287,86 @@ class AccessoryDecomposeSqlRepository:
             "max_goods_num": max_goods_num,
         }
         payload_json = self._json(payload)
-        with AttachedDatabaseUnitOfWork(
-            self.game_database,
-            attachments={"player_data": self.player_database},
-            immediate=True,
-        ) as uow:
-            previous = uow.query_one(
-                "SELECT action,payload,result_json FROM accessory_transaction_operations "
-                "WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["action"]) != "batch_decompose" or str(previous["payload"]) != payload_json:
-                    return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id, reason="operation_conflict")
-                return self._result("duplicate", str(previous["result_json"]))
+        subject = ",".join(selected_uids)
+        receipt_query = "SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?"
+        state_query = "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?"
+        stone_query = "SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?"
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(receipt_query, (operation_id,))
+                if previous is not None:
+                    if str(previous["action"]) != "batch_decompose" or str(previous["payload"]) != payload_json:
+                        return AccessoryDecomposeChange(
+                            "state_changed", "batch_decompose", user_id, reason="operation_conflict", subject=subject
+                        )
+                    return self._result("duplicate", str(previous["result_json"]))
 
-            row = uow.query_one(
-                "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?",
-                (user_id,),
-            )
-            if row is None:
-                return AccessoryDecomposeChange("accessory_missing", "batch_decompose", user_id)
-            equipped = self._decode(row["equipped"], dict)
-            bag = self._decode(row["bag"], list)
-            if self._json(bag) != self._json(expected_bag):
-                return AccessoryDecomposeChange("state_changed", "batch_decompose", user_id, reason="accessory_bag_changed")
-            selected = set(selected_uids)
-            hit = [item for item in bag if isinstance(item, dict) and str(item.get("uid", "")) in selected]
-            if len(hit) != len(selected_uids):
-                return AccessoryDecomposeChange("accessory_missing", "batch_decompose", user_id)
-            if not self._add_stones(
-                uow, user_id, stone_id, stone_name, total_gain, max_goods_num
-            ):
-                return AccessoryDecomposeChange("inventory_full", "batch_decompose", user_id)
+                row = uow.query_one(state_query, (user_id,))
+                if row is None:
+                    return AccessoryDecomposeChange("accessory_missing", "batch_decompose", user_id, subject=subject)
+                equipped = self._decode(row["equipped"], dict)
+                bag = self._decode(row["bag"], list)
+                if self._json(bag) != self._json(expected_bag):
+                    return AccessoryDecomposeChange(
+                        "state_changed", "batch_decompose", user_id, reason="accessory_bag_changed", subject=subject
+                    )
+                selected = set(selected_uids)
+                hit = [item for item in bag if isinstance(item, dict) and str(item.get("uid", "")) in selected]
+                if len(hit) != len(selected_uids):
+                    return AccessoryDecomposeChange("accessory_missing", "batch_decompose", user_id, subject=subject)
+                expected_stones = self._add_stones(
+                    uow, user_id, stone_id, stone_name, total_gain, max_goods_num, subject
+                )
+                if expected_stones is None:
+                    return AccessoryDecomposeChange("inventory_full", "batch_decompose", user_id, subject=subject)
 
-            bag = [item for item in bag if str(item.get("uid", "")) not in selected]
-            uow.execute(
-                "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
-                (json.dumps(equipped, ensure_ascii=False), json.dumps(bag, ensure_ascii=False), user_id),
-            )
-            result_json = self._json(
-                {
-                    "action": "batch_decompose",
-                    "user_id": user_id,
-                    "affected": len(hit),
-                    "stone_delta": total_gain,
-                    "accessory": None,
-                    "details": None,
+                bag = [item for item in bag if str(item.get("uid", "")) not in selected]
+                expected_state = {
+                    "equipped": json.dumps(equipped, ensure_ascii=False),
+                    "bag": json.dumps(bag, ensure_ascii=False),
                 }
-            )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, "batch_decompose", payload_json, result_json),
-            )
-            return AccessoryDecomposeChange(
-                "applied", "batch_decompose", user_id, len(hit), total_gain
-            )
+                state = uow.execute(
+                    "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
+                    (expected_state["equipped"], expected_state["bag"], user_id),
+                )
+                if state.rowcount != 1:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_state_write_rejected", subject)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_state_projection_mismatch", subject)
+                result_json = self._json(
+                    {
+                        "action": "batch_decompose",
+                        "user_id": user_id,
+                        "affected": len(hit),
+                        "stone_delta": total_gain,
+                        "accessory": None,
+                        "details": None,
+                    }
+                )
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations "
+                    "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                    (operation_id, "batch_decompose", payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_receipt_write_rejected", subject)
+                if uow.query_one(receipt_query, (operation_id,)) != {
+                    "action": "batch_decompose", "payload": payload_json, "result_json": result_json
+                }:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_receipt_projection_mismatch", subject)
+                if uow.query_one(stone_query, (user_id, stone_id)) != expected_stones:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_stone_projection_mismatch", subject)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _DecomposeWriteRejected("accessory_batch_decompose_state_projection_mismatch", subject)
+                return AccessoryDecomposeChange(
+                    "applied", "batch_decompose", user_id, len(hit), total_gain, subject=subject
+                )
+        except _DecomposeWriteRejected as exc:
+            return AccessoryDecomposeChange("failed", "batch_decompose", user_id, reason=exc.reason, subject=exc.subject)
 
 
 __all__ = ["AccessoryDecomposeSqlRepository"]

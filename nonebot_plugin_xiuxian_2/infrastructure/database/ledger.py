@@ -229,10 +229,10 @@ class OperationLedger:
         ) or {"n": 0})["n"])
         expected_audit = {
             "status": outcome.status,
-            "before_json": dict(outcome.before),
-            "after_json": dict(outcome.after),
-            "consumed_json": dict(outcome.consumed),
-            "granted_json": dict(outcome.granted),
+            "before_json": json.loads(json.dumps(dict(outcome.before), ensure_ascii=False, default=str)),
+            "after_json": json.loads(json.dumps(dict(outcome.after), ensure_ascii=False, default=str)),
+            "consumed_json": json.loads(json.dumps(dict(outcome.consumed), ensure_ascii=False, default=str)),
+            "granted_json": json.loads(json.dumps(dict(outcome.granted), ensure_ascii=False, default=str)),
             "category": outcome.audit_category,
             "occurred_at": occurred,
         }

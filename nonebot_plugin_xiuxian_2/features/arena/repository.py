@@ -69,10 +69,7 @@ class _SettlementProjections:
             if key not in row:
                 return False
             if isinstance(value, int):
-                try:
-                    if int(row[key]) != value:
-                        return False
-                except (TypeError, ValueError):
+                if sqlite_int_compare(row[key], value, strict=True) != 0:
                     return False
             elif str(row[key]) != str(value):
                 return False

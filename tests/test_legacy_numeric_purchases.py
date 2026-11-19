@@ -110,9 +110,13 @@ class LegacyNumericPurchaseTests(unittest.TestCase):
                         with self.assertRaisesRegex(sqlite3.IntegrityError, 'receipt refused'):
                             self.purchase(group, expected)
                     elif failure == 'write':
-                        with self.assertRaises(DomainError) as caught:
-                            self.purchase(group, expected)
-                        self.assertEqual({'training': 'training_points_write_rejected', 'arena': 'arena_honor_write_rejected', 'boss': 'boss_integral_write_rejected', 'tower': 'tower_purchase_write_rejected'}[kind], caught.exception.code)
+                        if kind == 'arena':
+                            result = self.purchase(group, expected)
+                            self.assertEqual(('state_changed', 'arena_purchase_honor_write_rejected'), (result['status'], result['reason']))
+                        else:
+                            with self.assertRaises(DomainError) as caught:
+                                self.purchase(group, expected)
+                            self.assertEqual({'training': 'training_points_write_rejected', 'boss': 'boss_integral_write_rejected', 'tower': 'tower_purchase_write_rejected'}[kind], caught.exception.code)
                     else:
                         self.assertEqual('state_changed', self.status(self.purchase(group, expected)))
                         # Some repositories persist a rejection receipt; assets stay unchanged.

@@ -133,10 +133,65 @@ class FinalReplyTests(unittest.TestCase):
         for code, message in REASONS.items():
             if code.endswith("write_rejected"):
                 with self.subTest(reason=code):
+                    self.assertTrue(message.strip())
                     self.assertNotIn("行数", message)
                     self.assertNotIn("SQL", message)
-                    self.assertNotIn("或", message)
-                    self.assertIn("管理员", message)
+                    self.assertNotIn("定位号", message)
+                    self.assertNotIn(code, message)
+                    self.assertEqual(
+                        f"操作：{message}",
+                        result_failure("操作", {"status": "state_changed", "reason": code}),
+                    )
+
+    def test_known_write_rejections_preserve_the_failed_stage_and_subject(self):
+        stages = {
+            "sect_weekly_progress_goal": "同门勤务周常进度没有记入",
+            "sect_weekly_progress_settlement": "周常进度记账未完成",
+            "dungeon_purchase_stone": "扣除灵石未能保存",
+            "dungeon_purchase_inventory": "物品入库未能保存",
+            "dungeon_purchase_receipt": "回执未能完整保存",
+            "work_abort_cleanup_cooldown": "冷却清理保存失败",
+            "work_abort_cleanup_offer_snapshot": "列表清理保存失败",
+            "work_abort_cleanup_receipt": "回执保存失败",
+            "boss_battle_stamina": "体力与角色状态未完整保存",
+            "boss_battle_cooldown": "冷却记录未保存",
+            "boss_battle_daily": "今日次数或收益未保存",
+            "boss_battle_integral": "积分未保存",
+            "boss_battle_inventory": "掉落物未完整入库",
+            "boss_battle_state": "血量状态未保存",
+            "boss_battle_statistics": "讨伐统计未保存",
+            "boss_battle_tasks": "任务进度未保存",
+            "boss_battle_activity_state": "活动首领血量未保存",
+            "boss_battle_activity_damage": "活动首领伤害记录未保存",
+            "boss_battle_activity_log": "活动首领讨伐记录未保存",
+            "boss_battle_activity_milestone": "活动首领里程碑未保存",
+            "boss_battle_receipt": "结算回执未保存",
+            "guishi_immediate_match": "撮合请求保存失败",
+            "partner_invite_create": "邀请保存失败",
+            "partner_invite_expiry": "邀请过期状态保存失败",
+            "partner_invite_resolve": "邀请处理状态保存失败",
+            "partner_cultivation_user": "角色修为保存失败",
+            "partner_cultivation_usage": "次数保存失败",
+            "partner_cultivation_statistics": "统计保存失败",
+            "partner_cultivation_invite": "邀请状态保存失败",
+            "partner_cultivation_receipt": "结算回执保存失败",
+            "accessory_affix_state": "词条状态保存失败",
+            "accessory_affix_receipt": "词条操作回执保存失败",
+            "accessory_wash_stone": "洗练石扣除未能保存",
+            "accessory_wash_state": "洗练状态保存失败",
+            "accessory_wash_receipt": "洗练操作回执保存失败",
+            "accessory_decompose_stone": "分解所得洗练石未能保存",
+            "accessory_decompose_state": "分解状态保存失败",
+            "accessory_decompose_receipt": "分解操作回执保存失败",
+        }
+        for stage, phrase in stages.items():
+            code = stage + "_write_rejected"
+            with self.subTest(reason=code):
+                reply = result_failure("操作", {"status": "state_changed", "reason": code, "subject": "actor"})
+                self.assertIn(phrase, reply)
+                self.assertTrue(reply.startswith("操作：发起方，"))
+                self.assertNotIn("数据已变化", reply)
+                self.assertNotIn("未知错误", reply)
 
 
 class BankReasonChainTests(unittest.TestCase):
