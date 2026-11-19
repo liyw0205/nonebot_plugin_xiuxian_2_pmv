@@ -4327,7 +4327,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "inactive_owner_profile_application_owned": "sect_application.get_inactive_owner_user_profile(owner_id)" in sect_inactive_owner_handler and "_sql_message().get_user_info_with_id(owner_id)" not in sect_inactive_owner_handler,
             "inactive_owner_profile_repository_owned": "def get_owner_profile(" in sect_inactive_owner_repository and "ORDER BY rowid ASC LIMIT 1" in sect_inactive_owner_repository,
             "inactive_owner_reads_fully_feature_owned": "_sql_message()" not in sect_inactive_owner_handler,
-            "sect_member_list_application_owned": "_sql_message().get_all_users_by_sect_id(" not in sect_facade and sect_facade.count("sect_application.list_sect_members(") >= 6,
+            "sect_member_list_application_owned": "_sql_message().get_all_users_by_sect_id(" not in sect_facade and (sect_facade.count("sect_application.list_sect_members(") + sect_member_utils.count("sect_application.list_sect_members(")) >= 6,
             "sect_member_list_repository_owned": "SectMemberSqlRepository" in sect_application and "def list_by_sect_id(" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
             "sect_member_list_read_only": "read_only=True" in sect_member_repository and "CREATE TABLE" not in sect_member_repository,
             "sect_member_utils_application_injected": "sect_app=sect_application" in sect_facade and "if sect_app is None:" in sect_member_utils and "raise ValueError(\"sect_app is required\")" in sect_member_utils,

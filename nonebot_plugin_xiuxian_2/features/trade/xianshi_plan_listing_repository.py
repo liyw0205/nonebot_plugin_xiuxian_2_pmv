@@ -83,6 +83,22 @@ class XianshiPlanListingSqlRepository:
         )
 
     @staticmethod
+    def _matches_exact_projection(row: Mapping[str, Any] | None, expected: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            if key in {"price", "fee_charged"}:
+                try:
+                    field = "listing_price" if key == "price" else "listing_fee"
+                    if require_exact_integer(row[key], field=field, subject="listing") != value:
+                        return False
+                except (KeyError, TypeError, ValueError):
+                    return False
+            elif key not in row or row[key] != value:
+                return False
+        return True
+
+    @staticmethod
     def _release_savepoint(uow: DatabaseUnitOfWork) -> None:
         uow.execute('RELEASE SAVEPOINT "xianshi_plan_listing"')
 
@@ -314,7 +330,7 @@ class XianshiPlanListingSqlRepository:
                             "price": entry["price"],
                             "quantity": 1,
                         }
-                        if listing_write.rowcount != 1 or saved_listing != expected_listing:
+                        if listing_write.rowcount != 1 or not self._matches_exact_projection(saved_listing, expected_listing):
                             return self._reject_write(
                                 uow,
                                 self._result("listed", seller_id, item_count),
@@ -347,7 +363,7 @@ class XianshiPlanListingSqlRepository:
                 "fee_charged": fee,
                 "stamina_cost": stamina_cost,
             }
-            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+            if receipt_write.rowcount != 1 or not self._matches_exact_projection(saved_receipt, expected_receipt):
                 return self._reject_write(
                     uow,
                     self._result("listed", seller_id, item_count),
@@ -372,7 +388,7 @@ class XianshiPlanListingSqlRepository:
                     "SELECT id,user_id,goods_id,name,type,price,quantity FROM xianshi_item WHERE id=?",
                     (listing_id,),
                 )
-                if saved_listing != listing_expected[listing_id]:
+                if not self._matches_exact_projection(saved_listing, listing_expected[listing_id]):
                     return self._reject_write(
                         uow,
                         self._result("listed", seller_id, item_count),

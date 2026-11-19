@@ -372,7 +372,7 @@ class ArenaSeasonRewardRepository:
                     inserted = uow.execute(
                         "INSERT INTO arena_season_reward_operations "
                         "(operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned) "
-                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'arena_honor','actor'),?)",
+                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'arena_honor','actor'),xiuxian_int_store(?,'arena_honor','actor'))",
                         (operation_id, payload, season_key, user_id, total_reward, honor_points, total_honor),
                     )
                     if inserted.rowcount != 1 or not self._matches(

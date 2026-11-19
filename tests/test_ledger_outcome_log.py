@@ -11,6 +11,7 @@ operation_id 或 audit_category。根因是 `emit()` 把字段 `logger.bind(**pa
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -140,6 +141,25 @@ class LedgerEmitTests(unittest.TestCase):
         self.assertIn("status=failed", message)
         self.assertIn("code=internal_error", message)
         self.assertIn("category=failure", message)
+
+    def test_audit_projection_compares_the_json_encoded_shape(self) -> None:
+        outcome = OperationOutcome.applied(
+            "op-json-shape",
+            "pet.travel_claim",
+            after={"rewards": ((1, 2),)},
+            granted={"items": ((1001, 3), (1002, 1))},
+        )
+
+        self._finish(outcome)
+
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT after_json,granted_json FROM operation_audit "
+                "WHERE operation_id=? AND action=?",
+                (outcome.operation_id, outcome.action),
+            )
+        self.assertEqual({"rewards": [[1, 2]]}, json.loads(row["after_json"]))
+        self.assertEqual({"items": [[1001, 3], [1002, 1]]}, json.loads(row["granted_json"]))
 
     def test_audit_finish_rejection_rolls_back_ledger_and_does_not_emit_success(self) -> None:
         failures = (

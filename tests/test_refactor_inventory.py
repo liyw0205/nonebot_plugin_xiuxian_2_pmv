@@ -21,11 +21,22 @@ class RefactorInventoryTests(unittest.TestCase):
                 'def query():\n'
                 '    """Read from decoy_function_docs."""\n'
                 '    sql = "CREATE TABLE IF NOT EXISTS actual_table (id INTEGER)"\n'
+                '    error = "partner usage update did not persist exactly"\n'
+                '    trigger_error = "join receipt failed"\n'
+                '    qualified = "SELECT * FROM game_data.user_xiuxian AS profile JOIN player_data.partner AS partner ON 1=1"\n'
+                '    update = "UPDATE player_data.actual_table SET value=1"\n'
+                '    quoted_create = \'CREATE TABLE "quoted_create" (id INTEGER)\'\n'
+                '    quoted_read = \'SELECT * FROM "quoted_read" WHERE id=1\'\n'
+                '    quoted_insert = \'INSERT INTO main."quoted_insert" (id) VALUES(1)\'\n'
+                '    quoted_update = \'UPDATE OR IGNORE main."quoted_update" SET id=1\'\n'
                 '    return f"SELECT * FROM actual_table JOIN second_table ON 1=1 WHERE id={1}"\n',
                 encoding="utf-8",
             )
             with patch.object(export_refactor_inventory, "PACKAGE", root):
-                self.assertEqual(["actual_table", "second_table"], export_refactor_inventory._database_tables())
+                self.assertEqual(
+                    ["actual_table", "partner", "quoted_create", "quoted_insert", "quoted_read", "quoted_update", "second_table", "user_xiuxian"],
+                    export_refactor_inventory._database_tables(),
+                )
 
     def test_checked_in_inventory_matches_source(self) -> None:
         path = ROOT / "docs" / "refactor_inventory.json"

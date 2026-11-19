@@ -108,7 +108,13 @@ def _legacy_jobs() -> list[str]:
 
 
 _TABLE_RE = re.compile(
-    r"\b(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|FROM|JOIN|INTO|UPDATE)\s+[`\"']?([A-Za-z_][A-Za-z0-9_]*)",
+    r"\bCREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?[`\"']?([A-Za-z_][A-Za-z0-9_]*)[`\"']?\s*\("
+    r"|\b(?:FROM|JOIN)\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?[`\"']?([A-Za-z_][A-Za-z0-9_]*)[`\"']?"
+    r"(?=\s*(?:\(|[,;)]|$)|\s+(?:(?:AS\s+)?[A-Za-z_][A-Za-z0-9_]*\s+)?"
+    r"(?:ON|USING|WHERE|JOIN|LEFT|RIGHT|INNER|CROSS|FULL|GROUP|ORDER|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT|INDEXED|NOT)\b)"
+    r"|\bINTO\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?[`\"']?([A-Za-z_][A-Za-z0-9_]*)[`\"']?(?=\s*(?:\(|[,;)]|$)|\s+(?:VALUES|SELECT|DEFAULT)\b)"
+    r"|\bUPDATE(?:\s+OR\s+(?:ROLLBACK|ABORT|REPLACE|FAIL|IGNORE))?\s+"
+    r"(?:[A-Za-z_][A-Za-z0-9_]*\.)?[`\"']?([A-Za-z_][A-Za-z0-9_]*)[`\"']?(?=\s+(?:AS\s+[A-Za-z_][A-Za-z0-9_]*\s+)?SET\b)",
     re.IGNORECASE,
 )
 
@@ -131,7 +137,12 @@ def _database_tables() -> list[str]:
         # must not become table names when source changes.
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
-                tables.update(match.group(1).lower() for match in _TABLE_RE.finditer(node.value))
+                tables.update(
+                    group.lower()
+                    for match in _TABLE_RE.finditer(node.value)
+                    for group in match.groups()
+                    if group is not None
+                )
     return sorted(tables)
 
 
