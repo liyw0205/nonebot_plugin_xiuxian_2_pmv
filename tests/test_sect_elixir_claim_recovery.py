@@ -10,7 +10,7 @@ import pytest
 from nonebot.exception import FinishedException, ProcessException
 
 from tests.test_sect_elixir_claim_transaction import make_database
-from nonebot_plugin_xiuxian_2.core.errors import DomainError, OperationConflictError
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
 from nonebot_plugin_xiuxian_2.features.sect.repository import SectRenameSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
@@ -129,8 +129,18 @@ def test_started_request_and_generated_rewards_can_resume_but_explicit_payload_c
     with DatabaseUnitOfWork(database) as uow:
         app.ledger.begin(uow, 'claim', 'sect.claim_elixir', {k: v for k, v in REQUEST.items() if k != 'operation_id'})
     assert app.claim_elixir(**REQUEST).ok
-    with pytest.raises(OperationConflictError):
-        app.claim_elixir(**{**REQUEST, 'rewards': [REWARDS[0]]})
+    before = snapshot(database)
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        ledger_before = uow.query_all('SELECT * FROM operation_ledger')
+        audit_before = uow.query_all('SELECT * FROM operation_audit')
+    conflict = app.claim_elixir(**{**REQUEST, 'rewards': [REWARDS[0]]})
+    assert not conflict.ok and not conflict.replayed
+    assert (conflict.status, conflict.code) == ('rejected', 'operation_conflict')
+    assert conflict.data == {'status': 'operation_conflict', 'reason': 'operation_conflict', 'subject': 'actor'}
+    assert snapshot(database) == before
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert uow.query_all('SELECT * FROM operation_ledger') == ledger_before
+        assert uow.query_all('SELECT * FROM operation_audit') == audit_before
     with DatabaseUnitOfWork(database) as uow:
         uow.execute('UPDATE user_xiuxian SET sect_elixir_get=0')
     install_fault(database, 'receipt', 'ignore')
