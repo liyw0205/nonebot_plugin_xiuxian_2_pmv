@@ -493,6 +493,79 @@ def register(case):
         probe.evidence.update(set_name="烈阳", actual_rows=len(instances), equipped=1, readonly=after == before)
 
     @case(
+        "accessory-detail-owned-readonly",
+        "查看饰品",
+        "合法背包/已装备UID、空白/错误UID",
+        "随包实际饰品、三阶词条和锁定与隔离game/player SQLite",
+        "完整详情正确、重复和拒绝查询均不写完整文档/资产/回执",
+        group="remaining-player-parameters",
+    )
+    async def accessory_detail_owned_readonly(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        equipped_item, bag_item, empty_item = seed_accessory_document(
+            probe, [19001, 19002, 19101], equipped_slots=("手镯",),
+        )
+        for item in (equipped_item, bag_item):
+            item.update(quality=3, wash_count=149, locked_affixes=[0], affixes=[
+                {"type": "攻击", "value": 0.12}, {"type": "速度", "value": 20},
+            ])
+        equipped = {"手镯": equipped_item, "戒指": None, "手环": None, "项链": None}
+        probe.seed(player, "UPDATE player_accessory SET equipped=?,bag=? WHERE user_id='900001'",
+                   (json.dumps(equipped, ensure_ascii=False), json.dumps([bag_item, empty_item], ensure_ascii=False)))
+        foreign_item = dict(bag_item, uid="another-player-accessory")
+        probe.managers[1].save_doc(
+            "900002", "player_accessory", {"equipped": {}, "bag": [foreign_item]},
+            fields=["equipped", "bag"], dirty_check=False,
+        )
+
+        def snapshot():
+            return (
+                probe.rows(player, "SELECT * FROM player_accessory ORDER BY user_id"),
+                probe.rows(game, "SELECT * FROM accessory_transaction_operations ORDER BY operation_id"),
+                balances(probe), backpack(probe),
+            )
+
+        before = snapshot()
+        for number, (item, location) in enumerate((
+            (equipped_item, "已装备（手镯）"), (bag_item, "背包"),
+        ), start=970860):
+            probe.clear_cooldowns()
+            request = f"查看饰品  {item['uid']}  "
+            reply = await probe.command("查看饰品", request, number=number)
+            for phrase in (
+                "【饰品详情】", f"名称：{item['name']}", f"UID：{item['uid']}",
+                "品阶：三阶", f"部位：{item['part']}", "套装：烈阳", f"状态：{location}",
+                "当前洗练次数：149/150", "词条槽位：2/2", "锁定词条：1",
+                "下次洗练消耗：洗练石x8", "1. 攻击：+12.0%（已锁定）", "2. 速度：+20点",
+                "【套装效果】", "2件：", "4件：",
+            ):
+                assert phrase in reply, (phrase, reply)
+            assert snapshot() == before
+            probe.clear_cooldowns()
+            replay = await probe.command("查看饰品", request, number=number)
+            assert replay == reply and snapshot() == before
+
+        probe.clear_cooldowns()
+        empty = await probe.command("查看饰品", f"查看饰品 {empty_item['uid']}", number=970862)
+        assert "- 无词条" in empty and "锁定词条：无" in empty
+        assert "当前洗练次数：0/150" in empty and "下次洗练消耗：洗练石x1" in empty
+        assert snapshot() == before
+        for number, (arguments, phrase) in enumerate((
+            ("", "用法：查看饰品"), ("missing-accessory", "未找到该饰品UID"),
+            (foreign_item["uid"], "未找到该饰品UID"),
+        ), start=970863):
+            probe.clear_cooldowns()
+            rejected = await probe.command("查看饰品", f"查看饰品 {arguments}", number=number)
+            assert phrase in rejected and "【饰品详情】" not in rejected, rejected
+            assert snapshot() == before
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(
+            equipped_uid=equipped_item["uid"], bag_uid=bag_item["uid"],
+            affixes_and_locks=True, foreign_uid_rejected=True, readonly=True, repeat_unchanged=True,
+        )
+
+    @case(
         "accessory-equip-write-rejection",
         "装备饰品",
         "有效背包UID",
