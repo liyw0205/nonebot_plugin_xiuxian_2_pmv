@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.back.accessory_quick_equip_application import (
     AccessoryQuickEquipApplication,
@@ -140,6 +141,90 @@ class AccessoryQuickEquipApplicationTests(unittest.TestCase):
             with sqlite3.connect(player) as conn:
                 columns = {row[1] for row in conn.execute("PRAGMA table_info(player_accessory)")}
             self.assertNotIn("preset_1", columns)
+
+    def snapshot(self):
+        with sqlite3.connect(self.player) as conn:
+            state = conn.execute("SELECT * FROM player_accessory").fetchall()
+        with sqlite3.connect(self.game) as conn:
+            receipts = conn.execute("SELECT * FROM accessory_transaction_operations").fetchall()
+        return state, receipts
+
+    def assert_rejected_write(self, database, event, fault, reason):
+        before = self.snapshot()
+        with sqlite3.connect(database) as conn:
+            conn.execute("CREATE TABLE isolated_quick_equip_effect(effect INTEGER)")
+            conn.execute(
+                f"CREATE TRIGGER reject_quick_equip {event} BEGIN "
+                f"INSERT INTO isolated_quick_equip_effect VALUES(1); {fault}; END"
+            )
+        result = self.application.equip("rejected-switch", "u", 1, self.equipped, self.bag, self.preset)
+        self.assertEqual((result.status, result.reason), ("failed", reason))
+        self.assertEqual(result.subject, "preset:1")
+        self.assertEqual(self.snapshot(), before)
+        with sqlite3.connect(database) as conn:
+            self.assertEqual(conn.execute("SELECT * FROM isolated_quick_equip_effect").fetchall(), [])
+            conn.execute("DROP TRIGGER reject_quick_equip")
+        recovered = self.application.equip("rejected-switch", "u", 1, self.equipped, self.bag, self.preset)
+        self.assertEqual(recovered.status, "applied")
+        self.assertEqual(self.state()[0]["手镯"], self.target)
+        self.assertEqual(self.state()[1], [self.old])
+        self.assertIsNone(self.state()[2]["项链"])
+        after = self.snapshot()
+        replay = self.application.replay("rejected-switch")
+        self.assertEqual((replay.status, replay.details), ("duplicate", recovered.details))
+        self.assertEqual(self.snapshot(), after)
+        for database in (self.game, self.player):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(uow.query_one("PRAGMA integrity_check"), {"integrity_check": "ok"})
+
+    def test_state_ignore_does_not_record_a_successful_switch(self):
+        self.assert_rejected_write(
+            self.player, "BEFORE UPDATE OF equipped ON player_accessory", "SELECT RAISE(IGNORE)",
+            "accessory_quick_equip_state_write_rejected",
+        )
+
+    def test_state_rewrite_rolls_back_the_entire_switch(self):
+        self.assert_rejected_write(
+            self.player, "AFTER UPDATE OF equipped ON player_accessory",
+            "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+            "accessory_quick_equip_state_projection_mismatch",
+        )
+
+    def test_other_presets_cannot_be_rewritten_during_switch(self):
+        self.assert_rejected_write(
+            self.player, "AFTER UPDATE OF equipped ON player_accessory",
+            "UPDATE player_accessory SET preset_2='{}' WHERE user_id=NEW.user_id",
+            "accessory_quick_equip_state_projection_mismatch",
+        )
+
+    def test_receipt_ignore_rolls_back_equipment_and_preset_cleanup(self):
+        self.assert_rejected_write(
+            self.game, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+            "accessory_quick_equip_receipt_write_rejected",
+        )
+
+    def test_receipt_rewrite_rolls_back_equipment_and_preset_cleanup(self):
+        self.assert_rejected_write(
+            self.game, "AFTER INSERT ON accessory_transaction_operations",
+            "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+            "accessory_quick_equip_receipt_projection_mismatch",
+        )
+
+    def test_final_receipt_step_cannot_change_equipment(self):
+        execute = AttachedDatabaseUnitOfWork.execute
+
+        def corrupt_equipment(uow, sql, parameters=()):
+            cursor = execute(uow, sql, parameters)
+            if sql.startswith("INSERT INTO accessory_transaction_operations"):
+                execute(uow, "UPDATE player_data.player_accessory SET equipped='{}' WHERE user_id='u'")
+            return cursor
+
+        before = self.snapshot()
+        with patch.object(AttachedDatabaseUnitOfWork, "execute", corrupt_equipment):
+            result = self.application.equip("final-switch", "u", 1, self.equipped, self.bag, self.preset)
+        self.assertEqual((result.status, result.reason, result.subject),
+                         ("failed", "accessory_quick_equip_state_projection_mismatch", "preset:1"))
+        self.assertEqual(self.snapshot(), before)
 
 
 if __name__ == "__main__":

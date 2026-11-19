@@ -49,6 +49,12 @@
 已知拒写携 `subject=preset:序号` 整笔回滚，玩家回复保留具体原因和预设编号；
 解除故障后同消息可恢复，成功回执重放不再写入。未知 SQLite 异常原样透传并回滚，
 并发竞争仍按装备/原预设快照拒绝，不改保存或装备规则。
+
+`快速装备饰品 1/2/3` 同样在立即 attached 事务内一次保存换装后的装备、背包、清理后的预设与永久回执。
+状态和回执分别核影响行数与最终投影，并在回执后复核完整玩家文档；拒写/改写保留
+`accessory_quick_equip_state_write_rejected` / `...state_projection_mismatch` /
+`...receipt_write_rejected` / `...receipt_projection_mismatch` 和预设编号，整笔回滚后可同消息恢复。
+正常换装、已经装备时跳过、失效 UID 清理和空预设拒绝保持；成功回执优先重放，不重复换装。
 ## 定时任务
 既有 `daily_reset_day_num` 仍由 scheduler 在每日零点执行，写入改由
 `DailyPillUsageResetApplication -> DailyPillUsageResetSqlRepository` 承担。按 scheduler 时区生成
@@ -64,6 +70,8 @@ Web 和命令适配器不直接写库存。
 - `python -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/back/tests/test_daily_pill_usage_reset.py -q`
 - `python -m pytest -q tests/test_accessory_preset_application.py tests/test_accessory_preset_parameter_dispatch.py`：
   隔离 SQLite、真实 matcher 参数/别名、拒写/改写/ABORT、恢复/重放与 OneBot/QQ 消息 mock；不代表真实 QQ 联调。
+- `python -m pytest -q tests/test_accessory_quick_equip_application.py tests/test_accessory_quick_equip_parameter_dispatch.py`：
+  隔离换装/回执投影、状态和回执拒写/改写/ABORT、恢复与重放、1/2/3/空预设/非法参数及 OneBot/QQ 消息 mock。
 ## 灰度开关、回滚和已知限制
 关闭开关回退旧背包入口；通用 Web 批处理只负责原子扣除背包物品，具体物品效果仍由各领域 handler/application 维护。
 

@@ -1520,14 +1520,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             deepcopy(preset),
         )
         if not equip_result.succeeded:
-            messages = {
-                "preset_empty": f"饰品预设{preset_idx}为空，无法快速装备。",
-                "state_changed": _acc_fail_msg(equip_result, action="切换预设"),
-            }
+            from ..command_guard import result_failure
+
+            message = (
+                f"饰品预设{preset_idx}为空，无法快速装备。"
+                if equip_result.status == "preset_empty"
+                else result_failure(
+                    "切换预设", equip_result,
+                    subjects={f"preset:{preset_idx}": f"饰品预设{preset_idx}"},
+                )
+            )
             await handle_send(
-                bot,
-                event,
-                messages.get(equip_result.status, f"快速装备饰品失败（{equip_result.status}）"),
+                bot, event, message,
             )
             return
 

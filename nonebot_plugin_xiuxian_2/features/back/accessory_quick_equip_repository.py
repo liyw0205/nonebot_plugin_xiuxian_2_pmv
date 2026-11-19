@@ -13,6 +13,12 @@ from .accessory_quick_equip_domain import (
 )
 
 
+class _QuickEquipWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str):
+        self.reason = reason
+        self.subject = subject
+
+
 class AccessoryQuickEquipSqlRepository:
     """Atomically apply a preset equipment switch and clean missing UIDs."""
 
@@ -42,6 +48,23 @@ class AccessoryQuickEquipSqlRepository:
     def _normalize_equipped(value: Any) -> dict[str, Any]:
         source = value if isinstance(value, dict) else {}
         return {slot: source.get(slot) for slot in SLOTS}
+
+    @classmethod
+    def _state_matches(
+        cls, row: dict[str, Any] | None, expected: dict[str, Any], column: str,
+    ) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            if key in {"equipped", "bag", column}:
+                try:
+                    if cls._json(json.loads(row[key])) != cls._json(json.loads(value)):
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif row[key] != value:
+                return False
+        return True
 
     @classmethod
     def _result(cls, status: str, result_json: str) -> AccessoryQuickEquipChange:
@@ -87,71 +110,101 @@ class AccessoryQuickEquipSqlRepository:
             "expected_preset": plan.expected_preset,
         }
         payload_json = self._json(payload)
-        with AttachedDatabaseUnitOfWork(
-            self.game_database,
-            attachments={"player_data": self.player_database},
-            immediate=True,
-        ) as uow:
-            previous = uow.query_one(
-                "SELECT action,payload,result_json FROM accessory_transaction_operations "
-                "WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["action"]) != "quick_equip_preset" or str(previous["payload"]) != payload_json:
-                    return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="operation_conflict")
-                return self._result("duplicate", str(previous["result_json"]))
+        subject = f"preset:{plan.preset_idx}"
+        receipt_sql = (
+            "SELECT action,payload,result_json FROM accessory_transaction_operations WHERE operation_id=?"
+        )
+        state_sql = "SELECT * FROM player_data.player_accessory WHERE user_id=?"
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(receipt_sql, (operation_id,))
+                if previous is not None:
+                    if str(previous["action"]) != "quick_equip_preset" or str(previous["payload"]) != payload_json:
+                        return AccessoryQuickEquipChange(
+                            "state_changed", "quick_equip_preset", user_id,
+                            reason="operation_conflict", subject=subject,
+                        )
+                    return self._result("duplicate", str(previous["result_json"]))
 
-            columns = {
-                str(item[1])
-                for item in uow.execute("PRAGMA player_data.table_info(player_accessory)").fetchall()
-            }
-            if column not in columns:
-                return AccessoryQuickEquipChange("schema_missing", "quick_equip_preset", user_id)
-            row = uow.query_one(
-                f"SELECT equipped,bag,{column} FROM player_data.player_accessory WHERE user_id=?",
-                (user_id,),
-            )
-            if row is None:
-                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="accessory_missing")
-            current_equipped = self._normalize_equipped(self._decode(row["equipped"], dict))
-            current_bag = self._decode(row["bag"], list)
-            current_preset = normalize_preset(self._decode(row[column], dict))
-            if (
-                self._json(current_equipped) != self._json(plan.expected_equipped)
-                or self._json(current_bag) != self._json(plan.expected_bag)
-                or self._json(current_preset) != self._json(plan.expected_preset)
-            ):
-                return AccessoryQuickEquipChange("state_changed", "quick_equip_preset", user_id, reason="accessory_equipped_changed" if self._json(current_equipped) != self._json(plan.expected_equipped) else "accessory_bag_changed" if self._json(current_bag) != self._json(plan.expected_bag) else "accessory_preset_changed")
-
-            if plan.details is None or self._json(normalize_preset(plan.preset)) != self._json(normalize_preset(plan.details.get("preset", {}))):
-                return AccessoryQuickEquipChange("invalid_plan", "quick_equip_preset", user_id)
-            uow.execute(
-                f"UPDATE player_data.player_accessory SET equipped=?,bag=?,{column}=? WHERE user_id=?",
-                (
-                    json.dumps(plan.equipped, ensure_ascii=False),
-                    json.dumps(plan.bag, ensure_ascii=False),
-                    json.dumps(plan.preset, ensure_ascii=False),
-                    user_id,
-                ),
-            )
-            result_json = self._json(
-                {
-                    "action": "quick_equip_preset",
-                    "user_id": user_id,
-                    "affected": plan.affected,
-                    "stone_delta": 0,
-                    "accessory": None,
-                    "details": plan.details,
+                columns = {
+                    str(item[1])
+                    for item in uow.execute("PRAGMA player_data.table_info(player_accessory)").fetchall()
                 }
-            )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, "quick_equip_preset", payload_json, result_json),
-            )
+                if column not in columns:
+                    return AccessoryQuickEquipChange("schema_missing", "quick_equip_preset", user_id)
+                row = uow.query_one(state_sql, (user_id,))
+                if row is None:
+                    return AccessoryQuickEquipChange(
+                        "state_changed", "quick_equip_preset", user_id,
+                        reason="accessory_missing", subject=subject,
+                    )
+                current_equipped = self._normalize_equipped(self._decode(row["equipped"], dict))
+                current_bag = self._decode(row["bag"], list)
+                current_preset = normalize_preset(self._decode(row[column], dict))
+                if (
+                    self._json(current_equipped) != self._json(plan.expected_equipped)
+                    or self._json(current_bag) != self._json(plan.expected_bag)
+                    or self._json(current_preset) != self._json(plan.expected_preset)
+                ):
+                    return AccessoryQuickEquipChange(
+                        "state_changed", "quick_equip_preset", user_id,
+                        reason="accessory_equipped_changed"
+                        if self._json(current_equipped) != self._json(plan.expected_equipped)
+                        else "accessory_bag_changed"
+                        if self._json(current_bag) != self._json(plan.expected_bag)
+                        else "accessory_preset_changed",
+                        subject=subject,
+                    )
+
+                if plan.details is None or self._json(normalize_preset(plan.preset)) != self._json(normalize_preset(plan.details.get("preset", {}))):
+                    return AccessoryQuickEquipChange("invalid_plan", "quick_equip_preset", user_id)
+                expected_state = dict(row)
+                expected_state.update(
+                    equipped=json.dumps(plan.equipped, ensure_ascii=False),
+                    bag=json.dumps(plan.bag, ensure_ascii=False),
+                )
+                expected_state[column] = json.dumps(plan.preset, ensure_ascii=False)
+                write = uow.execute(
+                    f"UPDATE player_data.player_accessory SET equipped=?,bag=?,{column}=? WHERE user_id=?",
+                    (expected_state["equipped"], expected_state["bag"], expected_state[column], user_id),
+                )
+                if write.rowcount != 1:
+                    raise _QuickEquipWriteRejected("accessory_quick_equip_state_write_rejected", subject)
+                if not self._state_matches(uow.query_one(state_sql, (user_id,)), expected_state, column):
+                    raise _QuickEquipWriteRejected("accessory_quick_equip_state_projection_mismatch", subject)
+                result_json = self._json(
+                    {
+                        "action": "quick_equip_preset",
+                        "user_id": user_id,
+                        "affected": plan.affected,
+                        "stone_delta": 0,
+                        "accessory": None,
+                        "details": plan.details,
+                    }
+                )
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations "
+                    "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                    (operation_id, "quick_equip_preset", payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _QuickEquipWriteRejected("accessory_quick_equip_receipt_write_rejected", subject)
+                if uow.query_one(receipt_sql, (operation_id,)) != {
+                    "action": "quick_equip_preset", "payload": payload_json, "result_json": result_json,
+                }:
+                    raise _QuickEquipWriteRejected("accessory_quick_equip_receipt_projection_mismatch", subject)
+                if not self._state_matches(uow.query_one(state_sql, (user_id,)), expected_state, column):
+                    raise _QuickEquipWriteRejected("accessory_quick_equip_state_projection_mismatch", subject)
+                return AccessoryQuickEquipChange(
+                    "applied", "quick_equip_preset", user_id, plan.affected, plan.details, subject=subject,
+                )
+        except _QuickEquipWriteRejected as exc:
             return AccessoryQuickEquipChange(
-                "applied", "quick_equip_preset", user_id, plan.affected, plan.details
+                "failed", "quick_equip_preset", user_id, reason=exc.reason, subject=exc.subject,
             )
 
 

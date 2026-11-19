@@ -29,6 +29,7 @@ class AccessoryQuickEquipChange:
     affected: int = 0
     details: dict[str, Any] | None = None
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
