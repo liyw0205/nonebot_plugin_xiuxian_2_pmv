@@ -340,10 +340,8 @@ def test_runtime_expiry_job_has_single_instance_and_uses_worker(monkeypatch):
 
 
 def test_invite_handler_freezes_origin_before_assign_bot(application, monkeypatch):
+    from nonebot.exception import FinishedException
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as dungeon
-
-    class Finished(Exception):
-        pass
 
     event = SimpleNamespace(group_id="100", message_id="message", get_user_id=lambda: "leader")
     args = SimpleNamespace(extract_plain_text=lambda: "")
@@ -354,8 +352,8 @@ def test_invite_handler_freezes_origin_before_assign_bot(application, monkeypatc
     monkeypatch.setattr(dungeon, "dungeon_team_application", application)
     monkeypatch.setattr(dungeon, "runtime_clock", Clock(100))
     monkeypatch.setattr(dungeon, "handle_send", AsyncMock())
-    monkeypatch.setattr(dungeon.invite_team_cmd, "finish", AsyncMock(side_effect=Finished))
-    with pytest.raises(Finished):
+    monkeypatch.setattr(dungeon.invite_team_cmd, "finish", AsyncMock(side_effect=FinishedException))
+    with pytest.raises(FinishedException):
         asyncio.run(dungeon.invite_team_handler(SimpleNamespace(self_id="origin"), event, args))
     invite = application.pending_invite("member", 100)
     stored = application.invite_by_id(invite.invite_id)

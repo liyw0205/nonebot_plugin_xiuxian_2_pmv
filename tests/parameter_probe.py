@@ -400,6 +400,10 @@ from tests.parameter_cases_remaining import register as register_remaining
 
 register_remaining(case)
 
+from tests.parameter_cases_team_invite import register as register_team_invite
+
+register_team_invite(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

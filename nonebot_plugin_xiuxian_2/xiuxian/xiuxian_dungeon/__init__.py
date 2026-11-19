@@ -234,7 +234,13 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
         subjects = {}
         if action == "create" and getattr(result, "subject", ""):
             subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
-        return result_failure("创建队伍" if action == "create" else "队伍操作", result, subjects=subjects)
+        if action == "invite" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_invite_expiry_"):
+                subjects[result.subject] = f"旧邀请【{result.subject}】"
+            else:
+                target = _sql_message().get_user_info_with_id(result.target_id) or {}
+                subjects[result.subject] = f"被邀请者【{target.get('user_name', result.target_id)}】"
+        return result_failure({"create": "创建队伍", "invite": "邀请组队"}.get(action, "队伍操作"), result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -460,6 +466,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @invite_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("邀请组队")
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     notification_bot_id = str(bot.self_id)
     notification_scene = get_chat_scene(event)
@@ -472,11 +479,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "invite", user_id)
-    replay = dungeon_team_application.operation_result(operation_id, "invite")
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await invite_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -484,8 +486,15 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
-    team_id = dungeon_team_application.team_id_for_user(user_id) or ""
     group_id = str(getattr(event, "group_id", "") or "")
+    replay = dungeon_team_application.operation_result(operation_id, "invite")
+    if replay is not None:
+        if replay.target_id != target_user_id or replay.group_id != group_id:
+            replay = TeamMutationResult("state_changed", reason="operation_conflict", target_id=target_user_id, group_id=group_id)
+        await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await invite_team_cmd.finish()
+
+    team_id = dungeon_team_application.team_id_for_user(user_id) or ""
     now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
     result = dungeon_team_application.invite(
