@@ -70,3 +70,71 @@ def test_decompose_handler_keeps_reason_and_uid_across_adapter_delivery(adapter,
         reply = markdown_send.call_args.args[2]
     assert phrase in reply and uid in reply
     assert "已分解：" not in reply
+
+
+@pytest.mark.parametrize("adapter,markdown,fails", [
+    ("OneBot V11", False, False),
+    ("QQ", True, False),
+    ("QQ", True, True),
+])
+@pytest.mark.parametrize("reason,phrase", [
+    ("accessory_batch_decompose_stone_write_rejected", "分解所得洗练石未能保存"),
+    ("accessory_batch_decompose_stone_projection_mismatch", "分解所得洗练石与应得数量不一致"),
+    ("accessory_batch_decompose_state_write_rejected", "饰品快速分解状态保存失败"),
+    ("accessory_batch_decompose_state_projection_mismatch", "饰品快速分解状态与请求不一致"),
+    ("accessory_batch_decompose_receipt_write_rejected", "饰品快速分解操作回执保存失败"),
+    ("accessory_batch_decompose_receipt_projection_mismatch", "饰品快速分解操作回执不一致"),
+])
+def test_batch_decompose_handler_keeps_reason_and_uids_across_adapter_delivery(adapter, markdown, fails, reason, phrase):
+    uids = ("adapter-accessory-1", "adapter-accessory-2")
+    bag = [
+        {"uid": uid, "item_id": 19002, "name": "烈阳戒指", "part": "戒指", "set_type": "烈阳", "quality": 1}
+        for uid in uids
+    ]
+    subject = ",".join(uids)
+    event = SimpleNamespace(get_user_id=lambda: "900001", message_id=970701)
+    bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: adapter))
+    config = SimpleNamespace(
+        max_goods_num=999,
+        markdown_status=markdown,
+        markdown_id="",
+        markdown_id2="",
+        markdown_button_status=False,
+        at_sender=False,
+        message_optimization=False,
+        img=False,
+    )
+    result = AccessoryDecomposeChange(
+        "failed", "batch_decompose", "900001", reason=reason, subject=subject,
+    )
+    application = SimpleNamespace(
+        replay_batch=Mock(return_value=None),
+        batch_decompose=Mock(return_value=result),
+    )
+    plain = AsyncMock()
+    markdown_send = AsyncMock(side_effect=RuntimeError("isolated batch decompose delivery failure") if fails else None)
+    with (
+        patch.object(accessory, "check_user", return_value=(True, {"user_id": "900001"}, "")),
+        patch.object(accessory, "_get_data", return_value={"equipped": {}, "bag": bag}),
+        patch.object(accessory, "_decompose_application", return_value=application),
+        patch.object(accessory, "XiuConfig", return_value=config),
+        patch.object(accessory, "handle_send", utils.handle_send),
+        patch.object(utils, "XiuConfig", return_value=config),
+        patch.object(utils, "get_chat_scene", return_value="group"),
+        patch.object(utils, "is_group_event", return_value=True),
+        patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")),
+        patch.object(utils, "_send_event_message", plain),
+        patch.object(utils, "_send_markdown_or_keyboard", markdown_send),
+    ):
+        asyncio.run(accessory.quick_decompose_accessory.handlers[0].call(
+            bot, event, SimpleNamespace(extract_plain_text=lambda: "烈阳 1"),
+        ))
+    application.batch_decompose.assert_called_once()
+    if adapter == "OneBot V11" or not markdown or fails:
+        plain.assert_awaited_once()
+        reply = str(plain.call_args.kwargs["message"])
+    else:
+        markdown_send.assert_awaited_once()
+        reply = markdown_send.call_args.args[2]
+    assert phrase in reply and subject in reply
+    assert "快速分解完成：" not in reply

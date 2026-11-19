@@ -691,6 +691,12 @@ REASONS = {
     "accessory_decompose_state_projection_mismatch": "饰品分解状态与请求不一致，本次分解已撤销，请联系管理员核对。",
     "accessory_decompose_receipt_write_rejected": "饰品分解操作回执保存失败，本次分解已撤销，请稍后重试。",
     "accessory_decompose_receipt_projection_mismatch": "饰品分解操作回执不一致，本次分解已撤销，请联系管理员核对。",
+    "accessory_batch_decompose_stone_write_rejected": "分解所得洗练石未能保存，本次快速分解已撤销，请稍后重试。",
+    "accessory_batch_decompose_stone_projection_mismatch": "分解所得洗练石与应得数量不一致，本次快速分解已撤销，请联系管理员核对。",
+    "accessory_batch_decompose_state_write_rejected": "饰品快速分解状态保存失败，本次快速分解已撤销，请稍后重试。",
+    "accessory_batch_decompose_state_projection_mismatch": "饰品快速分解状态与请求不一致，本次快速分解已撤销，请联系管理员核对。",
+    "accessory_batch_decompose_receipt_write_rejected": "饰品快速分解操作回执保存失败，本次快速分解已撤销，请稍后重试。",
+    "accessory_batch_decompose_receipt_projection_mismatch": "饰品快速分解操作回执不一致，本次快速分解已撤销，请联系管理员核对。",
 }
 
 

@@ -1240,6 +1240,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
+    operation_id = _accessory_operation_id(event, "batch-decompose", user_id, f"{t}:{q_text}")
+    replay = _decompose_application().replay_batch(operation_id)
+    if replay is not None:
+        if not replay.succeeded:
+            await handle_send(bot, event, _acc_fail_msg(replay, action="快速分解", subject=replay.subject))
+            return
+        await handle_send(
+            bot, event,
+            f"快速分解完成：{replay.affected}件\n筛选：{t} / {q_text}\n获得{WASH_STONE_NAME}：{replay.stone_delta}个",
+            md_type="背包", k1="饰品", v1="饰品背包", k2="背包", v2="我的背包"
+        )
+        return
     data = _get_data(user_id)
     bag = data.get("bag", [])
 
@@ -1273,9 +1285,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     selected_uids = [str(acc.get("uid", "")) for acc in hit]
-    target_key = f"{t}:{q_text}:{','.join(selected_uids)}"
     result = _decompose_application().batch_decompose(
-        _accessory_operation_id(event, "batch-decompose", user_id, target_key),
+        operation_id,
         user_id,
         deepcopy(bag),
         selected_uids,
@@ -1288,7 +1299,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"快速分解失败：{WASH_STONE_NAME}已达背包上限")
         return
     if not result.succeeded:
-        await handle_send(bot, event, _acc_fail_msg(result, action="快速分解"))
+        await handle_send(bot, event, _acc_fail_msg(result, action="快速分解", subject=",".join(selected_uids)))
         return
 
     await handle_send(

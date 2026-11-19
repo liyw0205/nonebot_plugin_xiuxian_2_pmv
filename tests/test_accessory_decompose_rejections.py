@@ -31,10 +31,13 @@ from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
          "accessory_decompose_stone_projection_mismatch"),
     ],
 )
-def test_single_decompose_known_write_rejections_roll_back_and_recover(tmp_path, database, event, fault, reason):
+@pytest.mark.parametrize("batch", [False, True], ids=["single", "batch"])
+def test_decompose_known_write_rejections_roll_back_and_recover(tmp_path, database, event, fault, reason, batch):
     game, player = tmp_path / "game.db", tmp_path / "player.db"
     target = {"uid": "acc-1", "name": "测试戒指", "quality": 4, "affixes": []}
     other = dict(target, uid="acc-2")
+    keep = dict(target, uid="acc-3")
+    expected_bag = [target, other, keep] if batch else [target, other]
     with sqlite3.connect(game) as connection:
         connection.execute(
             "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,"
@@ -44,10 +47,16 @@ def test_single_decompose_known_write_rejections_roll_back_and_recover(tmp_path,
     with sqlite3.connect(player) as connection:
         connection.execute("CREATE TABLE player_accessory(user_id TEXT PRIMARY KEY,equipped TEXT,bag TEXT)")
         connection.execute("INSERT INTO player_accessory VALUES(?,?,?)",
-                           ("u", "{}", json.dumps([target, other], ensure_ascii=False)))
+                           ("u", "{}", json.dumps(expected_bag, ensure_ascii=False)))
     with DatabaseUnitOfWork(game) as uow:
         apply_accessory_affix_operations(uow)
     application = AccessoryDecomposeApplication(game, player)
+
+    def perform():
+        if batch:
+            return application.batch_decompose("op", "u", expected_bag, ("acc-1", "acc-2"),
+                                               20023, "洗练石", 6, 100)
+        return application.decompose("op", "u", "acc-1", target, 20023, "洗练石", 3, 100)
 
     def snapshot():
         with DatabaseUnitOfWork(game, read_only=True) as uow:
@@ -63,16 +72,19 @@ def test_single_decompose_known_write_rejections_roll_back_and_recover(tmp_path,
         connection.execute(f"CREATE TRIGGER reject_decompose {event} "
                            f"BEGIN INSERT INTO isolated_effect VALUES(1); {fault}; END")
     before = snapshot()
-    result = application.decompose("op", "u", "acc-1", target, 20023, "洗练石", 3, 100)
-    assert (result.status, result.reason, getattr(result, "subject", "")) == ("failed", reason, "acc-1")
+    result = perform()
+    expected_reason = reason.replace("accessory_decompose", "accessory_batch_decompose") if batch else reason
+    subject = "acc-1,acc-2" if batch else "acc-1"
+    assert (result.status, result.reason, getattr(result, "subject", "")) == ("failed", expected_reason, subject)
     assert snapshot() == before
     with sqlite3.connect(selected_database) as connection:
         assert connection.execute("SELECT * FROM isolated_effect").fetchall() == []
         connection.execute("DROP TRIGGER reject_decompose")
-    recovered = application.decompose("op", "u", "acc-1", target, 20023, "洗练石", 3, 100)
+    recovered = perform()
     assert recovered.status == "applied"
     after = snapshot()
-    assert after[0][0]["goods_num"] == 8 and after[0][0]["bind_num"] == 5
-    assert json.loads(after[2][0]["bag"]) == [other]
-    assert application.decompose("op", "u", "acc-1", target, 20023, "洗练石", 3, 100).status == "duplicate"
+    gain = 6 if batch else 3
+    assert after[0][0]["goods_num"] == 5 + gain and after[0][0]["bind_num"] == 2 + gain
+    assert json.loads(after[2][0]["bag"]) == [keep if batch else other]
+    assert perform().status == "duplicate"
     assert snapshot() == after

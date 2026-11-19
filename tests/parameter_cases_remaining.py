@@ -299,7 +299,7 @@ async def check_accessory_wash_writes(probe):
                           abort=True, recovery=True, replay_unchanged=True)
 
 
-async def check_accessory_decompose_writes(probe):
+async def check_accessory_decompose_writes(probe, *, batch=False):
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.accessory import ACCESSORY_DECOMPOSE_GAIN
 
     player, game = probe.context.paths.player_db, probe.context.paths.game_db
@@ -354,10 +354,15 @@ async def check_accessory_decompose_writes(probe):
     initial_balances = balances(probe)
     initial_backpack = [row for row in backpack(probe) if int(row[1]) != 20023]
     for number, (database, existing, event, fault, reason) in enumerate(faults, start=970600):
-        instances = seed_accessory_document(probe, [19001, 19002, 19003], equipped_slots=("手镯",))
+        if batch and reason:
+            reason = reason.replace("accessory_decompose", "accessory_batch_decompose")
+        instances = seed_accessory_document(
+            probe, [19001, 19002, 19003, *([19101] if batch else [])], equipped_slots=("手镯",),
+        )
         target = instances[1]
-        target_uid = target["uid"]
-        command_text = f"饰品分解 {target_uid}"
+        target_uid = ",".join(item["uid"] for item in instances[1:3]) if batch else target["uid"]
+        command = "快速分解饰品" if batch else "饰品分解"
+        command_text = "快速分解饰品 烈阳 1" if batch else f"饰品分解 {target_uid}"
         probe.seed(game, "DELETE FROM back WHERE user_id='900001' AND goods_id=20023")
         if existing:
             probe.seed(game, "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
@@ -368,7 +373,7 @@ async def check_accessory_decompose_writes(probe):
         probe.seed(database, f"CREATE TRIGGER reject_decompose {event} "
                    f"BEGIN INSERT INTO isolated_decompose_effect VALUES(1); {fault}; END")
         probe.clear_cooldowns()
-        text = await probe.command("饰品分解", command_text, number=number, allow_exception=reason is None)
+        text = await probe.command(command, command_text, number=number, allow_exception=reason is None)
         failed_state = accessory_projection(probe)
         failed_stones = probe.rows(game, stone_sql)
         failed_receipts = probe.rows(game, receipt_sql)
@@ -382,31 +387,40 @@ async def check_accessory_decompose_writes(probe):
             errors = "\n".join(probe.calls[-1]["errors"])
             assert "sqlite3.IntegrityError: isolated accessory decompose abort" in errors, errors
         else:
-            assert phrases[reason] in text and target_uid in text, text
-        assert "已分解：" not in text, text
+            phrase = phrases[reason.replace("accessory_batch_decompose", "accessory_decompose")]
+            if batch:
+                phrase = phrase.replace("饰品分解", "饰品快速分解")
+            assert phrase in text and target_uid in text, text
+        success_marker = "快速分解完成：" if batch else "已分解："
+        assert success_marker not in text, text
         assert failed_state == before_state and failed_stones == before_stones
         assert failed_receipts == before_receipts
         assert not probe.rows(database, "SELECT effect FROM isolated_decompose_effect")
 
         probe.seed(database, "DROP TRIGGER reject_decompose")
         probe.clear_cooldowns()
-        recovered = await probe.command("饰品分解", command_text, number=number)
-        assert "已分解：" in recovered, recovered
+        recovered = await probe.command(command, command_text, number=number)
+        assert success_marker in recovered, recovered
         after_state = accessory_projection(probe)
         after_stones = probe.rows(game, stone_sql)
         after_receipts = probe.rows(game, receipt_sql)
-        gain = ACCESSORY_DECOMPOSE_GAIN[target["quality"]]
+        gain = ACCESSORY_DECOMPOSE_GAIN[target["quality"]] * (2 if batch else 1)
         assert json.loads(after_state[0][0]) == json.loads(before_state[0][0])
-        assert json.loads(after_state[0][1]) == [instances[2]]
+        assert json.loads(after_state[0][1]) == [instances[3] if batch else instances[2]]
         assert after_stones == [("洗练石", "特殊道具", (5 if existing else 0) + gain,
                                  (2 if existing else 0) + gain)]
         [receipt] = [row for row in after_receipts if row not in before_receipts]
-        assert receipt[0] == f"accessory:{number}:decompose:900001:{target_uid}"
-        assert json.loads(receipt[2])["expected_accessory"] == target
-        assert json.loads(receipt[3])["accessory"] == target
+        if batch:
+            assert receipt[0] == f"accessory:{number}:batch-decompose:900001:烈阳:1"
+            assert json.loads(receipt[2])["selected_uids"] == target_uid.split(",")
+            assert json.loads(receipt[3])["affected"] == 2
+        else:
+            assert receipt[0] == f"accessory:{number}:decompose:900001:{target_uid}"
+            assert json.loads(receipt[2])["expected_accessory"] == target
+            assert json.loads(receipt[3])["accessory"] == target
         probe.clear_cooldowns()
-        replay = await probe.command("饰品分解", command_text, number=number)
-        assert "已分解：" in replay, replay
+        replay = await probe.command(command, command_text, number=number)
+        assert success_marker in replay, replay
         assert accessory_projection(probe) == after_state
         assert probe.rows(game, stone_sql) == after_stones
         assert probe.rows(game, receipt_sql) == after_receipts
@@ -549,6 +563,44 @@ def register(case):
     )
     async def accessory_decompose_write_recovery(probe):
         await check_accessory_decompose_writes(probe)
+
+    @case(
+        "accessory-batch-decompose-write-recovery",
+        "快速分解饰品",
+        "烈阳 1",
+        "两件匹配饰品、一件不匹配饰品、一件已装备饰品和隔离game/player SQLite",
+        "批量返还/状态/回执拒写改写整笔回滚，具体原因、恢复、replay与ABORT",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_batch_decompose_write_recovery(probe):
+        await check_accessory_decompose_writes(probe, batch=True)
+
+    @case(
+        "accessory-batch-decompose-stable-replay",
+        "快速分解饰品",
+        "烈阳 1，同消息重放时背包已新增匹配饰品",
+        "合法匹配饰品，第一次成功后新增另一合法UID",
+        "重放历史批量结果，不把新到饰品再次分解或新增第二笔回执",
+        group="remaining-player-parameters",
+    )
+    async def accessory_batch_decompose_stable_replay(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        seed_accessory_document(probe, [19002])
+        first = await probe.command("快速分解饰品", "快速分解饰品 烈阳 1", number=970630)
+        assert "快速分解完成：1件" in first, first
+        [new_item] = seed_accessory_document(probe, [19002])
+        new_item["uid"] = "new-arrival-accessory"
+        probe.seed(player, "UPDATE player_accessory SET bag=? WHERE user_id='900001'",
+                   (json.dumps([new_item], ensure_ascii=False),))
+        receipt_sql = "SELECT operation_id,payload,result_json FROM accessory_transaction_operations ORDER BY operation_id"
+        before = accessory_projection(probe), backpack(probe), probe.rows(game, receipt_sql)
+        probe.clear_cooldowns()
+        replay = await probe.command("快速分解饰品", "快速分解饰品 烈阳 1", number=970630)
+        after = accessory_projection(probe), backpack(probe), probe.rows(game, receipt_sql)
+        probe.evidence.update(reply=replay, state_unchanged=after[0] == before[0],
+                              stones_unchanged=after[1] == before[1], receipt_delta=len(after[2]) - len(before[2]))
+        assert after == before and "快速分解完成：1件" in replay, probe.evidence
 
     @case(
         "accessory-decompose-legal-boundaries",
