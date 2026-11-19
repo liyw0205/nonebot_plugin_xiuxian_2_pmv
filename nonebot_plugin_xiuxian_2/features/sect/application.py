@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+from zoneinfo import ZoneInfo
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
@@ -34,6 +35,7 @@ from .inactive_owner_repository import SectInactiveOwnerSqlRepository
 from .sect_info_repository import SectInfoSqlRepository
 from .member_repository import SectMemberSqlRepository
 from .task_state_repository import SectTaskStateSqlRepository
+from .schema import table_ready
 
 
 def _data(raw: Any) -> dict[str, Any]:
@@ -78,6 +80,7 @@ class SectApplication:
         ledger: OperationLedger | None = None,
         clock=None,
         random_source=None,
+        task_timezone=None,
     ) -> None:
         self.database = str(database)
         self.player_database = str(player_database) if player_database is not None else None
@@ -87,6 +90,7 @@ class SectApplication:
         self.ledger = ledger or OperationLedger()
         self.clock = clock or SystemClock()
         self.random = random_source or SystemRandom()
+        self.task_timezone = task_timezone or ZoneInfo('Asia/Shanghai')
         self.activity_repository = SectActivitySqlRepository(self.database)
         self.directory_repository = SectDirectorySqlRepository(self.database)
         self.inactive_owner_repository = SectInactiveOwnerSqlRepository(self.database)
@@ -129,7 +133,13 @@ class SectApplication:
 
     def _task_now(self):
         value = self.clock.now()
-        return value.astimezone() if value.tzinfo is not None else value
+        return value.astimezone(self.task_timezone) if value.tzinfo is not None else value
+
+    def task_claim_receipt(self, operation_id, user_id):
+        return self.task_state_repository.claim_receipt(operation_id, user_id)
+
+    def task_settlement_receipt(self, operation_id, user_id):
+        return SectTaskSettlementSqlRepository(self.database, clock=self.clock, task_timezone=self.task_timezone).settlement_receipt(operation_id, user_id)
 
     def current_task_period(self) -> str:
         return self._task_now().strftime("%Y-%m-%d")
@@ -208,6 +218,8 @@ class SectApplication:
         task_key = self.random.choice(list(task_config))
         task_data = dict(task_config[task_key])
         now = self._task_now()
+        if str(current_task.get('period') or now.strftime('%Y-%m-%d')) != now.strftime('%Y-%m-%d'):
+            return SectMutationResult(status='state_changed', reason='sect_task_period_changed', subject=user_id)
         return SectMutationResult(
             self.task_state_repository.refresh_task(
                 operation_id,
@@ -268,9 +280,17 @@ class SectApplication:
         amount: int,
         goals: Iterable[Mapping[str, Any]],
         updated_at: str,
+        *,
+        settlement_operation_id: str | None = None,
     ) -> list[dict[str, Any]]:
         return self._weekly_progress_repository().record_progress(
-            sect_id, week_key, user_id, amount, goals, updated_at
+            sect_id,
+            week_key,
+            user_id,
+            amount,
+            goals,
+            updated_at,
+            settlement_operation_id=settlement_operation_id,
         )
 
     def weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:
@@ -300,15 +320,15 @@ class SectApplication:
 
     def leave(self, *, operation_id: str, user_id: str, owner_position: int = 0) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "owner_position": int(owner_position)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.leave", payload=payload, call=lambda: self._repository().leave(operation_id, user_id, owner_position=owner_position))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.leave", payload=payload, call=lambda: self._repository().leave(operation_id, user_id, owner_position=owner_position), retry_started=True)
 
     def kick(self, *, operation_id: str, user_id: str, target_id: str, manager_max_position: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "target_id": str(target_id), "manager_max_position": int(manager_max_position)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.kick", payload=payload, call=lambda: self._repository().kick(operation_id, user_id, target_id, manager_max_position=manager_max_position))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.kick", payload=payload, call=lambda: self._repository().kick(operation_id, user_id, target_id, manager_max_position=manager_max_position), retry_started=True)
 
     def change_position(self, *, operation_id: str, user_id: str, target_id: str, requested_position: int, position_limits: Mapping[str, Any], manager_max_position: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "target_id": str(target_id), "requested_position": int(requested_position), "position_limits": dict(position_limits), "manager_max_position": int(manager_max_position)}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.position_change", payload=payload, call=lambda: self._repository().change_position(operation_id, user_id, target_id, requested_position, position_limits, manager_max_position=manager_max_position))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.position_change", payload=payload, call=lambda: self._repository().change_position(operation_id, user_id, target_id, requested_position, position_limits, manager_max_position=manager_max_position), retry_started=True)
 
     def donate(self, *, operation_id: str, user_id: str, sect_id: int, stone: int, materials: int) -> OperationOutcome[dict[str, Any]]:
         payload = {"user_id": str(user_id), "sect_id": int(sect_id), "stone": int(stone), "materials": int(materials)}
@@ -356,8 +376,8 @@ class SectApplication:
     def upgrade_practice(self, operation_id: str, user_id: str, sect_id: int, practice_type: str, expected_level: int, next_level: int, stone_cost: int, materials_cost: int):
         return SectMutationResult(SectPracticeSqlRepository(self.database).upgrade(operation_id, user_id, sect_id, practice_type, expected_level, next_level, stone_cost, materials_cost))
 
-    def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None):
-        repository = SectTaskSettlementSqlRepository(self.database, clock=self.clock)
+    def settle_task(self, operation_id: str, user_id: str, sect_id: int, period: str, cost_type: str, cost: int, exp_reward: int, sect_reward: int, expected_task_key=None, expected_task_data=None, *, enforce_current_period: bool = False):
+        repository = SectTaskSettlementSqlRepository(self.database, clock=self.clock, task_timezone=self.task_timezone)
         return SectMutationResult(
             repository.settle(
                 operation_id,
@@ -370,6 +390,7 @@ class SectApplication:
                 sect_reward,
                 expected_task_key,
                 expected_task_data,
+                current_period=self.current_task_period() if enforce_current_period else None,
             )
         )
 
@@ -400,15 +421,49 @@ class SectApplication:
                 }.get(action)
                 if status in {"applied", "joined", "learned", "duplicate", success_status}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, audit_category="sect")
+                elif action in {"sect.join", "sect.donate", "sect.rename", "sect.purchase", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and str(data.get("reason", "")).endswith("_write_rejected"):
+                    message = ("宗门捐献写入未完成，请稍后重试。" if action == "sect.donate"
+                               else "宗门改名写入未完成，请稍后重试。" if action == "sect.rename"
+                               else "加入宗门写入未完成，请稍后重试。" if action == "sect.join"
+                               else "宗门兑换写入未完成，请稍后重试。" if action == "sect.purchase"
+                               else "宗门丹药领取写入失败。" if action == "sect.claim_elixir"
+                               else "宗门功法学习写入未完成，请稍后重试。" if action == "sect.learn_main"
+                               else "宗门神通学习写入未完成，请稍后重试。" if action == "sect.learn_secondary"
+                               else "宗门职位变更写入未完成，请稍后重试。" if action == "sect.position_change"
+                               else "宗门踢出成员写入未完成，请稍后重试。" if action == "sect.kick"
+                               else "退出宗门写入未完成，请稍后重试。")
+                    outcome = OperationOutcome.failed(operation_id, action, message,
+                                                       code=data["reason"], data=data, audit_category="sect")
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, "宗门操作未完成。", code=status, data=data, audit_category="sect")
-                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    self.ledger.finish(uow, outcome)
+                try:
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.ledger.finish(uow, outcome)
+                except Exception as exc:
+                    if action in {"sect.join", "sect.donate", "sect.rename", "sect.purchase", "sect.claim_elixir", "sect.learn_main", "sect.learn_secondary", "sect.position_change", "sect.kick", "sect.leave"} and not outcome.ok and data.get("reason"):
+                        raise DomainError(data["reason"], outcome.message, data) from exc
+                    raise
                 return outcome
+            except OperationConflictError:
+                # Keep the first receipt immutable while exposing the concrete
+                # idempotency conflict to the command reply.
+                return OperationOutcome.rejected(
+                    operation_id,
+                    action,
+                    "该操作号已用于不同内容的请求，请发送一条新命令。",
+                    code="operation_conflict",
+                    data={"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor"},
+                    audit_category="sect",
+                )
             except DomainError:
                 raise
             except Exception as exc:
-                self.ledger.record_failure(self.database, operation_id, action, payload, str(exc))
+                try:
+                    self.ledger.record_failure(self.database, operation_id, action, payload, str(exc))
+                except Exception as diagnostic_error:
+                    if action == "sect.claim_elixir":
+                        raise exc from diagnostic_error
+                    raise
                 raise
 
     def join(self, *, operation_id: str, user_id: str, sect_id: int, member_position: int = 12) -> OperationOutcome[dict[str, Any]]:
@@ -421,7 +476,7 @@ class SectApplication:
         if not str(operation_id).strip() or not str(user_id).strip():
             raise ValidationError("operation_id and user_id are required")
         payload = {"user_id": str(user_id), **kwargs}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.purchase", payload=payload, call=lambda: self._repository().purchase(operation_id, user_id, **kwargs))
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.purchase", payload=payload, call=lambda: self._repository().purchase(operation_id, user_id, **kwargs), retry_started=True)
 
     def weekly_shop_progress(self, user_id: str, *, item_ids=None, fallback=None) -> dict[str, int]:
         """本人本周宗门商店已购数量（只读；与限购判定同源，缺表返回空）。"""
@@ -439,11 +494,26 @@ class SectApplication:
         payload = {"user_id": str(user_id), **dict(kwargs)}
         return self._execute(operation_id=str(operation_id), user_id=str(user_id), action=action, payload=payload, call=lambda: getattr(self._repository(), method)(operation_id, user_id, **dict(kwargs)), retry_started=action == "sect.learn_main")
 
-    def claim_elixir(self, *, operation_id: str, user_id: str, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
+    def claim_elixir(self, *, operation_id: str, user_id: str, generated_rewards: bool = False, **kwargs: Any) -> OperationOutcome[dict[str, Any]]:
         if not str(operation_id).strip() or not str(user_id).strip():
             raise ValidationError("operation_id and user_id are required")
         payload = {"user_id": str(user_id), **kwargs}
-        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.claim_elixir", payload=payload, call=lambda: self._repository().claim_elixir(operation_id, user_id, **kwargs))
+        if generated_rewards:
+            # Chat rewards are generated by the server, not part of the player's request.
+            payload = {key: value for key, value in payload.items() if key != "rewards"}
+        return self._execute(operation_id=str(operation_id), user_id=str(user_id), action="sect.claim_elixir", payload=payload, call=lambda: self._repository().claim_elixir(operation_id, user_id, **kwargs), retry_started=True)
+
+    def elixir_claim_receipt(self, operation_id: str, user_id: str) -> dict[str, Any] | None:
+        """Replay committed rewards and finish an interrupted diagnostic write."""
+        receipt = SectRenameSqlRepository(self.database).elixir_claim_receipt(operation_id, user_id)
+        if receipt is None:
+            return None
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            if table_ready(uow, "operation_ledger"):
+                existing = self.ledger.get(uow, operation_id, "sect.claim_elixir")
+                if existing is not None and existing.status in {"started", "failed", "needs_reconcile"}:
+                    self.ledger.finish(uow, OperationOutcome.applied(operation_id, "sect.claim_elixir", data=receipt, audit_category="sect"))
+        return receipt
 
     def claim_weekly(
         self,
@@ -502,6 +572,18 @@ class SectApplication:
                     granted={"rewards": data.get("rewards", ())},
                     audit_category="sect",
                     replayed=status == "duplicate",
+                    clock=self.clock,
+                )
+            if status == "write_rejected" and str(data.get("reason", "")).endswith("_write_rejected"):
+                reason = str(data["reason"])
+                subject = str(data.get("subject", ""))
+                return OperationOutcome.failed(
+                    operation_id,
+                    action,
+                    f"宗门周常奖励写入未完成（{reason}；对象：{subject}），请稍后重试。",
+                    code=reason,
+                    data=data,
+                    audit_category="sect",
                     clock=self.clock,
                 )
             return OperationOutcome.rejected(

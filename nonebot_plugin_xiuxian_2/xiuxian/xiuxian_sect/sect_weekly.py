@@ -174,6 +174,11 @@ class SectWeeklyGoalManager:
             amount,
             ({"key": goal.key, "target": goal.target} for goal in goals),
             _now_text(),
+            settlement_operation_id=(
+                str(meta["settlement_operation_id"])
+                if meta.get("settlement_operation_id")
+                else None
+            ),
         )
         goal_by_key = {goal.key: goal for goal in goals}
         return [{**row, "name": goal_by_key[row["goal_key"]].name} for row in rows]

@@ -23,6 +23,11 @@ class SectFairylandSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
+    @staticmethod
+    def _reject(step: str, subject: str | int) -> None:
+        reason = f"sect_fairyland_{step}_write_rejected"
+        raise DomainError(reason, f"{reason}: {subject}", {"reason": reason, "subject": str(subject)})
+
     @classmethod
     def _schema_ready(cls, uow: DatabaseUnitOfWork) -> bool:
         table = uow.query_one(
@@ -56,16 +61,64 @@ class SectFairylandSqlRepository:
         if not operation_id:
             raise ValueError("operation_id must not be empty")
 
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+        try:
+            return self._upgrade(
+                operation_id, actor_id, sect_id, expected_level, next_level,
+                stone_cost, materials_cost, owner_position,
+            )
+        except DomainError as exc:
+            if exc.code.startswith("sect_fairyland_") and exc.code.endswith("_write_rejected"):
+                return {
+                    "status": "state_changed",
+                    "actor_id": actor_id,
+                    "sect_id": sect_id,
+                    "from_level": expected_level,
+                    "to_level": next_level,
+                    "stone_cost": stone_cost,
+                    "materials_cost": materials_cost,
+                    "reason": exc.details.get("reason") or exc.code,
+                    "subject": str(exc.details.get("subject") or operation_id),
+                }
+            raise
+
+    def _upgrade(
+        self,
+        operation_id: str,
+        actor_id: str,
+        sect_id: int,
+        expected_level: int,
+        next_level: int,
+        stone_cost: int,
+        materials_cost: int,
+        owner_position: int,
+    ) -> dict[str, Any]:
+        with DatabaseUnitOfWork(self.database, immediate=True, require_exists=True) as uow:
             if not self._schema_ready(uow):
                 return {"status": "schema_missing", "actor_id": actor_id, "sect_id": sect_id}
 
             previous = uow.query_one(
-                "SELECT from_level,to_level,stone_cost,materials_cost "
+                "SELECT actor_id,sect_id,from_level,to_level,stone_cost,materials_cost "
                 "FROM sect_fairyland_operations WHERE operation_id=?",
                 (operation_id,),
             )
             if previous is not None:
+                # The command derives the next level and its cost from current
+                # state, so a replay naturally carries newer values. The
+                # operation ledger identity is authoritative for the same actor
+                # and sect; a different actor/sect remains a conflict.
+                same_request = str(previous["actor_id"]) == actor_id and int(previous["sect_id"]) == sect_id
+                if not same_request:
+                    return {
+                        "status": "state_changed",
+                        "actor_id": actor_id,
+                        "sect_id": sect_id,
+                        "from_level": expected_level,
+                        "to_level": next_level,
+                        "stone_cost": stone_cost,
+                        "materials_cost": materials_cost,
+                        "reason": "operation_conflict",
+                        "subject": "actor",
+                    }
                 return {
                     "status": "duplicate",
                     "actor_id": actor_id,
@@ -129,13 +182,58 @@ class SectFairylandSqlRepository:
                 ),
             )
             if changed.rowcount != 1:
-                raise DomainError("sect_fairyland_write_rejected", "sect fairyland write count mismatch")
+                self._reject("state", sect_id)
+            saved_sect = uow.query_one(
+                "SELECT sect_owner,COALESCE(sect_fairyland,0) AS level,"
+                "COALESCE(sect_used_stone,0) AS stones,COALESCE(sect_materials,0) AS materials "
+                "FROM sects WHERE sect_id=?",
+                (sect_id,),
+            )
+            if (
+                saved_sect is None
+                or str(saved_sect["sect_owner"]) != actor_id
+                or as_int_like(saved_sect["level"]) != next_level
+                or as_int_like(saved_sect["stones"]) != as_int_like(sect["stones"]) - stone_cost
+                or as_int_like(saved_sect["materials"]) != as_int_like(sect["materials"]) - materials_cost
+            ):
+                self._reject("state", sect_id)
 
-            uow.execute(
+            recorded = uow.execute(
                 "INSERT INTO sect_fairyland_operations(operation_id,actor_id,sect_id,from_level,"
                 "to_level,stone_cost,materials_cost) VALUES(?,?,?,?,?,?,?)",
                 (operation_id, actor_id, sect_id, current_level, next_level, stone_cost, materials_cost),
             )
+            if recorded.rowcount != 1:
+                self._reject("receipt", operation_id)
+            saved_receipt = uow.query_one(
+                "SELECT actor_id,sect_id,from_level,to_level,stone_cost,materials_cost "
+                "FROM sect_fairyland_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if (
+                saved_receipt is None
+                or str(saved_receipt["actor_id"]) != actor_id
+                or int(saved_receipt["sect_id"]) != sect_id
+                or int(saved_receipt["from_level"]) != current_level
+                or int(saved_receipt["to_level"]) != next_level
+                or int(saved_receipt["stone_cost"]) != stone_cost
+                or int(saved_receipt["materials_cost"]) != materials_cost
+            ):
+                self._reject("receipt", operation_id)
+            final_sect = uow.query_one(
+                "SELECT sect_owner,COALESCE(sect_fairyland,0) AS level,"
+                "COALESCE(sect_used_stone,0) AS stones,COALESCE(sect_materials,0) AS materials "
+                "FROM sects WHERE sect_id=?",
+                (sect_id,),
+            )
+            if (
+                final_sect is None
+                or str(final_sect["sect_owner"]) != actor_id
+                or as_int_like(final_sect["level"]) != next_level
+                or as_int_like(final_sect["stones"]) != as_int_like(sect["stones"]) - stone_cost
+                or as_int_like(final_sect["materials"]) != as_int_like(sect["materials"]) - materials_cost
+            ):
+                self._reject("state", sect_id)
             return {"status": "upgraded", **result}
 
 

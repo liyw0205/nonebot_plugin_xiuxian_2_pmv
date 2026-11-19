@@ -56,7 +56,7 @@ class Probe:
         self.calls = []
         self.evidence = {}
 
-    async def command(self, name, text=None, *, actor="900001", number=None):
+    async def command(self, name, text=None, *, actor="900001", number=None, allow_exception=False):
         from tests.parameter_exception_watch import watch_handler_catches
         candidates = [entry for entry in self.entries if entry["command"] == name or name in entry["aliases"]]
         assert len(candidates) == 1, (name, [entry["module"] for entry in candidates])
@@ -68,7 +68,7 @@ class Probe:
         self.calls.append({"command": name, **result})
         if result["status"] == "blocked":
             raise ProbeBlocked(json.dumps(result, ensure_ascii=False))
-        assert result["status"] == "pass", json.dumps(result, ensure_ascii=False)
+        assert result["status"] == "pass" or (allow_exception and result["status"] == "exception"), json.dumps(result, ensure_ascii=False)
         return "\n".join(result["replies"])
 
     def player(self, uid="900001", **values):
@@ -328,9 +328,53 @@ from tests.parameter_cases_market import register as register_market
 
 register_market(case)
 
+from tests.parameter_cases_auction import register as register_auction
+
+register_auction(case)
+
+from tests.parameter_cases_world_boss import register as register_world_boss
+
+register_world_boss(case)
+
 from tests.parameter_cases_sect_body import register as register_sect_body
 
 register_sect_body(case)
+
+from tests.parameter_cases_sect_materials import register as register_sect_materials
+
+register_sect_materials(case)
+
+from tests.parameter_cases_sect_daily import register as register_sect_daily
+
+register_sect_daily(case)
+
+from tests.parameter_cases_sect_weekly import register as register_sect_weekly
+
+register_sect_weekly(case)
+
+from tests.parameter_cases_sect_mainbuff import register as register_sect_mainbuff
+
+register_sect_mainbuff(case)
+
+from tests.parameter_cases_sect_secbuff import register as register_sect_secbuff
+
+register_sect_secbuff(case)
+
+from tests.parameter_cases_sect_buff_search import register as register_sect_buff_search
+
+register_sect_buff_search(case)
+
+from tests.parameter_cases_sect_practice import register as register_sect_practice
+
+register_sect_practice(case)
+
+from tests.parameter_cases_sect_fairyland import register as register_sect_fairyland
+
+register_sect_fairyland(case)
+
+from tests.parameter_cases_sect_elixir_room import register as register_sect_elixir_room
+
+register_sect_elixir_room(case)
 
 from tests.parameter_cases_bag_consumers import register as register_bag_consumers
 

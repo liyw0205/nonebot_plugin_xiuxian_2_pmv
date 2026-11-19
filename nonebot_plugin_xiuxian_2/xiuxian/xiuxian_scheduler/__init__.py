@@ -110,7 +110,9 @@ async def _run_job(job_name: str, func, *args, **kwargs):
                 result = await result
         if result is False or getattr(result, "succeeded", True) is False:
             status = getattr(result, "status", "failed")
-            raise RuntimeError(f"任务返回失败状态：{status}")
+            reason = getattr(result, "reason", "") or status
+            subject = getattr(result, "subject", "")
+            raise RuntimeError(f"任务返回失败状态：{reason} subject={subject}")
         logger.opt(colors=True).success(f"<cyan>[定时任务完成]</cyan> <green>{job_name}</green>")
         return result
     except Exception as e:

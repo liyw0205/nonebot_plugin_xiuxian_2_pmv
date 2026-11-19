@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 from .settlement_repository import DEFAULT_MAX_GOODS_NUM, configured_max_goods_num
@@ -30,10 +32,12 @@ class AuctionPendingClaimResult:
     claimed: tuple[dict[str, Any], ...] = ()
     blocked: tuple[dict[str, Any], ...] = ()
     remaining: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
-        return self.status in {"claimed", "duplicate"}
+        return self.status in {"claimed", "duplicate"} and bool(self.claimed)
 
 
 @dataclass(frozen=True)
@@ -55,6 +59,40 @@ class _PendingRow:
             "role_label": _ROLE_LABELS.get(self.role, self.role),
             "created_at": self.created_at,
         }
+
+
+class _ClaimRejected(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.result = AuctionPendingClaimResult("state_changed", reason=reason, subject=subject)
+
+
+class _ClaimWrites:
+    """Recheck cumulative inventory and claim marks after the receipt write."""
+
+    def __init__(self, uow: DatabaseUnitOfWork) -> None:
+        self.uow = uow
+        self.rows: dict[tuple, tuple[dict, str, str]] = {}
+
+    @staticmethod
+    def affected(cursor: Any, reason: str, subject: str) -> None:
+        if cursor.rowcount != 1:
+            raise _ClaimRejected(reason, subject)
+
+    def before(self, sql: str, params: tuple) -> dict | None:
+        previous = self.rows.get((sql, params))
+        return dict(previous[0]) if previous else self.uow.query_one(sql, params)
+
+    def expect(self, sql: str, params: tuple, expected: dict, reason: str, subject: str) -> None:
+        self.rows[(sql, params)] = (expected, reason, subject)
+        self._check(sql, params, expected, reason, subject)
+
+    def _check(self, sql: str, params: tuple, expected: dict, reason: str, subject: str) -> None:
+        if self.uow.query_one(sql, params) != expected:
+            raise _ClaimRejected(reason, subject)
+
+    def verify(self) -> None:
+        for (sql, params), (expected, reason, subject) in self.rows.items():
+            self._check(sql, params, expected, reason, subject)
 
 
 class AuctionPendingApplication:
@@ -92,7 +130,7 @@ class AuctionPendingApplication:
         self, uow: DatabaseUnitOfWork, user_id: str, auction_id: str | None
     ) -> list[dict[str, Any]]:
         sql = (
-            "SELECT auction_id,item_id,item_name,item_type,role,created_at "
+            "SELECT * "
             "FROM auction_pending_items WHERE owner_id=? AND claimed_at IS NULL"
         )
         params: list[Any] = [str(user_id)]
@@ -127,6 +165,7 @@ class AuctionPendingApplication:
         user_id: str,
         auction_id: str | None,
         operation_id: str,
+        writes: _ClaimWrites,
     ) -> AuctionPendingClaimResult:
         rows = self._pending_rows(uow, user_id, auction_id)
         claimed: list[dict[str, Any]] = []
@@ -135,12 +174,13 @@ class AuctionPendingApplication:
             item_id = int(row["item_id"])
             item_name = str(row["item_name"])
             item_type = str(row["item_type"])
-            held = uow.query_one(
-                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
-                "WHERE user_id=? AND goods_id=?",
-                (user_id, item_id),
-            )
-            current = int(held["goods_num"]) if held else 0
+            inventory_sql = "SELECT goods_num,bind_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?"
+            held = writes.before(inventory_sql, (user_id, item_id)) or {}
+            subject = f"{user_id}:{item_id}"
+            current = require_exact_integer(held.get("goods_num") or 0, field="goods_num", subject=subject)
+            bound = require_exact_integer(held.get("bind_num") or 0, field="bind_num", subject=subject)
+            if current < 0 or bound < 0 or bound > current:
+                raise _ClaimRejected("auction_claim_inventory_invalid", subject)
             record = _PendingRow(
                 auction_id=str(row["auction_id"]),
                 item_id=item_id,
@@ -150,9 +190,13 @@ class AuctionPendingApplication:
                 created_at=str(row.get("created_at") or ""),
             ).as_dict()
             if current + 1 > self.max_goods_num:
+                writes.expect(inventory_sql, (user_id, item_id), held,
+                              "auction_claim_inventory_write_rejected", subject)
+                writes.expect("SELECT * FROM auction_pending_items WHERE id=?", (row["id"],), row,
+                              "auction_claim_pending_write_rejected", str(row["auction_id"]))
                 blocked.append(record)
                 continue
-            uow.execute(
+            cursor = uow.execute(
                 "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,"
                 "create_time,update_time,bind_num) VALUES(?,?,?,?,1,CURRENT_TIMESTAMP,"
                 "CURRENT_TIMESTAMP,1) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
@@ -161,11 +205,22 @@ class AuctionPendingApplication:
                 "bind_num=COALESCE(back.bind_num,0)+1,update_time=CURRENT_TIMESTAMP",
                 (user_id, item_id, item_name, item_type),
             )
-            uow.execute(
-                "UPDATE auction_pending_items SET claimed_at=CURRENT_TIMESTAMP,"
-                "claim_operation_id=? WHERE auction_id=? AND role=? AND claimed_at IS NULL",
-                (operation_id, str(row["auction_id"]), str(row["role"])),
+            reason = "auction_claim_inventory_write_rejected"
+            writes.affected(cursor, reason, subject)
+            writes.expect(inventory_sql, (user_id, item_id),
+                          {"goods_num": current + 1, "bind_num": bound + 1,
+                           "goods_name": item_name, "goods_type": item_type}, reason, subject)
+            claimed_at = self.clock.now().isoformat()
+            cursor = uow.execute(
+                "UPDATE auction_pending_items SET claimed_at=?,claim_operation_id=? "
+                "WHERE id=? AND owner_id=? AND claimed_at IS NULL",
+                (claimed_at, operation_id, row["id"], user_id),
             )
+            reason = "auction_claim_pending_write_rejected"
+            writes.affected(cursor, reason, str(row["auction_id"]))
+            writes.expect("SELECT * FROM auction_pending_items WHERE id=?", (row["id"],),
+                          dict(row, claimed_at=claimed_at, claim_operation_id=operation_id),
+                          reason, str(row["auction_id"]))
             claimed.append(record)
         remaining = len(self._pending_rows(uow, user_id, None))
         if claimed:
@@ -185,6 +240,24 @@ class AuctionPendingApplication:
         user_id: str,
         auction_id: str | None = None,
     ) -> AuctionPendingClaimResult:
+        """Return known refusals only after the complete claim has rolled back."""
+        try:
+            return self._claim_operation(operation_id=operation_id, user_id=user_id, auction_id=auction_id)
+        except _ClaimRejected as rejected:
+            return rejected.result
+        except DomainError as rejected:
+            if not rejected.details.get("reason"):
+                raise
+            return AuctionPendingClaimResult("state_changed", reason=rejected.details["reason"],
+                                             subject=str(rejected.details.get("subject") or user_id))
+
+    def _claim_operation(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        auction_id: str | None = None,
+    ) -> AuctionPendingClaimResult:
         """Move claimable pending items into the player's backpack."""
 
         operation_id = str(operation_id or "").strip()
@@ -198,10 +271,11 @@ class AuctionPendingApplication:
 
         database = Path(self.database)
         if not database.is_file():
-            return AuctionPendingClaimResult("schema_missing")
+            return AuctionPendingClaimResult("schema_missing", reason="schema_missing", subject="auction_pending_items")
         with DatabaseUnitOfWork(database, immediate=True) as uow:
-            if not self._table_exists(uow, "auction_pending_items"):
-                return AuctionPendingClaimResult("schema_missing")
+            for table in ("auction_pending_items", "auction_pending_claim_operations"):
+                if not self._table_exists(uow, table):
+                    return AuctionPendingClaimResult("schema_missing", reason="schema_missing", subject=table)
             previous = uow.query_one(
                 "SELECT payload,result FROM auction_pending_claim_operations "
                 "WHERE operation_id=?",
@@ -209,7 +283,7 @@ class AuctionPendingApplication:
             )
             if previous is not None:
                 if str(previous["payload"]) != payload:
-                    return AuctionPendingClaimResult("operation_conflict")
+                    return AuctionPendingClaimResult("operation_conflict", reason="operation_conflict", subject=operation_id)
                 stored = json.loads(str(previous["result"]))
                 return AuctionPendingClaimResult(
                     "duplicate",
@@ -217,10 +291,17 @@ class AuctionPendingApplication:
                     tuple(dict(item) for item in stored.get("blocked", ())),
                     int(stored.get("remaining", 0)),
                 )
-            result = self._claim(uow, user_id, scoped_auction, operation_id)
+            if not self._table_exists(uow, "back"):
+                return AuctionPendingClaimResult("schema_missing", reason="schema_missing", subject="back")
+            writes = _ClaimWrites(uow)
+            result = self._claim(uow, user_id, scoped_auction, operation_id, writes)
             if result.status == "empty":
                 return result
-            uow.execute(
+            result_json = json.dumps(
+                {"claimed": list(result.claimed), "blocked": list(result.blocked), "remaining": result.remaining},
+                ensure_ascii=False,
+            )
+            cursor = uow.execute(
                 "INSERT INTO auction_pending_claim_operations(operation_id,payload,user_id,"
                 "claimed_count,blocked_count,result) VALUES(?,?,?,?,?,?)",
                 (
@@ -229,16 +310,17 @@ class AuctionPendingApplication:
                     user_id,
                     len(result.claimed),
                     len(result.blocked),
-                    json.dumps(
-                        {
-                            "claimed": list(result.claimed),
-                            "blocked": list(result.blocked),
-                            "remaining": result.remaining,
-                        },
-                        ensure_ascii=False,
-                    ),
+                    result_json,
                 ),
             )
+            reason = "auction_claim_receipt_write_rejected"
+            writes.affected(cursor, reason, operation_id)
+            writes.expect("SELECT operation_id,payload,user_id,claimed_count,blocked_count,result "
+                          "FROM auction_pending_claim_operations WHERE operation_id=?", (operation_id,),
+                          {"operation_id": operation_id, "payload": payload, "user_id": user_id,
+                           "claimed_count": len(result.claimed), "blocked_count": len(result.blocked),
+                           "result": result_json}, reason, operation_id)
+            writes.verify()
             return result
 
 

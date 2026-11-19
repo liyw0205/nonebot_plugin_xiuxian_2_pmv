@@ -21,6 +21,37 @@
 
 `sect.011` 在 game DB 创建/补齐 `sect_weekly_goal` 和 `sect_weekly_reward_operations`；`sect.012` 仅在 player DB 创建/补齐 `boss_limit.integral`，保留已有周常进度与玩家记录；`sect.013` 在 game DB 预建手动解散回执并保留已有操作记录；`sect.016` 预建宗门任务状态表；`sect.017` 在 game DB 预建接取/刷新幂等回执；`sect.018` 在 game DB 预建任务结算回执。周常、手动解散及任务状态/接取/刷新/结算请求只检查已登记 schema，不建表或补列。任务结算时间由注入的 Clock 提供。周常奖励由 `SectWeeklyRewardSqlRepository` 使用 attached game/player transaction 校验宗门归属、目标进度、重复领取与背包容量，再更新玩家、宗门、背包、BOSS 积分及领取标记。晚期 SQL 异常会回滚两个库；SQLite WAL 下 attached 多库事务不承诺进程/主机崩溃时的跨库原子性。手动解散由 `SectManualDisbandSqlRepository` 在 game-db immediate UoW 内重验宗主身份、解绑全部成员、删除宗门并写幂等回执；旧 `SectDisbandService` 仅保留兼容对照。关闭 `XIUXIAN_SECT_ENABLED` 即回退兼容入口。
 
+### 宗门三项修炼升级
+
+`升级攻击修炼`、`升级元血修炼`、`升级灵海修炼` 通过 `SectApplication.upgrade_practice` 进入同一
+SQLite 事务：玩家灵石与对应修炼等级、宗门 `sect_materials` 和 `sect_practice_operations`
+永久回执必须逐步写入并在提交前回读。玩家的 `sect_used_stone` 不是本次消耗列，不能代替
+玩家灵石；每次成功升级只扣玩家灵石与宗门资材。
+
+`RAISE(IGNORE)`、触发器改写或末步回执缺失均返回对应的
+`sect_practice_player_write_rejected`、`sect_practice_assets_write_rejected` 或
+`sect_practice_receipt_write_rejected`，携 `reason/subject` 回滚整笔事务及副作用；SQLite
+`ABORT` 原异常透传。相同消息在玩家等级已推进后按同一入口、升级步数和成本重放为
+`duplicate`，不重复扣费；改变数量则保留 `operation_conflict`。参数解析拒绝零、负数、非数字、
+多余参数和超过单次上限，职位与资材边界保持原规则。
+
+### 宗门捐献
+
+`宗门捐献` 通过 `SectApplication.donate` 以操作号幂等写入玩家灵石/贡献、宗门建设/资材和
+永久回执。相同消息回放返回已完成提示，不重复扣款；改变同一操作号参数返回
+`operation_conflict`，保留首笔回执。玩家、宗门和回执写入均检查影响行数与最终投影；
+`sect_donation_member_write_rejected`、`sect_donation_assets_write_rejected`、
+`sect_donation_receipt_write_rejected` 会整笔回滚，携具体 `reason/subject` 返回，SQLite
+`ABORT` 原异常透传。触发器故障解除后可用原操作号恢复。
+
+### 宗门改名
+
+`宗门改名` 通过 `SectApplication.rename` 原子更新宗门名称/储备、消耗易名符并写入永久回执。
+同消息回放只返回已完成提示；改参数由账本返回 `operation_conflict`，不改写首笔记录。
+三步写入均检查影响行数与最终投影，`sect_rename_state_write_rejected`、
+`sect_rename_card_write_rejected`、`sect_rename_receipt_write_rejected` 会携具体
+`reason/subject` 回滚名称、费用和道具，故障解除后可用原消息恢复；SQLite `ABORT` 原异常透传。
+
 ## 商店每周限购行
 `宗门商店` 的商品行渲染 `每周限购：{剩余}/{总量}个`（售罄写 `已售罄（N/N个）`，
 不限购写 `不限购`），已购数量读取本周 `sect_shop_weekly_purchases`
@@ -89,9 +120,29 @@
 
 ## 事务与失败回滚
 
-周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
+周常领取以 `sect_weekly_reward_operations` 作为唯一幂等回执，并与奖励状态在同一 attached transaction 提交；不额外写入会跨事务留下 started 状态的通用 ledger。每步写入检查影响行数，末步再回读玩家/宗门资产、背包、BOSS 积分、目标领取状态和永久回执；`RAISE(IGNORE)`、trigger 改写或最终投影不一致会回滚整笔，并以具体 `reason`/`subject` 返回，未知 SQLite 异常保留原异常链。重复领取可重放奖励摘要，operation 冲突、进度变化、库存不足和晚期 SQL 异常不发放部分奖励。
 
 ## 宗门命令合同
+
+`宗门丹药领取`及别名`领取宗门丹药`在日重置后读取新的领取次数和丹房状态。
+发药/绑定数量、已领标志与永久回执同事务，逐写行数及最后回读，拒写/改写含
+trigger副作用整笔回滚。`sect_elixir_item_write_rejected`、
+`sect_elixir_user_write_rejected`、`sect_elixir_receipt_write_rejected`及晚期宗门
+状态改写的`sect_elixir_eligibility_write_rejected`携具体主体经应用、failed回执
+和实际回复保留；原SQLite异常透传，诊断失败不遮原原因/异常。
+
+新写入失败可同请求恢复，started预约可续；贡献和宗门资材仍只校验门槛，不在领取
+时扣减。多药、已有绑定、重复物品ID与库存上限按整批校验，大数使用既有精确存储。
+聊天随机奖励由服务端生成，不参与玩家请求指纹；显式API奖励参数仍检查冲突。
+旧成功回执先回放，保持历史奖励、旧payload和次数；次日旧消息不占新次数，并发
+晚到的回放也显示实际历史奖励。业务已提交而诊断失败时，重放仅补完诊断。legacy
+保留原DTO、NULL职位拒绝与物品元数据更新语义，写入委派同一feature校验，无新迁移。
+
+`test_sect_elixir_claim_recovery.py`验证三步IGNORE/改写/ABORT、后步篡改前步、整笔
+回滚/重建恢复/并发、大数/坏数据/旧兼容、真实handler流程与失败投递及Flask合同。
+`sect-elixir-claim`两条真实dispatch/DI/handler衔接每日调度→领取故障→同消息恢复→
+别名/跨日/随机多药和旧消息回放；核对三库资产/回执/ledger/统计/任务及完整性。
+OneBot/QQ文本、Markdown与降级仅mock，真实QQ展示未验。
 
 主/副功法搜寻（`宗门功法搜寻`、`宗门神通搜寻`）经
 `SectApplication.apply_buff_search(..., owner_position=...)` 进入
@@ -121,6 +172,59 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 
 ## 个人宗门任务记录
 
+### 每日任务交接
+
+日重置后，接取/刷新将任务状态与永久接取回执一笔提交；完成任务将消耗、修为/
+贡献奖励、次数、宗门奖励、完成状态与永久结算回执一笔提交。逐步检查行数并在
+提交前回读，IGNORE、字段改写和末步篡改均按具体步骤拒绝，事务含trigger副作用
+完整回滚。八种`sect_task_{claim,refresh,settlement}_*_write_rejected`分别带玩家、
+宗门或请求主体进入应用结果与命令回复，原SQLite异常透传。
+
+聊天先读取本人永久回执，旧消息跨日、退宗或已有新任务时只回放历史，不覆盖新任务、
+不再次结算或记统计。前置体力从通用依赖改为该指令调用既有幂等接口，同消息首次
+出门消耗3点，结算失败恢复不再重复扣除；该体力事务独立提交，失败不能宣称体力
+也已退还。首次无任务、资产不足等原出门规则保留，冷却仍由原依赖处理。
+
+任务日期与完成时间使用应用注入时钟和调度时区（默认上海），naive保留旧本地解释；
+刷新/实际聊天结算拒绝跨业务日快照，历史成功回执先回放。新大整数精确存储，旧
+REAL/科学记数奖励回执与原小数气血/修为/建设度计算保留；不改奖励生成、每日上限，
+无新迁移。旧服务只准备原schema并委派同一写校验，DTO保留且补充reason/subject。
+
+`tests/test_sect_task_daily_handoff.py`覆盖拒写/改写/末步篡改/ABORT、完整回滚和恢复、
+旧成功/并发/时区/坏数值与真实handler异常合同；`sect-task-daily`两条真实dispatch/
+DI/handler场景串联实际日重置→接取→刷新→两种消耗完成、八步拒写与重建同消息
+恢复，核对三库资产/永久回执/统计/完整性。OneBot/QQ文本、Markdown和降级为mock。
+
+任务体力扣减与永久消费回执也逐步验证和最后回读，拒写/篡改使体力事务含副作用
+整笔回滚，任务结算不开始；具体`stamina_user_write_rejected`与
+`stamina_receipt_write_rejected`携本人/本次体力回执进入实际指令及共享Cooldown。
+旧成功消费回执保持权威，恢复体力后重放仍不重扣；快照竞争、坏体力、坏历史回执
+分别保留原因。原SQLite异常到安全定位，失败投递透传。保留原管理员免体力规则，
+未改变恢复/补充策略或新增迁移。
+
+`test_sect_task_stamina_handoff.py`补两步IGNORE/改写/末步篡改/ABORT、无回执调用、
+竞争/旧回放/坏数据和共享依赖失败合同；`sect-task-stamina`真实参数场景覆盖六种
+拒写恢复、体力不足→实际定时恢复→原ABORT→同消息恢复以及管理员免消耗，核三库
+和统计/永久回执/完整性，24个OneBot/QQ消息合同为mock，不外推线上或真机已通过。
+
+### 每分钟体力恢复
+
+`recover_user_stamina` 保持原interval、每分钟恢复量/上限和rowid分批；每个分批在
+SQLite事务内校验实际更新行数并回读目标玩家。拒写、身份改写或删除会回滚当前批次及
+trigger副作用，返回具体`stamina_recovery_write_rejected`和玩家subject，并使调度回调
+失败；先前已提交批次保留，后续批次停止。缺表/缺列和非法配置分别保留
+`schema_missing`/`stamina_recovery_config_invalid`及具体subject，原SQLite异常透传。
+恢复量为0仍是无写成功，批大小小于1仍钳为1；NULL、重复玩家记录和封顶规则保持。
+后续interval按既有规则形成一次新的恢复，不增加周期回执、断点补跑或补偿。
+
+`tests/test_stamina_schedule_recovery.py` 覆盖实际声明、pending注册失败重试、interval
+边界和真实APScheduler触发、缺schema/非法配置、IGNORE/改写/ABORT/超过SQLite参数
+分片的末步篡改、部分提交与失败批次回滚。`stamina-recovery`真实参数场景用隔离三库
+验证恢复失败时真实宗门任务仍体力不足、后续恢复再消费一次、成功消息只回放，并核对
+资产/回执/统计/完整性。OneBot/QQ文本、Markdown和降级合同为mock，未真机验证。
+
+### 历史查询
+
 `我的宗门任务记录`（别名 `宗门任务记录`）补齐玩家侧逐次宗门任务的可见性：玩家只能看到
 当前接取的任务与一次完成提示，无法回看最近做过哪些任务、付出了什么、拿到了什么。
 
@@ -138,7 +242,49 @@ sect_fairyland,sect_materials,mainbuff,secbuff,elixir_room_level`。
 
 ## 定时任务
 
+`sect_materials_grant` 沿用配置的 cron 小时、coalesce/max_instances=1 和300秒宽限。
+业务日期将注入时钟转换为调度时区（默认Asia/Shanghai）；旧无时区时间仍按本地解释。
+每天每宗门的永久回执限制重复发放：已完成宗门和随后新增资材不因重试被覆盖，
+后续宗门失败时停止本轮，故障解除后同日重试只处理尚未完成部分。正常宗门消失或
+失去宗主仍跳过；缺迁移、坏数值、写入拒绝则使实际APScheduler产生ERROR事件，
+保留具体reason/subject，失败不记录完成，新发放日志不计duplicate。
+
+资材/战力状态更新与回执插入逐步校验行数并在提交前回读两者。IGNORE、trigger改写
+或末步篡改前步时，`sect_material_state_write_rejected` / `sect_material_receipt_write_rejected`
+携宗门编号，退出事务完整回滚（含trigger副作用）后才转结果；原SQLite异常透传。
+新超int64写入复用`xiuxian_int_store`的ASCII BLOB表示，避免列affinity变成REAL后
+无法通过最终校验；成员既有REAL及旧战力回执仍沿用历史整数转换，不恢复已失精度，
+不重写旧回执。legacy服务只保留schema准备，写入委派同一feature仓储，无新迁移。
+
+`test_sect_material_recovery.py` 覆盖实际声明/连续注册失败pending恢复、cron边界、
+真实触发、上海跨日/同刻跨时区、两步拒写/改写/ABORT、部分提交恢复、大数与历史
+回放、坏资材原因和正常目标竞争。`sect-material-schedule`两条真实dispatch/DI/handler
+串联发放→我的宗门/宗门信息别名→成员关键词分页→重放/次日，以及第二宗门拒写→
+重建应用→只补剩余；核对三库资产/永久回执/统计及integrity_check。OneBot/QQ文本、
+Markdown与发送降级仅mock，无真实消息或线上部署验证。
+
+`daily_reset_sect_task` 每日08:00:15调用日重置，业务日期按实际调度时区取值，
+默认上海，旧naive时钟按本地解释。全部玩家次数、丹房维护及当日永久回执在同一
+事务；玩家UPDATE、资材扣减、降级UPDATE、回执INSERT各查行数并在提交前回读，
+拒写/改写/后步篡改前步均整日回滚，包括trigger副作用。四个
+`sect_daily_reset_{user,material,level,receipt}_write_rejected`携玩家/宗门/业务日
+到实际任务ERROR；坏数值、坏回执和缺迁移各保留原因，原SQLite异常透传。
+同日成功回执先回放，不覆盖新领取次数或任务；旧带空格JSON费用payload按结构比较，
+费用实际变化仍拒绝。超int64资材复用既有精确存储，无新迁移、旧回执改写或费用变更。
+无主/无房/未知等级仍按原规则跳过；旧服务仅准备schema，再委派同一feature校验。
+
+`test_sect_daily_maintenance_recovery.py`覆盖真实注册/pending重试/cron边界/触发、
+四步IGNORE/改写/ABORT与整日恢复、业务时区、六种正常状态、历史兼容及大数。
+`sect-daily-maintenance`两条真实参数场景连接日重置→宗门查询→别名领取/接任务→
+同日重放/次日，以及失败后原状态读取→重建应用恢复；核对三库状态/资产/回执/
+outbox/ledger/统计/任务和完整性。OneBot/QQ文本、Markdown及降级仅mock。
+
 宗门日常重置和任务刷新由兼容生命周期统一调度，使用稳定 job ID。
+不活跃维护逐宗检查解散、继承、封闭结果；缺迁移、请求冲突和未识别结果保留
+`status/action/sect_id` 并使任务失败，已处理或正常竞争仍按具体原因跳过。批次可继续
+处理其他宗门，末尾汇总异常并保留原异常链；存在失败时不记录“处理完成”，也不宣称
+其他宗门已回滚。日重置的 `schema_missing` / `operation_conflict` 同样向调度器抛错，
+不再丢成属性异常或正常返回。受影响失败/恢复/部分成功与回执由隔离真实 SQLite 验证。
 
 ## 配置项
 

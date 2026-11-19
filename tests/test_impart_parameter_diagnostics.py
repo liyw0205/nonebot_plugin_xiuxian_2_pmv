@@ -27,8 +27,12 @@ class ImpartParameterDiagnosticsTests(unittest.TestCase):
                 capture_output=True,
                 timeout=120,
             )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            payload = json.loads(report.read_text(encoding="utf-8"))
+            payload = json.loads(report.read_text(encoding="utf-8")) if report.exists() else {}
+            failures = [row for row in payload.get("results", []) if row["status"] != "pass"]
+            self.assertEqual(
+                result.returncode, 0,
+                result.stdout + result.stderr + json.dumps(failures, ensure_ascii=False),
+            )
             statuses = {row["status"] for row in payload["results"]}
             self.assertEqual(payload["summary"], {"pass": 20}, result.stdout)
             self.assertEqual(statuses, {"pass"})

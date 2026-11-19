@@ -12,10 +12,12 @@ player-triggered convergence without a second notion of "now".
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 # The hour the Guishi sell window closes; the buy-order promise quotes the same hour.
 DEFAULT_GUISHI_END_HOUR = 8
+DEFAULT_GUISHI_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
 # SQLite ``CURRENT_TIMESTAMP`` writes UTC without an offset.
 _SQLITE_TIMESTAMP_FORMATS = (
@@ -61,14 +63,18 @@ def parse_created_at(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _compare_frames(
-    deadline: datetime, now: datetime
-) -> tuple[datetime, datetime]:
-    """Drop tzinfo from both sides when the caller mixed naive and aware instants."""
+def business_time(moment: datetime, business_timezone: tzinfo) -> datetime:
+    """Project an instant into the business zone; offsetless clock values are UTC."""
 
-    if (deadline.tzinfo is None) != (now.tzinfo is None):
-        return deadline.replace(tzinfo=None), now.replace(tzinfo=None)
-    return deadline, now
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(business_timezone)
+
+
+def _compare_frames(deadline: datetime, now: datetime) -> tuple[datetime, datetime]:
+    """Compare instants without discarding an explicit UTC offset."""
+
+    return business_time(deadline, timezone.utc), business_time(now, timezone.utc)
 
 
 def order_deadline(
@@ -98,6 +104,17 @@ def order_remaining_seconds(
     deadline, now = _compare_frames(deadline, now)
     remaining = (deadline - now).total_seconds()
     return max(int(remaining), 0)
+
+
+def baitan_deadline(
+    created_at: datetime | None, *, end_hour: int = DEFAULT_GUISHI_END_HOUR
+) -> datetime | None:
+    """A stall closes at the first daily cleanup after its creation instant."""
+
+    deadline = order_deadline(created_at, end_hour=end_hour)
+    if deadline is not None and created_at.hour < int(end_hour):
+        deadline -= timedelta(days=1)
+    return deadline
 
 
 def qiugou_deadline(
@@ -136,6 +153,9 @@ def qiugou_remaining_seconds(
 
 __all__ = [
     "DEFAULT_GUISHI_END_HOUR",
+    "DEFAULT_GUISHI_TIMEZONE",
+    "baitan_deadline",
+    "business_time",
     "order_deadline",
     "order_remaining_seconds",
     "parse_created_at",

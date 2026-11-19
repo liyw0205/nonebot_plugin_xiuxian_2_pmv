@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol
 
@@ -71,6 +71,26 @@ class DemonEventLifecycleSqlRepository:
             verify_event_state(uow, event_key, expected)
         except RuntimeError as exc:
             raise RuntimeError("demon lifecycle state verification failed") from exc
+
+    @staticmethod
+    def _can_rollover(current: Mapping[str, Any], target: Mapping[str, Any]) -> bool:
+        if (
+            current.get("event_type") != "demon_invasion"
+            or target.get("event_type") != "demon_invasion"
+            or int(target.get("manual") or 0) != 0
+            or target.get("event_id") != f"demon_invasion:{target.get('period')}"
+        ):
+            return False
+        try:
+            previous = date.fromisoformat(str(current.get("period")))
+            following = date.fromisoformat(str(target.get("period")))
+        except ValueError:
+            return False
+        return (
+            previous.isoformat() == current.get("period")
+            and following.isoformat() == target.get("period")
+            and previous < following
+        )
 
     def replay(self, operation_id: str) -> DemonEventLifecycleResult | None:
         operation_id = str(operation_id)
@@ -149,7 +169,9 @@ class DemonEventLifecycleSqlRepository:
                     and int(target.get("active") or 0) == 1
                     and bool(target.get("event_id"))
                 )
-                valid = valid and not (current and current.get("status") == "active")
+                if current and current.get("status") == "active":
+                    # Recover a missed previous-day close in this same transaction.
+                    valid = valid and action == "auto_start" and self._can_rollover(current, target)
             else:
                 valid = current is not None and current.get("status") == "active"
                 valid = valid and target.get("event_id") == current.get("event_id")

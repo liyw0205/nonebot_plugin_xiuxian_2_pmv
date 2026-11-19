@@ -15,6 +15,8 @@ class AuctionSessionStartResult:
     start_time: float = 0.0
     end_time: float = 0.0
     items_count: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -29,6 +31,8 @@ class AuctionSessionFinishResult:
     operation_id: str
     session_id: str = ""
     results: tuple[dict[str, Any], ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -85,6 +89,8 @@ class AuctionSessionService:
             result.start_time,
             result.end_time,
             result.items_count,
+            result.reason,
+            result.subject,
         )
 
     def start(
@@ -110,6 +116,8 @@ class AuctionSessionService:
             result.start_time,
             result.end_time,
             result.items_count,
+            result.reason,
+            result.subject,
         )
 
     def finish(
@@ -140,6 +148,8 @@ class AuctionSessionService:
             result.operation_id,
             result.session_id or session_id,
             tuple(dict(item) for item in result.results),
+            result.reason,
+            result.subject,
         )
 
 

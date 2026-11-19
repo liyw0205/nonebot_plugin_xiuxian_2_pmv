@@ -26,6 +26,9 @@ from ..adapter_compat import (
 from ..messaging.delivery import delivery_service
 from ..xiuxian_config import XiuConfig, JsonConfig
 from ...bootstrap.legacy import register_legacy_shutdown
+from ..command_guard import result_failure
+from ...core.errors import DomainError
+from ...core.player_reasons import reason_text
 from .utils import check_user, consume_player_stamina, get_msg_pic, get_user_profile, handle_send, recover_player_stamina
 
 
@@ -72,12 +75,17 @@ def limit_all_stamina_():
         result = recover_player_stamina(
             XiuConfig().max_stamina,
             XiuConfig().stamina_recovery_points,
-            batch_size=max(1, int(os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000"))),
+            batch_size=os.getenv("XIUXIAN_STAMINA_RECOVERY_BATCH_SIZE", "1000"),
         )
+        if result.get('status') != 'applied':
+            reason = result.get('reason') or result.get('status') or 'stamina_recovery_result_invalid'
+            subject = result.get('subject') or 'recover_user_stamina'
+            raise DomainError(reason, f'stamina recovery rejected reason={reason} subject={subject} updated={result.get("updated", 0)}',
+                              {'reason': reason, 'subject': subject, 'updated': result.get('updated', 0)})
         updated = int(result.get("updated", 0) or 0)
     except Exception as e:
         logger.opt(exception=e).warning("体力恢复定时任务执行失败，当前批次已回滚，后续恢复已停止")
-        return
+        raise
 
     elapsed = time.monotonic() - started_at
     if elapsed >= 10:
@@ -491,17 +499,27 @@ def Cooldown(
                     msg = "你没有足够的体力，请等待体力恢复后再试！"
                     await handle_send(bot, event, msg)
                     await matcher.finish()
-                stamina_result = consume_player_stamina(
-                    stamina_user_id,
-                    stamina_cost,
-                    expected_stamina=current_stamina,
-                    operation_id=stamina_operation_id,
-                )
+                try:
+                    stamina_result = consume_player_stamina(
+                        stamina_user_id,
+                        stamina_cost,
+                        expected_stamina=current_stamina,
+                        operation_id=stamina_operation_id,
+                    )
+                except DomainError as exc:
+                    reason = exc.details.get('reason') or exc.code
+                    if not reason_text(reason):
+                        raise
+                    stamina_result = {'status': 'rejected', **exc.details, 'reason': reason}
                 if stamina_result.get("status") not in {"applied", "duplicate"}:
-                    if stamina_result.get("status") == "stamina_insufficient":
+                    if stamina_result.get('reason'):
+                        subject = str(stamina_result.get('subject') or '')
+                        msg = result_failure('体力消耗', stamina_result,
+                                             subjects={subject: '本次体力回执' if 'receipt' in stamina_result['reason'] else '本人'} if subject else None)
+                    elif stamina_result.get("status") == "stamina_insufficient":
                         msg = "你没有足够的体力，请等待体力恢复后再试！"
                     else:
-                        msg = "体力状态已更新，请稍后重试。"
+                        msg = result_failure('体力消耗', stamina_result)
                     await handle_send(bot, event, msg)
                     await matcher.finish()
         if cd_time <= 0:

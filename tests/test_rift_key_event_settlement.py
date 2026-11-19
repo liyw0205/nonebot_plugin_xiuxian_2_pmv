@@ -1,13 +1,26 @@
+import asyncio
+import importlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import nonebot
+from nonebot.exception import FinishedException
 
 nonebot.init()
 
+from nonebot_plugin_xiuxian_2.features.rift.application import RiftApplication
+from nonebot_plugin_xiuxian_2.features.rift.migrations import (
+    apply_rift_demon_token_player_schema,
+    apply_rift_key_event_operations,
+)
+from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift.transaction_service import RiftKeyEventSettlementService
+from nonebot_plugin_xiuxian_2.features.rift.key_event_repository import RiftKeyEventResult
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import result_failure
 from tests.test_db_backend import db_backend
 
 
@@ -20,6 +33,83 @@ class RiftKeyEventSettlementTests(unittest.TestCase):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_rift
 
         self.assertFalse(hasattr(xiuxian_rift, "_rift_key_event_settlement_service_instance"))
+
+    def test_key_rejection_reply_keeps_key_specific_reason(self):
+        result = RiftKeyEventResult(
+            "state_changed",
+            reason="rift_key_event_receipt_write_rejected",
+            subject="key-operation",
+        )
+        message = result_failure("秘境钥匙", result)
+        self.assertIn("秘境钥匙结算回执保存失败", message)
+        self.assertNotIn("斩妖令结算", message)
+
+    def test_registered_key_command_surfaces_key_reason_after_receipt_rejection(self):
+        with DatabaseUnitOfWork(self.game_db) as uow:
+            apply_rift_key_event_operations(uow)
+        with DatabaseUnitOfWork(self.player_db) as uow:
+            apply_rift_demon_token_player_schema(uow)
+
+        back_module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back")
+        rift_module = importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_rift")
+        registered_handler = next(
+            handler for handler in back_module.use_item.handlers if handler.call is back_module.use_item_
+        )
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_key_receipt BEFORE INSERT ON rift_key_event_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        class MessageData:
+            @staticmethod
+            def goods_num(user_id, item_id):
+                return 1
+
+        replies = []
+
+        async def capture_reply(*args, **kwargs):
+            replies.append((args, kwargs))
+
+        async def invoke():
+            fake_bot = SimpleNamespace(self_id="bot")
+            fake_event = SimpleNamespace(message_id="key-reason-message")
+            outcome = {
+                "delta": {"stone": 15, "hp": -20},
+                "statistics": {"rift_combat": 1},
+                "message": "fixed key event",
+            }
+            with (
+                patch.object(back_module, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+                patch.object(rift_module, "assign_bot", new=AsyncMock(return_value=(fake_bot, None))),
+                patch.object(back_module, "check_user", return_value=(True, {"user_id": "u"}, "")),
+                patch.object(rift_module, "check_user", return_value=(True, {"user_id": "u", "stone": 100, "exp": 200, "hp": 80, "mp": 60}, "")),
+                patch.object(rift_module, "check_user_type", return_value=(True, "")),
+                patch.object(back_module, "items") as items,
+                patch.object(back_module, "_sql_message", return_value=MessageData()),
+                patch.object(rift_module, "read_rift_data", return_value=self.rift),
+                patch.object(rift_module, "_rift_progress_snapshot", return_value=9),
+                patch.object(
+                    rift_module,
+                    "_roll_rift_progress",
+                    return_value=({"id": 20018, "name": "token", "type": "item", "amount": 1}, ""),
+                ),
+                patch.object(rift_module, "_roll_rift_event", new=AsyncMock(return_value=(None, "", outcome))),
+                patch.object(rift_module, "rift_application", RiftApplication(self.game_db, self.player_db)),
+                patch.object(rift_module, "XiuConfig", return_value=SimpleNamespace(max_goods_num=1000)),
+                patch.object(rift_module, "send_msg_handler", new=AsyncMock()),
+                patch.object(rift_module, "handle_send", new=capture_reply),
+                patch.object(back_module, "handle_send", new=capture_reply),
+                patch.object(rift_module, "log_message"),
+            ):
+                items.get_data_by_item_name.return_value = (20001, {"type": "特殊道具", "name": "秘境钥匙"})
+                with self.assertRaises(FinishedException):
+                    await registered_handler.call(fake_bot, fake_event, args="秘境钥匙")
+
+        asyncio.run(invoke())
+        self.assertEqual(len(replies), 1)
+        self.assertIn("秘境钥匙结算回执保存失败", replies[0][0][2])
+        self.assertNotIn("斩妖令结算", replies[0][0][2])
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()

@@ -21,7 +21,9 @@ from typing import Any, Callable
 
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...core.errors import DomainError
 from .guishi_match_repository import GuishiMatchResult
+from .guishi_immediate_match import GuishiMatchFailure
 
 _QIUGOU_TYPES = ("qiugou", "求购")
 _BAITAN_TYPES = ("baitan", "摆摊")
@@ -56,15 +58,15 @@ class GuishiListingFillService:
         if not database.is_file():
             return None
         with DatabaseUnitOfWork(database, read_only=True) as uow:
-            if not self._table_exists(uow, "guishi_item"):
-                return None
             row = uow.query_one(
                 "SELECT id,user_id,item_id,item_name,item_type,price,quantity,"
                 "COALESCE(filled_quantity,0) AS filled_quantity FROM guishi_item WHERE id=?",
                 (baitan_order_id,),
             )
-        if row is None or str(row["item_type"]) not in _BAITAN_TYPES:
+        if row is None:
             return None
+        if str(row["item_type"]) not in _BAITAN_TYPES:
+            raise GuishiMatchFailure("baitan_invalid", "", baitan_order_id)
         return dict(row)
 
     def _candidates(self, listing: dict[str, Any]) -> list[dict[str, Any]]:
@@ -106,7 +108,11 @@ class GuishiListingFillService:
         matches: list[GuishiMatchResult] = []
         attempted: set[str] = set()
         while True:
-            listing = self._listing(order_id)
+            try:
+                listing = self._listing(order_id)
+            except GuishiMatchFailure as exc:
+                exc.matches = list(matches)
+                raise
             if listing is None:
                 break
             remaining = max(
@@ -122,18 +128,73 @@ class GuishiListingFillService:
                 if not qiugou_order_id or qiugou_order_id in attempted:
                     continue
                 attempted.add(qiugou_order_id)
-                result = self.match(
+                result = self._match_pair(
                     operation_id=f"guishi-fill:{order_id}:{qiugou_order_id}",
                     qiugou_order_id=qiugou_order_id,
                     baitan_order_id=order_id,
+                    matches=matches,
                 )
                 if result.matched:
-                    matches.append(result)
+                    if result.status != "duplicate":
+                        matches.append(result)
                     progressed = True
                     break
+                if result.status not in {"order_missing", "qiugou_completed", "baitan_completed", "not_matchable"}:
+                    raise GuishiMatchFailure(result.status, qiugou_order_id, order_id, matches=matches)
             if not progressed:
                 break
         return matches
+
+    def _match_pair(self, *, operation_id: str, qiugou_order_id: str,
+                    baitan_order_id: str, matches: list[GuishiMatchResult]) -> GuishiMatchResult:
+        try:
+            return self.match(operation_id=operation_id, qiugou_order_id=qiugou_order_id,
+                              baitan_order_id=baitan_order_id)
+        except DomainError as exc:
+            raise GuishiMatchFailure(exc.details.get("reason") or exc.code, qiugou_order_id,
+                                     baitan_order_id, matches=matches,
+                                     subject=exc.details.get("subject", "")) from exc
+
+    def fill_buy(self, *, qiugou_order_id: str) -> list[GuishiMatchResult]:
+        """Resume only this buy order, using the existing sweep price ordering."""
+        order_id = str(qiugou_order_id)
+        matches: list[GuishiMatchResult] = []
+        attempted: set[str] = set()
+        while True:
+            with DatabaseUnitOfWork(self.trade_database, read_only=True) as uow:
+                buy = uow.query_one("SELECT * FROM guishi_item WHERE id=?", (order_id,))
+                if buy is None:
+                    return matches
+                if str(buy["item_type"]) not in _QIUGOU_TYPES:
+                    raise GuishiMatchFailure("qiugou_invalid", order_id, "", matches=matches)
+                sells = uow.query_all(
+                    "SELECT id,price FROM guishi_item WHERE item_type IN ('baitan','摆摊') AND item_name=? "
+                    "AND user_id<>? ORDER BY id",
+                    (buy["item_name"], buy["user_id"]),
+                )
+                sells = sorted((row for row in sells if int(row["price"]) <= int(buy["price"])),
+                               key=lambda row: int(row["price"]))
+            progressed = False
+            for sell in sells:
+                sell_id = str(sell["id"])
+                if sell_id in attempted:
+                    continue
+                attempted.add(sell_id)
+                result = self._match_pair(operation_id=f"guishi-match:{order_id}:{sell_id}",
+                                          qiugou_order_id=order_id, baitan_order_id=sell_id, matches=matches)
+                if result.matched:
+                    if result.status != "duplicate":
+                        matches.append(result)
+                    if result.qiugou_completed:
+                        return matches
+                    progressed = True
+                    break
+                if result.status == "qiugou_completed":
+                    return matches
+                if result.status not in {"order_missing", "baitan_completed", "not_matchable"}:
+                    raise GuishiMatchFailure(result.status, order_id, sell_id, matches=matches)
+            if not progressed:
+                return matches
 
 
 __all__ = ["GuishiListingFillService"]

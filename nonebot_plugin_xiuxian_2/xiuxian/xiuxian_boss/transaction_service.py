@@ -646,6 +646,8 @@ class WorldBossManualSpawnResult:
     bosses: tuple[dict[str, Any], ...] = ()
     boss: dict[str, Any] | None = None
     revision: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -723,39 +725,23 @@ class WorldBossManualSpawnService:
             int(stored.get("revision", 0)),
         )
 
-    def snapshot(self) -> tuple[list[dict[str, Any]], int]:
+    def _repository(self):
+        from ...features.boss.world_boss_repository import WorldBossManualSpawnSqlRepository
+
         with self._lock, closing(db_backend.connect(self._player_database)) as conn:
             self._ensure_schema(conn)
             conn.commit()
-            row = conn.execute(
-                "SELECT bosses,revision FROM world_boss_state WHERE state_key='global'"
-            ).fetchone()
-            if row is None:
-                return [], 0
-            try:
-                bosses = json.loads(row[0])
-            except (TypeError, ValueError):
-                bosses = []
-            if not isinstance(bosses, list):
-                bosses = []
-            return [dict(boss) for boss in bosses if isinstance(boss, dict)], int(
-                row[1] or 0
-            )
+        return WorldBossManualSpawnSqlRepository(self._player_database, self._config_loader, self._lock)
 
-    def get_result(self, operation_id: str) -> WorldBossManualSpawnResult | None:
+    def snapshot(self) -> tuple[list[dict[str, Any]], int]:
+        return self._repository().snapshot()
+
+    def get_result(self, operation_id: str, *, request=None) -> WorldBossManualSpawnResult | None:
         operation_id = str(operation_id).strip()
         if not operation_id:
             return None
-        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
-            self._ensure_schema(conn)
-            conn.commit()
-            row = conn.execute(
-                "SELECT result_json FROM world_boss_manual_spawn_operations WHERE operation_id=%s",
-                (operation_id,),
-            ).fetchone()
-            if row is None:
-                return None
-            return self._result_from_json(row[0], "duplicate")
+        result = self._repository().get_result(operation_id, request=request)
+        return WorldBossManualSpawnResult(**vars(result)) if result is not None else None
 
     def spawn(
         self,
@@ -765,91 +751,12 @@ class WorldBossManualSpawnService:
         expected_bosses: list[dict[str, Any]],
         expected_config: dict[str, Any],
         boss: dict[str, Any],
+        request=None,
     ) -> WorldBossManualSpawnResult:
-        operation_id = str(operation_id).strip()
-        expected_revision = int(expected_revision)
-        expected_bosses = list(expected_bosses)
-        expected_config = dict(expected_config)
-        boss = dict(boss)
-        if not operation_id:
-            raise ValueError("operation_id is required")
-
-        payload = self._json({
-            "expected_revision": expected_revision,
-            "expected_bosses": expected_bosses,
-            "expected_config": expected_config,
-            "boss": boss,
-        })
-
-        with self._lock, closing(db_backend.connect(self._player_database)) as conn:
-            try:
-                self._ensure_schema(conn)
-                conn.commit()
-                conn.execute("BEGIN IMMEDIATE")
-                previous = conn.execute(
-                    "SELECT payload,result_json FROM world_boss_manual_spawn_operations "
-                    "WHERE operation_id=%s",
-                    (operation_id,),
-                ).fetchone()
-                if previous is not None:
-                    conn.rollback()
-                    if previous[0] != payload:
-                        return WorldBossManualSpawnResult("operation_conflict")
-                    return self._result_from_json(previous[1], "duplicate")
-
-                realm = str(boss.get("jj", ""))
-                current_config = self.config_snapshot(self._config_loader(), realm)
-                if current_config != expected_config or not self._valid_boss(boss, current_config):
-                    conn.rollback()
-                    return WorldBossManualSpawnResult("config_changed")
-
-                row = conn.execute(
-                    "SELECT bosses,revision FROM world_boss_state WHERE state_key='global'"
-                ).fetchone()
-                if row is None:
-                    current_bosses = []
-                    current_revision = 0
-                else:
-                    try:
-                        current_bosses = json.loads(row[0])
-                    except (TypeError, ValueError):
-                        current_bosses = []
-                    current_revision = int(row[1] or 0)
-                if (
-                    not isinstance(current_bosses, list)
-                    or current_revision != expected_revision
-                    or self._json(current_bosses) != self._json(expected_bosses)
-                ):
-                    conn.rollback()
-                    return WorldBossManualSpawnResult("session_changed")
-
-                bosses = [item for item in current_bosses if item.get("jj") != realm]
-                bosses.append(boss)
-                bosses_json = self._json(bosses)
-                revision = current_revision + 1
-                conn.execute(
-                    "INSERT INTO world_boss_state(state_key,bosses,updated_at,revision) "
-                    "VALUES ('global',%s,CURRENT_TIMESTAMP,%s) "
-                    "ON CONFLICT(state_key) DO UPDATE SET "
-                    "bosses=excluded.bosses,updated_at=excluded.updated_at,"
-                    "revision=excluded.revision",
-                    (bosses_json, revision),
-                )
-                result_json = self._json(
-                    {"bosses": bosses, "boss": boss, "revision": revision}
-                )
-                conn.execute(
-                    "INSERT INTO world_boss_manual_spawn_operations(operation_id,payload,result_json) "
-                    "VALUES (%s,%s,%s)",
-                    (operation_id, payload, result_json),
-                )
-                conn.commit()
-                return WorldBossManualSpawnResult(
-                    "spawned", tuple(bosses), boss, revision
-                )
-            except Exception:
-                conn.rollback()
-                raise
+        result = self._repository().spawn(operation_id=operation_id, expected_revision=expected_revision,
+                                          expected_bosses=expected_bosses, expected_config=expected_config,
+                                          boss=boss, request=request)
+        return WorldBossManualSpawnResult(**vars(result))
 
 @dataclass(frozen=True)
 class WorldBossFullRefreshResult:
@@ -1330,6 +1237,8 @@ class WorldBossDailyLimitResetResult:
     completed: int = 0
     changed: int = 0
     skipped: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -1340,9 +1249,10 @@ class WorldBossDailyLimitResetService:
 
     _FIELDS = ("boss_integral", "boss_stone", "boss_battle_count")
 
-    def __init__(self, database: str | Path, lock: RLock | None = None) -> None:
+    def __init__(self, database: str | Path, lock: RLock | None = None, *, clock=None) -> None:
         self._database = Path(database)
         self._lock = lock or RLock()
+        self.clock = clock
 
     @staticmethod
     def _normalize_date(value) -> str:
@@ -1405,131 +1315,21 @@ class WorldBossDailyLimitResetService:
         chunk_size=500,
         updated_at=None,
     ) -> WorldBossDailyLimitResetResult:
-        business_date = self._normalize_date(business_date)
-        chunk_size = max(1, int(chunk_size))
-        updated_at = str(
-            updated_at or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
+        from ...features.boss.world_boss_repository import WorldBossDailyLimitResetSqlRepository
 
+        # Only this legacy facade retains schema creation; writes share feature validation.
         with self._lock, closing(db_backend.connect(self._database)) as conn:
             try:
                 conn.execute("BEGIN IMMEDIATE")
                 self._ensure_schema(conn)
-                operation = conn.execute(
-                    "SELECT status FROM world_boss_daily_limit_reset_operations "
-                    "WHERE business_date=%s",
-                    (business_date,),
-                ).fetchone()
-                if operation is None:
-                    user_ids = tuple(
-                        str(row[0])
-                        for row in conn.execute(
-                            "SELECT user_id FROM boss ORDER BY user_id"
-                        ).fetchall()
-                    )
-                    task_status = "completed" if not user_ids else "running"
-                    conn.execute(
-                        "INSERT INTO world_boss_daily_limit_reset_operations("
-                        "business_date,total,status,created_at,updated_at) "
-                        "VALUES(%s,%s,%s,%s,%s)",
-                        (
-                            business_date,
-                            len(user_ids),
-                            task_status,
-                            updated_at,
-                            updated_at,
-                        ),
-                    )
-                    conn.executemany(
-                        "INSERT INTO world_boss_daily_limit_reset_targets("
-                        "business_date,user_id,updated_at) VALUES(%s,%s,%s)",
-                        (
-                            (business_date, user_id, updated_at)
-                            for user_id in user_ids
-                        ),
-                    )
-                    conn.commit()
-                    if not user_ids:
-                        return self._result(conn, business_date, "applied")
-                elif str(operation[0]) == "completed":
-                    result = self._result(conn, business_date, "duplicate")
-                    conn.rollback()
-                    return result
-                else:
-                    conn.commit()
-
-                conn.execute("BEGIN IMMEDIATE")
-                pending = conn.execute(
-                    "SELECT user_id FROM world_boss_daily_limit_reset_targets "
-                    "WHERE business_date=%s AND status='pending' "
-                    "ORDER BY user_id LIMIT %s",
-                    (business_date, chunk_size),
-                ).fetchall()
-                changed = 0
-                skipped = 0
-                for pending_row in pending:
-                    user_id = str(pending_row[0])
-                    row = conn.execute(
-                        "SELECT COALESCE(boss_integral,0),COALESCE(boss_stone,0),"
-                        "COALESCE(boss_battle_count,0) FROM boss WHERE user_id=%s",
-                        (user_id,),
-                    ).fetchone()
-                    if row is None:
-                        skipped += 1
-                        conn.execute(
-                            "UPDATE world_boss_daily_limit_reset_targets SET "
-                            "status='skipped',updated_at=%s WHERE business_date=%s "
-                            "AND user_id=%s AND status='pending'",
-                            (updated_at, business_date, user_id),
-                        )
-                        continue
-
-                    previous = tuple(int(value or 0) for value in row)
-                    updated = conn.execute(
-                        "UPDATE boss SET boss_integral=0,boss_stone=0,"
-                        "boss_battle_count=0 WHERE user_id=%s",
-                        (user_id,),
-                    )
-                    if updated.rowcount != 1:
-                        raise db_backend.IntegrityError(
-                            "world boss daily reset target changed"
-                        )
-                    changed += int(any(previous))
-                    conn.execute(
-                        "UPDATE world_boss_daily_limit_reset_targets SET "
-                        "status='applied',previous_integral=%s,previous_stone=%s,"
-                        "previous_battle_count=%s,updated_at=%s WHERE business_date=%s "
-                        "AND user_id=%s AND status='pending'",
-                        (*previous, updated_at, business_date, user_id),
-                    )
-
-                progress = conn.execute(
-                    "SELECT COUNT(*),COALESCE(SUM(CASE WHEN status='pending' "
-                    "THEN 1 ELSE 0 END),0) FROM world_boss_daily_limit_reset_targets "
-                    "WHERE business_date=%s",
-                    (business_date,),
-                ).fetchone()
-                completed = int(progress[0]) - int(progress[1])
-                task_status = "completed" if int(progress[1]) == 0 else "running"
-                conn.execute(
-                    "UPDATE world_boss_daily_limit_reset_operations SET completed=%s,"
-                    "changed=changed+%s,skipped=skipped+%s,status=%s,updated_at=%s "
-                    "WHERE business_date=%s",
-                    (
-                        completed,
-                        changed,
-                        skipped,
-                        task_status,
-                        updated_at,
-                        business_date,
-                    ),
-                )
-                result = self._result(conn, business_date, "applied")
                 conn.commit()
-                return result
             except Exception:
                 conn.rollback()
                 raise
+        result = WorldBossDailyLimitResetSqlRepository(self._database, self._lock, clock=self.clock).reset(
+            business_date, chunk_size=chunk_size, updated_at=updated_at
+        )
+        return WorldBossDailyLimitResetResult(**vars(result))
 
 @dataclass(frozen=True)
 class BossRewardResult:

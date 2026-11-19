@@ -134,6 +134,53 @@ class SectFairylandRepositoryTests(unittest.TestCase):
             SectFairylandSqlRepository(self.database).upgrade("fail", "owner", 1, 1, 2, 100, 200)
         self.assertEqual(self.row(), (1, 1000, 2000))
 
+    def test_receipt_ignore_returns_specific_rejection_and_rolls_back(self) -> None:
+        self.migrate()
+        with sqlite3.connect(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fairyland_receipt BEFORE INSERT ON sect_fairyland_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        result = SectFairylandSqlRepository(self.database).upgrade("ignore", "owner", 1, 1, 2, 100, 200)
+        self.assertEqual(
+            (result["status"], result["reason"], result["subject"]),
+            ("state_changed", "sect_fairyland_receipt_write_rejected", "ignore"),
+        )
+        self.assertEqual(self.row(), (1, 1000, 2000))
+        with sqlite3.connect(self.database) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM sect_fairyland_operations").fetchone()[0], 0)
+
+    def test_receipt_rewrite_and_late_state_rewrite_are_rejected(self) -> None:
+        self.migrate()
+        with sqlite3.connect(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_fairyland_receipt AFTER INSERT ON sect_fairyland_operations "
+                "BEGIN UPDATE sect_fairyland_operations SET to_level=99 WHERE operation_id=NEW.operation_id; END"
+            )
+        result = SectFairylandSqlRepository(self.database).upgrade("rewrite", "owner", 1, 1, 2, 100, 200)
+        self.assertEqual(result["reason"], "sect_fairyland_receipt_write_rejected")
+        self.assertEqual(self.row(), (1, 1000, 2000))
+
+        with sqlite3.connect(self.database) as conn:
+            conn.execute("DROP TRIGGER rewrite_fairyland_receipt")
+            conn.execute(
+                "CREATE TRIGGER late_fairyland_state AFTER INSERT ON sect_fairyland_operations "
+                "BEGIN UPDATE sects SET sect_materials=sect_materials+777 WHERE sect_id=1; END"
+            )
+        result = SectFairylandSqlRepository(self.database).upgrade("late", "owner", 1, 1, 2, 100, 200)
+        self.assertEqual(result["reason"], "sect_fairyland_state_write_rejected")
+        self.assertEqual(self.row(), (1, 1000, 2000))
+
+    def test_same_operation_conflict_keeps_actor_subject(self) -> None:
+        self.migrate()
+        repo = SectFairylandSqlRepository(self.database)
+        self.assertEqual(repo.upgrade("conflict", "owner", 1, 1, 2, 100, 200)["status"], "upgraded")
+        result = repo.upgrade("conflict", "other", 1, 1, 2, 100, 200)
+        self.assertEqual(
+            (result["status"], result["reason"], result["subject"]),
+            ("state_changed", "operation_conflict", "actor"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

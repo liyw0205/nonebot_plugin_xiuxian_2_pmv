@@ -4,7 +4,9 @@
 
 世界BOSS兑换和讨伐结算均通过 application 生成唯一 operation_id。旧 NoneBot 命令通过兼容门面调用新 application，返回字段保持兼容。
 
-`世界BOSS兑换` 由 `BossPurchaseCommandApplication` 负责。命令先读取 ledger/旧回执和用户 profile，再读取商品配置、物品目录、周限购与积分快照；原始请求数量写入 operation payload，实际数量只在事务内按剩余周限购裁剪。成功回放不依赖当前配置、目录、积分或周限购，拒绝和不明确回执不会渲染为成功。回执仓储只读、不执行请求期 DDL；`started`、`needs_reconcile`、旧表缺少明确 status 和坏 JSON 均 fail closed。
+`世界BOSS兑换` 由 `BossPurchaseCommandApplication` 负责。命令先读取 ledger/旧回执和用户 profile，再读取商品配置、物品目录、周限购与积分快照；原始请求数量写入 operation payload，实际数量只在事务内按剩余周限购裁剪。成功回放不依赖当前配置、目录、积分或周限购，拒绝和不明确回执不会渲染为成功。回执仓储只读、不执行请求期 DDL；没有可核验业务回执的 `started`、`needs_reconcile`、无 ledger 的旧表缺少明确 status 和坏 JSON 均 fail closed。
+
+当 ledger 仍为 `started/failed` 但同操作已有完整业务回执时，仓储只在用户、商品、原始数量和 ledger 请求哈希全部一致后提供恢复资料；应用只补齐 ledger/audit，不再扣积分、改周限购或发物。兼容旧八元素数组回执时，若无法从旧请求身份确定原始数量则保持待核查，不猜测恢复。没有匹配回执的 started、`needs_reconcile`、缺字段和坏 JSON 继续 fail closed。
 
 ## 命令与别名
 
@@ -41,7 +43,9 @@
 
 资产 application 先写 `operation_ledger`，再执行结算；手动生成使用版本 CAS 与回执幂等，每日限额重置冻结目标并按 chunk 恢复。相同 operation/日期重试只返回首次结果；异常在当前事务回滚并保留可恢复进度。旧 transaction service 仅作为显式兼容/回滚路径。
 
-兑换 writer 复用 `BossApplication.purchase -> BossPurchaseSqlRepository.purchase`，在附加 player DB 的 immediate SQLite 事务中校验积分/周限购/背包容量并同时更新积分、周限购、背包和业务回执；ledger 与业务回执仍保留原 operation identity。已确认的 SQL 回滚记录为 `internal_error`，同 payload 可重试；无法确认的 started/needs_reconcile 不盲目重放。
+兑换 writer 复用 `BossApplication.purchase -> BossPurchaseSqlRepository.purchase`，在附加 player DB 的 immediate SQLite 事务中校验积分/周限购/背包容量并同时更新积分、周限购、背包和业务回执。每步写入检查影响行数并回读，末尾再次核对前序资产；`IGNORE`、trigger 改写和副作用均须整笔回滚。已知拒写保留 `reason/subject` 到玩家回复；原 SQLite 异常保留 traceback，并以“暂时无法确认结果”回复，不宣称业务已撤销。
+
+共享 `OperationLedger.finish` 在记录完成日志前校验 ledger 最终行及 audit 行；静默拒写或改写不会伪装成成功。若资产与业务回执已经提交而 ledger 收尾失败，原回复保持不确定，下一次相同请求从已校验回执仅恢复 ledger，不重复扣分或发物。OneBot 文本、QQ Markdown 与降级合同由 mock 回归验证，不代表真实 QQ 客户端展示。
 
 世界BOSS战斗和“世界BOSS信息”通过 `BossApplication.daily_limit_snapshot` 读取每日讨伐次数、积分和灵石。读取使用只读 UoW，每次最多取一行，不缓存；缺数据库、表、用户行或旧字段时返回零，不创建数据库/表、不补字段，也不插入默认用户行。战斗沿用该快照作为结算 CAS 的期望值；显式限额写入与每日重置仍由各自 mutation 路径负责。
 
@@ -97,11 +101,104 @@
 
 世界BOSS刷新和天罚仍由显式兼容生命周期注册，手动生成、全量刷新与每日重置的持久化由 feature-owned repository 承担；手动与定时全量刷新共享 operation receipt，未在 feature 导入时重复注册。
 
+### 全量刷新故障恢复
+
+`set_boss_generation` 的注册异常透传启动生命周期；调度桥尚未激活时保留声明，激活
+失败可重试，不能凭“已配置”日志认定任务已注册。小时/分钟统一接受非负整数或整数
+字符串，均为0时正常禁用，负数/小数/布尔/缺键明确 `world_boss_schedule_invalid`。
+间隔的幂等槽使用注入业务时钟的 Unix 时间戳，同一时刻转换时区不改变操作号；整点
+相邻时间槽分别刷新。同槽回放读取当前状态同步缓存，不将历史回执中的满血状态复活。
+
+状态 UPSERT 与永久回执 INSERT 在同一 player DB immediate 事务中逐步校验行数，
+全部写入后再回读两行；IGNORE、trigger改写或后一步篡改早一步均整笔回滚（含副作用）。
+`world_boss_refresh_state_write_rejected/global` 与
+`world_boss_refresh_receipt_write_rejected/operation_id` 经应用到实际任务/管理员回复。
+任务拒绝产生 `EVENT_JOB_ERROR`；配置变化、场次变化、缺迁移、生成数据无效各保留
+具体原因/主体。SQLite未知异常保留原链，管理员收到安全定位；正常流程和失败回复的
+投递异常透传。成功回执和旧紧凑/完整payload继续回放，拒写无回执，同请求可恢复。
+状态或回执JSON损坏明确拒绝，不过滤坏条目或当空列表覆盖。
+
+玩家查询、列表与讨伐只接受完整正整数编号/页码（查询空参数列全部，列表默认1）。
+负号、多余参数、非数字和超长整数明确拒绝；全量生成不接收参数。讨伐CAS通过feature
+仓储读取冷却原文，保留旧本地/带时区时间，不使用展示工具函数重新格式化；首次NULL
+和空串均是未记录时间的合法期望值，实际结算时间和日/周期间仍必填。奖励、20%伤害
+上限与额度规则不变，缺用户行仍拒绝。全量生成回复沿原有纯文本消息门面，不强制QQ
+Markdown；定时通知失败可能发生在提交后，重放不重复刷新/通知，未新增通知补发队列。
+
+可重放入口为 `tests/test_world_boss_refresh_recovery.py` 和
+`tests/test_world_boss_parameter_dispatch.py`：实际注册/调度事件、隔离迁移SQLite、
+真实dispatch/DI/handler贯穿刷新→查询/分页→讨伐→回放→下一槽，核对余额/体力/
+扣血/回执/统计/缓存及三库完整性。战斗、图片渲染和发送为mock，不代表真实QQ展示。
+
 每日限额重置的逐用户明细（`world_boss_daily_limit_reset_targets`）由启动维护
 `features/maintenance/reset_target_retention.py` 保留 30 天：只清理「日期规范、状态为
 `applied/skipped`、且该业务日父操作行已 `completed`」的行；`pending`/未知状态/非 ISO 日期/
 缺父行一律保留，父操作行（含总计与变更数）与 `boss.boss_*` 永不改动。
 详见 `docs/features/maintenance.md`「每日重置明细保留」。
+
+### 每日额度重置故障恢复
+
+`daily_reset_boss_limits` 保持调度时区的每日00:01:40、coalesce、单实例及300秒
+misfire宽限。默认日期用注入时钟转换调度时区，避免上海零点使用UTC前一天；显式日期
+仍用于恢复指定业务日，仓储独立默认Asia/Shanghai。未新增自动补跑历史日期的策略。
+
+冻结任务/名单独立事务，处理每个分块另用 immediate 事务。登记、冻结名单、额度清零、
+逐用户回执及汇总进度均校验行数，最后回读本块额度/完整名单/汇总；IGNORE、改写或
+末步篡改前步均拒绝并回滚当前事务及trigger副作用。已有完成分块保留，失败名单仍pending，
+故障解除后重建应用继续；不再次清掉已完成玩家的新额度。已删除玩家记skipped，冻结后
+新增玩家不加入该日。completed汇总仍是永久幂等依据，兼容30天明细清理与历史回放。
+
+具体 `world_boss_reset_{operation,freeze,limit,target,progress}_write_rejected` 分别携带
+业务日或玩家主体，坏进度明确 `world_boss_reset_progress_invalid`，坏数值保留字段原因，
+拒绝退出事务后才转结果。失败结果即使task_status仍running也停止循环，不空转；任务
+产生 `EVENT_JOB_ERROR` 并保留原因/主体。SQLite未知异常保留原链，管理员收到安全定位，
+正常流程和失败回复投递异常透传。管理员重置无参数，多余参数零写；旧兼容服务只保留
+原有schema准备，写入委派同一feature校验，不新增迁移或改永久积分/经济规则。
+
+`tests/test_world_boss_daily_reset_recovery.py` 覆盖实际声明注册/持续失败pending恢复、
+cron边界/真实触发、隔离SQLite五步拒写/改写/ABORT/后步篡改与恢复、整块回滚/跳过/
+旧完成回执和坏数据；两条 `world-boss-daily-reset` 实际dispatch/DI/handler覆盖权限、
+玩家额度读取、跨本地日期、同日新额度保留、拒写/未知异常同消息恢复与三库完整性。
+OneBot/QQ文本、Markdown及降级仅mock，未做真实QQ展示。
+
+### 世界BOSS兑换回执与命令入口恢复
+
+`tests/test_boss_purchase_command_ingress.py` 覆盖隔离 handler body 的参数拒绝、限购裁切与
+回放、known write rejection 的 reason/subject、资产回滚和同消息恢复，以及 OneBot 文本、
+QQ Markdown/发送失败降级。`tests/test_world_boss_parameter_dispatch.py` 的
+`world-boss-purchase` 组走真实 matcher/DI/application/repository 和隔离迁移三库，核验
+默认数量/别名/边界、积分/周限购/背包/业务回执、IGNORE/改写/ABORT与ledger收尾故障；
+还覆盖业务已提交后旧数组回执与 `started` ledger 的恢复，并断言资产只结算一次。
+异常发送、Markdown渲染及QQ行为均为mock，未做真实客户端验证。
+
+### 人工生成与定时场次交接
+
+随机生成不接收参数，指定生成接受境界及可选名称；先校验配置中的境界/名称，再生成。
+普通玩家权限拒绝、缺参/多参/非法目标均不写场次或回执。新回执记录原始生成请求，
+同消息改变境界或是否显式指定名称返回 `operation_conflict/operation_id`；旧payload
+无request时按已生成首领约束显式参数，保留历史成功回放，不重写旧数据。回放先于
+当前生成配置校验，不重新随机生成；同步当前持久化场次缓存，避免恢复历史满血首领。
+
+人工单体替换与定时全量刷新共用 `world_boss_state` 的revision/CAS；只替换同境界
+首领，保留其他境界。状态UPSERT和永久回执INSERT同一immediate事务，逐步检查
+行数并在末尾回读两行。IGNORE、trigger改写及末步篡改早先状态均完整回滚含副作用；
+具体 `world_boss_spawn_state_write_rejected/global`、
+`world_boss_spawn_receipt_write_rejected/operation_id` 经应用到管理员回复。
+缺迁移、配置/场次变化、坏状态/回执及非法生成数据各保留reason/subject；未知SQLite
+异常保留原链并回复安全定位。正常NoneBot流程和失败投递异常透传，拒写无成功回执，
+故障解除可重建应用、同消息恢复一次。旧服务保留schema准备后委派同一feature校验。
+
+`tests/test_world_boss_manual_recovery.py` 包含隔离SQLite拒写/改写/ABORT/坏数据、
+旧回执和当前受伤状态缓存合同、兼容服务及两handler异常/消息合同。三条
+`world-boss-manual-spawn` 真实dispatch/DI/handler贯穿定时刷新、指定/随机生成、
+查询/分页、下一时间槽与历史回放，另覆权限、参数冲突、两步故障与重建恢复；核对
+三库资产/永久积分/回执/outbox/任务/统计及integrity_check。OneBot/QQ文本/Markdown/
+降级仅mock，不代表真实QQ展示。没有新增迁移或改变首领生成、奖励、经济规则。
+
+参数清单的 `planned_cases` 仅按case主命令分配，不收录场景内的全部调用。因此
+`世界BOSS列表` 虽已在刷新/人工生成场景实际执行，清单仍标pending；`世界BOSS兑换`
+的新增正常生命周期、拒写恢复和 ledger 恢复证据不能泛化为其他主命令均已覆盖。清单用于定位证据，
+不能替代真实dispatch、资产/回执断言及对应测试结果。
 
 ## 配置项
 

@@ -5,13 +5,15 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from nonebot_plugin_xiuxian_2.features.trade.application import TradeApplication
 from nonebot_plugin_xiuxian_2.features.trade.guishi_listing_fill import (
     GuishiListingFillService,
 )
 from nonebot_plugin_xiuxian_2.features.trade.guishi_match_repository import (
-    GuishiOrderMatchSqlRepository,
+    GuishiOrderMatchSqlRepository, GuishiMatchResult,
 )
 
 
@@ -277,6 +279,35 @@ class GuishiListingFillTests(unittest.TestCase):
     def test_missing_listing_is_a_noop(self) -> None:
         self.assertEqual([], self._service().fill(baitan_order_id="absent"))
 
+    def test_conflicting_real_receipt_is_not_reported_as_no_match(self) -> None:
+        self._order("want", user_id="buyer", item_type="qiugou", price=20, quantity=2)
+        self._order("stall", user_id="seller", item_type="baitan", price=20, quantity=2)
+        with sqlite3.connect(self.trade_database) as connection:
+            connection.execute(
+                "INSERT INTO guishi_match_operations(operation_id,payload,result) VALUES(?,?,?)",
+                ("guishi-fill:stall:want", '["different", "pair"]', "{}"),
+            )
+        before = self._rows(), self._account("buyer"), self._account("seller")
+        with self.assertRaisesRegex(RuntimeError, "operation_conflict.*want.*stall"):
+            self._service().fill(baitan_order_id="stall")
+        self.assertEqual((self._rows(), self._account("buyer"), self._account("seller")), before)
+
+    def test_failure_after_first_pair_carries_committed_matches(self) -> None:
+        self._order("first", user_id="buyer", item_type="qiugou", price=20, quantity=1)
+        self._order("second", user_id="other", item_type="qiugou", price=20, quantity=1)
+        self._order("stall", user_id="seller", item_type="baitan", price=20, quantity=2)
+        original = self.repository.match
+        def fail_second(**kwargs):
+            if kwargs["qiugou_order_id"] == "second":
+                return GuishiMatchResult("qiugou_invalid", "second", "stall")
+            return original(**kwargs)
+        service = GuishiListingFillService(self.trade_database, match=fail_second)
+        with self.assertRaisesRegex(RuntimeError, "qiugou_invalid.*second.*stall") as caught:
+            service.fill(baitan_order_id="stall")
+        self.assertEqual([row.quantity for row in caught.exception.matches], [1])
+        self.assertEqual(self._account("seller")[0], 20)
+        self.assertEqual(self._rows(), [("second", 1, 0), ("stall", 2, 1)])
+
     def test_missing_trade_database_is_not_created(self) -> None:
         missing = Path(self.temp_dir.name) / "absent.sqlite3"
         service = GuishiListingFillService(missing, match=self.repository.match)
@@ -295,7 +326,8 @@ class GuishiListingFillTests(unittest.TestCase):
             created_at="2026-03-05 20:00:00",
         )
         self._order("stall", user_id="seller", item_type="baitan", price=20, quantity=5)
-        application = TradeApplication(self.game_database, self.trade_database)
+        application = TradeApplication(self.game_database, self.trade_database,
+                                       clock=SimpleNamespace(now=lambda: datetime(2026, 3, 5, 23, tzinfo=timezone.utc)))
 
         results = application.guishi_fill_standing_qiugou(baitan_order_id="stall")
 
@@ -323,7 +355,7 @@ class GuishiListingFillWiringTests(unittest.TestCase):
         handler = self._slice("async def guishi_baitan_", "@guishi_shoutan.handle")
 
         self.assertIn("trade_application.guishi_baitan(", handler)
-        self.assertIn("trade_application.guishi_fill_standing_qiugou(", handler)
+        self.assertIn("_resume_guishi_match_reply(order_id)", handler)
         self.assertNotIn("match_guishi_orders(", handler)
 
     def test_both_match_paths_share_one_statistics_recorder(self) -> None:

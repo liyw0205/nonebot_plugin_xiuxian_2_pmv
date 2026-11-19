@@ -113,6 +113,96 @@ class PartnerProtectionTransactionTests(unittest.TestCase):
                 "WHERE operation_id='fail'"
             ).fetchone())
 
+    def test_state_ignore_is_a_specific_rejection_and_can_retry(self):
+        self.service.set_status("seed", "a", "off", "on")
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_partner_protection_update "
+                "BEFORE UPDATE OF two_exp_protect ON status "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        rejected = self.service.set_status("retry", "a", "on", "refusal")
+
+        self.assertEqual(
+            ("state_changed", "partner_protection_state_write_rejected", "a"),
+            (rejected.status, rejected.reason, rejected.subject),
+        )
+        self.assertEqual("on", self.service.get_status("a"))
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual(1, conn.execute(
+                "SELECT COUNT(*) FROM partner_protection_operations"
+            ).fetchone()[0])
+            conn.execute("DROP TRIGGER reject_partner_protection_update")
+        retried = self.service.set_status("retry", "a", "on", "refusal")
+        self.assertEqual("applied", retried.status)
+        self.assertEqual("refusal", self.service.get_status("a"))
+
+    def test_state_insert_ignore_is_a_specific_rejection(self):
+        with db_backend.transaction(self.player) as conn:
+            PartnerProtectionService.ensure_schema(conn)
+            conn.execute(
+                "CREATE TRIGGER reject_partner_protection_insert "
+                "BEFORE INSERT ON status "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        rejected = self.service.set_status("insert-retry", "a", "off", "on")
+
+        self.assertEqual(
+            ("state_changed", "partner_protection_state_write_rejected", "a"),
+            (rejected.status, rejected.reason, rejected.subject),
+        )
+        self.assertEqual("off", self.service.get_status("a"))
+        with db_backend.connection(self.player) as conn:
+            self.assertIsNone(conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='partner_protection_operations'"
+            ).fetchone())
+
+    def test_state_after_trigger_rewrite_rolls_back(self):
+        self.service.set_status("seed", "a", "off", "on")
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_partner_protection_update "
+                "AFTER UPDATE OF two_exp_protect ON status "
+                "BEGIN UPDATE status SET two_exp_protect='off' WHERE user_id='a'; END"
+            )
+
+        rejected = self.service.set_status("rewrite", "a", "on", "refusal")
+
+        self.assertEqual("partner_protection_state_write_rejected", rejected.reason)
+        self.assertEqual("on", self.service.get_status("a"))
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual(1, conn.execute(
+                "SELECT COUNT(*) FROM partner_protection_operations"
+            ).fetchone()[0])
+
+    def test_receipt_ignore_rolls_back_state_and_can_retry(self):
+        self.service.set_status("seed", "a", "off", "on")
+        with db_backend.transaction(self.player) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_partner_protection_receipt "
+                "BEFORE INSERT ON partner_protection_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        rejected = self.service.set_status("receipt-retry", "a", "on", "refusal")
+
+        self.assertEqual(
+            ("state_changed", "partner_protection_receipt_write_rejected", "receipt-retry"),
+            (rejected.status, rejected.reason, rejected.subject),
+        )
+        self.assertEqual("on", self.service.get_status("a"))
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual(1, conn.execute(
+                "SELECT COUNT(*) FROM partner_protection_operations"
+            ).fetchone()[0])
+            conn.execute("DROP TRIGGER reject_partner_protection_receipt")
+        retried = self.service.set_status("receipt-retry", "a", "on", "refusal")
+        self.assertEqual("applied", retried.status)
+        self.assertEqual("refusal", self.service.get_status("a"))
+
     def test_rejects_invalid_status_values(self):
         for expected, target in (("unknown", "on"), ("off", "unknown")):
             with self.subTest(expected=expected, target=target):

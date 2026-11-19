@@ -1,11 +1,36 @@
 from __future__ import annotations
 
 import json
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
+
+
+def _verified_task_result(method):
+    # Convert known write refusals only after the method's transaction rolled back.
+    @wraps(method)
+    def call(*args, **kwargs):
+        try:
+            return method(*args, **kwargs)
+        except DomainError as exc:
+            if not exc.code.startswith('sect_task_') or not exc.code.endswith('_write_rejected'):
+                raise
+            return {'status': 'state_changed', 'reason': exc.code, **exc.details}
+    return call
+
+
+def _task_object(value, subject):
+    try:
+        data = json.loads(value)
+        if not isinstance(data, dict):
+            raise ValueError('task must be an object')
+        return data
+    except (ValueError, TypeError) as exc:
+        raise DomainError('sect_task_data_invalid', 'invalid task data', {'subject': str(subject)}) from exc
 
 
 def _dump_task_data(task_data: dict[str, Any]) -> str:
@@ -75,6 +100,34 @@ class SectTaskStateSqlRepository:
     def assert_schema_ready(self) -> None:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_schema_ready(uow)
+
+    @staticmethod
+    def _reject(mode, step, subject):
+        reason = f'sect_task_{mode}_{step}_write_rejected'
+        raise DomainError(reason, reason, {'reason': reason, 'subject': str(subject)})
+
+    def _verify_claim(self, uow, mode, expected, now):
+        operation_id, user_id, sect_id, period, task_key, task_json = expected
+        saved = uow.query_one('SELECT sect_id,task_key,task_data,status,progress,target,accepted_at,updated_at,completed_at '
+                              'FROM sect_task_state WHERE user_id=? AND period=?', (user_id, period))
+        if saved != dict(sect_id=sect_id, task_key=task_key, task_data=task_json, status='accepted',
+                         progress=0, target=1, accepted_at=now, updated_at=now, completed_at=None):
+            self._reject(mode, 'state', user_id)
+        receipt = uow.query_one('SELECT operation_id,user_id,sect_id,period,task_key,task_data '
+                                'FROM sect_task_claim_operations WHERE operation_id=?', (operation_id,))
+        if receipt != dict(zip(('operation_id', 'user_id', 'sect_id', 'period', 'task_key', 'task_data'), expected)):
+            self._reject(mode, 'receipt', operation_id)
+
+    def claim_receipt(self, operation_id, user_id):
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            self._assert_claim_schema_ready(uow)
+            row = uow.query_one('SELECT user_id,sect_id,period,task_key,task_data FROM sect_task_claim_operations '
+                                'WHERE operation_id=?', (str(operation_id),))
+            if row is None:
+                return None
+            if str(row['user_id']) != str(user_id):
+                raise DomainError('operation_conflict', 'task receipt belongs to another player')
+            return {'status': 'duplicate', **row, 'task_data': _task_object(row['task_data'], operation_id)}
 
     @staticmethod
     def _row_to_task(row: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -147,6 +200,7 @@ class SectTaskStateSqlRepository:
             "completed_at": None,
         }
 
+    @_verified_task_result
     def claim_task(
         self,
         operation_id: str,
@@ -181,7 +235,7 @@ class SectTaskStateSqlRepository:
                 return {
                     "status": "duplicate", "user_id": user_id, "sect_id": sect_id,
                     "period": period, "task_key": str(previous["task_key"]),
-                    "task_data": _load_task_data(previous["task_data"]),
+                    "task_data": _task_object(previous["task_data"], operation_id),
                 }
 
             user = uow.query_one(
@@ -191,7 +245,7 @@ class SectTaskStateSqlRepository:
                 return {"status": "user_missing", "user_id": user_id, "sect_id": sect_id}
             if user["sect_id"] is None or int(user["sect_id"]) != sect_id:
                 return {"status": "sect_changed", "reason": "user_missing" if user is None else "sect_changed", "user_id": user_id, "sect_id": sect_id}
-            if int(user["sect_task"] or 0) >= daily_limit:
+            if require_exact_integer(user["sect_task"] or 0, field='sect_task', subject=user_id) >= daily_limit:
                 return {"status": "daily_limit", "user_id": user_id, "sect_id": sect_id}
             if uow.query_one("SELECT 1 AS present FROM sects WHERE sect_id=?", (sect_id,)) is None:
                 return {"status": "sect_missing", "user_id": user_id, "sect_id": sect_id}
@@ -203,7 +257,7 @@ class SectTaskStateSqlRepository:
                 return {"status": "task_exists", "user_id": user_id, "sect_id": sect_id}
 
             task_json = _dump_task_data(task_data)
-            uow.execute(
+            changed = uow.execute(
                 """INSERT INTO sect_task_state (
                        user_id,sect_id,task_key,task_data,period,status,progress,target,
                        accepted_at,updated_at,completed_at
@@ -215,16 +269,22 @@ class SectTaskStateSqlRepository:
                        completed_at=NULL""",
                 (user_id, sect_id, task_key, task_json, period, now, now),
             )
-            uow.execute(
+            if changed.rowcount != 1:
+                self._reject('claim', 'state', user_id)
+            recorded = uow.execute(
                 "INSERT INTO sect_task_claim_operations "
                 "(operation_id,user_id,sect_id,period,task_key,task_data) VALUES(?,?,?,?,?,?)",
                 (operation_id, user_id, sect_id, period, task_key, task_json),
             )
+            if recorded.rowcount != 1:
+                self._reject('claim', 'receipt', operation_id)
+            self._verify_claim(uow, 'claim', (operation_id, user_id, sect_id, period, task_key, task_json), now)
         return {
             "status": "claimed", "user_id": user_id, "sect_id": sect_id,
             "period": period, "task_key": task_key, "task_data": task_data,
         }
 
+    @_verified_task_result
     def refresh_task(
         self,
         operation_id: str,
@@ -261,7 +321,7 @@ class SectTaskStateSqlRepository:
                 return {
                     "status": "duplicate", "user_id": user_id, "sect_id": sect_id,
                     "period": period, "task_key": str(previous["task_key"]),
-                    "task_data": _load_task_data(previous["task_data"]),
+                    "task_data": _task_object(previous["task_data"], operation_id),
                 }
 
             user = uow.query_one(
@@ -269,32 +329,41 @@ class SectTaskStateSqlRepository:
             )
             if user is None or user["sect_id"] is None or int(user["sect_id"]) != sect_id:
                 return {"status": "sect_changed", "reason": "user_missing" if user is None else "sect_changed", "user_id": user_id, "sect_id": sect_id}
-            if int(user["sect_task"] or 0) >= daily_limit:
+            if require_exact_integer(user["sect_task"] or 0, field='sect_task', subject=user_id) >= daily_limit:
                 return {"status": "daily_limit", "user_id": user_id, "sect_id": sect_id}
+            if uow.query_one('SELECT 1 FROM sects WHERE sect_id=?', (sect_id,)) is None:
+                return {'status': 'sect_missing', 'user_id': user_id, 'sect_id': sect_id}
             current = uow.query_one(
-                "SELECT task_key,task_data,status FROM sect_task_state WHERE user_id=? AND period=?",
+                "SELECT sect_id,task_key,task_data,status FROM sect_task_state WHERE user_id=? AND period=?",
                 (user_id, period),
             )
             if current is None or str(current["status"]) != "accepted":
                 return {"status": "task_missing", "reason": "task_missing" if current is None else "task_resolved", "user_id": user_id, "sect_id": sect_id}
+            if int(current['sect_id']) != sect_id:
+                return {'status': 'task_sect_changed', 'reason': 'task_sect_changed', 'subject': user_id}
             if (
                 str(current["task_key"]) != expected_task_key
-                or _load_task_data(current["task_data"]) != expected_task_data
+                or _task_object(current["task_data"], user_id) != expected_task_data
             ):
                 return {**{"status": "state_changed", "user_id": user_id, "sect_id": sect_id}, "reason": "task_key_changed" if str(current["task_key"]) != str(expected_task_key) else "task_contents_changed", "subject": ""}
 
             task_json = _dump_task_data(task_data)
-            uow.execute(
+            changed = uow.execute(
                 """UPDATE sect_task_state SET task_key=?,task_data=?,progress=0,target=1,
                        accepted_at=?,updated_at=?,completed_at=NULL
                    WHERE user_id=? AND period=? AND status='accepted'""",
                 (task_key, task_json, now, now, user_id, period),
             )
-            uow.execute(
+            if changed.rowcount != 1:
+                self._reject('refresh', 'state', user_id)
+            recorded = uow.execute(
                 "INSERT INTO sect_task_claim_operations "
                 "(operation_id,user_id,sect_id,period,task_key,task_data) VALUES(?,?,?,?,?,?)",
                 (operation_id, user_id, sect_id, period, task_key, task_json),
             )
+            if recorded.rowcount != 1:
+                self._reject('refresh', 'receipt', operation_id)
+            self._verify_claim(uow, 'refresh', (operation_id, user_id, sect_id, period, task_key, task_json), now)
         return {
             "status": "claimed", "user_id": user_id, "sect_id": sect_id,
             "period": period, "task_key": task_key, "task_data": task_data,

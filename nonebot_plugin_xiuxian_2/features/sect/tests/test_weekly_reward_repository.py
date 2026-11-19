@@ -146,6 +146,141 @@ class SectWeeklyRewardRepositoryTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.player, read_only=True) as uow:
             self.assertEqual(0, uow.query_one("SELECT integral FROM boss_limit WHERE user_id='u'")["integral"])
 
+    def test_ignored_permanent_receipt_write_does_not_commit_rewards(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("CREATE TABLE isolated_effect(name TEXT)")
+            uow.execute(
+                "CREATE TRIGGER ignore_weekly_operation BEFORE INSERT ON sect_weekly_reward_operations "
+                "BEGIN INSERT INTO isolated_effect VALUES('receipt'); SELECT RAISE(IGNORE); END"
+            )
+
+        result = self.claim()
+        with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+            user = uow.query_one("SELECT stone,exp,sect_contribution FROM user_xiuxian WHERE user_id='u'")
+            sect = uow.query_one("SELECT sect_scale,sect_materials FROM sects WHERE sect_id=1")
+            claimed = uow.query_all(
+                "SELECT claimed_users FROM sect_weekly_goal WHERE sect_id=1 AND week_key='2026-W29' "
+                "AND goal_key IN ('g1','g2') ORDER BY goal_key"
+            )
+            inventory = uow.query_one("SELECT COALESCE(SUM(goods_num),0) AS count FROM back WHERE user_id='u'")
+            receipt_count = uow.query_one("SELECT COUNT(*) AS count FROM sect_weekly_reward_operations")
+            side_effect_count = uow.query_one("SELECT COUNT(*) AS count FROM isolated_effect")
+        with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+            integral = uow.query_one("SELECT integral FROM boss_limit WHERE user_id='u'")["integral"]
+
+        self.assertEqual(
+            ("write_rejected", (10, 20, 30), (100, 200), ["[]", "[]"], 0, 0, 0, 0),
+            (
+                result.status,
+                tuple(user.values()),
+                tuple(sect.values()),
+                [row["claimed_users"] for row in claimed],
+                inventory["count"],
+                integral,
+                receipt_count["count"],
+                side_effect_count["count"],
+            ),
+        )
+        self.assertEqual("sect_weekly_receipt_write_rejected", result.reason)
+        self.assertEqual("op", result.subject)
+
+    def test_ignored_weekly_writes_reject_with_specific_subject_and_rollback(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("CREATE TABLE isolated_effect(name TEXT)")
+        with DatabaseUnitOfWork(self.player) as uow:
+            uow.execute("CREATE TABLE isolated_effect(name TEXT)")
+
+        def snapshot():
+            with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+                game = (
+                    tuple(uow.query_one("SELECT stone,exp,sect_contribution FROM user_xiuxian WHERE user_id='u'").values()),
+                    tuple(uow.query_one("SELECT sect_scale,sect_materials FROM sects WHERE sect_id=1").values()),
+                    [tuple(row.values()) for row in uow.query_all("SELECT goods_id,goods_num,bind_num FROM back ORDER BY goods_id")],
+                    [tuple(row.values()) for row in uow.query_all("SELECT goal_key,claimed_users FROM sect_weekly_goal ORDER BY goal_key")],
+                    uow.query_one("SELECT COUNT(*) AS n FROM sect_weekly_reward_operations")["n"],
+                    uow.query_one("SELECT COUNT(*) AS n FROM isolated_effect")["n"],
+                )
+            with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+                player = (
+                    tuple(uow.query_one("SELECT integral FROM boss_limit WHERE user_id='u'").values()),
+                    uow.query_one("SELECT COUNT(*) AS n FROM isolated_effect")["n"],
+                )
+            return game, player
+
+        cases = (
+            ("item", self.game, "back", "INSERT", "", "u:101"),
+            ("user_assets", self.game, "user_xiuxian", "UPDATE", "", "u"),
+            ("sect_assets", self.game, "sects", "UPDATE", "", "1"),
+            ("boss_integral", self.player, "boss_limit", "INSERT", "", "u"),
+            ("claim", self.game, "sect_weekly_goal", "UPDATE", " WHEN NEW.goal_key='g1'", "1:2026-W29:g1"),
+            ("receipt", self.game, "sect_weekly_reward_operations", "INSERT", "", "op"),
+        )
+        for step, database, table, verb, condition, subject in cases:
+            with self.subTest(step=step):
+                before = snapshot()
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute(
+                        f"CREATE TRIGGER ignore_{step} BEFORE {verb} ON {table}{condition} "
+                        "BEGIN INSERT INTO isolated_effect VALUES('trigger'); SELECT RAISE(IGNORE); END"
+                    )
+                result = self.claim()
+                self.assertEqual(("write_rejected", f"sect_weekly_{step}_write_rejected", subject),
+                                 (result.status, result.reason, result.subject))
+                self.assertEqual(before, snapshot())
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute(f"DROP TRIGGER ignore_{step}")
+
+    def test_late_receipt_trigger_rewrite_rolls_back_earlier_assets(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("CREATE TABLE isolated_effect(name TEXT)")
+            uow.execute(
+                "CREATE TRIGGER rewrite_weekly_receipt AFTER INSERT ON sect_weekly_reward_operations "
+                "BEGIN INSERT INTO isolated_effect VALUES('receipt'); "
+                "UPDATE user_xiuxian SET stone=999 WHERE user_id='u'; END"
+            )
+
+        result = self.claim()
+        self.assertEqual(("write_rejected", "sect_weekly_user_assets_write_rejected", "u"),
+                         (result.status, result.reason, result.subject))
+        with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+            self.assertEqual((10, 20, 30), tuple(uow.query_one(
+                "SELECT stone,exp,sect_contribution FROM user_xiuxian WHERE user_id='u'"
+            ).values()))
+            self.assertEqual(0, uow.query_one("SELECT COUNT(*) AS n FROM isolated_effect")["n"])
+            self.assertEqual(0, uow.query_one("SELECT COUNT(*) AS n FROM sect_weekly_reward_operations")["n"])
+        with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+            self.assertEqual(0, uow.query_one("SELECT integral FROM boss_limit WHERE user_id='u'")["integral"])
+
+    def test_rewritten_permanent_receipt_rejects_and_rolls_back_all_databases(self):
+        with DatabaseUnitOfWork(self.game) as uow:
+            uow.execute("CREATE TABLE isolated_effect(name TEXT)")
+            uow.execute(
+                "CREATE TRIGGER rewrite_weekly_receipt AFTER INSERT ON sect_weekly_reward_operations "
+                "BEGIN INSERT INTO isolated_effect VALUES('receipt'); "
+                "UPDATE sect_weekly_reward_operations SET result_json='[]' WHERE operation_id=NEW.operation_id; END"
+            )
+
+        result = self.claim()
+        self.assertEqual(("write_rejected", "sect_weekly_receipt_write_rejected", "op"),
+                         (result.status, result.reason, result.subject))
+        with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+            self.assertEqual((10, 20, 30), tuple(uow.query_one(
+                "SELECT stone,exp,sect_contribution FROM user_xiuxian WHERE user_id='u'"
+            ).values()))
+            self.assertEqual((100, 200), tuple(uow.query_one(
+                "SELECT sect_scale,sect_materials FROM sects WHERE sect_id=1"
+            ).values()))
+            self.assertEqual(0, uow.query_one("SELECT COUNT(*) AS n FROM back")["n"])
+            self.assertEqual(["[]", "[]"], [row["claimed_users"] for row in uow.query_all(
+                "SELECT claimed_users FROM sect_weekly_goal WHERE goal_key IN ('g1','g2') ORDER BY goal_key"
+            )])
+            self.assertEqual(0, uow.query_one(
+                "SELECT COUNT(*) AS n FROM sect_weekly_reward_operations"
+            )["n"])
+            self.assertEqual(0, uow.query_one("SELECT COUNT(*) AS n FROM isolated_effect")["n"])
+        with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+            self.assertEqual(0, uow.query_one("SELECT integral FROM boss_limit WHERE user_id='u'")["integral"])
+
     def test_missing_startup_schema_is_rejected_without_request_ddl(self):
         with tempfile.TemporaryDirectory() as directory:
             game, player = Path(directory) / "game.db", Path(directory) / "player.db"

@@ -192,6 +192,7 @@ class GuishiOrderStatusServiceTests(unittest.TestCase):
             self.game_database,
             self.trade_database,
             clock=_FixedClock(datetime(2026, 3, 5, 23, 0, tzinfo=timezone.utc)),
+            business_timezone=timezone.utc,
         )
 
         lines = application.guishi_order_status_lines("buyer")

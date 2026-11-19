@@ -41,7 +41,9 @@ class ArenaProgressContractTests(unittest.TestCase):
             ("handlers", "if opponent_player is None:", "if False:", challenge),
             ("repository", 'result["status"] in {"applied", "duplicate"}',
              'result["status"] in {"applied", "duplicate", "state_changed"}', receipts),
-            ("application", 'action in {"arena.purchase", "arena.settle"}',
+            ("application", 'action in {"arena.purchase", "arena.settle", "arena.challenge_ticket", "arena.challenge_purchase"}',
+             'action in {"arena.purchase", "arena.settle", "arena.challenge_ticket"}', receipts),
+            ("application", 'action in {"arena.purchase", "arena.settle", "arena.challenge_ticket", "arena.challenge_purchase"}',
              'action in {"arena.purchase", "arena.settle", "arena.challenge_purchase"}', receipts),
         )
         for source, before, after, gate in cases:

@@ -21,6 +21,7 @@ from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
 from nonebot_plugin_xiuxian_2.features.sect.weekly_progress_repository import SectWeeklyProgressSqlRepository
 from scripts.check_full_refactor_progress import _slice_status
 from tests.test_db_backend import db_backend
+from tests import test_guishi_parameter_dispatch as dispatch
 
 
 def test_transaction_service_reexports_compatibility_implementation():
@@ -205,6 +206,16 @@ class SectWeeklyRewardClaimTests(unittest.TestCase):
             self.assertEqual(['[]', '[]'], [row[0] for row in conn.execute("SELECT claimed_users FROM sect_weekly_goal WHERE goal_key IN ('g1','g2') ORDER BY goal_key")])
         with db_backend.connection(self.player) as conn:
             self.assertEqual(7, conn.execute("SELECT integral FROM boss_limit").fetchone()[0])
+
+
+class SectWeeklyRewardParameterDispatchTests(unittest.TestCase):
+    check_group = dispatch.GuishiParameterDispatchTests.check_group
+
+    def test_real_claim_parameters_recovery_and_adapters(self):
+        self.check_group("sect-weekly-claim", 5, {"success": 5})
+
+    def test_task_completion_weekly_progress_recovery_and_adapters(self):
+        self.check_group("sect-weekly-task-handoff", 3, {"success": 3})
 
 
 if __name__ == "__main__":

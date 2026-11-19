@@ -13,6 +13,31 @@ from .domain import ArenaChallengePurchaseRequest, ArenaPurchaseRequest, ArenaSe
 from .repository import ArenaChallengePurchaseSqlRepository, ArenaRepository
 
 
+ARENA_SETTLEMENT_RETRYABLE_REJECTIONS = frozenset({
+    "arena_settlement_challenger_write_rejected",
+    "arena_settlement_opponent_write_rejected",
+    "arena_settlement_challenger_vitals_write_rejected",
+    "arena_settlement_opponent_vitals_write_rejected",
+    "arena_settlement_receipt_write_rejected",
+})
+ARENA_TICKET_RETRYABLE_REJECTIONS = frozenset({
+    "arena_ticket_item_write_rejected",
+    "arena_ticket_count_write_rejected",
+    "arena_ticket_receipt_write_rejected",
+})
+ARENA_CHALLENGE_PURCHASE_RETRYABLE_REJECTIONS = frozenset({
+    "arena_challenge_purchase_stone_write_rejected",
+    "arena_challenge_purchase_state_write_rejected",
+    "arena_challenge_purchase_receipt_write_rejected",
+})
+ARENA_PURCHASE_RETRYABLE_REJECTIONS = frozenset({
+    "arena_purchase_honor_write_rejected",
+    "arena_purchase_weekly_write_rejected",
+    "arena_purchase_inventory_write_rejected",
+    "arena_purchase_receipt_write_rejected",
+})
+
+
 def _data(raw: Any) -> dict[str, Any]:
     if is_dataclass(raw):
         return dict(asdict(raw))
@@ -33,7 +58,7 @@ class ArenaApplication:
         return self.repository or ArenaChallengePurchaseSqlRepository(self.game_database, self.player_database, clock=self.clock)
 
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
-        recoverable = action in {"arena.purchase", "arena.settle"} and (
+        recoverable = action in {"arena.purchase", "arena.settle", "arena.challenge_ticket", "arena.challenge_purchase"} and (
             self.repository is None or type(self.repository) is ArenaChallengePurchaseSqlRepository
         )
         if recoverable and not all(Path(path).is_file() for path in (self.game_database, self.player_database)):
@@ -53,6 +78,42 @@ class ArenaApplication:
                 status = str(data.get("status", "failed"))
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, consumed={"stone": int(data.get("cost", 0) or 0)}, granted={"score": int(data.get("score_delta", 0) or 0)}, audit_category="arena")
+                elif action == "arena.settle" and str(data.get("reason") or "") in ARENA_SETTLEMENT_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场结算写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
+                elif action == "arena.challenge_ticket" and str(data.get("reason") or "") in ARENA_TICKET_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场挑战券写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
+                elif action == "arena.challenge_purchase" and str(data.get("reason") or "") in ARENA_CHALLENGE_PURCHASE_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场购买次数写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
+                elif action == "arena.purchase" and str(data.get("reason") or "") in ARENA_PURCHASE_RETRYABLE_REJECTIONS:
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        "竞技场兑换写入未完成，可在故障解除后重试。",
+                        code=str(data["reason"]),
+                        data=data,
+                        audit_category="arena",
+                    )
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, "竞技场操作未完成。", code=status, data=data, audit_category="arena")
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:

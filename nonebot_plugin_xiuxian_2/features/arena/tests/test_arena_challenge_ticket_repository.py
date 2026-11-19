@@ -46,6 +46,52 @@ class ArenaChallengeTicketRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.player) as conn:
             self.assertEqual((2, 1), tuple(conn.execute("SELECT daily_challenges_used,daily_extra_challenges FROM arena").fetchone()))
 
+    def test_receipt_ignore_rolls_back_both_databases_with_specific_reason(self):
+        self.repo = ArenaChallengePurchaseSqlRepository(self.game, self.player)
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER refuse_receipt BEFORE INSERT ON arena_challenge_ticket_operations BEGIN SELECT RAISE(IGNORE); END")
+
+        result = self.use("receipt-ignore")
+
+        self.assertEqual(("state_changed", "arena_ticket_receipt_write_rejected", "receipt"), tuple(result[key] for key in ("status", "reason", "subject")))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual((3, 3, 0), tuple(conn.execute("SELECT goods_num,bind_num,(SELECT COUNT(*) FROM arena_challenge_ticket_operations) FROM back").fetchone()))
+        with db_backend.connection(self.player) as conn:
+            self.assertEqual((2, 1), tuple(conn.execute("SELECT daily_challenges_used,daily_extra_challenges FROM arena").fetchone()))
+
+    def test_receipt_after_trigger_rewrite_rolls_back_and_recovers(self):
+        self.repo = ArenaChallengePurchaseSqlRepository(self.game, self.player)
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER rewrite_receipt AFTER INSERT ON arena_challenge_ticket_operations BEGIN UPDATE arena_challenge_ticket_operations SET item_remaining=99 WHERE operation_id=NEW.operation_id; END")
+
+        result = self.use("receipt-rewrite")
+
+        self.assertEqual(("state_changed", "arena_ticket_receipt_write_rejected"), tuple(result[key] for key in ("status", "reason")))
+        with db_backend.connection(self.game) as conn:
+            self.assertEqual((3, 0), tuple(conn.execute("SELECT goods_num,(SELECT COUNT(*) FROM arena_challenge_ticket_operations) FROM back").fetchone()))
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DROP TRIGGER rewrite_receipt")
+        recovered = self.use("receipt-rewrite")
+        self.assertEqual(("applied", 1), (recovered["status"], recovered["used_tickets"]))
+
+    def test_item_and_count_after_triggers_are_rejected_before_receipt(self):
+        for target, reason, database, trigger in (
+            ("item", "arena_ticket_item_write_rejected", self.game, "CREATE TRIGGER rewrite_item AFTER UPDATE ON back BEGIN UPDATE back SET goods_num=goods_num+1 WHERE user_id='u' AND goods_id=9; END"),
+            ("arena", "arena_ticket_count_write_rejected", self.player, "CREATE TRIGGER rewrite_count AFTER UPDATE ON arena BEGIN UPDATE arena SET daily_extra_challenges=daily_extra_challenges+1 WHERE user_id='u'; END"),
+        ):
+            with self.subTest(target=target):
+                self.repo = ArenaChallengePurchaseSqlRepository(self.game, self.player)
+                with db_backend.transaction(database) as conn:
+                    conn.execute(trigger)
+                result = self.use(f"{target}-rewrite")
+                self.assertEqual(("state_changed", reason, target), tuple(result[key] for key in ("status", "reason", "subject")))
+                with db_backend.connection(self.game) as conn:
+                    self.assertEqual((3, 0), tuple(conn.execute("SELECT goods_num,(SELECT COUNT(*) FROM arena_challenge_ticket_operations) FROM back").fetchone()))
+                with db_backend.connection(self.player) as conn:
+                    self.assertEqual((2, 1), tuple(conn.execute("SELECT daily_challenges_used,daily_extra_challenges FROM arena").fetchone()))
+                with db_backend.transaction(database) as conn:
+                    conn.execute("DROP TRIGGER rewrite_item" if target == "item" else "DROP TRIGGER rewrite_count")
+
 
 if __name__ == "__main__":
     unittest.main()

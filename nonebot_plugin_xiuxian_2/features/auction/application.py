@@ -10,7 +10,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.observability import trace_context
 from .domain import AuctionBidRequest
-from .bid_repository import AuctionBidSqlRepository
+from .bid_repository import AuctionBidSqlRepository, BID_WRITE_REJECTIONS
 from .bid_effects import AuctionBidEffects, NullAuctionBidEffects
 from .repository import AuctionBidRepository
 from .schemas import AuctionBidResult
@@ -144,12 +144,20 @@ class AuctionBidApplication:
                         request.bid_time,
                     )
                 except Exception as exc:
-                    self.ledger.record_failure(self.database, request.operation_id, self.action, payload, str(exc))
+                    try:
+                        self.ledger.record_failure(self.database, request.operation_id, self.action, payload, str(exc))
+                    except Exception as diagnostic_error:
+                        raise exc from diagnostic_error
                     raise
                 outcome = self._to_outcome(request, result)
-                with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    self.ledger.finish(uow, outcome)
-                    self._append_effect_event(uow, outcome, request, str(item_name))
+                try:
+                    with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                        self.ledger.finish(uow, outcome)
+                        self._append_effect_event(uow, outcome, request, str(item_name))
+                except Exception as exc:
+                    if not outcome.ok and (outcome.data or {}).get("reason"):
+                        raise DomainError(outcome.code, outcome.message, dict(outcome.data)) from exc
+                    raise
             else:
                 outcome = replayed_outcome
         return self._apply_effects(outcome)
@@ -165,6 +173,8 @@ class AuctionBidApplication:
             debit=int(getattr(result, "debit", 0) or 0),
             refunded_bidder=str(getattr(result, "refunded_bidder", "") or ""),
             refunded_amount=int(getattr(result, "refunded_amount", 0) or 0),
+            reason=str(getattr(result, "reason", "") or ""),
+            subject=str(getattr(result, "subject", "") or ""),
         ).to_dict()
         if status in {"bid", "duplicate"}:
             outcome = OperationOutcome.applied(
@@ -177,7 +187,9 @@ class AuctionBidApplication:
                 clock=self.ledger.clock,
             )
             return replace(outcome, replayed=True) if status == "duplicate" else outcome
-        return OperationOutcome.rejected(request.operation_id, self.action, f"竞拍未结算：{status}", code=status, data=data, audit_category="auction_bid", clock=self.ledger.clock)
+        reject = OperationOutcome.failed if data["reason"] in BID_WRITE_REJECTIONS else OperationOutcome.rejected
+        return reject(request.operation_id, self.action, f"竞拍未结算：{data['reason'] or status}",
+                      code=data["reason"] or status, data=data, audit_category="auction_bid", clock=self.ledger.clock)
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.place_bid(**kwargs)

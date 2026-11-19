@@ -50,7 +50,10 @@ class AuctionSessionStartApplication:
             active = self.repository.get_active_session()
             if active and active["session_id"] == previous.session_id:
                 return previous
-            return AuctionSessionStartResult("state_changed", operation_id)
+            return AuctionSessionStartResult(
+                "state_changed", operation_id, reason="auction_start_session_inactive",
+                subject=previous.session_id,
+            )
 
         now = self.clock.now()
         names = list(system_items_config)

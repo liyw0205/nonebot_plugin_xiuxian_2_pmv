@@ -35,6 +35,7 @@ class HistoryFixture:
         if migrate:
             with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
                 sect_migrations.apply_sect_task_settlement_operations(uow)
+                sect_migrations.apply_sect_task_weekly_event_status(uow)
 
     def add(
         self,

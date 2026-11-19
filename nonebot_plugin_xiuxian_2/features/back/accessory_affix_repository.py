@@ -9,6 +9,12 @@ from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from .accessory_affix_domain import AccessoryAffixChange
 
 
+class _AffixWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str):
+        self.reason = reason
+        self.subject = subject
+
+
 class AccessoryAffixSqlRepository:
     """Persist affix-lock changes with the game operation receipt atomically."""
 
@@ -93,64 +99,79 @@ class AccessoryAffixSqlRepository:
             "locked_indexes": locked_indexes,
         }
         payload_json = self._json(payload)
+        receipt_query = (
+            "SELECT action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE operation_id=?"
+        )
+        state_query = "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?"
 
-        with AttachedDatabaseUnitOfWork(
-            self.game_database,
-            attachments={"player_data": self.player_database},
-            immediate=True,
-        ) as uow:
-            previous = uow.query_one(
-                "SELECT action,payload,result_json FROM accessory_transaction_operations "
-                "WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["action"]) != action or str(previous["payload"]) != payload_json:
-                    return AccessoryAffixChange("state_changed", action, user_id, reason="operation_conflict")
-                return self._result(action, user_id, "duplicate", str(previous["result_json"]))
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(receipt_query, (operation_id,))
+                if previous is not None:
+                    if str(previous["action"]) != action or str(previous["payload"]) != payload_json:
+                        return AccessoryAffixChange(
+                            "state_changed", action, user_id, reason="operation_conflict", subject=uid
+                        )
+                    return self._result(action, user_id, "duplicate", str(previous["result_json"]))
 
-            row = uow.query_one(
-                "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?",
-                (user_id,),
-            )
-            if row is None:
-                return AccessoryAffixChange("accessory_missing", action, user_id)
-            equipped = self._decode_dict(row["equipped"])
-            bag = self._decode_list(row["bag"])
-            where, key, current = self._find(equipped, bag, uid)
-            if current is None:
-                return AccessoryAffixChange("accessory_missing", action, user_id)
-            if self._json(current) != self._json(expected_accessory):
-                return AccessoryAffixChange("state_changed", action, user_id, reason="accessory_changed")
+                row = uow.query_one(state_query, (user_id,))
+                if row is None:
+                    return AccessoryAffixChange("accessory_missing", action, user_id, subject=uid)
+                equipped = self._decode_dict(row["equipped"])
+                bag = self._decode_list(row["bag"])
+                where, key, current = self._find(equipped, bag, uid)
+                if current is None:
+                    return AccessoryAffixChange("accessory_missing", action, user_id, subject=uid)
+                if self._json(current) != self._json(expected_accessory):
+                    return AccessoryAffixChange(
+                        "state_changed", action, user_id, reason="accessory_changed", subject=uid
+                    )
 
-            if where == "bag":
-                bag[key] = accessory
-            else:
-                equipped[key] = accessory
-            uow.execute(
-                "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
-                (
-                    json.dumps(equipped, ensure_ascii=False),
-                    json.dumps(bag, ensure_ascii=False),
-                    user_id,
-                ),
-            )
-            result_json = self._json(
-                {
+                if where == "bag":
+                    bag[key] = accessory
+                else:
+                    equipped[key] = accessory
+                expected_state = {
+                    "equipped": json.dumps(equipped, ensure_ascii=False),
+                    "bag": json.dumps(bag, ensure_ascii=False),
+                }
+                write = uow.execute(
+                    "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
+                    (expected_state["equipped"], expected_state["bag"], user_id),
+                )
+                if write.rowcount != 1:
+                    raise _AffixWriteRejected("accessory_affix_state_write_rejected", uid)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _AffixWriteRejected("accessory_affix_state_projection_mismatch", uid)
+                result_json = self._json({
                     "action": action,
                     "user_id": user_id,
                     "affected": 1,
                     "stone_delta": 0,
                     "accessory": accessory,
                     "details": None,
-                }
-            )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, action, payload_json, result_json),
-            )
-            return AccessoryAffixChange("applied", action, user_id, accessory)
+                })
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations "
+                    "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                    (operation_id, action, payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _AffixWriteRejected("accessory_affix_receipt_write_rejected", uid)
+                if uow.query_one(receipt_query, (operation_id,)) != {
+                    "action": action, "payload": payload_json, "result_json": result_json
+                }:
+                    raise _AffixWriteRejected("accessory_affix_receipt_projection_mismatch", uid)
+                if uow.query_one(state_query, (user_id,)) != expected_state:
+                    raise _AffixWriteRejected("accessory_affix_state_projection_mismatch", uid)
+                return AccessoryAffixChange("applied", action, user_id, accessory)
+        except _AffixWriteRejected as exc:
+            return AccessoryAffixChange("failed", action, user_id, reason=exc.reason, subject=exc.subject)
 
 
 __all__ = ["AccessoryAffixSqlRepository"]

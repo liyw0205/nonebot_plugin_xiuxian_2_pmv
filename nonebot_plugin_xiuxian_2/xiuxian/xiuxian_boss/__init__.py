@@ -14,6 +14,7 @@ from nonebot import get_bots, get_bot, require
 from ..on_compat import on_command
 from ..messaging.delivery import delivery_service
 from nonebot.params import CommandArg
+from nonebot.exception import MatcherException, ProcessException
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -28,7 +29,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.log import logger
 from ...core.errors import ConflictError
 from ...paths import get_paths
-from ..command_guard import result_failure
+from ..command_guard import result_failure, report_exception
 from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage,
     UserBuffDate,
@@ -45,7 +46,7 @@ from ..xiuxian_utils.utils import (
     number_to, check_user, check_user_type,
     get_msg_pic,
     send_msg_handler, log_message, handle_send,
-    send_help_message, update_last_check_info_time, get_last_check_info_time,
+    send_help_message, update_last_check_info_time,
     restore_player_stamina,
 )
 from ..xiuxian_title.title_data import check_and_unlock_titles
@@ -73,6 +74,9 @@ from ...features.boss.punishment_repository import WorldBossPunishmentSqlReposit
 from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
     WorldBossManualSpawnSqlRepository,
+    WorldBossManualSpawnResult,
+    WorldBossSpawnError,
+    WorldBossRefreshError,
 )
 from ...features.base.keyword_page import (
     empty_notice,
@@ -117,6 +121,17 @@ player_state_application = PlayerStateApplication(get_paths().game_db)
 runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _world_boss_battle_settlement_service_instance = None
+
+
+async def _report_world_boss_settlement_exception(bot, event, exc):
+    battle_flag[GLOBAL_BOSS_KEY] = False
+    diagnostic = report_exception("世界BOSS讨伐", exc, event=event)
+    await handle_send(
+        bot,
+        event,
+        "本次世界BOSS讨伐暂时无法确认结果，请查询当前状态后再重试。\n" + diagnostic,
+        md_type="世界BOSS",
+    )
 
 
 def _sql_message():
@@ -291,29 +306,35 @@ async def read_boss_():
 
 @register_legacy_startup
 async def set_boss_generation():
-    try:
-        # 根据配置的时间参数执行自动生成全部BOSS
-        hours = config['Boss生成时间参数']['hours']
-        minutes = config['Boss生成时间参数']['minutes']
-        
-        # 计算总分钟数
-        total_minutes = hours * 60 + minutes
-        
-        if total_minutes > 0:
-            scheduler.add_job(
-                func=generate_all_bosses_task,
-                trigger='interval',
-                minutes=total_minutes,
-                id="generate_all_bosses",
-                coalesce=True,
-                max_instances=1,
-                misfire_grace_time=60,
-            )
-            logger.opt(colors=True).success(f"<green>已开启自动生成全部世界BOSS定时任务，每{hours}小时{minutes}分钟执行一次！</green>")
-        else:
-            logger.opt(colors=True).warning(f"<yellow>Boss生成时间参数配置为0，不开启自动生成BOSS定时任务</yellow>")
-    except Exception as e:
-        logger.opt(colors=True).warning(f"<red>警告,自动生成BOSS定时任务加载失败!,{e}!</red>")
+    total_minutes = _boss_generation_minutes()
+    if total_minutes == 0:
+        logger.info("Boss生成时间参数配置为0，不开启自动生成BOSS定时任务")
+        return
+    scheduler.add_job(
+        func=generate_all_bosses_task,
+        trigger='interval',
+        minutes=total_minutes,
+        id="generate_all_bosses",
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+    logger.info(f"已配置自动生成全部世界BOSS定时任务，每{total_minutes}分钟执行一次。")
+
+
+def _boss_generation_minutes():
+    values = []
+    settings = config.get('Boss生成时间参数')
+    for key in ('hours', 'minutes'):
+        value = settings.get(key) if isinstance(settings, dict) else None
+        if (isinstance(value, bool) or not isinstance(value, (str, int))
+                or re.fullmatch(r'[0-9]+', str(value).strip()) is None):
+            raise WorldBossRefreshError('world_boss_schedule_invalid', f'Boss生成时间参数.{key}')
+        try:
+            values.append(int(value))
+        except ValueError as exc:
+            raise WorldBossRefreshError('world_boss_schedule_invalid', f'Boss生成时间参数.{key}') from exc
+    return values[0] * 60 + values[1]
 
 
 def _sync_world_boss_cache(bosses):
@@ -375,16 +396,23 @@ def _spawn_world_boss(
     boss_jj: str | None = None,
     boss_name: str | None = None,
 ):
-    result = boss_application.spawn_result(operation_id, config_loader=get_boss_config)
+    request = {'realm': boss_jj or '', 'name': boss_name or ''}
+    result = boss_application.spawn_result(operation_id, config_loader=get_boss_config, request=request)
     if result is not None:
-        current_bosses, _ = boss_application.spawn_snapshot(config_loader=get_boss_config)
-        _sync_world_boss_cache(current_bosses)
+        if result.succeeded:
+            current_bosses, _ = boss_application.spawn_snapshot(config_loader=get_boss_config)
+            _sync_world_boss_cache(current_bosses)
         return result
 
     boss_jj = boss_jj or createboss()
+    current_config = get_boss_config()
+    if boss_jj not in current_config.get('Boss灵石', {}):
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_realm_invalid', subject=str(boss_jj))
+    if boss_name is not None and boss_name not in current_config.get('Boss名字', []):
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_name_invalid', subject=str(boss_name))
     bossinfo = createboss_jj(boss_jj, boss_name)
     if bossinfo is None:
-        return None
+        return WorldBossManualSpawnResult('invalid_target', reason='world_boss_realm_invalid', subject=str(boss_jj))
     expected_bosses, expected_revision = boss_application.spawn_snapshot(config_loader=get_boss_config)
     result = boss_application.spawn(
         operation_id=operation_id,
@@ -392,6 +420,7 @@ def _spawn_world_boss(
         expected_bosses=expected_bosses,
         expected_config=WorldBossManualSpawnSqlRepository.config_snapshot(get_boss_config(), boss_jj),
         boss=bossinfo,
+        request=request,
         config_loader=get_boss_config,
     )
     if result.succeeded:
@@ -400,15 +429,15 @@ def _spawn_world_boss(
 
 
 async def generate_all_bosses_task():
-    hours = int(config['Boss生成时间参数']['hours'])
-    minutes = int(config['Boss生成时间参数']['minutes'])
-    interval_seconds = max((hours * 60 + minutes) * 60, 60)
-    slot = int(time_module.time() // interval_seconds)
+    interval_seconds = _boss_generation_minutes() * 60
+    if interval_seconds == 0:
+        return
+    slot = int(runtime_clock.now().timestamp() // interval_seconds)
     operation_id = f"world-boss-full-refresh:scheduled:{interval_seconds}:{slot}"
     result = _refresh_all_world_bosses(operation_id, "scheduled")
     if not result.succeeded:
-        logger.warning(f"世界BOSS定时刷新未执行：{result.status}")
-        return
+        raise WorldBossRefreshError(getattr(result, 'reason', '') or result.status,
+                                    getattr(result, 'subject', '') or operation_id)
     if result.status == "duplicate":
         logger.info("世界BOSS定时刷新任务已处理，本次跳过重复通知。")
         return
@@ -427,19 +456,27 @@ async def save_boss_():
     logger.opt(colors=True).info(f"<green>boss数据已保存</green>")
 
 async def set_boss_limits_reset(business_date=None, *, chunk_size=500):
-    business_date = business_date or runtime_clock.now().date().isoformat()
+    from zoneinfo import ZoneInfo
+
+    if business_date is None:
+        moment = runtime_clock.now()
+        if moment.tzinfo is not None:
+            moment = moment.astimezone(getattr(scheduler, 'timezone', None) or ZoneInfo('Asia/Shanghai'))
+        business_date = moment.date().isoformat()
     while True:
         result = boss_application.reset_daily_limit(
             business_date, chunk_size=chunk_size
         )
-        if result.task_status != "running":
+        if not result.succeeded or result.task_status != "running":
             if result.succeeded:
                 logger.opt(colors=True).info(
                     f"<green>世界BOSS额度重置完成：{result.completed}/{result.total}，"
                     f"实际变更{result.changed}人，跳过{result.skipped}人</green>"
                 )
             else:
-                logger.error(f"世界BOSS额度重置未完成：{result.status}")
+                logger.error("世界BOSS额度重置未完成：{} subject={}",
+                             getattr(result, 'reason', '') or result.status,
+                             getattr(result, 'subject', '') or business_date)
             return result
         await asyncio.sleep(0)
 
@@ -538,8 +575,18 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
     operation_key = event_id or boss_ids.new_id()
     operation_id = f"world-boss-battle:{operation_key}:{user_id}"
     # 先查 operation：同事件重放必须在限购/重伤/境界前置拦截之前回放。
-    previous_settlement = boss_application.settlement_result_compat(operation_id=operation_id)
+    try:
+        previous_settlement = boss_application.settlement_result_compat(
+            operation_id=operation_id, user_id=str(user_id)
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await _report_world_boss_settlement_exception(bot, event, exc)
+        await battle.finish()
     if previous_settlement is not None:
+        settled_bosses, _ = boss_application.full_refresh_snapshot()
+        _sync_world_boss_cache(settled_bosses)
         msg = (
             "该讨伐请求已经处理，无需重复提交。\n"
             f"当前体力：{previous_settlement.stamina}，今日讨伐：{previous_settlement.battle_count}次"
@@ -577,11 +624,9 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await battle.finish()
 
     msg = args.extract_plain_text().strip()
-    boss_num = re.findall(r"\d+", msg)
+    boss_num = _world_boss_number(msg)
 
-    if boss_num:
-        boss_num = int(boss_num[0])
-    else:
+    if boss_num <= 0:
         msg = "请输入正确的世界Boss编号!"
         await handle_send(
             bot,
@@ -708,7 +753,7 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
         await battle.finish()
 
-    checked_at = get_last_check_info_time(user_id)
+    checked_at = boss_application.battle_checked_at_snapshot(user_id)
 
     battle_flag[GLOBAL_BOSS_KEY] = True
 
@@ -889,41 +934,47 @@ async def battle_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
 
     # Rewards and combat state share the composite settlement boundary.
     now = runtime_clock.now()
-    settlement = boss_application.settle_compat(
-        operation_id=operation_id,
-        user_id=user_id,
-        expected_bosses=expected_bosses,
-        settled_bosses=settled_bosses,
-        boss_index=boss_num - 1,
-        expected_stamina=user_info['user_stamina'],
-        stamina_cost=stamina_cost,
-        expected_hp=user_info['hp'],
-        expected_mp=user_info['mp'],
-        final_hp=final_hp,
-        final_mp=final_mp,
-        expected_exp=user_info['exp'],
-        exp_reward=now_exp,
-        expected_stone=user_info['stone'],
-        stone_reward=get_stone,
-        expected_daily_stone=today_stone,
-        expected_daily_integral=today_integral,
-        expected_total_integral=total_integral,
-        integral_reward=boss_integral,
-        expected_battle_count=today_battle_count,
-        battle_limit=battle_count,
-        expected_checked_at="" if checked_at is None else str(checked_at),
-        checked_at=str(now),
-        item={
-            "id": drops_info['id'], "name": drops_info['name'], "type": drops_info['type'],
-            "quantity": 1, "bind": drops_info['type'] in ["特殊道具", "神物"],
-        } if reward_drop else None,
-        max_goods_num=XiuConfig().max_goods_num,
-        actual_damage=actual_damage,
-        killed=boss_now_hp <= 0,
-        daily_period=now.strftime("%Y-%m-%d"),
-        weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
-        activity_bosses=activity_bosses,
-    )
+    try:
+        settlement = boss_application.settle_compat(
+            operation_id=operation_id,
+            user_id=user_id,
+            expected_bosses=expected_bosses,
+            settled_bosses=settled_bosses,
+            boss_index=boss_num - 1,
+            expected_stamina=user_info['user_stamina'],
+            stamina_cost=stamina_cost,
+            expected_hp=user_info['hp'],
+            expected_mp=user_info['mp'],
+            final_hp=final_hp,
+            final_mp=final_mp,
+            expected_exp=user_info['exp'],
+            exp_reward=now_exp,
+            expected_stone=user_info['stone'],
+            stone_reward=get_stone,
+            expected_daily_stone=today_stone,
+            expected_daily_integral=today_integral,
+            expected_total_integral=total_integral,
+            integral_reward=boss_integral,
+            expected_battle_count=today_battle_count,
+            battle_limit=battle_count,
+            expected_checked_at="" if checked_at is None else str(checked_at),
+            checked_at=str(now),
+            item={
+                "id": drops_info['id'], "name": drops_info['name'], "type": drops_info['type'],
+                "quantity": 1, "bind": drops_info['type'] in ["特殊道具", "神物"],
+            } if reward_drop else None,
+            max_goods_num=XiuConfig().max_goods_num,
+            actual_damage=actual_damage,
+            killed=boss_now_hp <= 0,
+            daily_period=now.strftime("%Y-%m-%d"),
+            weekly_period=f"{now.isocalendar().year}-W{now.isocalendar().week:02d}",
+            activity_bosses=activity_bosses,
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await _report_world_boss_settlement_exception(bot, event, exc)
+        await battle.finish()
     if settlement.status == "stamina_insufficient":
         battle_flag[GLOBAL_BOSS_KEY] = False
         await handle_send(bot, event, "你没有足够的体力，请等待体力恢复后再试！")
@@ -1199,6 +1250,18 @@ async def challenge_training_puppet_(bot: Bot, event: GroupMessageEvent | Privat
     await challenge_training_puppet.finish()
     
     
+def _world_boss_number(text, default=0):
+    value = text.strip()
+    if not value:
+        return default
+    if re.fullmatch(r'\d+', value) is None:
+        return -1
+    try:
+        return int(value)
+    except ValueError:
+        return -1
+
+
 @boss_info.handle(parameterless=[Cooldown(cd_time=0)])
 async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查询世界boss"""
@@ -1214,7 +1277,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await boss_info.finish()
 
     msg = args.extract_plain_text().strip()
-    boss_num = re.findall(r"\d+", msg)  # boss编号
+    boss_num = _world_boss_number(msg)
 
     if not bosss:
         msg = f"尚未生成世界Boss,请等待世界boss刷新!"
@@ -1222,8 +1285,7 @@ async def boss_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await boss_info.finish()
 
     Flag = False  # True查对应Boss
-    if boss_num:
-        boss_num = int(boss_num[0])
+    if msg:
         index = len(group_boss[GLOBAL_BOSS_KEY])
         if not (0 < boss_num <= index):
             msg = f"请输入正确的世界Boss编号!"
@@ -1286,11 +1348,7 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     total_items = len(bosss)  # 总BOSS数量
     total_pages = (total_items + per_page - 1) // per_page
     
-    current_page = re.findall(r"\d+", arg_list)
-    if current_page:
-        current_page = int(current_page[0])
-    else:
-        current_page = 1
+    current_page = _world_boss_number(arg_list, default=1)
     if current_page < 1 or current_page > total_pages:
         msg = f"页码错误，有效范围为1~{total_pages}页！"
         await handle_send(bot, event, msg, md_type="世界BOSS", k1="列表", v1="世界BOSS列表1", k2="讨伐", v2="讨伐世界BOSS", k3="状态", v3="我的状态")
@@ -1309,49 +1367,83 @@ async def boss_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 @generate_all.handle(parameterless=[Cooldown(cd_time=0)])
 async def generate_all_bosses(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    if args.extract_plain_text().strip():
+        await delivery_service.reply(bot, event, "世界BOSS全部生成无需参数，请直接发送指令。")
+        return
     event_id = str(
         getattr(event, "message_id", "")
         or getattr(event, "id", "")
         or time_module.time_ns()
     )
     operation_id = f"world-boss-full-refresh:manual:{event_id}"
-    result = _refresh_all_world_bosses(operation_id, "manual")
-    if result.succeeded:
-        msg = f"已生成全部 {len(result.bosses)} 个境界的 BOSS！"
+    try:
+        result = _refresh_all_world_bosses(operation_id, "manual")
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossRefreshError as exc:
+        msg = _world_boss_refresh_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception("世界BOSS全部生成", exc, event=event)
     else:
-        msg = "世界BOSS场次或生成配置已变化，请重新执行全部生成指令。"
+        if result.succeeded:
+            msg = f"已生成全部 {len(result.bosses)} 个境界的 BOSS！"
+        else:
+            msg = _world_boss_refresh_failure(getattr(result, 'reason', '') or result.status,
+                                              getattr(result, 'subject', '') or operation_id)
     await delivery_service.reply(bot, event, msg)
+
+
+def _world_boss_refresh_failure(reason, subject):
+    messages = {
+        'schema_missing': '世界BOSS数据库迁移未就绪，请联系管理员。',
+        'operation_conflict': '该操作号已用于其他刷新请求，请核对原请求。',
+        'config_changed': '生成配置已变化，请重新执行全部生成。',
+        'session_changed': '世界BOSS场次已变化，请重试。',
+        'world_boss_generated_invalid': '生成的BOSS不符合配置，请联系管理员核对。',
+        'world_boss_state_invalid': '持久化世界BOSS状态损坏，请联系管理员核对。',
+        'world_boss_refresh_receipt_invalid': '历史刷新回执损坏，请联系管理员核对。',
+        'world_boss_refresh_state_write_rejected': '世界BOSS状态写入被拒绝，本次刷新已回滚，请稍后重试。',
+        'world_boss_refresh_receipt_write_rejected': '刷新回执写入被拒绝，本次刷新已回滚，请稍后重试。',
+    }
+    msg = result_failure('世界BOSS全部生成', {'status': reason, 'reason': reason}, messages=messages)
+    return f"{msg}（原因：{reason}；主体：{subject}）"
 
 
 @create.handle(parameterless=[Cooldown(cd_time=0)])
 async def create_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成世界boss - 每个境界只生成一个"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
+    if args.extract_plain_text().strip():
+        await handle_send(bot, event, "世界BOSS生成无需参数；指定境界请使用世界BOSS指定生成。")
+        await create.finish()
+        return
     event_id = str(
         getattr(event, "message_id", "")
         or getattr(event, "id", "")
         or time_module.time_ns()
     )
     operation_id = f"world-boss-manual-spawn:{event_id}"
-    result = _spawn_world_boss(operation_id)
-    if result is None or not result.succeeded:
-        msg = "世界Boss场次或生成配置已变化，请重新执行生成指令。"
-        await handle_send(bot, event, msg)
-        await create.finish()
-    bossinfo = dict(result.boss)
-    boss_jj = bossinfo["jj"]
-    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧!"
+    try:
+        result = _spawn_world_boss(operation_id)
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossSpawnError as exc:
+        msg = _world_boss_spawn_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception('世界BOSS生成', exc, event=event)
+    else:
+        msg = _world_boss_spawn_reply(result)
     await handle_send(bot, event, msg)
     await create.finish()
 
 @create_appoint.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+async def create_appointed_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """生成指定世界boss - 替换同境界BOSS"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
     # 解析参数
     arg_list = args.extract_plain_text().split()
-    if len(arg_list) < 1:
+    if len(arg_list) not in {1, 2}:
         msg = f"请输入正确的指令，例如：生成指定世界boss 祭道境 少姜"
         await handle_send(bot, event, msg)
         await create_appoint.finish()
@@ -1364,23 +1456,45 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         or getattr(event, "id", "")
         or time_module.time_ns()
     )
-    result = _spawn_world_boss(
-        f"world-boss-appointed-spawn:{event_id}",
-        boss_jj,
-        boss_name,
-    )
-    if result is None:
-        msg = f"请输入正确的境界，例如：生成指定世界boss 祭道境"
-        await handle_send(bot, event, msg)
-        await create_appoint.finish()
-    if not result.succeeded:
-        msg = "世界Boss场次或生成配置已变化，请重新执行指定生成指令。"
-        await handle_send(bot, event, msg)
-        await create_appoint.finish()
-    bossinfo = dict(result.boss)
-    msg = f"已生成{boss_jj}Boss:{bossinfo['name']}，诸位道友请击败Boss获得奖励吧！"
+    try:
+        result = _spawn_world_boss(f"world-boss-appointed-spawn:{event_id}", boss_jj, boss_name)
+    except (MatcherException, ProcessException):
+        raise
+    except WorldBossSpawnError as exc:
+        msg = _world_boss_spawn_failure(exc.code, exc.details['subject'])
+    except Exception as exc:
+        msg = report_exception('世界BOSS指定生成', exc, event=event)
+    else:
+        msg = _world_boss_spawn_reply(result)
     await handle_send(bot, event, msg)
     await create_appoint.finish()
+
+
+def _world_boss_spawn_reply(result):
+    if not result.succeeded:
+        return _world_boss_spawn_failure(getattr(result, 'reason', '') or result.status,
+                                         getattr(result, 'subject', '') or 'global')
+    prefix = '该请求此前已生成' if result.status == 'duplicate' else '已生成'
+    return f"{prefix}{result.boss['jj']}Boss:{result.boss['name']}，诸位道友请击败Boss获得奖励吧！"
+
+
+def _world_boss_spawn_failure(reason, subject):
+    messages = {
+        'schema_missing': '生成服务数据库迁移未就绪，请联系管理员。',
+        'operation_conflict': '该消息已用于不同生成参数，请核对原请求。',
+        'config_changed': '生成配置已变化，请重新执行生成。',
+        'session_changed': '世界BOSS场次已变化，请重新执行生成。',
+        'world_boss_generated_invalid': '生成的BOSS不符合配置，请联系管理员核对。',
+        'world_boss_realm_invalid': '请输入正确的境界，例如：世界BOSS指定生成 祭道境。',
+        'world_boss_name_invalid': '首领名称不在生成配置中，请核对名称。',
+        'world_boss_state_invalid': '持久化世界BOSS状态损坏，请联系管理员核对。',
+        'world_boss_spawn_receipt_invalid': '历史生成回执损坏，请联系管理员核对。',
+        'world_boss_spawn_state_write_rejected': '场次写入被拒绝，本次生成已回滚，请稍后重试。',
+        'world_boss_spawn_receipt_write_rejected': '生成回执写入被拒绝，本次生成已回滚，请稍后重试。',
+    }
+    msg = result_failure('世界BOSS生成', {'status': reason, 'reason': reason}, messages=messages)
+    return f"{msg}（原因：{reason}；主体：{subject}）"
+
 
 @boss_integral_store.handle(parameterless=[Cooldown(cd_time=0)])
 async def boss_integral_store_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -1526,8 +1640,8 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     except ConflictError:
         await handle_send(bot, event, "兑换请求冲突，本次未结算。", md_type="世界BOSS")
         return
-    except Exception as exc:
-        logger.warning("boss purchase command failed: {}", type(exc).__name__)
+    except Exception:
+        logger.exception("world-boss purchase failed; operation_id={}", operation_id)
         await handle_send(bot, event, "世界BOSS兑换异常，暂时无法确认结果，请稍后核查。", md_type="世界BOSS")
         return
     await handle_send(bot, event, message, md_type="世界BOSS", k1="兑换", v1="世界BOSS兑换", k2="商店", v2="世界BOSS商店", k3="信息", v3="世界BOSS信息")

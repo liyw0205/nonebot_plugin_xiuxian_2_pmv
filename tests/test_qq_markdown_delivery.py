@@ -44,6 +44,9 @@ SIGN_TEXT = (
     "✓ 已签｜· 今日｜— 非本月｜本月已签 2 天｜连续 2 天"
 )
 
+RIFT_TEXT = "秘境探索时间减少50%了！\n当前状态：探索玄天秘境 30分后"
+RIFT_MARKDOWN = "秘境探索时间减少50%了！\n[结算](秘境结算)  [加速](道具使用 秘境加速券)"
+
 
 class _Context:
     def __init__(self, bot, event):
@@ -105,6 +108,18 @@ class _RecordingMessageDelivery(MessageDeliveryService):
 
 
 class GatewayIntentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rift_shared_plain_reply_reaches_onebot_without_markdown_rewrite(self) -> None:
+        delivery = _RecordingDelivery()
+        gateway = NoneBotMessageGateway(delivery)
+
+        await gateway.send(
+            _Context(object(), _Event("group")),
+            ReplyPlan(RIFT_TEXT),
+        )
+
+        self.assertEqual([], delivery.enhanced)
+        self.assertEqual(RIFT_TEXT, delivery.plain[0][2])
+
     async def test_markdown_intent_uses_markdown_capable_delivery(self) -> None:
         delivery = _RecordingDelivery()
         gateway = NoneBotMessageGateway(delivery)
@@ -171,6 +186,43 @@ class GatewayIntentTests(unittest.IsolatedAsyncioTestCase):
 
 class DeliveryFallbackTests(unittest.IsolatedAsyncioTestCase):
     """Real `reply_enhanced` policy: capability gate + plain fallback."""
+
+    async def test_rift_qq_markdown_and_plain_fallback_keep_same_wording(self) -> None:
+        class _FakeSegment:
+            @staticmethod
+            def markdown(bot, msg, button_id=""):
+                return ("markdown", msg)
+
+        class _Bot:
+            self_id = "10000"
+
+        qq_delivery = _RecordingMessageDelivery(capabilities=QQCapabilityRegistry())
+        qq_gateway = NoneBotMessageGateway(qq_delivery)
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+            return_value=True,
+        ), patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment",
+            _FakeSegment,
+        ):
+            await qq_gateway.send(
+                _Context(_Bot(), _Event("group")),
+                ReplyPlan(RIFT_MARKDOWN, intent=INTENT_MARKDOWN),
+            )
+
+        onebot_delivery = _RecordingMessageDelivery()
+        onebot_gateway = NoneBotMessageGateway(onebot_delivery)
+        with patch(
+            "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+            return_value=False,
+        ):
+            await onebot_gateway.send(
+                _Context(object(), _Event("group")),
+                ReplyPlan(RIFT_MARKDOWN, intent=INTENT_MARKDOWN),
+            )
+
+        self.assertEqual(("markdown", RIFT_MARKDOWN), qq_delivery.sent[0])
+        self.assertEqual("秘境探索时间减少50%了！\n结算  加速", onebot_delivery.sent[0])
 
     async def test_onebot_bot_receives_plain_text_for_group_and_private(self) -> None:
         for scene in ("group", "private", "channel_group", "channel_private"):

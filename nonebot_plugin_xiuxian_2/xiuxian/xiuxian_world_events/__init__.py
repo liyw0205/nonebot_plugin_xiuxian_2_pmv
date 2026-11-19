@@ -2,6 +2,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 import time
+from zoneinfo import ZoneInfo
 
 from nonebot import require
 from nonebot.log import logger
@@ -244,8 +245,30 @@ def _now() -> datetime:
     return runtime_clock.now()
 
 
+def _event_timezone():
+    """Return the APScheduler timezone used for event business windows."""
+    configured = getattr(scheduler, "timezone", None)
+    if configured is None:
+        return timezone.utc
+    if isinstance(configured, str):
+        try:
+            return ZoneInfo(configured)
+        except (KeyError, ValueError):
+            logger.warning("世界事件调度器时区无效，回退 UTC：{}", configured)
+            return timezone.utc
+    return configured
+
+
+def _event_now(value: datetime | None = None) -> datetime:
+    """Project the runtime clock into the scheduler's business timezone."""
+    value = value or _now()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(_event_timezone())
+
+
 def _current_period() -> str:
-    return _now().strftime("%Y-%m-%d")
+    return _event_now().strftime("%Y-%m-%d")
 
 
 def _format_time(value: datetime) -> str:
@@ -364,6 +387,15 @@ def _event_id(period: str) -> str:
     return f"demon_invasion:{period}"
 
 
+def _require_transition_applied(result, operation_id: str) -> None:
+    """Do not let a persisted transition failure look like a successful job."""
+    status = str(getattr(result, "status", ""))
+    if status != "applied":
+        raise RuntimeError(
+            f"世界事件状态变更失败：operation_id={operation_id} status={status or 'unknown'}"
+        )
+
+
 def _spirit_vein_event_id(started_at: datetime) -> str:
     return f"spirit_vein:{started_at.strftime('%Y%m%d%H%M')}"
 
@@ -429,7 +461,7 @@ def _create_all_bosses() -> dict:
 
 def _build_active_state(period: str | None = None, manual: bool = False) -> dict:
     period = period or _current_period()
-    now = _now()
+    now = _event_now()
     return {
         "active": 1,
         "status": "active",
@@ -475,7 +507,7 @@ def _build_spirit_vein_state(
 
 
 def _is_auto_window(now: datetime | None = None) -> bool:
-    now = now or _now()
+    now = _event_now(now)
     return EVENT_START_HOUR <= now.hour < EVENT_END_HOUR
 
 
@@ -506,6 +538,7 @@ def _ensure_spirit_vein_state(now: datetime | None = None) -> dict:
             state,
             target,
         )
+        _require_transition_applied(result, operation_id)
         state = result.state or state
     return state
 
@@ -563,7 +596,9 @@ def _build_spirit_vein_message(state: dict) -> str:
 def _try_start_auto_spirit_vein() -> tuple[dict, str]:
     now = _now()
     state = _ensure_spirit_vein_state(now)
-    slot = now.strftime("%Y%m%d%H30")
+    # The trigger fires in the scheduler's business timezone, while the
+    # persisted wall-clock timestamps remain the historical UTC frame.
+    slot = _event_now(now).strftime("%Y%m%d%H30")
     operation_id = f"spirit-vein:auto-trigger:{slot}"
     replay = spirit_vein_lifecycle_application.replay(operation_id)
     if replay is not None:
@@ -593,13 +628,16 @@ def _try_start_auto_spirit_vein() -> tuple[dict, str]:
         state,
         target,
     )
+    if result.status not in {"applied", "already_active", "not_triggered"}:
+        raise RuntimeError(
+            f"灵脉自动触发状态变更失败：operation_id={operation_id} "
+            f"status={getattr(result, 'status', 'unknown')}"
+        )
     state = result.state or state
     if result.action == "auto_skip":
         return state, "天降灵脉仍在持续，本次触发检查自动跳过。"
     if result.action == "auto_miss":
         return state, "天降灵脉触发检查完成，本次未开启。"
-    if result.status != "applied":
-        return state, "灵脉自动触发未执行：本期状态冲突。"
     return state, f"天降灵脉已自动开启，持续至{state.get('ends_at')}。"
 
 
@@ -661,16 +699,8 @@ def _ensure_daily_state() -> dict:
     period = _current_period()
     is_manual = bool(_to_int(state.get("manual"), 0))
     if _is_auto_window():
-        if state.get("period") == period and is_manual and state.get("status") == "finished":
-            return state
         if state.get("status") != "active" or state.get("period") != period:
-            operation_id = f"demon-lifecycle:auto-start:{period}"
-            replay = demon_event_lifecycle_application.replay(operation_id)
-            if replay is not None:
-                return replay.state or state
-            target = _build_active_state(period)
-            result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", state, target)
-            return result.state or state
+            return _start_auto_demon_invasion()
     elif state.get("status") == "active" and not is_manual:
         operation_id = f"demon-lifecycle:auto-finish:{state.get('event_id')}"
         replay = demon_event_lifecycle_application.replay(operation_id)
@@ -681,6 +711,7 @@ def _ensure_daily_state() -> dict:
         target["status"] = "finished"
         target["last_result"] = "今日魔修入侵已于22:00结束。"
         result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+        _require_transition_applied(result, operation_id)
         return result.state or state
     return state
 
@@ -980,13 +1011,23 @@ def _sum_reward_contribution(state: dict, records: list[tuple[str, dict]]) -> tu
 
 def _start_auto_demon_invasion() -> dict:
     period = _current_period()
+    expected = _load_state()
+    if expected.get("period") == period and (
+        expected.get("status") == "active"
+        or (expected.get("status") == "finished" and _to_int(expected.get("manual"), 0))
+    ):
+        return expected
     operation_id = f"demon-lifecycle:auto-start:{period}"
     replay = demon_event_lifecycle_application.replay(operation_id)
     if replay is not None:
-        return replay.state or _load_state()
-    expected = _load_state()
+        _require_transition_applied(replay, operation_id)
+        if expected.get("event_id") != (replay.state or {}).get("event_id"):
+            raise RuntimeError(f"世界事件状态变更失败：operation_id={operation_id} status=state_changed")
+        # A receipt proves the start happened; its snapshot is not current state.
+        return expected
     target = _build_active_state(period)
     result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_start", expected, target)
+    _require_transition_applied(result, operation_id)
     return result.state or expected
 
 
@@ -1004,6 +1045,7 @@ def _finish_auto_demon_invasion() -> tuple[dict, bool]:
     target["status"] = "finished"
     target["last_result"] = "今日魔修入侵已于22:00结束。"
     result = demon_event_lifecycle_application.transition(operation_id, EVENT_KEY, "auto_finish", state, target)
+    _require_transition_applied(result, operation_id)
     return result.state or state, result.status == "applied"
 
 
@@ -1012,7 +1054,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     if state.get("status") != "active":
         return state, []
 
-    slot = _now().strftime("%Y%m%d%H30")
+    slot = _event_now().strftime("%Y%m%d%H30")
     operation_id = f"demon-wave-refresh:{state.get('event_id')}:{slot}"
     replay = demon_wave_refresh_application.replay(operation_id)
     if replay is not None:
@@ -1026,6 +1068,7 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     result = demon_wave_refresh_application.refresh(
         operation_id, EVENT_KEY, state, next_bosses, last_result
     )
+    _require_transition_applied(result, operation_id)
     return result.state or state, list(result.refreshed_realms)
 
 
@@ -1039,11 +1082,14 @@ def _refresh_defeated_demon_bosses() -> tuple[dict, list[str]]:
     misfire_grace_time=300,
 )
 async def demon_invasion_schedule_job():
-    now = _now()
+    now = _event_now()
     with _state_lock:
         if now.hour == EVENT_START_HOUR:
             state = _start_auto_demon_invasion()
-            log_text = f"每日魔修入侵已自动开启，本期生成{len(state.get('bosses', {}))}个境界魔修。"
+            if state.get("status") == "active":
+                log_text = f"每日魔修入侵已自动开启，本期生成{len(state.get('bosses', {}))}个境界魔修。"
+            else:
+                log_text = "每日魔修入侵开启检查完成，保留本期已结束状态。"
         elif now.hour == EVENT_END_HOUR:
             _, finished = _finish_auto_demon_invasion()
             log_text = "每日魔修入侵已自动结束。" if finished else "每日魔修入侵结束检查完成，当前无进行中的入侵。"

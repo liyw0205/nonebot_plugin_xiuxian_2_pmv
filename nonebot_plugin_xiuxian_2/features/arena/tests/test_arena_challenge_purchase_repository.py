@@ -56,6 +56,29 @@ class ArenaChallengePurchaseRepositoryTests(unittest.TestCase):
             self.buy("rollback")
         self.assertEqual(self.state(), (100, (1, 1, "2026-09-15")))
 
+    def test_receipt_ignore_rolls_back_wallet_and_counters_with_specific_reason(self):
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TRIGGER refuse_receipt BEFORE INSERT ON arena_challenge_purchase_operations BEGIN SELECT RAISE(IGNORE); END")
+
+        result = self.buy("receipt-ignore")
+
+        self.assertEqual(("state_changed", "arena_challenge_purchase_receipt_write_rejected", "receipt"), tuple(result[key] for key in ("status", "reason", "subject")))
+        self.assertEqual(self.state(), (100, (1, 1, "2026-09-15")))
+
+    def test_asset_after_triggers_are_rejected_and_reverted(self):
+        for target, reason, database, trigger in (
+            ("user", "arena_challenge_purchase_stone_write_rejected", self.game, "CREATE TRIGGER rewrite_stone AFTER UPDATE OF stone ON user_xiuxian BEGIN UPDATE user_xiuxian SET stone=stone+7 WHERE user_id='u'; END"),
+            ("arena", "arena_challenge_purchase_state_write_rejected", self.player, "CREATE TRIGGER rewrite_counter AFTER UPDATE OF daily_challenge_buys ON arena BEGIN UPDATE arena SET daily_extra_challenges=daily_extra_challenges+1 WHERE user_id='u'; END"),
+        ):
+            with self.subTest(target=target):
+                with db_backend.transaction(database) as conn:
+                    conn.execute(trigger)
+                result = self.buy(f"{target}-rewrite")
+                self.assertEqual(("state_changed", reason, target), tuple(result[key] for key in ("status", "reason", "subject")))
+                self.assertEqual(self.state(), (100, (1, 1, "2026-09-15")))
+                with db_backend.transaction(database) as conn:
+                    conn.execute("DROP TRIGGER rewrite_stone" if target == "user" else "DROP TRIGGER rewrite_counter")
+
 
 if __name__ == "__main__":
     unittest.main()

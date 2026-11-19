@@ -378,6 +378,99 @@ class BossPurchaseCommandRepository:
             "replayed": True,
         }
 
+    @classmethod
+    def _committed_business_result(
+        cls,
+        row: Mapping[str, Any],
+        *,
+        operation_id: str,
+        user_id: str,
+        action: str,
+        item_id: int | None,
+        requested_quantity: int | None,
+        record,
+    ) -> dict[str, Any]:
+        """Recover a committed purchase when ledger finalization was interrupted."""
+        try:
+            encoded = json.loads(row["payload"])
+            if isinstance(encoded, dict):
+                if set(encoded) - {"request", "requested_quantity", "_rejection"}:
+                    raise ValueError("purchase request envelope is invalid")
+                request = cls._legacy_payload(json.dumps(encoded.get("request")))
+                original_quantity = cls._number(encoded.get("requested_quantity"), positive=True)
+                rejection = encoded.get("_rejection")
+            elif isinstance(encoded, list):
+                request = cls._legacy_payload(json.dumps(encoded))
+                original_quantity = cls._number(
+                    requested_quantity if requested_quantity is not None else request[4],
+                    positive=True,
+                )
+                rejection = None
+            else:
+                raise ValueError("purchase request payload is unavailable")
+            values = {
+                "quantity": cls._number(row["quantity"]),
+                "cost": cls._number(row["cost"]),
+                "integral": cls._number(row["integral"]),
+                "purchased": cls._number(row["purchased"]),
+                "inventory": cls._number(row["inventory"]),
+            }
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return cls._reject(action, "receipt_invalid")
+
+        payload_user, saved_item, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num = request
+        if payload_user != user_id or (item_id is not None and saved_item != item_id):
+            return cls._reject(action, "operation_conflict")
+        if requested_quantity is not None and requested_quantity != original_quantity:
+            return cls._reject(action, "operation_conflict")
+        request_payload = {
+            "user_id": payload_user,
+            "item_id": saved_item,
+            "quantity": quantity,
+            "unit_cost": unit_cost,
+            "weekly_limit": weekly_limit,
+            "max_goods_num": max_goods_num,
+            "requested_quantity": original_quantity,
+        }
+        if record is None:
+            return cls._reject(action, "operation_pending")
+        if request_hash(request_payload) != record.request_hash:
+            legacy_request_payload = dict(request_payload)
+            legacy_request_payload.pop("requested_quantity")
+            if (requested_quantity is not None and requested_quantity != quantity
+                    or request_hash(legacy_request_payload) != record.request_hash):
+                return cls._reject(action, "operation_pending")
+            request_payload = legacy_request_payload
+            original_quantity = quantity
+
+        repair = {
+            **request_payload,
+            "item_name": item_name,
+            "item_type": item_type,
+            "expected_integral": values["integral"] + values["cost"] if values["quantity"] else values["integral"],
+        }
+        if rejection is not None:
+            if (not isinstance(rejection, dict) or rejection.get("status") not in cls._KNOWN_REJECTIONS
+                    or not rejection.get("reason") or rejection.get("subject") != user_id
+                    or values["quantity"] != 0 or values["cost"] != 0
+                    or any(type(rejection.get(key)) is not int or rejection[key] != value for key, value in values.items())):
+                return cls._reject(action, "receipt_invalid")
+            return {**rejection, "action": action, "replayed": True, "_ledger_repair": repair}
+
+        if values["quantity"] != quantity or values["cost"] != quantity * unit_cost:
+            return cls._reject(action, "receipt_invalid")
+        return {
+            **values,
+            "item_id": saved_item,
+            "item_name": item_name,
+            "item_type": item_type,
+            "operation_id": operation_id,
+            "action": action,
+            "status": "duplicate",
+            "replayed": True,
+            "_ledger_repair": repair,
+        }
+
     def receipt(
         self,
         operation_id: str,
@@ -456,6 +549,18 @@ class BossPurchaseCommandRepository:
                         quantity=quantity,
                         legacy_payload=legacy_payload,
                     )
+                    if record.status in {"started", "failed"} and legacy_row is not None and "status" not in self._columns(uow, self._LEGACY_TABLE):
+                        committed = self._committed_business_result(
+                            legacy_row,
+                            operation_id=operation_id,
+                            user_id=user_id,
+                            action=display_action,
+                            item_id=item_id,
+                            requested_quantity=quantity,
+                            record=record,
+                        )
+                        if committed.get("status") != "operation_pending":
+                            return committed
                     if ledger_result is not None:
                         return ledger_result
                     # A retryable failure still carries the original request

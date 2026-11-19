@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
+from datetime import tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .._legacy_application import LegacyApplication
-from ...core.errors import ValidationError
+from ...core.errors import DomainError, ValidationError
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.random_source import SystemRandom
@@ -15,12 +18,14 @@ from .guishi_cancel_repository import GuishiOrderCancelSqlRepository
 from .guishi_deposit_repository import GuishiDepositSqlRepository
 from .guishi_baitan_repository import GuishiBaitanSqlRepository
 from .guishi_stone_rules import withdrawal_is_open
+from .guishi_lifecycle import DEFAULT_GUISHI_TIMEZONE, business_time
 from .guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from .guishi_qiugou_repository import GuishiQiugouSqlRepository
 from .guishi_match_repository import GuishiOrderMatchSqlRepository
 from .guishi_expired_repository import GuishiExpiredOrderSqlRepository
 from .guishi_qiugou_expiry import GuishiQiugouExpiryService
 from .guishi_listing_fill import GuishiListingFillService
+from .guishi_immediate_match import GuishiImmediateMatchRepository, GuishiImmediateMatchResult, GuishiMatchFailure
 from .guishi_order_status import GuishiOrderStatusService
 from .guishi_take_repository import GuishiStoredItemTakeSqlRepository
 from .guishi_query_repository import GuishiQueryRepository, GuishiQuerySqlRepository
@@ -40,7 +45,9 @@ class TradeApplication(LegacyApplication):
         trade_database: str | Path,
         *,
         repository: TradeFeatureRepository | None = None,
+        player_database: str | Path | None = None,
         clock: Any | None = None,
+        business_timezone: tzinfo | str | None = None,
         ids: Any | None = None,
         random_source: Any | None = None,
         auction_queue: Any | None = None,
@@ -54,6 +61,10 @@ class TradeApplication(LegacyApplication):
         self.game_database = str(game_database)
         self.trade_database = str(trade_database)
         self.clock = clock or SystemClock()
+        self.business_timezone = (
+            ZoneInfo(business_timezone) if isinstance(business_timezone, str)
+            else business_timezone or DEFAULT_GUISHI_TIMEZONE
+        )
         self.ids = ids or UUIDGenerator()
         self.random_source = random_source or SystemRandom()
         self.auction_max_user_items = max(int(auction_max_user_items), 1)
@@ -84,8 +95,12 @@ class TradeApplication(LegacyApplication):
         self.guishi_withdraw_repository = GuishiWithdrawSqlRepository(
             self.game_database, self.trade_database
         )
-        self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database)
-        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(self.trade_database)
+        self.guishi_qiugou_repository = GuishiQiugouSqlRepository(self.trade_database, clock=self.clock)
+        self.guishi_order_match_repository = GuishiOrderMatchSqlRepository(
+            self.trade_database, player_database=player_database, clock=self.clock,
+            business_timezone=self.business_timezone,
+        )
+        self.guishi_immediate_match_repository = GuishiImmediateMatchRepository(self.trade_database)
         self.guishi_expired_order_repository = GuishiExpiredOrderSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
         )
@@ -93,6 +108,7 @@ class TradeApplication(LegacyApplication):
             self.trade_database,
             cancel=self.guishi_order_cancel_repository.cancel_qiugou,
             clock=self.clock,
+            business_timezone=self.business_timezone,
         )
         self.guishi_listing_fill_service = GuishiListingFillService(
             self.trade_database,
@@ -100,7 +116,7 @@ class TradeApplication(LegacyApplication):
             clock=self.clock,
         )
         self.guishi_order_status_service = GuishiOrderStatusService(
-            self.trade_database, clock=self.clock
+            self.trade_database, clock=self.clock, business_timezone=self.business_timezone
         )
         self.guishi_stored_item_take_repository = GuishiStoredItemTakeSqlRepository(
             self.game_database, self.trade_database, clock=self.clock
@@ -384,7 +400,7 @@ class TradeApplication(LegacyApplication):
             operation_id=operation_id,
             user_id=user_id,
             amount=amount,
-            withdrawal_open=withdrawal_is_open(self.clock.now()),
+            withdrawal_open=withdrawal_is_open(business_time(self.clock.now(), self.business_timezone)),
         )
 
     def guishi_qiugou(
@@ -397,6 +413,7 @@ class TradeApplication(LegacyApplication):
         price: int,
         quantity: int,
         max_orders: int,
+        immediate_match: bool = False,
     ):
         return self.guishi_qiugou_repository.create(
             operation_id=operation_id,
@@ -406,6 +423,7 @@ class TradeApplication(LegacyApplication):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+            immediate_match=immediate_match,
         )
 
     def guishi_baitan(
@@ -418,6 +436,9 @@ class TradeApplication(LegacyApplication):
         price: int,
         quantity: int,
         max_orders: int,
+        creation_open: bool = True,
+        cap_to_stock: bool = False,
+        immediate_match: bool = False,
     ):
         return self.guishi_baitan_repository.create(
             operation_id=operation_id,
@@ -427,6 +448,9 @@ class TradeApplication(LegacyApplication):
             price=price,
             quantity=quantity,
             max_orders=max_orders,
+            creation_open=creation_open,
+            cap_to_stock=cap_to_stock,
+            immediate_match=immediate_match,
         )
 
     def guishi_cancel_qiugou(
@@ -482,6 +506,37 @@ class TradeApplication(LegacyApplication):
 
         return self.guishi_listing_fill_service.fill(baitan_order_id=baitan_order_id)
 
+    def guishi_resume_immediate_match(self, *, order_id: str) -> GuishiImmediateMatchResult:
+        request = self.guishi_immediate_match_repository.get(str(order_id))
+        if request is None:
+            return GuishiImmediateMatchResult("legacy")
+        if request["status"] == "complete":
+            return GuishiImmediateMatchResult("complete")
+        try:
+            if request["status"] != "pending":
+                raise GuishiMatchFailure("request_status_invalid", str(order_id), "")
+            expired = self.guishi_order_match_repository.pending_order_expiry(str(order_id))
+            if expired:
+                raise GuishiMatchFailure(expired, str(order_id) if request['order_type'] == 'qiugou' else '',
+                                         str(order_id) if request['order_type'] == 'baitan' else '')
+            if request["order_type"] == "baitan":
+                matches = self.guishi_listing_fill_service.fill(baitan_order_id=str(order_id))
+            elif request["order_type"] == "qiugou":
+                matches = self.guishi_listing_fill_service.fill_buy(qiugou_order_id=str(order_id))
+            else:
+                raise GuishiMatchFailure("order_type_invalid", str(order_id), "")
+        except GuishiMatchFailure as exc:
+            try:
+                self.guishi_immediate_match_repository.finish(str(order_id), exc)
+            except (sqlite3.Error, OSError, DomainError) as persistence_error:
+                raise exc from persistence_error
+            return GuishiImmediateMatchResult("pending", tuple(exc.matches), exc)
+        self.guishi_immediate_match_repository.finish(str(order_id))
+        return GuishiImmediateMatchResult("complete", tuple(matches))
+
+    def guishi_pending_immediate_matches(self):
+        return self.guishi_immediate_match_repository.pending()
+
     def guishi_expire_qiugou(self, *, user_id: str | None = None, now: Any | None = None):
         """Cancel buy orders whose deadline passed and refund their frozen stones."""
 
@@ -521,6 +576,7 @@ class TradeApplication(LegacyApplication):
             item_name=item_name,
             goods_type=goods_type,
             max_goods_num=max_goods_num,
+            take_open=withdrawal_is_open(business_time(self.clock.now(), self.business_timezone)),
         )
 
     def enqueue(self, *, operation_id: str, user_id: str, **kwargs: Any): return self._action("enqueue", operation_id=operation_id, user_id=user_id, **kwargs)

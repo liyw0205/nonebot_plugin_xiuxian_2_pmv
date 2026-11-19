@@ -30,10 +30,17 @@ class ArenaSeasonRewardResult:
     honor: int
     honor_points: int
     total_honor_earned: int
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
         return self.status in {"applied", "duplicate"}
+
+
+class _ArenaSeasonRewardWriteRejected(Exception):
+    def __init__(self, result: ArenaSeasonRewardResult) -> None:
+        self.result = result
 
 
 @dataclass(frozen=True)
@@ -57,8 +64,40 @@ class ArenaSeasonRewardRepository:
         self.player_database = str(player_database)
 
     @staticmethod
-    def _result(status: str, honor: int, honor_points: int, earned: int) -> ArenaSeasonRewardResult:
-        return ArenaSeasonRewardResult(status, as_int_like(honor), as_int_like(honor_points), as_int_like(earned))
+    def _result(
+        status: str,
+        honor: int,
+        honor_points: int,
+        earned: int,
+        *,
+        reason: str = "",
+        subject: str = "",
+    ) -> ArenaSeasonRewardResult:
+        return ArenaSeasonRewardResult(
+            status,
+            as_int_like(honor),
+            as_int_like(honor_points),
+            as_int_like(earned),
+            reason,
+            subject,
+        )
+
+    @staticmethod
+    def _matches(row: Mapping[str, Any] | None, expected: Mapping[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            if key not in row:
+                return False
+            if isinstance(value, int):
+                try:
+                    if as_int_like(row[key]) != value:
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif str(row[key] or "") != str(value):
+                return False
+        return True
 
     @staticmethod
     def _settlement(row: Mapping[str, Any]) -> ArenaHonorSettlement:
@@ -182,99 +221,195 @@ class ArenaSeasonRewardRepository:
         )
         total_reward = base_honor + ranking_bonus
 
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            if not table_ready(uow, "arena_season_reward_operations", CLAIM_RECEIPT_COLUMNS) or not table_ready(
-                uow, "arena", CLAIM_COLUMNS | frozenset(reset or {}), prefix="player_data."
-            ):
-                return self._result(SCHEMA_MISSING, 0, expected_honor, expected_total_honor)
-            previous = uow.query_one(
-                "SELECT payload,honor,honor_points,total_honor_earned "
-                "FROM arena_season_reward_operations WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["payload"]) != payload:
-                    return self._result("state_changed", 0, expected_honor, expected_total_honor)
-                return self._result(
-                    "duplicate", previous["honor"], previous["honor_points"], previous["total_honor_earned"]
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                if not table_ready(uow, "arena_season_reward_operations", CLAIM_RECEIPT_COLUMNS) or not table_ready(
+                    uow, "arena", CLAIM_COLUMNS | frozenset(reset or {}), prefix="player_data."
+                ):
+                    return self._result(SCHEMA_MISSING, 0, expected_honor, expected_total_honor)
+                previous = uow.query_one(
+                    "SELECT payload,season_key,user_id,honor,honor_points,total_honor_earned "
+                    "FROM arena_season_reward_operations WHERE operation_id=?",
+                    (operation_id,),
                 )
-            claimed = uow.query_one(
-                "SELECT honor,honor_points,total_honor_earned FROM arena_season_reward_operations "
-                "WHERE season_key=? AND user_id=?",
-                (season_key, user_id),
-            )
-            if claimed is not None:
-                return self._result("already_claimed", claimed["honor"], claimed["honor_points"], claimed["total_honor_earned"])
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
-                return self._result("user_missing", 0, expected_honor, expected_total_honor)
-            arena = uow.query_one(
-                "SELECT COALESCE(score,0) AS score,COALESCE(rank,'') AS rank,"
-                "COALESCE(honor_points,0) AS honor_points,"
-                "COALESCE(total_honor_earned,0) AS total_honor_earned "
-                "FROM player_data.arena WHERE user_id=?",
-                (user_id,),
-            )
-            if arena is None or (
-                as_int_like(arena["score"]), str(arena["rank"]), as_int_like(arena["honor_points"]), as_int_like(arena["total_honor_earned"])
-            ) != (expected_score, str(expected_rank), expected_honor, expected_total_honor):
-                return self._result("state_changed", 0, expected_honor, expected_total_honor)
-            ranking = uow.query_one(
-                "SELECT COUNT(*)+1 AS position FROM player_data.arena WHERE xiuxian_int_cmp(COALESCE(score,0),?)>0",
-                (expected_score,),
-            )
-            if ranking is None or (expected_position > 0 and int(ranking["position"]) != expected_position):
-                return self._result("state_changed", 0, expected_honor, expected_total_honor)
-            if reset is not None:
-                reset_row = uow.query_one(
-                    "SELECT COALESCE(daily_challenges_used,0) AS daily_challenges_used,"
-                    "COALESCE(daily_extra_challenges,0) AS daily_extra_challenges,"
-                    "COALESCE(daily_challenge_buys,0) AS daily_challenge_buys,"
-                    "COALESCE(last_reset_date,'') AS last_reset_date,"
-                    "COALESCE(last_buy_date,'') AS last_buy_date "
+                if previous is not None:
+                    if str(previous["payload"]) != payload:
+                        if str(previous["season_key"]) != season_key or str(previous["user_id"]) != user_id:
+                            return self._result("state_changed", 0, expected_honor, expected_total_honor)
+                        try:
+                            old_payload = json.loads(str(previous["payload"]))
+                            new_payload = json.loads(payload)
+                        except (TypeError, ValueError):
+                            return self._result("state_changed", 0, expected_honor, expected_total_honor)
+                        stable_fields = (0, 1, 2, 3, 4, 7, 8, 9, 10)
+                        if (
+                            not isinstance(old_payload, list)
+                            or not isinstance(new_payload, list)
+                            or len(old_payload) != 12
+                            or len(new_payload) != 12
+                            or any(old_payload[index] != new_payload[index] for index in stable_fields)
+                        ):
+                            return self._result("state_changed", 0, expected_honor, expected_total_honor)
+                    return self._result(
+                        "duplicate", previous["honor"], previous["honor_points"], previous["total_honor_earned"]
+                    )
+                claimed = uow.query_one(
+                    "SELECT honor,honor_points,total_honor_earned FROM arena_season_reward_operations "
+                    "WHERE season_key=? AND user_id=?",
+                    (season_key, user_id),
+                )
+                if claimed is not None:
+                    return self._result("already_claimed", claimed["honor"], claimed["honor_points"], claimed["total_honor_earned"])
+                if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
+                    return self._result("user_missing", 0, expected_honor, expected_total_honor)
+                arena = uow.query_one(
+                    "SELECT COALESCE(score,0) AS score,COALESCE(rank,'') AS rank,"
+                    "COALESCE(honor_points,0) AS honor_points,"
+                    "COALESCE(total_honor_earned,0) AS total_honor_earned "
                     "FROM player_data.arena WHERE user_id=?",
                     (user_id,),
                 )
-                if reset_row is None or any(str(reset_row[key]) != str(value) for key, value in reset.items()):
+                if arena is None or (
+                    as_int_like(arena["score"]), str(arena["rank"]), as_int_like(arena["honor_points"]), as_int_like(arena["total_honor_earned"])
+                ) != (expected_score, str(expected_rank), expected_honor, expected_total_honor):
                     return self._result("state_changed", 0, expected_honor, expected_total_honor)
-            for item_id, _name, _type, amount, _bound in rewards:
-                inventory = uow.query_one(
-                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
-                    (user_id, item_id),
+                ranking = uow.query_one(
+                    "SELECT COUNT(*)+1 AS position FROM player_data.arena WHERE xiuxian_int_cmp(COALESCE(score,0),?)>0",
+                    (expected_score,),
                 )
-                inventory_total = int(inventory["goods_num"]) + amount if inventory else amount
-                if inventory_total > max_goods_num:
-                    return self._result("inventory_full", 0, expected_honor, expected_total_honor)
-            honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
-            changed = uow.execute(
-                "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),total_honor_earned=xiuxian_int_store(?,'arena_honor','actor') WHERE user_id=? "
-                "AND xiuxian_int_cmp(COALESCE(score,0),?)=0 AND COALESCE(rank,'')=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0 "
-                "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),?,1,'arena_honor','actor')=0",
-                (honor_points, total_honor, user_id, expected_score, str(expected_rank), expected_honor, expected_total_honor),
-            )
-            if changed.rowcount != 1:
-                return self._result("state_changed", 0, expected_honor, expected_total_honor)
-            if reset is not None:
-                uow.execute(
-                    "UPDATE player_data.arena SET daily_challenges_used=0,daily_extra_challenges=0,"
-                    "daily_challenge_buys=0,last_reset_date=?,last_buy_date=? WHERE user_id=?",
-                    (season_key, season_key, user_id),
-                )
-            for item_id, name, item_type, amount, bound in rewards:
-                uow.execute(
-                    "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
-                    "VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) "
-                    "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,"
-                    "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=CURRENT_TIMESTAMP",
-                    (user_id, item_id, name, item_type, amount, amount if bound else 0),
-                )
-            uow.execute(
-                "INSERT INTO arena_season_reward_operations "
-                "(operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned) "
-                "VALUES(?,?,?,?,?,xiuxian_int_store(?,'arena_honor','actor'),?)",
-                (operation_id, payload, season_key, user_id, total_reward, honor_points, total_honor),
-            )
-            return self._result("applied", total_reward, honor_points, total_honor)
+                if ranking is None or (expected_position > 0 and int(ranking["position"]) != expected_position):
+                    return self._result("state_changed", 0, expected_honor, expected_total_honor)
+                if reset is not None:
+                    reset_row = uow.query_one(
+                        "SELECT COALESCE(daily_challenges_used,0) AS daily_challenges_used,"
+                        "COALESCE(daily_extra_challenges,0) AS daily_extra_challenges,"
+                        "COALESCE(daily_challenge_buys,0) AS daily_challenge_buys,"
+                        "COALESCE(last_reset_date,'') AS last_reset_date,"
+                        "COALESCE(last_buy_date,'') AS last_buy_date "
+                        "FROM player_data.arena WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if reset_row is None or any(str(reset_row[key]) != str(value) for key, value in reset.items()):
+                        return self._result("state_changed", 0, expected_honor, expected_total_honor)
+                inventory_expectations: dict[int, list[int]] = {}
+                planned_goods: dict[int, int] = {}
+                for item_id, _name, _type, amount, _bound in rewards:
+                    if item_id not in inventory_expectations:
+                        inventory = uow.query_one(
+                            "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
+                            "FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id),
+                        )
+                        inventory_expectations[item_id] = [
+                            int(inventory["goods_num"]) if inventory else 0,
+                            int(inventory["bind_num"]) if inventory else 0,
+                        ]
+                        planned_goods[item_id] = inventory_expectations[item_id][0]
+                    planned_goods[item_id] += amount
+                    if planned_goods[item_id] > max_goods_num:
+                        return self._result("inventory_full", 0, expected_honor, expected_total_honor)
+                honor_points, total_honor = expected_honor + total_reward, expected_total_honor + total_reward
+                reset_expected = {
+                    "daily_challenges_used": 0,
+                    "daily_extra_challenges": 0,
+                    "daily_challenge_buys": 0,
+                    "last_reset_date": season_key,
+                    "last_buy_date": season_key,
+                }
+                with uow.savepoint("arena_season_reward"):
+                    changed = uow.execute(
+                        "UPDATE player_data.arena SET honor_points=xiuxian_int_store(?,'arena_honor','actor'),total_honor_earned=xiuxian_int_store(?,'arena_honor','actor') WHERE user_id=? "
+                        "AND xiuxian_int_cmp(COALESCE(score,0),?)=0 AND COALESCE(rank,'')=? AND xiuxian_int_cmp(COALESCE(honor_points,0),?,1,'arena_honor','actor')=0 "
+                        "AND xiuxian_int_cmp(COALESCE(total_honor_earned,0),?,1,'arena_honor','actor')=0",
+                        (honor_points, total_honor, user_id, expected_score, str(expected_rank), expected_honor, expected_total_honor),
+                    )
+                    if changed.rowcount != 1 or not self._matches(
+                        uow.query_one("SELECT honor_points,total_honor_earned FROM player_data.arena WHERE user_id=?", (user_id,)),
+                        {"honor_points": honor_points, "total_honor_earned": total_honor},
+                    ):
+                        raise _ArenaSeasonRewardWriteRejected(self._result(
+                            "state_changed", 0, expected_honor, expected_total_honor,
+                            reason="arena_season_reward_honor_write_rejected", subject=user_id,
+                        ))
+                    if reset is not None:
+                        changed = uow.execute(
+                            "UPDATE player_data.arena SET daily_challenges_used=0,daily_extra_challenges=0,"
+                            "daily_challenge_buys=0,last_reset_date=?,last_buy_date=? WHERE user_id=? "
+                            "AND COALESCE(daily_challenges_used,0)=? AND COALESCE(daily_extra_challenges,0)=? "
+                            "AND COALESCE(daily_challenge_buys,0)=? AND COALESCE(last_reset_date,'')=? "
+                            "AND COALESCE(last_buy_date,'')=?",
+                            (season_key, season_key, user_id, reset["daily_challenges_used"], reset["daily_extra_challenges"], reset["daily_challenge_buys"], reset["last_reset_date"], reset["last_buy_date"]),
+                        )
+                        if changed.rowcount != 1 or not self._matches(
+                            uow.query_one("SELECT daily_challenges_used,daily_extra_challenges,daily_challenge_buys,last_reset_date,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,)),
+                            reset_expected,
+                        ):
+                            raise _ArenaSeasonRewardWriteRejected(self._result(
+                                "state_changed", 0, expected_honor, expected_total_honor,
+                                reason="arena_season_reward_reset_write_rejected", subject=user_id,
+                            ))
+                    for item_id, name, item_type, amount, bound in rewards:
+                        expected_goods, expected_bind = inventory_expectations[item_id]
+                        expected_goods += amount
+                        expected_bind += amount if bound else 0
+                        changed = uow.execute(
+                            "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                            "VALUES(?,?,?,?,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,?) "
+                            "ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,"
+                            "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=CURRENT_TIMESTAMP",
+                            (user_id, item_id, name, item_type, amount, amount if bound else 0),
+                        )
+                        if changed.rowcount != 1 or not self._matches(
+                            uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)),
+                            {"goods_num": expected_goods, "bind_num": expected_bind},
+                        ):
+                            raise _ArenaSeasonRewardWriteRejected(self._result(
+                                "state_changed", 0, expected_honor, expected_total_honor,
+                                reason="arena_season_reward_inventory_write_rejected", subject=f"{user_id}:{item_id}",
+                            ))
+                        inventory_expectations[item_id] = [expected_goods, expected_bind]
+                    inserted = uow.execute(
+                        "INSERT INTO arena_season_reward_operations "
+                        "(operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned) "
+                        "VALUES(?,?,?,?,?,xiuxian_int_store(?,'arena_honor','actor'),?)",
+                        (operation_id, payload, season_key, user_id, total_reward, honor_points, total_honor),
+                    )
+                    if inserted.rowcount != 1 or not self._matches(
+                        uow.query_one("SELECT operation_id,payload,season_key,user_id,honor,honor_points,total_honor_earned FROM arena_season_reward_operations WHERE operation_id=?", (operation_id,)),
+                        {"operation_id": operation_id, "payload": payload, "season_key": season_key, "user_id": user_id, "honor": total_reward, "honor_points": honor_points, "total_honor_earned": total_honor},
+                    ):
+                        raise _ArenaSeasonRewardWriteRejected(self._result(
+                            "state_changed", 0, expected_honor, expected_total_honor,
+                            reason="arena_season_reward_receipt_write_rejected", subject="receipt",
+                        ))
+                    if not self._matches(
+                        uow.query_one("SELECT honor_points,total_honor_earned FROM player_data.arena WHERE user_id=?", (user_id,)),
+                        {"honor_points": honor_points, "total_honor_earned": total_honor},
+                    ) or (
+                        reset is not None and not self._matches(
+                            uow.query_one("SELECT daily_challenges_used,daily_extra_challenges,daily_challenge_buys,last_reset_date,last_buy_date FROM player_data.arena WHERE user_id=?", (user_id,)),
+                            reset_expected,
+                        )
+                    ):
+                        raise _ArenaSeasonRewardWriteRejected(self._result(
+                            "state_changed", 0, expected_honor, expected_total_honor,
+                            reason="arena_season_reward_honor_write_rejected" if reset is None else "arena_season_reward_reset_write_rejected", subject=user_id,
+                        ))
+                    for item_id, expected_values in inventory_expectations.items():
+                        if not self._matches(
+                            uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)),
+                            {"goods_num": expected_values[0], "bind_num": expected_values[1]},
+                        ):
+                            failed_reason = "arena_season_reward_inventory_write_rejected"
+                            failed_subject = f"{user_id}:{item_id}"
+                            raise _ArenaSeasonRewardWriteRejected(self._result(
+                                "state_changed", 0, expected_honor, expected_total_honor,
+                                reason=failed_reason, subject=failed_subject,
+                            ))
+                return self._result("applied", total_reward, honor_points, total_honor)
+        except _ArenaSeasonRewardWriteRejected as rejected:
+            return rejected.result
 
 
 __all__ = ["ArenaHonorSettlement", "ArenaSeasonRewardRepository", "ArenaSeasonRewardResult"]

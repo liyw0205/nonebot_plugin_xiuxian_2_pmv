@@ -16,6 +16,35 @@ from .termination_repository import RiftTerminationSqlRepository
 from .settlement_repository import RiftSettlementSqlRepository
 
 
+RIFT_SPEEDUP_RETRYABLE_REJECTIONS = (
+    "rift_speedup_item_write_rejected",
+    "rift_speedup_entry_write_rejected",
+    "rift_speedup_cooldown_write_rejected",
+    "rift_speedup_receipt_write_rejected",
+)
+
+RIFT_DEMON_TOKEN_RETRYABLE_REJECTIONS = (
+    "rift_demon_token_item_write_rejected",
+    "rift_demon_token_user_write_rejected",
+    "rift_demon_token_reward_write_rejected",
+    "rift_demon_token_progress_write_rejected",
+    "rift_demon_token_statistics_write_rejected",
+    "rift_demon_token_entry_write_rejected",
+    "rift_demon_token_cooldown_write_rejected",
+    "rift_demon_token_receipt_write_rejected",
+)
+
+RIFT_SETTLEMENT_RETRYABLE_REJECTIONS = (
+    "rift_settlement_user_write_rejected",
+    "rift_settlement_reward_write_rejected",
+    "rift_settlement_progress_write_rejected",
+    "rift_settlement_statistics_write_rejected",
+    "rift_settlement_entry_write_rejected",
+    "rift_settlement_cooldown_write_rejected",
+    "rift_settlement_receipt_write_rejected",
+)
+
+
 class RiftApplication(LegacyApplication):
     def __init__(
         self,
@@ -223,7 +252,21 @@ class RiftApplication(LegacyApplication):
         return self.key_event_repository.replay(operation_id)
     def speedup(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="rift.speedup", payload={"user_id": user_id, **kwargs}, call=lambda: RiftSpeedupSqlRepository(self.database).apply(operation_id, user_id, kwargs["item_id"], kwargs.get("expected_rift"), kwargs.get("expected_cd"), kwargs["remaining_ratio"]))
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="rift.speedup",
+                payload={"user_id": user_id, **kwargs},
+                retryable_rejections=RIFT_SPEEDUP_RETRYABLE_REJECTIONS,
+                call=lambda: RiftSpeedupSqlRepository(self.database).apply(
+                    operation_id,
+                    user_id,
+                    kwargs["item_id"],
+                    kwargs.get("expected_rift"),
+                    kwargs.get("expected_cd"),
+                    kwargs["remaining_ratio"],
+                ),
+            )
         return self._action("speedup", operation_id=operation_id, user_id=user_id, **kwargs)
     def settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self.repository is not None:

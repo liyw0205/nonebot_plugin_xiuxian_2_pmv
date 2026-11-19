@@ -15,6 +15,7 @@ from ..adapter_compat import (
 )
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_utils.item_json import Items
+from ..xiuxian_utils.player_data_manager import DocumentWriteRejected
 from ..xiuxian_utils.utils import check_user, handle_send, send_msg_handler, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager, XiuxianDateManage, calc_accessory_effects
 from ..xiuxian_utils.lay_out import Cooldown
@@ -171,7 +172,7 @@ def configure_quick_equip_application(application: AccessoryQuickEquipApplicatio
     _accessory_quick_equip_application = application
 
 
-def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
+def _acc_fail_msg(result, *, action: str = "饰品操作", subject: str = "") -> str:
     from ..command_guard import result_failure
     status = getattr(result, "status", None) or "unknown"
     mapping = {
@@ -182,7 +183,12 @@ def _acc_fail_msg(result, *, action: str = "饰品操作") -> str:
         "user_missing": "未找到修仙数据。",
         "duplicate": "该请求已处理，无需重复提交。",
     }
-    return result_failure(action, result, messages=mapping)
+    return result_failure(
+        action,
+        result,
+        messages=mapping,
+        subjects={str(subject): f"饰品 {subject}"} if subject else None,
+    )
 
 
 def _accessory_operation_id(event, action, user_id, target):
@@ -860,13 +866,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         result["msg"] = f"已装备：{hit.get('name', '未知饰品')} 到 {part}"
         return True
 
-    _player_data_manager().patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
-    )
+    try:
+        _player_data_manager().patch_doc(
+            user_id=user_id,
+            table_name=TABLE,
+            fields=["equipped", "bag"],
+            mutator=_mut,
+            default_factory=_default_accessory_doc,
+        )
+    except DocumentWriteRejected as exc:
+        await handle_send(bot, event, f"装备失败：饰品 {uid}。{exc.message}（{exc.code}）")
+        return
 
     await handle_send(bot, event, result["msg"])
 
@@ -897,13 +907,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         result["msg"] = f"已卸下：{cur.get('name', '未知饰品')}"
         return True
 
-    _player_data_manager().patch_doc(
-        user_id=user_id,
-        table_name=TABLE,
-        fields=["equipped", "bag"],
-        mutator=_mut,
-        default_factory=_default_accessory_doc
-    )
+    try:
+        _player_data_manager().patch_doc(
+            user_id=user_id,
+            table_name=TABLE,
+            fields=["equipped", "bag"],
+            mutator=_mut,
+            default_factory=_default_accessory_doc,
+        )
+    except DocumentWriteRejected as exc:
+        await handle_send(bot, event, f"卸下失败：{part}。{exc.message}（{exc.code}）")
+        return
 
     await handle_send(bot, event, result["msg"])
 
@@ -960,7 +974,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                             deepcopy(target), tuple(new_locked),
                         )
                         if not result.succeeded or result.accessory is None:
-                            result_msg = _acc_fail_msg(result, action="锁定")
+                            result_msg = _acc_fail_msg(result, action="锁定", subject=uid)
                         else:
                             updated = result.accessory
                             result_msg = (
@@ -1028,7 +1042,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
                         deepcopy(target), tuple(new_locked),
                     )
                     if not result.succeeded or result.accessory is None:
-                        result_msg = _acc_fail_msg(result, action="解锁")
+                        result_msg = _acc_fail_msg(result, action="解锁", subject=uid)
                     else:
                         updated = result.accessory
                         q = max(1, min(5, int(updated.get("quality", 1))))
@@ -1119,7 +1133,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     elif result.status in {"accessory_missing", "state_changed"}:
         text = _acc_fail_msg(result, action="洗练")
     elif not result.succeeded or result.accessory is None:
-        text = "洗练失败"
+        text = _acc_fail_msg(result, action="洗练", subject=uid)
     else:
         updated = result.accessory
         q2 = max(1, min(5, int(updated.get("quality", 1))))

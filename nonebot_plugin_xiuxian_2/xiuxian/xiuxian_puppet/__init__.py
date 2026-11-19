@@ -181,13 +181,14 @@ async def auto_harvest_scheduled():
                 break
             for enabled_user in enabled_users:
                 after_row_id = enabled_user.row_id
-                await check_and_harvest(enabled_user.user_id)
+                await check_and_harvest(enabled_user.user_id, scheduled=True)
 
     except Exception as e:
-        logger.warning(f"自动收取任务出错: {e}")
+        logger.exception(f"自动收取任务出错: {e}")
+        raise
 
 
-async def check_and_harvest(user_id):
+async def check_and_harvest(user_id, *, scheduled: bool = False):
     """检查并执行收取"""
     GETCONFIG = {
         "time_cost": 23,  # 单位小时
@@ -232,6 +233,11 @@ async def check_and_harvest(user_id):
         reward_factory=create_rewards,
         max_goods_num=XiuConfig().max_goods_num,
     )
+    if scheduled and result.status not in {
+        "harvested", "duplicate", "user_missing", "blessed_spot_missing", "puppet_disabled",
+        "stone_insufficient", "not_ready", "inventory_full",
+    }:
+        raise RuntimeError(f"傀儡自动收取失败：user_id={user_id} status={result.status}")
     if result.harvested:
         msg = '傀儡收取\n' + ''.join(
             f"道友成功收获药材：{reward.goods_name} {reward.quantity} 个！\n"

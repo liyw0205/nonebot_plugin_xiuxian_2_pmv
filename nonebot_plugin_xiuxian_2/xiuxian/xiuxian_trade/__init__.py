@@ -2,7 +2,8 @@ import asyncio
 import re
 import time
 from types import SimpleNamespace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from nonebot import require
 from .. import DRIVER
 from ..on_compat import on_command
@@ -69,6 +70,7 @@ from .transaction_service import (
 from .auction_jobs import run_auction_job
 from ...paths import get_paths
 from ...features.trade.application import TradeApplication
+from ...features.trade.guishi_immediate_match import GuishiImmediateMatchResult, GuishiMatchFailure
 from ...features.trade.xianshi_history_view import render_xianshi_trades
 from ...features.trade.xianshi_market_application import XianshiMarketApplication
 from ...features.trade.xianshi_market_schemas import (
@@ -94,7 +96,7 @@ from ...features.auction.settlement import AuctionSettlementApplication
 from ...features.auction.pending import AuctionPendingApplication
 from ...features.auction.my_auction_view import render_live_lots, render_settlements
 from ...features.auction.query_application import AuctionQueryApplication
-from ...features.auction.domain import session_window
+from ...features.auction.domain import AuctionLifecycleError, session_window
 from ...features.trade.guishi_deposit_repository import GuishiDepositSqlRepository
 from ...features.trade.guishi_withdraw_repository import GuishiWithdrawSqlRepository
 from ...infrastructure.ids import UUIDGenerator
@@ -110,12 +112,6 @@ runtime_clock = SystemClock()
 runtime_random = SystemRandom()
 _sql_message_instance = None
 _trade_manager_instance = None
-trade_application = TradeApplication(
-    get_paths().game_db,
-    get_paths().trade_db,
-    clock=runtime_clock,
-    ids=runtime_ids,
-)
 xianshi_market_application = XianshiMarketApplication(
     get_paths().game_db,
     clock=runtime_clock,
@@ -130,6 +126,38 @@ _auction_pending_application_instance = None
 _auction_query_application_instance = None
 scheduler = require("nonebot_plugin_apscheduler").scheduler # 全局调度器，用于鬼市
 auction_scheduler = require("nonebot_plugin_apscheduler").scheduler # 独立的拍卖调度器，避免冲突
+
+
+def _trade_scheduler_timezone():
+    """Return the scheduler timezone used by trade's wall-clock windows."""
+    configured = getattr(scheduler, "timezone", None)
+    if configured is None:
+        return timezone.utc
+    if isinstance(configured, str):
+        try:
+            return ZoneInfo(configured)
+        except (KeyError, ValueError):
+            logger.warning("交易调度器时区无效，回退 UTC：{}", configured)
+            return timezone.utc
+    return configured
+
+
+def _trade_business_now(value: datetime | None = None) -> datetime:
+    """Project the UTC runtime clock into the scheduler's business timezone."""
+    current = value or runtime_clock.now()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    return current.astimezone(_trade_scheduler_timezone())
+
+
+trade_application = TradeApplication(
+    get_paths().game_db,
+    get_paths().trade_db,
+    clock=runtime_clock,
+    ids=runtime_ids,
+    business_timezone=_trade_scheduler_timezone(),
+    player_database=get_paths().player_db,
+)
 
 
 def _sql_message():
@@ -230,9 +258,11 @@ def _start_auction_with_application(operation_id: str) -> bool:
         duration_hours=schedule_config["duration_hours"],
     )
     if not result.succeeded:
-        logger.warning(f"拍卖开启失败：{result.status}")
-        return False
-    current_date = runtime_clock.now().strftime("%Y-%m-%d")
+        if result.status == "empty":
+            logger.info("没有物品可供拍卖，本次未开启。")
+            return False
+        raise AuctionLifecycleError(result.reason or result.status, result.subject or operation_id)
+    current_date = _trade_business_now().strftime("%Y-%m-%d")
     auction_config.set_auction_config_value(
         "schedule", current_date, "last_auto_start_date"
     )
@@ -244,24 +274,34 @@ async def _end_auction_with_application(operation_id: str | None = None) -> list
     """Settle the active auction through the feature application by default."""
     current_auctions = _auction_query_application().get_current_auction() or []
     if not current_auctions:
+        active = _auction_session_service().get_active_session()
+        if active is not None:
+            raise AuctionLifecycleError("auction_items_missing", active["session_id"])
         return []
     session = _auction_session_service().get_active_session()
     if session is None:
-        raise RuntimeError("auction items exist without an active database session")
+        raise AuctionLifecycleError("auction_session_missing", str(current_auctions[0].get("id", "auction")))
     item_types = {}
     for item in current_auctions:
         info = items.get_data_by_item_id(item["item_id"])
         if info:
             item_types[int(item["item_id"])] = str(info["type"])
     stable_operation_id = operation_id or f"auction-finish:{session['session_id']}"
-    outcome = _auction_settlement_application().settle_active(
-        operation_id=stable_operation_id,
-        end_time=runtime_clock.now().timestamp(),
-        fee_rate=auction_config.get_auction_rules()["fee_rate"],
-        item_types=item_types,
-    )
+    try:
+        outcome = _auction_settlement_application().settle_active(
+            operation_id=stable_operation_id,
+            # Scheduled retries must retain their original deadline in the ledger payload.
+            end_time=min(runtime_clock.now().timestamp(), float(session["end_time"])),
+            fee_rate=auction_config.get_auction_rules()["fee_rate"],
+            item_types=item_types,
+        )
+    except DomainError as exc:
+        if exc.details.get("reason"):
+            raise AuctionLifecycleError(exc.details["reason"], exc.details.get("subject") or session["session_id"]) from exc
+        raise
     if not outcome.ok:
-        raise ValueError(f"auction session settlement blocked: status={outcome.code}")
+        data = outcome.data or {}
+        raise AuctionLifecycleError(data.get("reason") or outcome.code, data.get("subject") or session["session_id"])
     results = [dict(record) for record in (outcome.data or {}).get("results", ())]
     logger.info("拍卖已结束，结算及副作用事件已提交！")
     return results
@@ -272,6 +312,8 @@ async def _place_auction_bid_with_application(
 ) -> tuple[bool, str]:
     """Validate and place a bid through the feature application by default."""
     if not get_auction_status()["active"]:
+        if _auction_query_application().get_current_auction(auction_id):
+            return False, f"拍品缺少有效场次，竞拍未成立。（原因：auction_session_missing；主体：{auction_id}）"
         return False, "拍卖尚未开启。"
 
     item = _auction_query_application().get_current_auction(auction_id)
@@ -332,6 +374,18 @@ async def _place_auction_bid_with_application(
         item_name=str(item.get("name", auction_id)),
     )
     status = str((outcome.data or {}).get("status", outcome.code or outcome.status))
+    if status in {"auction_expired", "auction_not_started", "auction_session_missing", "auction_session_time_invalid"}:
+        description = {
+            "auction_expired": "本场竞拍时间已结束，正在等待结算。",
+            "auction_not_started": "本场尚未到竞拍开始时间。",
+            "auction_session_missing": "拍品缺少有效场次。",
+            "auction_session_time_invalid": "本场时间记录不合法。",
+        }[status]
+        data = outcome.data or {}
+        return False, f"{description}（原因：{data.get('reason') or status}；主体：{data.get('subject') or auction_id}）"
+    if status not in {"bid", "duplicate"} and (outcome.data or {}).get("reason"):
+        data = outcome.data
+        return False, f"竞拍未成立。（原因：{data['reason']}；主体：{data.get('subject') or auction_id}）"
     if status == "stone_insufficient":
         return False, "灵石不足，竞拍未成立。"
     if status == "bid_too_low":
@@ -555,7 +609,7 @@ def _guishi_take_item_operation_id(event, user_id, goods_id):
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
-        return f"guishi-item-take:{event_id}:{user_id}:{goods_id}"
+        return f"guishi-item-take:{event_id}:{user_id}"
     timestamp = runtime_clock.now().strftime("%Y%m%d%H%M%S%f")
     return f"guishi-item-take:{user_id}:{goods_id}:{timestamp}"
 
@@ -565,7 +619,7 @@ def _guishi_order_operation_id(event, order_type, user_id, item_id, price, quant
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
-        return f"guishi-order:{order_type}:{event_id}:{user_id}:{item_id}:{price}:{quantity}"
+        return f"guishi-order:{order_type}:{event_id}:{user_id}"
     return f"guishi-order:{order_type}:{user_id}:{item_id}:{price}:{quantity}:{runtime_ids.new_id()}"
 
 
@@ -574,6 +628,8 @@ def _guishi_cancel_operation_id(event, order_type, user_id, order_id):
         getattr(event, "message_id", "") or getattr(event, "id", "") or ""
     ).strip()
     if event_id:
+        if order_type == "qiugou":
+            return f"guishi-cancel:{order_type}:{event_id}:{user_id}"
         return f"guishi-cancel:{order_type}:{event_id}:{user_id}:{order_id}"
     return f"guishi-cancel:{order_type}:{user_id}:{order_id}:{runtime_ids.new_id()}"
 
@@ -582,20 +638,96 @@ def _guishi_expired_operation_id(order_id):
     return f"guishi-expire:baitan:{str(order_id).strip()}"
 
 
+def _guishi_order_failure(action, result, order_id=""):
+    messages = {
+        "order_missing": "订单不存在，可能已成交或取消。",
+        "not_owner": "该订单不属于您，不能取消。",
+        "not_qiugou": "该订单不是求购订单。",
+        "not_baitan": "该订单不是摆摊订单。",
+        "item_missing": "物品资料缺失，订单已保留，请联系管理员。",
+        "inventory_full": "背包容量不足，订单已保留，请腾出空间后重试。",
+        "operation_conflict": "同一请求已用于不同内容，请使用新消息操作。",
+        "state_changed": "订单或账户状态已变化，请重新查询后重试。",
+    }
+    text = result_failure(action, result, messages=messages,
+                          subjects={str(order_id): f"订单{order_id}"} if order_id else None)
+    subject = f"；订单：{order_id}" if order_id else ""
+    reason = getattr(result, "reason", "") or result.status
+    return f"{text}（原因：{reason}{subject}）"
+
+
+def _guishi_baitan_closed_message(now):
+    next_start = now.replace(hour=GUISHI_BAITAN_START_HOUR, minute=0, second=0, microsecond=0)
+    hours, minutes = divmod(int((next_start - now).total_seconds()) // 60, 60)
+    return (
+        f"鬼市摆摊时间：每天{GUISHI_BAITAN_START_HOUR}:00-次日{GUISHI_BAITAN_END_HOUR}:00\n"
+        f"下次可摆摊时间：{next_start.strftime('%m月%d日 %H:%M')}（{hours}小时{minutes}分钟后）"
+    )
+
+
 def _record_guishi_match_event(result, buyer_name, seller_name):
     """Record the shared Guishi trade statistics for one matched buy/sell pair."""
+    if result.status == "duplicate":
+        return
+    recorded = getattr(result, "statistics_recorded", False)
     record_trade_event(
         result.buyer_id,
         "鬼市成交",
         f"购得{result.item_name}x{result.quantity}，花费{number_to(result.amount)}灵石，卖家:{seller_name}",
-        {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
+        None if recorded else {"鬼市购买次数": 1, "鬼市购买数量": result.quantity, "鬼市消费灵石": result.amount}
     )
     record_trade_event(
         result.seller_id,
         "鬼市成交",
         f"售出{result.item_name}x{result.quantity}，收入{number_to(result.amount)}灵石，买家:{buyer_name}",
-        {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
+        None if recorded else {"鬼市售出次数": 1, "鬼市售出数量": result.quantity, "鬼市收入灵石": result.amount}
     )
+
+
+def _guishi_match_lines(matches):
+    lines = []
+    for fill in matches:
+        buyer = _sql_message().get_user_info_with_id(fill.buyer_id)
+        seller = _sql_message().get_user_info_with_id(fill.seller_id)
+        buyer_name = buyer['user_name'] if buyer else fill.buyer_id
+        seller_name = seller['user_name'] if seller else fill.seller_id
+        lines.append(f"{buyer_name} 从 {seller_name} 购得 {fill.item_name} x{fill.quantity}，"
+                     f"共 {number_to(fill.amount)} 灵石。")
+        _record_guishi_match_event(fill, buyer_name, seller_name)
+    return "\n".join(lines)
+
+
+def _resume_guishi_match_reply(order_id):
+    diagnostic = ""
+    try:
+        result = trade_application.guishi_resume_immediate_match(order_id=order_id)
+    except (MatcherException, ProcessException):
+        raise
+    except GuishiMatchFailure as exc:
+        result = GuishiImmediateMatchResult("pending", tuple(exc.matches), exc)
+        diagnostic = "\n失败原因记录未完成；" + report_exception("鬼市撮合记录", exc)
+    except DomainError as exc:
+        return (f"\n即时撮合未完成；订单 {order_id} 已创建，请查询账户。"
+                f"原因：{exc.details.get('reason') or exc.code}；主体：{exc.details.get('subject', '')}。\n"
+                + report_exception("鬼市即时撮合", exc))
+    except Exception as exc:
+        return (f"\n即时撮合未完成；订单 {order_id} 已创建，部分成交可能已提交，请先查询账户。"
+                "恢复后可用同一消息重试。\n"
+                + report_exception("鬼市即时撮合", exc))
+    try:
+        text = _guishi_match_lines(result.matches)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        text = "成交结果已提交，成交记录展示未完成，请查询鬼市账户。\n" + report_exception("鬼市成交记录", exc)
+    if text:
+        text = "\n☆------求购成交------☆\n" + text + "\n成交灵石与物品已进入鬼市账户。"
+    if result.failure:
+        failure = result.failure
+        text += (f"\n即时撮合未完成；已成交部分已结算，待处理请求已保留。"
+                 f"原因：{failure.reason}；主体：{failure.subject}；求购订单：{failure.qiugou_order_id}；"
+                 f"摆摊订单：{failure.baitan_order_id}。可用同一消息或定时任务重试。")
+    return text + diagnostic
 
 
 def _auction_queue_operation_id(event, action, user_id, item_id):
@@ -662,7 +794,12 @@ def buy_xianshi_item_safely(
         "inventory_full": f"背包中的 {item_to_buy['name']} 已达到数量上限！",
     }
     if not result.succeeded:
-        return False, result_failure("仙肆购买", result, messages=messages), None
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        return False, result_failure(
+            "仙肆购买", result, messages=messages, subjects=subjects
+        ), None
 
     if result.applied:
         trace_id = operation_id or f"xianshi:{result.listing_id}:{buyer_id}"
@@ -806,7 +943,12 @@ async def xian_shop_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xian_shop_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆上架 {item_name} {price}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
+        await xian_shop_add.finish()
     success_count = result.listed_quantity
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
     msg += f"单价: {number_to(price)} 灵石\n"
@@ -985,7 +1127,12 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
         await xianshi_auto_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi plan listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆自动上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆自动上架 {item_type} {rank_name}", k2="查看", v2=f"仙肆查看 {item_type}", k3="购买", v3="仙肆购买")
+        await xianshi_auto_add.finish()
     
     # 限制显示数量，防止消息过长
     result_messages = []
@@ -1114,7 +1261,12 @@ async def xianshi_fast_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2=f"仙肆查看 {goods_info['type']}", k3="购买", v3="仙肆购买")
         await xianshi_fast_add.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi fast listing status: {result.status}")
+        subjects = {}
+        if getattr(result, "subject", ""):
+            subjects[str(result.subject)] = f"对象 {result.subject}"
+        msg = result_failure("仙肆快速上架", result, subjects=subjects)
+        await handle_send(bot, event, msg, md_type="交易", k1="上架", v1=f"仙肆快速上架 {item_name} {price}", k2="查看", v2="仙肆查看", k3="购买", v3="仙肆购买")
+        await xianshi_fast_add.finish()
     success_count = result.listed_quantity
     
     msg = f"\n成功上架 {item_name} x{success_count} 到仙肆！\n"
@@ -1520,8 +1672,14 @@ async def xian_shop_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     if result.status == "listing_conflict":
         await handle_send(bot, event, "同名仙肆记录数据不一致，请联系管理员处理！")
         await xian_shop_remove.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("仙肆下架", result, subjects=subjects), md_type="交易")
+        await xian_shop_remove.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi name removal status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("仙肆下架", result, subjects=subjects), md_type="交易")
+        await xian_shop_remove.finish()
 
     removed = result.removed_quantity
     qty_msg = f"x{removed}" if removed > 1 else ""
@@ -1809,8 +1967,14 @@ async def xian_shop_off_all_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = "存在用户背包空间不足，仙肆未清空，请先处理背包容量！"
         await handle_send(bot, event, msg)
         await xian_shop_off_all.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("清空仙肆", result, subjects=subjects))
+        await xian_shop_off_all.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi clear status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("清空仙肆", result, subjects=subjects))
+        await xian_shop_off_all.finish()
 
     msg = (
         f"成功清空全服仙肆！共下架 {result.listing_count} 条记录，"
@@ -1880,13 +2044,17 @@ async def xian_shop_added_by_admin_(bot: Bot, event: GroupMessageEvent | Private
             quantity=quantity,
         )
         if not result.succeeded:
-            raise RuntimeError(f"unexpected system xianshi listing status: {result.status}")
-        if quantity == -1:
-            quantity_msg = "无限"
+            subjects = {}
+            if getattr(result, "subject", ""):
+                subjects[str(result.subject)] = f"对象 {result.subject}"
+            msg = result_failure("系统仙肆上架", result, subjects=subjects)
         else:
-            quantity_msg = f"x{quantity}"
-        msg = f"\n成功上架 {goods_name} {quantity_msg} 到仙肆！\n"
-        msg += f"单价: {number_to(price)} 灵石"
+            if quantity == -1:
+                quantity_msg = "无限"
+            else:
+                quantity_msg = f"x{quantity}"
+            msg = f"\n成功上架 {goods_name} {quantity_msg} 到仙肆！\n"
+            msg += f"单价: {number_to(price)} 灵石"
         await handle_send(bot, event, msg)
     except Exception as e:
         logger.error(f"系统仙肆上架失败: {e}")
@@ -1924,8 +2092,14 @@ async def xian_shop_remove_by_admin_(bot: Bot, event: GroupMessageEvent | Privat
     if result.status == "listing_missing":
         await handle_send(bot, event, f"仙肆ID {xianshi_id} 的挂单已不存在（可能已被买走或下架）。")
         await xian_shop_remove_by_admin.finish()
+    if result.status == "state_changed":
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("系统仙肆下架", result, subjects=subjects))
+        await xian_shop_remove_by_admin.finish()
     if not result.succeeded:
-        raise RuntimeError(f"unexpected xianshi removal status: {result.status}")
+        subjects = {str(result.subject): f"对象 {result.subject}"} if result.subject else None
+        await handle_send(bot, event, result_failure("系统仙肆下架", result, subjects=subjects))
+        await xian_shop_remove_by_admin.finish()
     msg = f"成功下架仙肆ID为 {xianshi_id} 的 {result.name}！"
     if result.refunded_quantity:
         msg += f"\n已退还给用户 x{result.refunded_quantity}。"
@@ -1947,12 +2121,15 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
-    if not amount_str.isdigit():
+    try:
+        amount = int(amount_str) if amount_str.isdigit() else None
+    except ValueError:
+        amount = None
+    if amount is None:
         msg = "请输入正确的灵石数量！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
     
-    amount = int(amount_str)
     if amount <= 0:
         msg = "存入数量必须大于0！"
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -1985,7 +2162,7 @@ async def guishi_deposit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "stone_insufficient": "灵石不足，存入失败。",
             "stored_cap_exceeded": "鬼市账户已达存储上限。",
             "amount_capped": "单次存入数量过大。",
-        }.get(result.status) or result_failure("鬼市存入", result)
+        }.get(result.status) or result_failure("鬼市存入", result, subjects={str(user_id): "本人账户"})
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="存灵石", v1="鬼市存灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_deposit.finish()
@@ -2013,12 +2190,15 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     user_id = user_info['user_id']
     amount_str = args.extract_plain_text().strip()
     
-    if not amount_str.isdigit():
+    try:
+        amount = int(amount_str) if amount_str.isdigit() else None
+    except ValueError:
+        amount = None
+    if amount is None:
         msg = "请输入正确的灵石数量！"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
     
-    amount = int(amount_str)
     if amount <= 0:
         msg = "取出数量必须大于0！"
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2047,7 +2227,7 @@ async def guishi_withdraw_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             "weekend_closed": "鬼市取灵石功能仅在周六和周日开放！",
             "stored_insufficient": "鬼市账户余额不足。",
             "amount_capped": "单次取出数量过大。",
-        }.get(result.status) or result_failure("鬼市取出", result)
+        }.get(result.status) or result_failure("鬼市取出", result, subjects={str(user_id): "本人账户"})
         msg = status_msg
         await handle_send(bot, event, msg, md_type="交易", k1="取灵石", v1="鬼市取灵石", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_withdraw.finish()
@@ -2076,7 +2256,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
     
-    if len(args) < 2:
+    if len(args) < 2 or len(args) > 3:
         msg = "指令格式：鬼市求购 物品名称 价格 [数量]\n数量不填默认为1"
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
@@ -2123,6 +2303,7 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price=price,
         quantity=quantity,
         max_orders=MAX_QIUGOU_ORDERS,
+        immediate_match=True,
     )
     if result.status == "limit_reached":
         msg = f"您的求购订单已达上限({MAX_QIUGOU_ORDERS})，请明日再来！"
@@ -2133,7 +2314,8 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_qiugou.finish()
     if not result.created:
-        raise RuntimeError(f"unexpected guishi qiugou status: {result.status}")
+        await handle_send(bot, event, _guishi_order_failure("鬼市求购", result))
+        await guishi_qiugou.finish()
     order_id = result.order_id
     
     msg = f"成功发布求购订单！\n"
@@ -2143,15 +2325,16 @@ async def guishi_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"订单ID：{order_id}\n"
     msg += f"♻️ 次日{GUISHI_BAITAN_END_HOUR}点自动取消订单，并退还未购得物品的灵石！"
-    record_trade_event(
-        user_id,
-        "鬼市求购",
-        f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(result.total_cost)}灵石，订单ID:{order_id}",
-        {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": result.total_cost}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市求购",
+            f"发布求购{item_name}x{quantity}，单价{number_to(price)}灵石，冻结{number_to(result.total_cost)}灵石，订单ID:{order_id}",
+            {"鬼市求购次数": 1, "鬼市求购数量": quantity, "鬼市求购冻结灵石": result.total_cost}
+        )
     
     # 立即尝试进行交易匹配，避免等待调度器
-    transaction_result_msg = await process_guishi_transactions(user_id=user_id)
+    transaction_result_msg = _resume_guishi_match_reply(order_id)
     await handle_send(bot, event, msg, md_type="交易", k1="求购", v1="鬼市求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     if transaction_result_msg:
         await handle_send(bot, event, transaction_result_msg) # 发送交易结果
@@ -2174,26 +2357,30 @@ async def guishi_cancel_qiugou_(bot: Bot, event: GroupMessageEvent | PrivateMess
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
     
-    result = trade_application.guishi_cancel_qiugou(
-        operation_id=_guishi_cancel_operation_id(
-            event, "qiugou", user_id, order_id
-        ),
-        user_id=user_id,
-        order_id=order_id,
-    )
+    try:
+        result = trade_application.guishi_cancel_qiugou(
+            operation_id=_guishi_cancel_operation_id(event, "qiugou", user_id, order_id),
+            user_id=user_id, order_id=order_id,
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("鬼市取消求购", exc, event=event))
+        await guishi_cancel_qiugou.finish()
     if not result.cancelled:
-        msg = f"未找到您的ID为 {order_id} 的求购订单！"
+        msg = _guishi_order_failure("鬼市取消求购", result, order_id)
         await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_cancel_qiugou.finish()
 
     msg = f"成功取消求购订单（ID:{order_id}）！\n"
     msg += f"已退还 {number_to(result.refunded_stone)} 灵石到您的鬼市账户。"
-    record_trade_event(
-        user_id,
-        "鬼市取消求购",
-        f"取消求购订单ID:{order_id}，退还{number_to(result.refunded_stone)}灵石",
-        {"鬼市取消求购次数": 1, "鬼市求购退还灵石": result.refunded_stone}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市取消求购",
+            f"取消求购订单ID:{order_id}，退还{number_to(result.refunded_stone)}灵石",
+            {"鬼市取消求购次数": 1, "鬼市求购退还灵石": result.refunded_stone}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="取消求购", v1="鬼市取消求购", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_cancel_qiugou.finish()
 
@@ -2206,35 +2393,18 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_baitan.finish()
     
-    # 检查摆摊时间
-    now = runtime_clock.now()
+    now = _trade_business_now()
     current_hour = now.hour
-    
-    # 判断是否在允许摆摊的时间段 (20:00-23:59 或 00:00-07:59)
-    if not (GUISHI_BAITAN_START_HOUR <= current_hour <= 23 or 0 <= current_hour < GUISHI_BAITAN_END_HOUR):
-        # 计算下一次摆摊开始时间
-        next_start_time = now.replace(minute=0, second=0, microsecond=0)
-        if current_hour >= GUISHI_BAITAN_END_HOUR: # 如果当前时间已经过了早上结束时间
-            next_start_time = next_start_time.replace(hour=GUISHI_BAITAN_START_HOUR) # 今天晚上开始
-            if current_hour >= GUISHI_BAITAN_START_HOUR: # 如果已经过了晚上开始时间，则是明晚
-                 next_start_time += timedelta(days=1)
-        else: # 如果当前时间在早上结束时间之前 (即0-7点)
-            next_start_time = next_start_time.replace(hour=GUISHI_BAITAN_START_HOUR) # 今天晚上开始
-        
-        # 计算距离下次开始的时间
-        time_left = next_start_time - now
-        hours = time_left.total_seconds() // 3600
-        minutes = (time_left.total_seconds() % 3600) // 60
-        
-        msg = f"鬼市摆摊时间：每天{GUISHI_BAITAN_START_HOUR}:00-次日{GUISHI_BAITAN_END_HOUR}:00\n"
-        msg += f"下次可摆摊时间：{next_start_time.strftime('%m月%d日 %H:%M')}（{int(hours)}小时{int(minutes)}分钟后）"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_baitan.finish()
+    creation_open = current_hour >= GUISHI_BAITAN_START_HOUR or current_hour < GUISHI_BAITAN_END_HOUR
     
     user_id = user_info['user_id']
     args = args.extract_plain_text().split()
+
+    if not args and not creation_open:
+        await handle_send(bot, event, _guishi_baitan_closed_message(now), md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_baitan.finish()
     
-    if len(args) < 2:
+    if len(args) < 2 or len(args) > 3:
         msg = "指令格式：鬼市摆摊 物品名称 价格 [数量]\n数量不填默认为1"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
@@ -2253,25 +2423,10 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
-    # 检查订单数量限制
-    baitan_orders = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan")
-    
-    if baitan_orders and len(baitan_orders) >= MAX_BAITAN_ORDERS:
-        msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        await guishi_baitan.finish()
-    
     # 检查背包物品
     goods_id, goods_info = items.get_data_by_item_name(item_name)
     if not goods_id:
         msg = f"物品 {item_name} 不存在，请检查名称是否正确！"
-        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
-        return
-    
-    # 检查用户背包中可交易的物品数量
-    goods_num = _sql_message().goods_num(str(user_info['user_id']), goods_id)
-    if goods_num <= 0:
-        msg = f"背包中没有足够的 {item_name} 用于交易！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         return
     
@@ -2287,9 +2442,6 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     
-    if quantity > goods_num: # 实际可上架数量不能超过背包现有数量
-        quantity = goods_num
-        
     result = trade_application.guishi_baitan(
         operation_id=_guishi_order_operation_id(
             event, "baitan", user_id, goods_id, price, quantity
@@ -2300,7 +2452,14 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         price=price,
         quantity=quantity,
         max_orders=MAX_BAITAN_ORDERS,
+        creation_open=creation_open,
+        cap_to_stock=True,
+        immediate_match=True,
     )
+    if result.status == "market_closed":
+        msg = _guishi_baitan_closed_message(now)
+        await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
+        await guishi_baitan.finish()
     if result.status == "limit_reached":
         msg = f"您的摆摊订单已达上限({MAX_BAITAN_ORDERS})，请先收摊部分订单！"
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2310,8 +2469,10 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_baitan.finish()
     if not result.created:
-        raise RuntimeError(f"unexpected guishi baitan status: {result.status}")
+        await handle_send(bot, event, _guishi_order_failure("鬼市摆摊", result))
+        await guishi_baitan.finish()
     order_id = result.order_id
+    quantity = result.quantity
     
     msg = f"成功摆摊！\n"
     msg += f"物品：{item_name}\n"
@@ -2319,31 +2480,15 @@ async def guishi_baitan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     msg += f"数量：{quantity}\n"
     msg += f"摊位ID：{order_id}\n"
 
-    # 摆摊即撮合：立刻匹配能接受该价格的求购订单，成交结果当场回到卖家手里。
-    fill_results = trade_application.guishi_fill_standing_qiugou(
-        baitan_order_id=order_id
-    )
-    if fill_results:
-        msg += "\n☆------求购成交------☆\n"
-        seller_name = (user_info or {}).get('user_name') or user_id
-        for fill in fill_results:
-            buyer_info = _sql_message().get_user_info_with_id(fill.buyer_id)
-            buyer_name = buyer_info['user_name'] if buyer_info else fill.buyer_id
-            execution_price = fill.amount // fill.quantity if fill.quantity else 0
-            msg += (
-                f"{buyer_name} 购得 {fill.item_name} x{fill.quantity}，"
-                f"单价 {number_to(execution_price)} 灵石，共 {number_to(fill.amount)} 灵石\n"
-            )
-            _record_guishi_match_event(fill, buyer_name, seller_name)
-        msg += "成交灵石已进入鬼市账户，可用 鬼市取灵石 取出。\n"
-
-    msg += f"⚠️ 请在次日{GUISHI_BAITAN_END_HOUR}点前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
-    record_trade_event(
-        user_id,
-        "鬼市摆摊",
-        f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
-        {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
-    )
+    if result.applied:
+        record_trade_event(
+            user_id,
+            "鬼市摆摊",
+            f"摆摊{item_name}x{quantity}，单价{number_to(price)}灵石，摊位ID:{order_id}",
+            {"鬼市摆摊次数": 1, "鬼市摆摊数量": quantity}
+        )
+    msg += _resume_guishi_match_reply(order_id)
+    msg += f"\n⚠️ 请在本轮{GUISHI_BAITAN_END_HOUR}点结束前收摊；未售出的物品会退回背包，背包已满时保留摊位。"
     
     await handle_send(bot, event, msg, md_type="交易", k1="摆摊", v1="鬼市摆摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_baitan.finish()
@@ -2370,26 +2515,37 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     # 取消所有摆摊订单
     total_refunded_items = 0
     refunded_items_summary = {} # 统计退还的物品
+    applied_orders = 0
+    failures = []
     
     for order in baitan_orders:
         _, item_info = items.get_data_by_item_name(order['item_name'])
         if not item_info:
-            logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
+            failures.append(_guishi_order_failure(
+                "鬼市收摊", SimpleNamespace(status="item_missing"), order["id"]
+            ))
             continue
-        result = trade_application.guishi_cancel_baitan(
-            operation_id=_guishi_cancel_operation_id(
-                event, "baitan", user_id, order["id"]
-            ),
-            user_id=user_id,
-            order_id=order["id"],
-            goods_type=item_info["type"],
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-        if result.status == "inventory_full":
-            logger.warning(f"鬼市摆摊订单 {order['id']} 退回失败：背包已满")
+        try:
+            result = trade_application.guishi_cancel_baitan(
+                operation_id=_guishi_cancel_operation_id(
+                    event, "baitan", user_id, order["id"]
+                ),
+                user_id=user_id,
+                order_id=order["id"],
+                goods_type=item_info["type"],
+                max_goods_num=XiuConfig().max_goods_num,
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            failures.append(f"订单 {order['id']}：{report_exception('鬼市收摊', exc, event=event)}")
             continue
         if not result.cancelled:
+            failures.append(_guishi_order_failure("鬼市收摊", result, order["id"]))
             continue
+        if not result.applied:
+            continue
+        applied_orders += 1
         if result.refunded_quantity:
             refunded_items_summary[result.item_name] = (
                 refunded_items_summary.get(result.item_name, 0)
@@ -2400,15 +2556,23 @@ async def guishi_shoutan_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     if total_refunded_items > 0:
         refund_msg = "\n已退回物品：" + "\n".join([f"{name} x{count}" for name, count in refunded_items_summary.items()])
     else:
-        refund_msg = "\n所有摆摊物品均已售出，没有物品退回。"
-        
-    msg = f"成功收摊！所有摆摊订单已取消。{refund_msg}"
-    record_trade_event(
-        user_id,
-        "鬼市收摊",
-        f"取消{len(baitan_orders)}条摆摊订单，退回{total_refunded_items}件物品",
-        {"鬼市收摊次数": 1, "鬼市收摊退回物品": total_refunded_items}
-    )
+        refund_msg = "\n本次没有物品退回。"
+
+    remaining = trade_application.guishi_get_orders(user_id=user_id, order_type="baitan") or []
+    if failures or remaining:
+        msg = f"本次取消{applied_orders}条摆摊订单，当前剩余{len(remaining)}条。"
+    else:
+        msg = "成功收摊！所有摆摊订单已取消。"
+    msg += refund_msg
+    if failures:
+        msg += "\n未完成订单：\n" + "\n".join(failures)
+    if applied_orders:
+        record_trade_event(
+            user_id,
+            "鬼市收摊",
+            f"取消{applied_orders}条摆摊订单，退回{total_refunded_items}件物品，剩余{len(remaining)}条",
+            {"鬼市收摊次数": 1, "鬼市收摊退回物品": total_refunded_items}
+        )
     await handle_send(bot, event, msg, md_type="交易", k1="收摊", v1="鬼市收摊", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
     await guishi_shoutan.finish()
 
@@ -2421,18 +2585,12 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="我要修仙")
         await guishi_take_item.finish()
     
-    # 检查是否是周末
-    today = runtime_clock.now().weekday()
-    if today not in [5, 6]:  # 5 是周六，6 是周日
-        msg = "鬼市取物品功能仅在周六和周日开放！"
-        await handle_send(bot, event, msg)
-        await guishi_take_item.finish()
-
     user_id = user_info['user_id']
     goods_name = args.extract_plain_text().strip()
 
     if not goods_name:
-        msg = "请输入要取出的物品名称！"
+        msg = ("请输入要取出的物品名称！" if _trade_business_now().weekday() in [5, 6]
+               else "鬼市取物品功能仅在周六和周日开放！")
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
@@ -2443,14 +2601,23 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     
-    result = trade_application.guishi_take_stored_item(
-        operation_id=_guishi_take_item_operation_id(event, user_id, goods_id),
-        user_id=user_id,
-        goods_id=goods_id,
-        item_name=item_info['name'],
-        goods_type=item_info['type'],
-        max_goods_num=XiuConfig().max_goods_num,
-    )
+    try:
+        result = trade_application.guishi_take_stored_item(
+            operation_id=_guishi_take_item_operation_id(event, user_id, goods_id),
+            user_id=user_id,
+            goods_id=goods_id,
+            item_name=item_info['name'],
+            goods_type=item_info['type'],
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("鬼市取物", exc, event=event))
+        await guishi_take_item.finish()
+    if result.status == "weekend_closed":
+        await handle_send(bot, event, "鬼市取物品功能仅在周六和周日开放！")
+        await guishi_take_item.finish()
     if result.status == "item_missing":
         msg = f"您没有暂存物品 {goods_name}！"
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
@@ -2460,7 +2627,12 @@ async def guishi_take_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
     if not result.succeeded:
-        msg = result_failure("鬼市取物", result, messages={"user_missing":"未找到鬼市账户，请先打开鬼市信息。", "item_missing":"鬼市暂存中没有该物品，请查看鬼市暂存后重新选择。"})
+        subjects = {str(user_id): "本人账户", f"item:{goods_id}": item_info['name']}
+        subject = str(getattr(result, "subject", ""))
+        if subject.startswith("item:") and subject not in subjects:
+            key = subject[5:]
+            subjects[subject] = f"暂存物品ID:{key}" if key.isdecimal() and len(key) <= 20 else "暂存物品"
+        msg = result_failure("鬼市取物", result, subjects=subjects, messages={"user_missing":"未找到鬼市账户，请先打开鬼市信息。", "item_missing":"鬼市暂存中没有该物品，请查看鬼市暂存后重新选择。"})
         await handle_send(bot, event, msg, md_type="交易", k1="取物品", v1="鬼市取物品", k2="信息", v2="鬼市信息", k3="帮助", v3="鬼市帮助")
         await guishi_take_item.finish()
 
@@ -2487,7 +2659,15 @@ async def guishi_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     user_id = user_info['user_id']
 
     # 访问期收敛：先让本人到期的求购自动取消并退还灵石，再展示余额与订单。
-    trade_application.guishi_expire_qiugou(user_id=user_id)
+    expired_qiugou = trade_application.guishi_expire_qiugou(user_id=user_id)
+    for result in expired_qiugou:
+        if not result.cancelled and result.status != "order_missing":
+            await handle_send(
+                bot, event,
+                result_failure(f"求购订单 {result.order_id} 到期处理未完成", result),
+                md_type="交易", k1="信息", v1="鬼市信息",
+            )
+            await guishi_info.finish()
 
     # 获取用户的鬼市账户信息
     stored_stone, stored_items = trade_application.guishi_get_account(user_id)
@@ -2534,7 +2714,13 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     msg = "正在清空全服鬼市，请稍候..."
     await handle_send(bot, event, msg)
     
-    all_guishi_orders = trade_application.guishi_get_orders() # 获取所有鬼市订单
+    try:
+        all_guishi_orders = trade_application.guishi_get_orders()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("清空鬼市读取订单", exc, event=event))
+        await clear_all_guishi.finish()
     
     if not all_guishi_orders:
         msg = "鬼市中没有订单可供清空！"
@@ -2544,56 +2730,82 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     cleared_count = 0
     refund_stone_summary = {} # 统计退还的灵石
     refund_item_summary = {} # 统计退还的物品
+    failures = []
     
     for order in all_guishi_orders:
-        if order['item_type'] == "qiugou": # 求购订单，退还灵石
-            result = trade_application.guishi_cancel_qiugou(
-                operation_id=f"guishi-clear-all:qiugou:{order['id']}",
-                user_id=order['user_id'],
-                order_id=order['id'],
-            )
-            if not result.cancelled:
-                continue
-            if result.refunded_stone:
-                refund_stone_summary[result.user_id] = (
-                    refund_stone_summary.get(result.user_id, 0) + result.refunded_stone
+        try:
+            if order['item_type'] in {"qiugou", "求购"}:
+                result = trade_application.guishi_cancel_qiugou(
+                    operation_id=f"guishi-clear-all:qiugou:{order['id']}",
+                    user_id=order['user_id'], order_id=order['id'],
                 )
-        elif order['item_type'] == "baitan": # 摆摊订单，退还物品
-            _, item_info = items.get_data_by_item_name(order['item_name'])
-            if not item_info:
-                logger.warning(f"鬼市摆摊订单 {order['id']} 的物品不存在，已保留订单")
-                continue
-            result = trade_application.guishi_clear_expired_baitan(
-                operation_id=_guishi_expired_operation_id(order['id']),
-                order_id=order['id'],
-                goods_type=item_info['type'],
-                max_goods_num=XiuConfig().max_goods_num,
-                expected_user_id=order['user_id'],
-            )
-            if not result.cleared:
-                continue
-            if result.refunded_quantity:
-                key = (result.user_id, result.item_name)
-                refund_item_summary[key] = (
-                    refund_item_summary.get(key, 0) + result.refunded_quantity
+                succeeded = result.cancelled
+            elif order['item_type'] in {"baitan", "摆摊"}:
+                _, item_info = items.get_data_by_item_name(order['item_name'])
+                if not item_info:
+                    failures.append(_guishi_order_failure("清空鬼市", SimpleNamespace(status="item_missing"), order['id']))
+                    continue
+                result = trade_application.guishi_clear_expired_baitan(
+                    operation_id=_guishi_expired_operation_id(order['id']), order_id=order['id'],
+                    goods_type=item_info['type'], max_goods_num=XiuConfig().max_goods_num,
+                    expected_user_id=order['user_id'],
                 )
-        else:
-            logger.warning(f"鬼市订单 {order['id']} 类型未知，已保留订单")
+                succeeded = result.cleared
+            else:
+                failures.append(_guishi_order_failure("清空鬼市", SimpleNamespace(status="guishi_order_type_invalid"), order['id']))
+                continue
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            failures.append(f"订单 {order['id']}：{report_exception('清空鬼市', exc, event=event)}")
             continue
-        
+        if not succeeded:
+            if result.status != "order_missing":
+                failures.append(_guishi_order_failure("清空鬼市", result, order['id']))
+            continue
+        if not result.applied:
+            continue
+        if order['item_type'] in {"qiugou", "求购"} and result.refunded_stone:
+            refund_stone_summary[result.user_id] = refund_stone_summary.get(result.user_id, 0) + result.refunded_stone
+        elif order['item_type'] in {"baitan", "摆摊"} and result.refunded_quantity:
+            key = (result.user_id, result.item_name)
+            refund_item_summary[key] = refund_item_summary.get(key, 0) + result.refunded_quantity
         cleared_count += 1
-    
-    msg_parts = [f"成功清空鬼市！共处理 {cleared_count} 条订单。"]
+
+    try:
+        remaining = trade_application.guishi_get_orders() or []
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        remaining = None
+        failures.append(report_exception("清空鬼市核对剩余订单", exc, event=event))
+    if remaining is None:
+        summary = f"本次处理 {cleared_count} 条订单，剩余订单数量未能核实。"
+    elif failures or remaining:
+        summary = f"本次处理 {cleared_count} 条订单，当前剩余 {len(remaining)} 条。"
+    else:
+        summary = f"成功清空鬼市！本次处理 {cleared_count} 条订单。"
+    msg_parts = [summary]
+    labels = {}
+    for user_id in set(refund_stone_summary) | {key[0] for key in refund_item_summary}:
+        try:
+            user_info = _sql_message().get_user_info_with_id(user_id)
+            labels[user_id] = user_info['user_name'] if user_info else user_id
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            labels[user_id] = user_id
+            msg_parts.append(report_exception("清空鬼市读取退款对象名称", exc, event=event))
+    if failures:
+        msg_parts.append("未完成订单：\n" + "\n".join(failures))
     if refund_stone_summary:
         msg_parts.append("\n☆------灵石退还------☆")
         for user_id, amount in refund_stone_summary.items():
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {number_to(amount)}灵石")
+            msg_parts.append(f"{labels[user_id]}: {number_to(amount)}灵石")
     if refund_item_summary:
         msg_parts.append("\n☆------物品退还------☆")
         for (user_id, item_name), quantity in refund_item_summary.items():
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            msg_parts.append(f"{user_info['user_name'] if user_info else user_id}: {item_name} x{quantity}")
+            msg_parts.append(f"{labels[user_id]}: {item_name} x{quantity}")
 
     await handle_send(bot, event, "\n".join(msg_parts))
     await clear_all_guishi.finish()
@@ -2660,7 +2872,12 @@ async def process_guishi_transactions(user_id: str = None) -> str:
                     transaction_log += f"求购订单 {qiugou_order_id} 已完成，已移除。\n"
                 break
             if not result.matched:
-                continue
+                if result.status in {"order_missing", "baitan_completed", "not_matchable"}:
+                    continue
+                raise RuntimeError(
+                    f"鬼市撮合失败：qiugou_order_id={qiugou_order_id} "
+                    f"baitan_order_id={baitan_order_id} status={result.status}"
+                )
 
             qiugou_user_info = _sql_message().get_user_info_with_id(result.buyer_id)
             baitan_user_info = _sql_message().get_user_info_with_id(result.seller_id)
@@ -2697,6 +2914,11 @@ async def process_guishi_transactions(user_id: str = None) -> str:
 async def auto_guishi_transactions_job():
     """定时鬼市自动交易匹配"""
     logger.info("执行鬼市自动交易匹配任务...")
+    for request in trade_application.guishi_pending_immediate_matches():
+        result = trade_application.guishi_resume_immediate_match(order_id=request['order_id'])
+        _guishi_match_lines(result.matches)
+        if result.failure:
+            raise result.failure
     await process_guishi_transactions()
 
 
@@ -2714,6 +2936,12 @@ async def clear_expired_baitan_orders_job():
     同时让到期的求购订单自动取消并把未成交灵石退回鬼市账户。"""
     expired_qiugou = trade_application.guishi_expire_qiugou()
     if expired_qiugou:
+        for result in expired_qiugou:
+            if not result.cancelled and result.status != "order_missing":
+                raise RuntimeError(
+                    f"鬼市求购到期取消失败：order_id={result.order_id} status={result.status} "
+                    f"reason={getattr(result, 'reason', '') or result.status} subject={getattr(result, 'subject', '') or result.order_id}"
+                )
         refunded_by_user = {}
         for result in expired_qiugou:
             if result.applied and result.refunded_stone > 0:
@@ -2759,7 +2987,12 @@ async def clear_expired_baitan_orders_job():
             )
             continue
         if not result.cleared:
-            continue
+            if result.status == "order_missing":
+                continue
+            raise RuntimeError(
+                f"鬼市摆摊清理失败：order_id={order['id']} status={result.status} "
+                f"reason={getattr(result, 'reason', '') or result.status} subject={getattr(result, 'subject', '') or order['id']}"
+            )
         if result.refunded_quantity > 0:
             user_info = _sql_message().get_user_info_with_id(result.user_id)
             user_name = user_info['user_name'] if user_info else f"用户{result.user_id}"
@@ -2906,7 +3139,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
 
     # 列表
     current_auctions_list = _auction_query_application().get_current_auction()
-    auction_current_status = get_auction_status()
+    auction_current_status = get_auction_status(now=_trade_business_now())
 
     if not current_auctions_list:
         msg = "当前暂无拍品。"
@@ -2922,7 +3155,7 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         if auction_current_status["start_time"] and auction_current_status["end_time"]:
             start_time_str = auction_current_status["start_time"].strftime("%H:%M")
             end_time_str = auction_current_status["end_time"].strftime("%H:%M")
-            status_line = f"进行中，预计{end_time_str}结束（{start_time_str}开启）"
+            status_line = f"{auction_current_status['state_label']}，预计{end_time_str}结束（{start_time_str}开启）"
         else:
             status_line = "进行中"
     else:
@@ -2999,9 +3232,21 @@ async def auction_bid_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, msg, md_type="拍卖", k1="列表", v1="拍卖查看", k2="帮助", v2="拍卖帮助")
         await auction_bid.finish()
 
-    success, result_msg = await _place_auction_bid_with_application(
-        str(user_info["user_id"]), auction_id, bid_price
-    )
+    try:
+        success, result_msg = await _place_auction_bid_with_application(
+            str(user_info["user_id"]), auction_id, bid_price
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except DomainError as exc:
+        if exc.details.get("reason"):
+            result_msg = f"竞拍未成立。（原因：{exc.details['reason']}；主体：{exc.details.get('subject', '')}）"
+            if exc.__cause__ is not None:
+                result_msg += "\n" + report_exception("竞拍失败记录", exc.__cause__, event=event)
+        else:
+            result_msg = report_exception("拍卖竞拍", exc, event=event)
+    except Exception as exc:
+        result_msg = report_exception("拍卖竞拍", exc, event=event)
     await handle_send(bot, event, result_msg, md_type="拍卖", k1="列表", v1="拍卖查看", k2="再竞", v2=f"拍卖竞拍 {auction_id}", k3="帮助", v3="拍卖帮助")
     await auction_bid.finish()
 
@@ -3023,7 +3268,7 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await handle_send(bot, event, "拍卖进行中时不能上架物品，请等待拍卖结束后再上架！", md_type="拍卖", k1="上架", v1="拍卖上架", k2="我的", v2="我的拍卖", k3="帮助", v3="拍卖帮助")
         await auction_add.finish()
     
-    if len(args_list) < 2:
+    if len(args_list) != 2:
         auction_rules = auction_config.get_auction_rules()
         msg = f"格式错误！正确格式：拍卖上架 [物品名] [底价]\n最低底价：{number_to(auction_rules['min_price'])}灵石"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="我的", v2="我的拍卖", k3="帮助", v3="拍卖帮助")
@@ -3064,26 +3309,20 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         await auction_add.finish()
 
     auction_rules = auction_config.get_auction_rules()
-    result = _auction_queue_application().enqueue(
-        _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
-        user_id,
-        goods_id,
-        item_name,
-        base_price,
-        user_info['user_name'],
-        max_user_items=auction_rules["max_user_items"],
-    )
-    if result.status == "limit_reached":
-        msg = f"每人最多上架{auction_rules['max_user_items']}件物品到拍卖等待区！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_add.finish()
-    if result.status == "stock_insufficient":
-        msg = f"可交易的 {item_name} 数量不足，上架失败！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_add.finish()
-    if result.status == "already_queued":
-        msg = f"{item_name} 已在拍卖等待区，请勿重复上架！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+    try:
+        result = _auction_queue_application().enqueue(
+            _auction_queue_operation_id(event, "enqueue", user_id, goods_id),
+            user_id,
+            goods_id,
+            item_name,
+            base_price,
+            user_info['user_name'],
+            max_user_items=auction_rules["max_user_items"],
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖上架", exc, event=event), md_type="拍卖")
         await auction_add.finish()
     if not result.succeeded:
         msg = {
@@ -3092,7 +3331,9 @@ async def auction_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             "already_queued": f"{item_name} 已在拍卖等待区。",
             "item_insufficient": f"可交易的 {item_name} 数量不足，上架失败。",
             "user_missing": "未找到修仙数据，上架未结算。",
-        }.get(result.status) or result_failure("拍卖上架", result)
+        }.get(result.status) or ("拍卖上架未完成。" if result.reason else result_failure("拍卖上架", result))
+        if result.reason:
+            msg += f"\n（原因：{result.reason}；主体：{result.subject}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="上架", v1="拍卖上架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_add.finish()
     
@@ -3134,16 +3375,32 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         operation_id = _auction_queue_operation_id(
             event, "dequeue", user_id, goods_id
         )
-        previous = _auction_queue_application().get_operation(
-            operation_id, "dequeue", user_id, goods_id
-        )
+        try:
+            previous = _auction_queue_application().get_operation(
+                operation_id, "dequeue", user_id, goods_id
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            await handle_send(bot, event, report_exception("拍卖下架回执读取", exc, event=event), md_type="拍卖")
+            await auction_remove.finish()
+        if previous is not None and not previous.succeeded:
+            msg = f"拍卖下架未完成。（原因：{previous.reason or previous.status}；主体：{previous.subject}）"
+            await handle_send(bot, event, msg, md_type="拍卖")
+            await auction_remove.finish()
         if previous is not None and previous.succeeded:
             msg = f"成功从拍卖等待区下架 {item_name}！物品已退回背包。"
             await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
             await auction_remove.finish()
     
     # 查找用户上架的该物品
-    player_items_in_queue = _auction_queue_application().get_player_items(user_id)
+    try:
+        player_items_in_queue = _auction_queue_application().get_player_items(user_id)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖下架等待区读取", exc, event=event), md_type="拍卖")
+        await auction_remove.finish()
     item_to_remove = None
     for item in player_items_in_queue:
         if item["item_name"] == item_name: # item_name是玩家上架时的名称
@@ -3151,38 +3408,38 @@ async def auction_remove_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             break
     
     if not item_to_remove:
-        msg = f"没有找到名为{item_name}的上架物品在拍卖等待区！"
+        msg = f"没有找到名为{item_name}的上架物品在拍卖等待区！（原因：queue_missing；主体：{user_id}:{goods_id or item_name}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     
     item_info = items.get_data_by_item_id(item_to_remove["item_id"])
     if not item_info:
-        msg = "无法读取该物品信息：物品配置缺失。"
+        msg = f"无法读取该物品信息：物品配置缺失。（原因：item_missing；主体：{item_to_remove['item_id']}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     operation_id = _auction_queue_operation_id(
         event, "dequeue", user_id, item_to_remove["item_id"]
     )
-    result = _auction_queue_application().dequeue(
-        operation_id,
-        user_id,
-        item_to_remove["item_id"],
-        item_info["type"],
-    )
-    if result.status == "queue_missing":
-        msg = "该物品已不在拍卖等待区，请刷新后重试！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
-        await auction_remove.finish()
-    if result.status == "inventory_full":
-        msg = "背包中该物品数量已达上限，无法下架！"
-        await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
+    try:
+        result = _auction_queue_application().dequeue(
+            operation_id,
+            user_id,
+            item_to_remove["item_id"],
+            item_info["type"],
+        )
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("拍卖下架", exc, event=event), md_type="拍卖")
         await auction_remove.finish()
     if not result.succeeded:
         msg = {
             "queue_missing": "该物品已不在拍卖等待区。",
             "inventory_full": "背包中该物品已达上限，无法下架。",
             "user_missing": "未找到修仙数据，下架未结算。",
-        }.get(result.status) or result_failure("拍卖下架", result)
+        }.get(result.status) or ("拍卖下架未完成。" if result.reason else result_failure("拍卖下架", result))
+        if result.reason:
+            msg += f"\n（原因：{result.reason}；主体：{result.subject}）"
         await handle_send(bot, event, msg, md_type="拍卖", k1="下架", v1="拍卖下架", k2="my", v2="我的拍卖", k3="help", v3="拍卖帮助")
         await auction_remove.finish()
     
@@ -3211,22 +3468,31 @@ async def my_auction_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
     if command_text.startswith("领取"):
         scope = command_text[len("领取"):].strip()
-        result = _auction_pending_application().claim(
-            operation_id=_auction_pending_claim_operation_id(event, user_id, scope or None),
-            user_id=user_id,
-            auction_id=scope or None,
-        )
+        try:
+            result = _auction_pending_application().claim(
+                operation_id=_auction_pending_claim_operation_id(event, user_id, scope or None),
+                user_id=user_id,
+                auction_id=scope or None,
+            )
+        except (MatcherException, ProcessException):
+            raise
+        except Exception as exc:
+            await handle_send(bot, event, report_exception("拍卖领取", exc, event=event), md_type="拍卖")
+            await my_auction.finish()
         if result.status == "schema_missing":
-            reply = "拍卖待领取暂不可用（数据库尚未就绪），请联系管理员。"
+            reply = f"拍卖待领取暂不可用（原因：{result.reason or result.status}；主体：{result.subject}），请联系管理员。"
         elif result.status == "operation_conflict":
-            reply = "该领取请求与之前的记录冲突，请重新发送指令。"
+            reply = f"该领取请求与之前的记录冲突（原因：{result.reason or result.status}；主体：{result.subject}），请重新发送指令。"
+        elif result.reason:
+            reply = f"拍卖领取未完成。（原因：{result.reason}；主体：{result.subject}）"
         elif result.status == "empty":
             reply = (
                 f"未找到拍卖ID {scope} 的待领取物品。" if scope else "您没有待领取的拍卖物品。"
             )
-        elif result.status == "blocked":
+        elif result.status == "blocked" or (result.status == "duplicate" and not result.claimed and result.blocked):
             names = "、".join(f"{row['item_name']}(ID:{row['auction_id']})" for row in result.blocked)
-            reply = f"背包已满，暂时无法领取：{names}\n请整理背包后再次使用 我的拍卖 领取。"
+            prefix = "该请求此前因背包已满未领取" if result.status == "duplicate" else "背包已满，暂时无法领取"
+            reply = f"{prefix}：{names}\n请整理背包后重新发送 我的拍卖 领取。"
         else:
             claimed = "\n".join(
                 f"{row['role_label']}：{row['item_name']} x1（拍卖ID:{row['auction_id']}）"
@@ -3318,7 +3584,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     schedule = auction_config.get_auction_schedule()
     rules = auction_config.get_auction_rules()
-    auction_current_status = get_auction_status()
+    auction_current_status = get_auction_status(now=_trade_business_now())
     
     # 获取等待上架的玩家物品数量
     total_player_items_in_queue = _auction_queue_application().count_player_items()
@@ -3328,7 +3594,7 @@ async def auction_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     msg_list = [
         "【拍卖信息】",
-        f"当前状态: {'运行中' if auction_current_status['active'] else '未运行'}",
+        f"当前状态: {auction_current_status['state_label']}",
         f"自动开启: {'开启' if schedule['enabled'] else '关闭'}",
         f"自动拍卖时间: 每日{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
         f"持续时间: {schedule['duration_hours']}小时",
@@ -3361,18 +3627,18 @@ async def auction_activity_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     schedule = auction_config.get_auction_schedule()
     rules = auction_config.get_auction_rules()
     activity_config = auction_config.get_auction_activity_config()
-    auction_current_status = get_auction_status()
+    now = _trade_business_now()
+    auction_current_status = get_auction_status(now=now)
     current_auctions = _auction_query_application().get_current_auction() or []
     current_auctions_count = len(current_auctions)
     waiting_auctions_count = _auction_queue_application().count_player_items()
-    now = runtime_clock.now()
     max_user_items = _safe_auction_int(rules.get("max_user_items"), 3)
     hot_items_limit = min(_safe_auction_int(activity_config.get("hot_items_limit"), 5), 5)
     recent_deals_limit = _safe_auction_int(activity_config.get("recent_deals_limit"), 5)
 
     msg_list = [
         "【拍卖活动】",
-        f"活动状态: {'进行中' if auction_current_status['active'] else '未开启'}",
+        f"活动状态: {auction_current_status['state_label']}",
         f"计划开启: {'每日' if schedule['enabled'] else '已暂停'}{schedule['start_hour']:02d}:{schedule['start_minute']:02d}",
         f"持续时间: {schedule['duration_hours']}小时",
         f"手续费率: {int(rules['fee_rate'] * 100)}%",
@@ -3434,15 +3700,24 @@ async def auction_start_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     auction_config.update_schedule({"enabled": True})
     
     # 开启拍卖
-    success = _start_auction_with_application(
-        _auction_session_operation_id(event, "start")
-    )
+    try:
+        success = _start_auction_with_application(
+            _auction_session_operation_id(event, "start")
+        )
+    except AuctionLifecycleError as exc:
+        await handle_send(bot, event, f"拍卖开启未完成。（原因：{exc.reason}；主体：{exc.subject}）", md_type="拍卖")
+        await auction_start.finish()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("开启拍卖", exc, event=event), md_type="拍卖")
+        await auction_start.finish()
     if not success:
-        await handle_send(bot, event, "开启拍卖失败或没有物品可供拍卖！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
+        await handle_send(bot, event, "没有物品可供拍卖，本次未开启。", md_type="拍卖", k1="查看", v1="拍卖查看", k2="结束", v2="结束拍卖", k3="帮助", v3="拍卖帮助")
         await auction_start.finish()
     
     # 重新获取最新的拍卖状态以得到准确的结束时间
-    current_auction_status = get_auction_status()
+    current_auction_status = get_auction_status(now=_trade_business_now())
     end_time_str = current_auction_status["end_time"].strftime("%H:%M")
     
     msg = f"拍卖已开启！本次拍卖将持续{auction_config.get_auction_schedule()['duration_hours']}小时，预计{end_time_str}结束。"
@@ -3464,9 +3739,18 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, "拍卖当前未开启！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
     
-    results = await _end_auction_with_application(
-        _auction_session_operation_id(event, "finish")
-    )
+    try:
+        results = await _end_auction_with_application(
+            _auction_session_operation_id(event, "finish")
+        )
+    except AuctionLifecycleError as exc:
+        await handle_send(bot, event, f"拍卖结算未完成。（原因：{exc.reason}；主体：{exc.subject}）", md_type="拍卖")
+        await auction_end.finish()
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        await handle_send(bot, event, report_exception("结束拍卖", exc, event=event), md_type="拍卖")
+        await auction_end.finish()
     if not results:
         await handle_send(bot, event, "结束拍卖失败或没有拍卖品需要结算！", md_type="拍卖", k1="查看", v1="拍卖查看", k2="开启", v2="开启拍卖", k3="帮助", v3="拍卖帮助")
         await auction_end.finish()
@@ -3474,16 +3758,18 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     # 构造结果消息
     msg_list = ["拍卖已结束！成交结果："]
     for result in results[:5]:  # 最多显示5条结果
-        if result["status"] == "成交":
+        if result.get("final_price") is not None:
             winner_info = _sql_message().get_user_info_with_id(result["winner_id"])
             winner_name = winner_info["user_name"] if winner_info else str(result["winner_id"])
             msg_list.append(
                 f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 "
                 f"手续费: {number_to(result['fee'])}灵石 "
                 f"买家: {winner_name}"
+                + ("，物品待领取" if result.get("delivery") == "pending" else "")
             )
         else:
-            msg_list.append(f"{result['item_name']} 流拍")
+            msg_list.append(f"{result['item_name']} 流拍"
+                            + ("，物品待领取" if result.get("delivery") == "pending" else ""))
     
     if len(results) > 5:
         msg_list.append(f"...等共 {len(results)} 件拍卖品。")
@@ -3540,7 +3826,7 @@ async def _auto_start_auction_job_impl():
         logger.info("自动拍卖功能已禁用。")
         return
     
-    current_date = runtime_clock.now().strftime('%Y-%m-%d')
+    current_date = _trade_business_now().strftime('%Y-%m-%d')
     if schedule_config.get("last_auto_start_date") == current_date:
         logger.info("今日自动拍卖已开启，跳过本次调度。")
         return  # 今日已开启过，防止重复
@@ -3551,16 +3837,22 @@ async def _auto_start_auction_job_impl():
 
     logger.info("开始执行自动拍卖开启任务...")
     
-    success = _start_auction_with_application(
-        f"auction-session:auto-start:{current_date}"
-    )
+    try:
+        success = _start_auction_with_application(
+            f"auction-session:auto-start:{current_date}"
+        )
+    except AuctionLifecycleError as exc:
+        if exc.reason != "auction_already_active":
+            raise
+        logger.info("拍卖已由其他请求开启，自动任务跳过：{}", exc)
+        return
     if success:
         # 获取最新的拍卖状态以得到准确的结束时间
-        current_auction_status = get_auction_status()
+        current_auction_status = get_auction_status(now=_trade_business_now())
         end_time_str = current_auction_status["end_time"].strftime("%H:%M")
         logger.info(f"拍卖已自动开启！本次拍卖将持续{schedule_config['duration_hours']}小时，预计{end_time_str}结束。")
     else:
-        logger.warning("自动开启拍卖失败，可能因为没有物品可供拍卖。")
+        logger.info("本次没有拍品，自动开启任务跳过。")
 
 @scheduler.scheduled_job(
     "interval",
@@ -3577,16 +3869,16 @@ async def check_auction_end_job():
 
 async def _check_auction_end_job_impl():
     current_auction_count = _auction_query_application().count_current_auctions()
+    session = _auction_session_service().get_active_session()
     if current_auction_count == 0:
+        if session is not None:
+            raise AuctionLifecycleError("auction_items_missing", session["session_id"])
         return
 
-    session = _auction_session_service().get_active_session()
     if session is None:
-        logger.error("拍卖库内存在拍品，但数据库场次不存在，停止自动收尾。")
-        return
+        raise AuctionLifecycleError("auction_session_missing", "auction_current")
     now_dt = runtime_clock.now()
     window = session_window(session, now_dt)
-    end_dt = window["end_time"]
     n = current_auction_count
 
     if window["expired"]:
@@ -3604,12 +3896,14 @@ async def _check_auction_end_job_impl():
 async def _reconcile_auction_with_application():
     """Reconcile an active auction through the feature-owned applications."""
     current_auctions = _auction_query_application().get_current_auction() or []
+    session = _auction_session_service().get_active_session()
     if not current_auctions:
+        if session is not None:
+            raise AuctionLifecycleError("auction_items_missing", session["session_id"])
         return
 
-    session = _auction_session_service().get_active_session()
     if session is None:
-        raise RuntimeError("auction items exist without an active database session")
+        raise AuctionLifecycleError("auction_session_missing", "auction_current")
 
     now_dt = runtime_clock.now()
     end_dt = datetime.fromtimestamp(float(session["end_time"]), tz=now_dt.tzinfo)
@@ -3634,5 +3928,4 @@ async def recover_orphan_auction_on_startup():
     await run_auction_job(
         "startup_reconcile",
         _reconcile_auction_with_application,
-        suppress=True,
     )

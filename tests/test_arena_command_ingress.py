@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import tests  # Establish isolated paths before importing plugin modules.
 import pytest
@@ -195,6 +195,50 @@ def test_real_purchase_handler_debits_honor_grants_bound_inventory_and_replays_o
     assert _query(context.game, "SELECT COUNT(*) FROM arena_purchase_operations") == [(1,)]
 
 
+def test_purchase_receipt_rejection_replies_specific_reason_and_recovers(tmp_path):
+    context = _context(tmp_path)
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("CREATE TRIGGER refuse_arena_receipt BEFORE INSERT ON arena_purchase_operations BEGIN SELECT RAISE(IGNORE); END")
+    handlers = _handlers(context)
+    failed = handlers.run("arena_buy_", "1 2", event_id="receipt-failure")
+    assert "回执保存失败" in failed
+    assert "竞技场兑换写入未完成" not in failed
+    assert _purchase_state(context) == (100, {"_last_reset": "2026-10-07", "1": 1}, [])
+    assert _query(context.game, "SELECT status FROM operation_ledger WHERE operation_id='arena-purchase:receipt-failure:u'") == [("failed",)]
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("DROP TRIGGER refuse_arena_receipt")
+    recovered = handlers.run("arena_buy_", "1 2", event_id="receipt-failure")
+    assert SUCCESS in recovered
+    assert _purchase_state(context) == (80, {"_last_reset": "2026-10-07", "1": 3}, [(1, 2, 2)])
+
+
+def test_purchase_reason_reply_keeps_onebot_qq_markdown_and_send_failure_contracts():
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+    async def run_contracts():
+        for onebot, markdown, send_fails in ((True, True, False), (False, False, False), (False, True, False), (False, True, True)):
+            bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ"))
+            config = SimpleNamespace(markdown_status=markdown, markdown_id="", markdown_id2="", markdown_button_status=False, at_sender=False, message_optimization=False, img=False)
+            plain = AsyncMock()
+            markdown_send = AsyncMock(side_effect=RuntimeError("isolated arena purchase delivery failure") if send_fails else None)
+            with (
+                patch.object(utils, "XiuConfig", return_value=config),
+                patch.object(utils, "get_chat_scene", return_value="group"),
+                patch.object(utils, "is_group_event", return_value=True),
+                patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")),
+                patch.object(utils, "_send_event_message", plain),
+                patch.object(utils, "_send_markdown_or_keyboard", markdown_send),
+            ):
+                await utils.handle_send(bot, SimpleNamespace(get_user_id=lambda: "u"), "竞技场兑换回执保存失败", md_type="竞技场", k1="竞技场", v1="竞技场查看")
+            if onebot or not markdown or send_fails:
+                plain.assert_awaited_once()
+                assert plain.call_args.kwargs["message"] == "竞技场兑换回执保存失败"
+            else:
+                markdown_send.assert_awaited_once()
+
+    asyncio.run(run_contracts())
+
+
 def test_original_quantity_clamps_once_and_successful_receipt_precedes_current_rank_limit_and_catalog(tmp_path):
     context = _context(tmp_path)
     handlers = _handlers(context)
@@ -320,6 +364,32 @@ def test_real_rejected_settlement_receipt_never_becomes_duplicate_success_in_han
     assert context.application.settlement_result(operation_id="arena-challenge:rejected:u", challenger_id="u")["status"] == "limit_reached"
     assert _battle_state(context) == before
     handlers.fight.assert_not_called()
+
+
+def test_real_challenge_receipt_rejection_keeps_reason_and_same_message_recovers(tmp_path):
+    context = _context(tmp_path, opponent=True)
+    handlers = _handlers(context)
+    context.opponents.set_cache("u", [{"user_id": "v", "score": 1100}])
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute(
+            "CREATE TRIGGER reject_arena_receipt BEFORE INSERT ON arena_challenge_settlement_operations "
+            "BEGIN SELECT RAISE(IGNORE); END"
+        )
+    before = _battle_state(context)
+    rejected = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert "竞技场结算回执保存失败" in rejected
+    ledger = json.loads(_query(context.game,
+        "SELECT result_json FROM operation_ledger WHERE action='arena.settle'"
+    )[0][0])
+    assert ledger["code"] == "arena_settlement_receipt_write_rejected"
+    assert "挑战胜利" not in rejected and _battle_state(context) == before
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("DROP TRIGGER reject_arena_receipt")
+    recovered = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert VICTORY in recovered
+    replay = handlers.run("arena_challenge_", "1", event_id="receipt-recovery")
+    assert replay == recovered
+    assert _query(context.game, "SELECT COUNT(*) FROM arena_challenge_settlement_operations") == [(1,)]
 
 
 @pytest.mark.parametrize("fault", ["candidate_read", "profile_missing", "settlement_storage"])

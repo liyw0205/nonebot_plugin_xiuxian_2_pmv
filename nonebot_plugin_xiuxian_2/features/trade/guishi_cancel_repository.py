@@ -5,8 +5,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ...core.errors import DomainError
+from ...core.numeric import bind_sqlite_param, exact_crystal_integer, require_exact_integer
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_operation_replay import order_receipts
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,8 @@ class GuishiOrderCancelResult:
     goods_type: str = ""
     refunded_quantity: int = 0
     refunded_stone: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def cancelled(self) -> bool:
@@ -50,16 +55,21 @@ class GuishiOrderCancelSqlRepository:
 
     @staticmethod
     def _from_operation(row: dict[str, Any], status: str) -> GuishiOrderCancelResult:
+        for field in ("goods_id", "refunded_quantity", "refunded_stone"):
+            value = exact_crystal_integer(row.get(field))
+            if value is None or value < 0:
+                return GuishiOrderCancelResult("state_changed", str(row["order_id"]),
+                                              reason="guishi_refund_receipt_invalid", subject=str(row["order_id"]))
         return GuishiOrderCancelResult(
             status=status,
             order_id=str(row["order_id"]),
             order_type=str(row["order_type"]),
             user_id=str(row["user_id"]),
-            goods_id=int(row.get("goods_id") or 0),
+            goods_id=exact_crystal_integer(row.get("goods_id")),
             item_name=str(row.get("item_name") or ""),
             goods_type=str(row.get("goods_type") or ""),
-            refunded_quantity=int(row.get("refunded_quantity") or 0),
-            refunded_stone=int(row.get("refunded_stone") or 0),
+            refunded_quantity=exact_crystal_integer(row.get("refunded_quantity")),
+            refunded_stone=exact_crystal_integer(row.get("refunded_stone")),
         )
 
     def _replay(
@@ -73,12 +83,10 @@ class GuishiOrderCancelSqlRepository:
     ) -> GuishiOrderCancelResult | None:
         if not operation_id:
             return None
-        previous = uow.query_one(
-            "SELECT payload,order_id,order_type,user_id,goods_id,item_name,goods_type,"
-            f"refunded_quantity,refunded_stone FROM {table_name} "
-            "WHERE operation_id=?",
-            (operation_id,),
-        )
+        receipts = order_receipts(uow, table_name, operation_id, legacy_parts=1)
+        if len(receipts) > 1:
+            return GuishiOrderCancelResult("operation_conflict", "", order_type=order_type)
+        previous = receipts[0] if receipts else None
         if previous is None:
             return None
         if str(previous["payload"]) != payload or str(previous["order_type"]) != order_type:
@@ -98,7 +106,11 @@ class GuishiOrderCancelSqlRepository:
     ) -> None:
         if not operation_id:
             return
-        uow.execute(
+        expected = dict(payload=payload, order_id=result.order_id, order_type=result.order_type,
+                        user_id=result.user_id, goods_id=result.goods_id, item_name=result.item_name,
+                        goods_type=result.goods_type, refunded_quantity=result.refunded_quantity,
+                        refunded_stone=result.refunded_stone)
+        written = uow.execute(
             f"INSERT INTO {table_name}("
             "operation_id,payload,order_id,order_type,user_id,goods_id,item_name,goods_type,"
             "refunded_quantity,refunded_stone) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -112,9 +124,17 @@ class GuishiOrderCancelSqlRepository:
                 result.item_name,
                 result.goods_type,
                 result.refunded_quantity,
-                result.refunded_stone,
+                bind_sqlite_param(result.refunded_stone, exact=True),
             ),
         )
+        saved = uow.query_one(
+            f"SELECT {','.join(expected)} FROM {table_name} WHERE operation_id=?", (operation_id,),
+        )
+        if saved is not None:
+            for field in ("goods_id", "refunded_quantity", "refunded_stone"):
+                saved[field] = exact_crystal_integer(saved[field])
+        if written.rowcount != 1 or saved != expected:
+            raise DomainError("guishi_refund_receipt_write_rejected", "Refund receipt did not persist exactly")
 
     def cancel_qiugou(
         self,
@@ -151,31 +171,53 @@ class GuishiOrderCancelSqlRepository:
             if owner != user_id:
                 return GuishiOrderCancelResult("not_owner", order_id, order_type="qiugou", user_id=owner)
 
-            refunded_stone = max(int(order["quantity"] or 0) - int(order["filled_quantity"] or 0), 0)
-            refunded_stone *= max(int(order["price"] or 0), 0)
-            if refunded_stone:
-                uow.execute(
-                    "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),?) "
-                    "ON CONFLICT(user_id) DO UPDATE SET stored_stone=COALESCE(guishi_info.stored_stone,0)+excluded.stored_stone",
-                    (owner, refunded_stone, "{}"),
-                )
-            uow.execute("DELETE FROM guishi_item WHERE id=?", (order_id,))
+            quantity, filled, price, goods_id = (
+                exact_crystal_integer(order[field]) for field in ("quantity", "filled_quantity", "price", "item_id")
+            )
+            if (None in (quantity, filled, price, goods_id) or quantity < 0 or not 0 <= filled <= quantity
+                    or price < 0 or goods_id <= 0):
+                return GuishiOrderCancelResult("state_changed", order_id, reason="guishi_refund_order_invalid", subject=order_id)
+            refunded_stone = (quantity - filled) * price
             result = GuishiOrderCancelResult(
                 "cancelled",
                 order_id,
                 order_type="qiugou",
                 user_id=owner,
-                goods_id=int(order["item_id"] or 0),
+                goods_id=goods_id,
                 item_name=str(order["item_name"] or ""),
                 refunded_stone=refunded_stone,
             )
-            self._record(
-                uow,
-                operation_id=operation_id,
-                payload=payload,
-                result=result,
-                table_name="guishi_order_cancel_operations",
-            )
+            try:
+                account = uow.query_one("SELECT stored_stone,items FROM guishi_info WHERE user_id=?", (owner,))
+                balance = require_exact_integer(account["stored_stone"], field="stored_stone", subject=order_id) if account else 0
+                if balance < 0:
+                    raise DomainError("guishi_refund_balance_invalid", "Negative stored balance")
+                expected_account = dict(stored_stone=balance + refunded_stone, items=account["items"] if account else "{}")
+                with uow.savepoint("guishi_cancel"):
+                    if refunded_stone:
+                        refunded = uow.execute(
+                            "INSERT INTO guishi_info(user_id,stored_stone,items) VALUES(?,xiuxian_int_store(?,'stored_stone','actor'),?) "
+                            "ON CONFLICT(user_id) DO UPDATE SET stored_stone=excluded.stored_stone",
+                            (owner, bind_sqlite_param(balance + refunded_stone, exact=True), expected_account["items"]),
+                        )
+                        if refunded.rowcount != 1:
+                            raise DomainError("guishi_refund_balance_write_rejected", "Refund balance write rejected")
+                    deleted = uow.execute("DELETE FROM guishi_item WHERE id=?", (order_id,))
+                    if deleted.rowcount != 1:
+                        raise DomainError("guishi_refund_order_delete_rejected", "Refund order deletion rejected")
+                    self._record(uow, operation_id=operation_id, payload=payload, result=result,
+                                 table_name="guishi_order_cancel_operations")
+                    if uow.query_one("SELECT id FROM guishi_item WHERE id=?", (order_id,)) is not None:
+                        raise DomainError("guishi_refund_order_delete_rejected", "Refund order still present")
+                    saved = uow.query_one("SELECT stored_stone,items FROM guishi_info WHERE user_id=?", (owner,))
+                    if saved is not None:
+                        saved["stored_stone"] = exact_crystal_integer(saved["stored_stone"])
+                    if saved != (expected_account if account or refunded_stone else None):
+                        raise DomainError("guishi_refund_balance_write_rejected", "Refund balance did not persist exactly")
+            except DomainError as exc:
+                return GuishiOrderCancelResult("state_changed", order_id, order_type="qiugou", user_id=owner,
+                                              reason=exc.details.get("reason") or exc.code,
+                                              subject=exc.details.get("subject") or order_id)
             return result
 
     def cancel_baitan(
@@ -221,14 +263,22 @@ class GuishiOrderCancelSqlRepository:
             if owner != user_id:
                 return GuishiOrderCancelResult("not_owner", order_id, order_type="baitan", user_id=owner)
 
-            goods_id = int(order["item_id"] or 0)
+            goods_id, quantity, filled = (exact_crystal_integer(order[field]) for field in ("item_id", "quantity", "filled_quantity"))
+            if None in (goods_id, quantity, filled) or goods_id <= 0 or quantity < 0 or not 0 <= filled <= quantity:
+                return GuishiOrderCancelResult("state_changed", order_id, reason="guishi_refund_order_invalid", subject=order_id)
             item_name = str(order["item_name"] or "")
-            refunded_quantity = max(int(order["quantity"] or 0) - int(order["filled_quantity"] or 0), 0)
+            refunded_quantity = quantity - filled
             inventory = uow.query_one(
-                "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                "SELECT goods_name,goods_type,COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
+                "FROM back WHERE user_id=? AND goods_id=?",
                 (owner, goods_id),
             )
-            current_quantity = int(inventory["goods_num"]) if inventory else 0
+            current_quantity = exact_crystal_integer(inventory["goods_num"]) if inventory else 0
+            current_bound = exact_crystal_integer(inventory["bind_num"]) if inventory else 0
+            if None in (current_quantity, current_bound) or current_quantity < 0 or not 0 <= current_bound <= current_quantity:
+                return GuishiOrderCancelResult("state_changed", order_id, reason="inventory_invalid", subject=order_id)
+            if inventory is not None:
+                inventory.update(goods_num=current_quantity, bind_num=current_bound)
             if current_quantity + refunded_quantity > max_goods_num:
                 return GuishiOrderCancelResult(
                     "inventory_full",
@@ -241,16 +291,6 @@ class GuishiOrderCancelSqlRepository:
                     refunded_quantity=refunded_quantity,
                 )
 
-            if refunded_quantity:
-                now = self.clock.now().isoformat()
-                uow.execute(
-                    "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
-                    "VALUES(?,?,?,?,?,?,?,0) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
-                    "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
-                    "goods_num=COALESCE(back.goods_num,0)+excluded.goods_num,update_time=excluded.update_time",
-                    (owner, goods_id, item_name, goods_type, refunded_quantity, now, now),
-                )
-            uow.execute("DELETE FROM guishi_trade.guishi_item WHERE id=?", (order_id,))
             result = GuishiOrderCancelResult(
                 "cancelled",
                 order_id,
@@ -261,13 +301,41 @@ class GuishiOrderCancelSqlRepository:
                 goods_type=goods_type,
                 refunded_quantity=refunded_quantity,
             )
-            self._record(
-                uow,
-                operation_id=operation_id,
-                payload=payload,
-                result=result,
-                table_name="guishi_trade.guishi_order_cancel_operations",
-            )
+            expected_inventory = (dict(goods_name=item_name, goods_type=goods_type,
+                                       goods_num=current_quantity + refunded_quantity, bind_num=current_bound)
+                                  if refunded_quantity else inventory)
+            try:
+                with uow.savepoint("guishi_cancel"):
+                    if refunded_quantity:
+                        now = self.clock.now().isoformat()
+                        refunded = uow.execute(
+                            "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                            "VALUES(?,?,?,?,xiuxian_int_store(?,'goods_num','actor'),?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                            "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
+                            "goods_num=excluded.goods_num,update_time=excluded.update_time",
+                            (owner, goods_id, item_name, goods_type, bind_sqlite_param(current_quantity + refunded_quantity, exact=True),
+                             now, now, bind_sqlite_param(current_bound, exact=True)),
+                        )
+                        if refunded.rowcount != 1:
+                            raise DomainError("guishi_refund_inventory_write_rejected", "Inventory refund write rejected")
+                    deleted = uow.execute("DELETE FROM guishi_trade.guishi_item WHERE id=?", (order_id,))
+                    if deleted.rowcount != 1:
+                        raise DomainError("guishi_refund_order_delete_rejected", "Refund order deletion rejected")
+                    self._record(uow, operation_id=operation_id, payload=payload, result=result,
+                                 table_name="guishi_trade.guishi_order_cancel_operations")
+                    if uow.query_one("SELECT id FROM guishi_trade.guishi_item WHERE id=?", (order_id,)) is not None:
+                        raise DomainError("guishi_refund_order_delete_rejected", "Refund order still present")
+                    saved = uow.query_one("SELECT goods_name,goods_type,COALESCE(goods_num,0) AS goods_num,"
+                                          "COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (owner, goods_id))
+                    if saved is not None:
+                        for field in ("goods_num", "bind_num"):
+                            saved[field] = exact_crystal_integer(saved[field])
+                    if saved != expected_inventory:
+                        raise DomainError("guishi_refund_inventory_write_rejected", "Inventory refund did not persist exactly")
+            except DomainError as exc:
+                return GuishiOrderCancelResult("state_changed", order_id, order_type="baitan", user_id=owner,
+                                              reason=exc.details.get("reason") or exc.code,
+                                              subject=exc.details.get("subject") or order_id)
             return result
 
 

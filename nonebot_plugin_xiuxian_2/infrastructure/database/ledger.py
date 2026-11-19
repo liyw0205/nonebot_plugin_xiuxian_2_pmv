@@ -181,13 +181,28 @@ class OperationLedger:
 
     def finish(self, uow: DatabaseUnitOfWork, outcome: OperationOutcome[Any]) -> None:
         encoded = json.dumps(outcome.to_dict(), ensure_ascii=False, sort_keys=True, default=str)
-        uow.execute(
+        changed = uow.execute(
             "UPDATE operation_ledger SET status = ?, result_json = ?, updated_at = ? "
             "WHERE operation_id = ? AND action = ?",
             (outcome.status, encoded, self._now(), outcome.operation_id, outcome.action),
         )
+        saved = uow.query_one(
+            "SELECT status,result_json FROM operation_ledger WHERE operation_id=? AND action=?",
+            (outcome.operation_id, outcome.action),
+        )
+        try:
+            saved_result = json.loads(saved["result_json"]) if saved and saved["result_json"] else None
+        except (TypeError, ValueError):
+            saved_result = None
+        if changed.rowcount != 1 or saved is None or saved["status"] != outcome.status or saved_result != json.loads(encoded):
+            raise RuntimeError(f"operation ledger finish write rejected: {outcome.action}/{outcome.operation_id}")
+
         occurred = outcome.occurred_at or self._now()
-        uow.execute(
+        audit_count = int((uow.query_one(
+            "SELECT COUNT(*) AS n FROM operation_audit WHERE operation_id=? AND action=?",
+            (outcome.operation_id, outcome.action),
+        ) or {"n": 0})["n"])
+        inserted = uow.execute(
             "INSERT INTO operation_audit(operation_id, action, status, before_json, after_json, consumed_json, granted_json, category, occurred_at, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -203,6 +218,39 @@ class OperationLedger:
                 self._now(),
             ),
         )
+        latest = uow.query_one(
+            "SELECT status,before_json,after_json,consumed_json,granted_json,category,occurred_at "
+            "FROM operation_audit WHERE operation_id=? AND action=? ORDER BY audit_id DESC LIMIT 1",
+            (outcome.operation_id, outcome.action),
+        )
+        actual_count = int((uow.query_one(
+            "SELECT COUNT(*) AS n FROM operation_audit WHERE operation_id=? AND action=?",
+            (outcome.operation_id, outcome.action),
+        ) or {"n": 0})["n"])
+        expected_audit = {
+            "status": outcome.status,
+            "before_json": dict(outcome.before),
+            "after_json": dict(outcome.after),
+            "consumed_json": dict(outcome.consumed),
+            "granted_json": dict(outcome.granted),
+            "category": outcome.audit_category,
+            "occurred_at": occurred,
+        }
+        try:
+            actual_audit = None if latest is None else {
+                "status": latest["status"],
+                "before_json": json.loads(latest["before_json"]),
+                "after_json": json.loads(latest["after_json"]),
+                "consumed_json": json.loads(latest["consumed_json"]),
+                "granted_json": json.loads(latest["granted_json"]),
+                "category": latest["category"],
+                "occurred_at": latest["occurred_at"],
+            }
+        except (TypeError, ValueError):
+            actual_audit = None
+        if inserted.rowcount != 1 or actual_count != audit_count + 1 or actual_audit != expected_audit:
+            raise RuntimeError(f"operation audit finish write rejected: {outcome.action}/{outcome.operation_id}")
+
         emit(
             "info" if outcome.ok else "warning",
             outcome_message(outcome),

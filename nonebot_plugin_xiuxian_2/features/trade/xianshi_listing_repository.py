@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_integer
-from ...core.errors import DomainError
+from ...core.numeric import bind_sqlite_param, require_exact_integer
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +24,8 @@ class XianshiListingResult:
     listed_quantity: int = 0
     fee_charged: int = 0
     stamina_charged: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -74,10 +75,32 @@ class XianshiListingSqlRepository:
         listed_quantity: int = 0,
         fee_charged: int = 0,
         stamina_charged: int = 0,
+        reason: str = "",
+        subject: str = "",
     ) -> XianshiListingResult:
         return XianshiListingResult(
             status, operation_id, seller_id, goods_id, name, goods_type, price,
-            quantity, listed_quantity, fee_charged, stamina_charged,
+            quantity, listed_quantity, fee_charged, stamina_charged, reason, subject,
+        )
+
+    @staticmethod
+    def _release_savepoint(uow: DatabaseUnitOfWork) -> None:
+        uow.execute('RELEASE SAVEPOINT "xianshi_listing"')
+
+    @classmethod
+    def _reject_write(
+        cls,
+        uow: DatabaseUnitOfWork,
+        result: XianshiListingResult,
+        reason: str,
+        subject: str,
+    ) -> XianshiListingResult:
+        uow.execute('ROLLBACK TO SAVEPOINT "xianshi_listing"')
+        cls._release_savepoint(uow)
+        return cls._result(
+            "state_changed", result.operation_id, result.seller_id, result.goods_id,
+            result.name, result.goods_type, result.price, result.requested_quantity,
+            reason=reason, subject=subject,
         )
 
     def list_items(
@@ -125,6 +148,7 @@ class XianshiListingSqlRepository:
                     return self._result(
                         "state_changed", operation_id, seller_id, goods_id, name,
                         goods_type, price, quantity,
+                        reason="operation_conflict", subject=operation_id,
                     )
                 return self._result(
                     "duplicate", operation_id, seller_id, goods_id, name,
@@ -156,8 +180,10 @@ class XianshiListingSqlRepository:
                     goods_type, price, quantity,
                 )
             stock_row = uow.query_one(
-                "SELECT COALESCE(goods_num,0)-COALESCE(bind_num,0)-COALESCE(state,0) "
-                "AS tradeable FROM back WHERE user_id=? AND goods_id=?",
+                "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num,"
+                "COALESCE(state,0) AS state,"
+                "COALESCE(goods_num,0)-COALESCE(bind_num,0)-COALESCE(state,0) AS tradeable "
+                "FROM back WHERE user_id=? AND goods_id=?",
                 (seller_id, goods_id),
             )
             if stock_row is None or int(stock_row["tradeable"] or 0) < quantity:
@@ -166,24 +192,45 @@ class XianshiListingSqlRepository:
                     goods_type, price, quantity,
                 )
             now = self.clock.now()
+            uow.execute('SAVEPOINT "xianshi_listing"')
+            expected_stamina = int(player["stamina"] or 0) - stamina_cost if stamina_cost else None
             if stamina_cost:
                 stamina = uow.execute(
                     "UPDATE user_xiuxian SET user_stamina=COALESCE(user_stamina,0)-? "
                     "WHERE user_id=? AND COALESCE(user_stamina,0)>=?",
                     (stamina_cost, seller_id, stamina_cost),
                 )
-                if stamina.rowcount != 1:
-                    raise RuntimeError("xianshi listing stamina snapshot changed")
+                saved_stamina = uow.query_one(
+                    "SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (seller_id,)
+                )
+                if (
+                    stamina.rowcount != 1
+                    or saved_stamina is None
+                    or int(saved_stamina["user_stamina"] or 0) != expected_stamina
+                ):
+                    return self._reject_write(
+                        uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                          goods_type, price, quantity),
+                        "xianshi_listing_stamina_write_rejected", seller_id,
+                    )
             changed_stone = uow.execute(
                 "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
                 "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
                 (bind_sqlite_param(wallet - fee, exact=True), seller_id, bind_sqlite_param(wallet, exact=True)),
             )
             if changed_stone.rowcount != 1:
-                raise RuntimeError("xianshi listing stone snapshot changed")
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stone_write_rejected", seller_id,
+                )
             saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (seller_id,))
             if saved is None or require_exact_integer(saved["stone"], field="stone", subject="seller") != wallet - fee:
-                raise DomainError("stone_write_rejected", "Xianshi listing fee did not persist exactly", {"reason": "stone_write_rejected", "subject": "seller"})
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stone_write_rejected", seller_id,
+                )
             stock = uow.execute(
                 "UPDATE back SET goods_num=COALESCE(goods_num,0)-?,update_time=?,action_time=? "
                 "WHERE user_id=? AND goods_id=? AND "
@@ -197,9 +244,23 @@ class XianshiListingSqlRepository:
                     quantity,
                 ),
             )
-            if stock.rowcount != 1:
-                raise RuntimeError("xianshi listing stock snapshot changed")
+            saved_stock = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            )
+            if (
+                stock.rowcount != 1
+                or saved_stock is None
+                or int(saved_stock["goods_num"] or 0) != int(stock_row["goods_num"]) - quantity
+            ):
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stock_write_rejected", f"{seller_id}:{goods_id}",
+                )
 
+            listing_ids = []
             for _ in range(quantity):
                 for _attempt in range(20):
                     listing_id = self._listing_id(self.ids.new_id())
@@ -208,16 +269,35 @@ class XianshiListingSqlRepository:
                     )
                     if exists is not None:
                         continue
-                    uow.execute(
+                    listing_write = uow.execute(
                         "INSERT INTO xianshi_item(id,user_id,goods_id,name,type,price,quantity) "
                         "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),1)",
                         (listing_id, seller_id, goods_id, name, goods_type, bind_sqlite_param(price, exact=True)),
                     )
+                    saved_listing = uow.query_one(
+                        "SELECT id,user_id,goods_id,name,type,price,quantity FROM xianshi_item WHERE id=?",
+                        (listing_id,),
+                    )
+                    if listing_write.rowcount != 1 or saved_listing != {
+                        "id": listing_id,
+                        "user_id": seller_id,
+                        "goods_id": goods_id,
+                        "name": name,
+                        "type": goods_type,
+                        "price": price,
+                        "quantity": 1,
+                    }:
+                        return self._reject_write(
+                            uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                              goods_type, price, quantity),
+                            "xianshi_listing_item_write_rejected", listing_id,
+                        )
+                    listing_ids.append(listing_id)
                     break
                 else:
                     raise RuntimeError("failed to allocate xianshi listing id")
 
-            uow.execute(
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_listing_operations "
                 "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
                 "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,xiuxian_int_store(?,'stone','actor'),?)",
@@ -226,6 +306,81 @@ class XianshiListingSqlRepository:
                     quantity, quantity, bind_sqlite_param(fee, exact=True), stamina_cost,
                 ),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
+                "listed_quantity,fee_charged,stamina_cost FROM xianshi_listing_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "seller_id": seller_id,
+                "goods_id": goods_id,
+                "name": name,
+                "goods_type": goods_type,
+                "price": price,
+                "requested_quantity": quantity,
+                "listed_quantity": quantity,
+                "fee_charged": fee,
+                "stamina_cost": stamina_cost,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_receipt_write_rejected", operation_id,
+                )
+
+            saved_stock = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (seller_id, goods_id),
+            )
+            if (
+                saved_stock is None
+                or int(saved_stock["goods_num"] or 0) != int(stock_row["goods_num"]) - quantity
+            ):
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stock_write_rejected", f"{seller_id}:{goods_id}",
+                )
+            for listing_id in listing_ids:
+                saved_listing = uow.query_one(
+                    "SELECT id,user_id,goods_id,name,type,price,quantity FROM xianshi_item WHERE id=?",
+                    (listing_id,),
+                )
+                if saved_listing != {
+                    "id": listing_id,
+                    "user_id": seller_id,
+                    "goods_id": goods_id,
+                    "name": name,
+                    "type": goods_type,
+                    "price": price,
+                    "quantity": 1,
+                }:
+                    return self._reject_write(
+                        uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                          goods_type, price, quantity),
+                        "xianshi_listing_item_write_rejected", listing_id,
+                    )
+            saved = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (seller_id,))
+            if saved is None or require_exact_integer(saved["stone"], field="stone", subject="seller") != wallet - fee:
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_stone_write_rejected", seller_id,
+                )
+            if stamina_cost:
+                saved_stamina = uow.query_one(
+                    "SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (seller_id,)
+                )
+                if saved_stamina is None or int(saved_stamina["user_stamina"] or 0) != expected_stamina:
+                    return self._reject_write(
+                        uow, self._result("listed", operation_id, seller_id, goods_id, name,
+                                          goods_type, price, quantity),
+                        "xianshi_listing_stamina_write_rejected", seller_id,
+                    )
+            self._release_savepoint(uow)
             return self._result(
                 "listed", operation_id, seller_id, goods_id, name, goods_type,
                 price, quantity, quantity, fee, stamina_cost,
@@ -267,6 +422,7 @@ class XianshiListingSqlRepository:
                     return self._result(
                         "state_changed", operation_id, "0", goods_id, name,
                         goods_type, price, quantity,
+                        reason="operation_conflict", subject=operation_id,
                     )
                 return self._result(
                     "duplicate", operation_id, "0", goods_id, name, goods_type,
@@ -274,6 +430,7 @@ class XianshiListingSqlRepository:
                     int(previous["fee_charged"]),
                 )
 
+            uow.execute('SAVEPOINT "xianshi_listing"')
             for _attempt in range(20):
                 listing_id = self._listing_id(self.ids.new_id())
                 exists = uow.query_one(
@@ -281,16 +438,34 @@ class XianshiListingSqlRepository:
                 )
                 if exists is not None:
                     continue
-                uow.execute(
+                listing_write = uow.execute(
                     "INSERT INTO xianshi_item(id,user_id,goods_id,name,type,price,quantity) "
                     "VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?)",
-                    (listing_id, "0", goods_id, name, goods_type, price, quantity),
+                    (listing_id, "0", goods_id, name, goods_type, bind_sqlite_param(price, exact=True), quantity),
                 )
+                saved_listing = uow.query_one(
+                    "SELECT id,user_id,goods_id,name,type,price,quantity FROM xianshi_item WHERE id=?",
+                    (listing_id,),
+                )
+                if listing_write.rowcount != 1 or saved_listing != {
+                    "id": listing_id,
+                    "user_id": "0",
+                    "goods_id": goods_id,
+                    "name": name,
+                    "type": goods_type,
+                    "price": price,
+                    "quantity": quantity,
+                }:
+                    return self._reject_write(
+                        uow, self._result("listed", operation_id, "0", goods_id, name,
+                                          goods_type, price, quantity),
+                        "xianshi_listing_item_write_rejected", listing_id,
+                    )
                 break
             else:
                 raise RuntimeError("failed to allocate system xianshi listing id")
 
-            uow.execute(
+            receipt_write = uow.execute(
                 "INSERT INTO xianshi_listing_operations "
                 "(operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
                 "listed_quantity,fee_charged,stamina_cost) VALUES(?,?,?,?,?,xiuxian_int_store(?,'stone','actor'),?,?,xiuxian_int_store(?,'stone','actor'),0)",
@@ -306,6 +481,30 @@ class XianshiListingSqlRepository:
                     0,
                 ),
             )
+            saved_receipt = uow.query_one(
+                "SELECT operation_id,seller_id,goods_id,name,goods_type,price,requested_quantity,"
+                "listed_quantity,fee_charged,stamina_cost FROM xianshi_listing_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = {
+                "operation_id": operation_id,
+                "seller_id": "0",
+                "goods_id": goods_id,
+                "name": name,
+                "goods_type": goods_type,
+                "price": price,
+                "requested_quantity": quantity,
+                "listed_quantity": quantity,
+                "fee_charged": 0,
+                "stamina_cost": 0,
+            }
+            if receipt_write.rowcount != 1 or saved_receipt != expected_receipt:
+                return self._reject_write(
+                    uow, self._result("listed", operation_id, "0", goods_id, name,
+                                      goods_type, price, quantity),
+                    "xianshi_listing_receipt_write_rejected", operation_id,
+                )
+            self._release_savepoint(uow)
             return self._result(
                 "listed", operation_id, "0", goods_id, name, goods_type, price,
                 quantity, quantity, 0,

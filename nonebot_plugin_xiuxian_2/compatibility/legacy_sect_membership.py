@@ -92,6 +92,8 @@ class SectScheduledMaterialGrant:
     sect_id: int
     materials: int = 0
     combat_power: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -134,6 +136,8 @@ class SectTaskSettlement:
     exp_reward: int = 0
     sect_reward: int = 0
     materials_reward: int = 0
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -147,6 +151,8 @@ class SectTaskClaim:
     period: str
     task_key: str = ""
     task_data: dict | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def applied(self) -> bool:
@@ -374,6 +380,12 @@ class SectMembershipService:
             )
             """
         )
+        columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(sect_task_settlement_operations)")}
+        if "weekly_event_status" not in columns:
+            conn.execute(
+                "ALTER TABLE sect_task_settlement_operations "
+                "ADD COLUMN weekly_event_status TEXT NOT NULL DEFAULT 'legacy'"
+            )
 
     @staticmethod
     def _ensure_task_claim_operations(conn) -> None:
@@ -1176,235 +1188,54 @@ class SectMembershipService:
 
     def refresh_task(self, operation_id, user_id, sect_id, period, expected_task_key,
                      expected_task_data, task_key, task_data, daily_limit) -> SectTaskClaim:
-        operation_id = str(operation_id).strip()
-        user_id, sect_id, period = str(user_id), int(sect_id), str(period).strip()
-        expected_json = safe_json_dumps(dict(expected_task_data))
-        task_key, task_data = str(task_key).strip(), dict(task_data)
-        task_json = safe_json_dumps(task_data)
-        if not operation_id or not period or not task_key:
-            raise ValueError("operation, period and task are required")
+        from ..features.sect.task_state_repository import SectTaskStateSqlRepository
+
         with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_task_claim_operations(conn)
-                previous = conn.execute("SELECT task_key,task_data FROM sect_task_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
-                if previous is not None:
-                    conn.rollback()
-                    return SectTaskClaim("duplicate", user_id, sect_id, period, str(previous[0]), safe_json_loads(previous[1], {}, dict))
-                user = conn.execute("SELECT sect_id,sect_task FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
-                if user is None or user[0] is None or int(user[0]) != sect_id:
-                    conn.rollback(); return SectTaskClaim("sect_changed", user_id, sect_id, period)
-                if int(user[1] or 0) >= int(daily_limit):
-                    conn.rollback(); return SectTaskClaim("daily_limit", user_id, sect_id, period)
-                current = conn.execute("SELECT task_key,task_data,status FROM sect_task_state WHERE user_id=%s AND period=%s", (user_id, period)).fetchone()
-                if current is None or str(current[2]) != "accepted":
-                    conn.rollback(); return SectTaskClaim("task_missing", user_id, sect_id, period)
-                if str(current[0]) != str(expected_task_key) or safe_json_dumps(safe_json_loads(current[1], {}, dict)) != expected_json:
-                    conn.rollback(); return SectTaskClaim("state_changed", user_id, sect_id, period)
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                conn.execute("UPDATE sect_task_state SET task_key=%s,task_data=%s,progress=0,target=1,accepted_at=%s,updated_at=%s,completed_at=NULL WHERE user_id=%s AND period=%s", (task_key,task_json,now,now,user_id,period))
-                conn.execute("INSERT INTO sect_task_claim_operations (operation_id,user_id,sect_id,period,task_key,task_data) VALUES (%s,%s,%s,%s,%s,%s)", (operation_id,user_id,sect_id,period,task_key,task_json))
-                conn.commit()
-                return SectTaskClaim("claimed", user_id, sect_id, period, task_key, task_data)
-            except Exception:
-                conn.rollback()
-                raise
+            self._ensure_task_claim_operations(conn)
+            conn.commit()
+        raw = SectTaskStateSqlRepository(self._database).refresh_task(
+            operation_id, user_id, sect_id, period, expected_task_key, expected_task_data,
+            task_key, task_data, daily_limit, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
+        return SectTaskClaim(raw["status"], str(user_id), int(sect_id), str(period),
+                             raw.get("task_key", ""), raw.get("task_data"),
+                             raw.get("reason", ""), raw.get("subject", ""))
 
     def claim_task(self, operation_id, user_id, sect_id, period, task_key,
                    task_data, daily_limit, replace_existing=False) -> SectTaskClaim:
-        operation_id = str(operation_id).strip()
-        if not operation_id:
-            raise ValueError("operation_id must not be empty")
-        user_id, sect_id = str(user_id), int(sect_id)
-        period, task_key = str(period).strip(), str(task_key).strip()
-        task_data, daily_limit = dict(task_data), int(daily_limit)
-        if not period or not task_key:
-            raise ValueError("period and task_key must not be empty")
-        task_json = safe_json_dumps(task_data)
-
-        def result(status, key=task_key, data=task_data):
-            return SectTaskClaim(status, user_id, sect_id, period, key, dict(data))
+        from ..features.sect.task_state_repository import SectTaskStateSqlRepository
 
         with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_task_claim_operations(conn)
-                previous = conn.execute("SELECT task_key, task_data FROM sect_task_claim_operations WHERE operation_id=%s", (operation_id,)).fetchone()
-                if previous is not None:
-                    conn.rollback()
-                    return result("duplicate", str(previous[0]), safe_json_loads(previous[1], {}, dict))
-                user = conn.execute("SELECT sect_id, sect_task FROM user_xiuxian WHERE user_id=%s", (user_id,)).fetchone()
-                if user is None:
-                    conn.rollback(); return result("user_missing")
-                if user[0] is None or int(user[0]) != sect_id:
-                    conn.rollback(); return result("sect_changed")
-                if int(user[1] or 0) >= daily_limit:
-                    conn.rollback(); return result("daily_limit")
-                if conn.execute("SELECT 1 FROM sects WHERE sect_id=%s", (sect_id,)).fetchone() is None:
-                    conn.rollback(); return result("sect_missing")
-                existing = conn.execute("SELECT status FROM sect_task_state WHERE user_id=%s AND period=%s", (user_id, period)).fetchone()
-                if existing is not None and str(existing[0]) == "accepted" and not replace_existing:
-                    conn.rollback(); return result("task_exists")
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                conn.execute("""INSERT INTO sect_task_state
-                    (user_id,sect_id,task_key,task_data,period,status,progress,target,accepted_at,updated_at,completed_at)
-                    VALUES (%s,%s,%s,%s,%s,'accepted',0,1,%s,%s,NULL)
-                    ON CONFLICT(user_id,period) DO UPDATE SET sect_id=EXCLUDED.sect_id,
-                    task_key=EXCLUDED.task_key,task_data=EXCLUDED.task_data,status='accepted',progress=0,target=1,
-                    accepted_at=EXCLUDED.accepted_at,updated_at=EXCLUDED.updated_at,completed_at=NULL""",
-                    (user_id, sect_id, task_key, task_json, period, now, now))
-                conn.execute("INSERT INTO sect_task_claim_operations (operation_id,user_id,sect_id,period,task_key,task_data) VALUES (%s,%s,%s,%s,%s,%s)", (operation_id,user_id,sect_id,period,task_key,task_json))
-                conn.commit()
-                return result("claimed")
-            except Exception:
-                conn.rollback()
-                raise
+            self._ensure_task_claim_operations(conn)
+            conn.commit()
+        raw = SectTaskStateSqlRepository(self._database).claim_task(
+            operation_id, user_id, sect_id, task_key, task_data, period, daily_limit,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), replace_existing=replace_existing,
+        )
+        return SectTaskClaim(raw["status"], str(user_id), int(sect_id), str(period),
+                             raw.get("task_key", ""), raw.get("task_data"),
+                             raw.get("reason", ""), raw.get("subject", ""))
 
-    def settle_task(
-        self,
-        operation_id,
-        user_id,
-        sect_id,
-        period,
-        cost_type,
-        cost,
-        exp_reward,
-        sect_reward,
-        expected_task_key=None,
-        expected_task_data=None,
-    ) -> SectTaskSettlement:
-        operation_id = str(operation_id).strip()
-        if not operation_id:
-            raise ValueError("operation_id must not be empty")
-        user_id = str(user_id)
-        sect_id = int(sect_id)
-        period = str(period).strip()
-        cost_type = str(cost_type).strip().lower()
-        cost = int(cost)
-        exp_reward = int(exp_reward)
-        sect_reward = int(sect_reward)
-        materials_reward = sect_reward * 10
-        if not period:
-            raise ValueError("period must not be empty")
-        if cost_type not in {"hp", "stone"}:
+    def settle_task(self, operation_id, user_id, sect_id, period, cost_type, cost,
+                    exp_reward, sect_reward, expected_task_key=None,
+                    expected_task_data=None) -> SectTaskSettlement:
+        from ..features.sect.task_settlement_repository import SectTaskSettlementSqlRepository
+
+        if str(cost_type).strip().lower() not in {"hp", "stone"}:
             raise ValueError("cost_type must be hp or stone")
-        if min(cost, exp_reward, sect_reward) < 0:
-            return SectTaskSettlement(
-                "invalid_amount", user_id, sect_id, period, cost_type,
-                cost, exp_reward, sect_reward, materials_reward,
-            )
-
-        def result(status, values=None):
-            values = values or (cost_type, cost, exp_reward, sect_reward, materials_reward)
-            return SectTaskSettlement(
-                status, user_id, sect_id, period, str(values[0]),
-                int(values[1]), int(values[2]), int(values[3]), int(values[4]),
-            )
-
         with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                conn.execute("BEGIN IMMEDIATE")
-                self._ensure_task_settlement_operations(conn)
-                previous = conn.execute(
-                    """
-                    SELECT cost_type, cost, exp_reward, sect_reward, materials_reward
-                    FROM sect_task_settlement_operations WHERE operation_id=%s
-                    """,
-                    (operation_id,),
-                ).fetchone()
-                if previous is not None:
-                    conn.rollback()
-                    return result("duplicate", previous)
-
-                task = conn.execute(
-                    """
-                    SELECT sect_id, status, task_key, task_data FROM sect_task_state
-                    WHERE user_id=%s AND period=%s
-                    """,
-                    (user_id, period),
-                ).fetchone()
-                if task is None or str(task[1]) != "accepted":
-                    conn.rollback()
-                    return result("task_missing")
-                if int(task[0]) != sect_id:
-                    conn.rollback()
-                    return result("task_sect_changed")
-                if expected_task_key is not None and str(task[2]) != str(expected_task_key):
-                    conn.rollback()
-                    return result("task_snapshot_changed")
-                if expected_task_data is not None and safe_json_loads(task[3], {}, dict) != dict(expected_task_data):
-                    conn.rollback()
-                    return result("task_snapshot_changed")
-
-                user = conn.execute(
-                    "SELECT sect_id, stone, hp FROM user_xiuxian WHERE user_id=%s",
-                    (user_id,),
-                ).fetchone()
-                if user is None:
-                    conn.rollback()
-                    return result("user_missing")
-                if user[0] is None or int(user[0]) != sect_id:
-                    conn.rollback()
-                    return result("sect_changed")
-                balance = as_int_like((user[2] if cost_type == "hp" else user[1]) or 0)
-                if balance < cost:
-                    conn.rollback()
-                    return result(f"{cost_type}_insufficient")
-                if conn.execute("SELECT 1 FROM sects WHERE sect_id=%s", (sect_id,)).fetchone() is None:
-                    conn.rollback()
-                    return result("sect_missing")
-
-                cost_column = "hp" if cost_type == "hp" else "stone"
-                user_update = conn.execute(
-                    f"""
-                    UPDATE user_xiuxian
-                    SET {cost_column}={cost_column}-%s,
-                        exp=CAST(COALESCE(exp,0) AS REAL)+CAST(%s AS REAL),
-                        sect_task=COALESCE(sect_task, 0)+1,
-                        sect_contribution=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_contribution,0),%s,'sect_contribution','actor'))
-                    WHERE user_id=%s AND sect_id=%s AND xiuxian_int_cmp({cost_column},%s)>=0
-                    """,
-                    (cost, exp_reward, sect_reward, user_id, sect_id, cost),
-                )
-                sect_update = conn.execute(
-                    """
-                    UPDATE sects
-                    SET sect_used_stone=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_used_stone,0),%s,'sect_used_stone','actor')),
-                        sect_scale=CAST(COALESCE(sect_scale,0) AS REAL)+CAST(%s AS REAL),
-                        sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor'))
-                    WHERE sect_id=%s
-                    """,
-                    (sect_reward, sect_reward, materials_reward, sect_id),
-                )
-                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                task_update = conn.execute(
-                    """
-                    UPDATE sect_task_state
-                    SET status='completed', progress=target,
-                        updated_at=%s, completed_at=%s
-                    WHERE user_id=%s AND period=%s AND sect_id=%s AND status='accepted'
-                    """,
-                    (now, now, user_id, period, sect_id),
-                )
-                if user_update.rowcount != 1 or sect_update.rowcount != 1 or task_update.rowcount != 1:
-                    conn.rollback()
-                    return result("state_changed")
-
-                conn.execute(
-                    """
-                    INSERT INTO sect_task_settlement_operations (
-                        operation_id, user_id, sect_id, period, cost_type, cost,
-                        exp_reward, sect_reward, materials_reward
-                    ) VALUES(%s,%s,%s,%s,%s,xiuxian_int_store(%s,'stone','actor'),%s,%s,%s)
-                    """,
-                    (operation_id, user_id, sect_id, period, cost_type, cost,
-                     exp_reward, sect_reward, materials_reward),
-                )
-                conn.commit()
-                return result("settled")
-            except Exception:
-                conn.rollback()
-                raise
+            self._ensure_task_settlement_operations(conn)
+            conn.commit()
+        raw = SectTaskSettlementSqlRepository(self._database).settle(
+            operation_id, user_id, sect_id, period, cost_type, cost, exp_reward,
+            sect_reward, expected_task_key, expected_task_data,
+        )
+        return SectTaskSettlement(raw["status"], str(user_id), int(sect_id), str(period),
+                                  raw.get("cost_type", str(cost_type)), raw.get("cost", int(cost)),
+                                  raw.get("exp_reward", int(exp_reward)),
+                                  raw.get("sect_reward", int(sect_reward)),
+                                  raw.get("materials_reward", int(sect_reward)*10),
+                                  raw.get("reason", ""), raw.get("subject", ""))
 
     def donate(self, operation_id, user_id, sect_id, stone, materials) -> SectDonation:
         operation_id = str(operation_id).strip()
@@ -1606,76 +1437,17 @@ class SectMembershipService:
         sect_id,
         multiplier,
     ) -> SectScheduledMaterialGrant:
+        from ..features.sect.scheduled_material_repository import SectScheduledMaterialSqlRepository
+
         grant_key = str(grant_key).strip()
         if not grant_key:
             raise ValueError("grant_key must not be empty")
-        sect_id = int(sect_id)
-        multiplier = max(int(multiplier), 0)
-
+        sect_id, multiplier = int(sect_id), max(int(multiplier), 0)
         with self._lock, closing(db_backend.connect(self._database)) as conn:
-            try:
-                self._ensure_scheduled_material_grants(conn)
-                conn.commit()
-                conn.execute("BEGIN IMMEDIATE")
-                previous = conn.execute(
-                    """
-                    SELECT materials, combat_power
-                    FROM sect_scheduled_material_grants
-                    WHERE grant_key=%s AND sect_id=%s
-                    """,
-                    (grant_key, sect_id),
-                ).fetchone()
-                if previous:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant(
-                        "duplicate",
-                        grant_key,
-                        sect_id,
-                        as_int_like(previous[0]),
-                        as_int_like(previous[1]),
-                    )
-
-                sect = conn.execute(
-                    "SELECT sect_scale, sect_owner FROM sects WHERE sect_id=%s",
-                    (sect_id,),
-                ).fetchone()
-                if sect is None:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant("sect_missing", grant_key, sect_id)
-                if sect[1] is None:
-                    conn.rollback()
-                    return SectScheduledMaterialGrant("sect_inactive", grant_key, sect_id)
-
-                materials = max(as_int_like(sect[0] or 0), 0) * multiplier
-                power_rows = conn.execute(
-                    "SELECT power FROM user_xiuxian WHERE sect_id=%s",
-                    (sect_id,),
-                )
-                combat_power = sum(as_int_like(row[0]) for row in power_rows)
-                conn.execute(
-                    """
-                    UPDATE sects
-                    SET sect_materials=xiuxian_int_store(xiuxian_int_add(COALESCE(sect_materials,0),%s,'sect_materials','actor')),
-                        combat_power=%s
-                    WHERE sect_id=%s
-                    """,
-                    (materials, combat_power, sect_id),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO sect_scheduled_material_grants (
-                        grant_key, sect_id, materials, combat_power
-                    ) VALUES (%s, %s, %s, %s)
-                    """,
-                    (grant_key, sect_id, materials, combat_power),
-                )
-                conn.commit()
-                return SectScheduledMaterialGrant(
-                    "granted", grant_key, sect_id, materials, combat_power
-                )
-            except Exception:
-                conn.rollback()
-                raise
+            self._ensure_scheduled_material_grants(conn)
+            conn.commit()
+            result = SectScheduledMaterialSqlRepository(self._database).grant(grant_key, sect_id, multiplier)
+        return SectScheduledMaterialGrant(**result)
 
     def transfer_owner(
         self,

@@ -98,9 +98,11 @@ def register(case):
         probe.evidence.update(card=name, inventory_unchanged=True)
 
     @case("impart-prayer-inconsistent-history", "传承祈愿", "合法次数 + 历史重复结晶不一致",
-          "两条历史传承记录仅结晶余额不同，有足够资源", "只结算最小有效行，历史副本整行不变并写入回执",
+          "两条历史传承记录仅结晶余额不同，有足够资源，固定未中奖", "只结算最小有效行，历史副本整行不变并写入回执",
           group="impart-parameters")
     async def divergent(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart as module
+
         probe.impart(stone_num=100)
         database = probe.context.paths.impart_db
         columns = [row[1] for row in probe.rows(database, "PRAGMA table_info(xiuxian_impart)") if row[1] != "id"]
@@ -128,7 +130,8 @@ def register(case):
         cards_before = cards(probe)
         receipt_sql = "SELECT * FROM impart_crystal_draw_operations"
         receipts_before = probe.rows(database, receipt_sql)
-        text = await probe.command("传承祈愿", "传承祈愿 2")
+        with patch.object(module, "_rank_success", return_value=False):
+            text = await probe.command("传承祈愿", "传承祈愿 2")
         after = probe.rows(database, state_sql)
         full_rows_after = probe.rows(database, full_rows_sql)
         assert "剩余思恋结晶：80颗" in text, text
@@ -147,7 +150,7 @@ def register(case):
         probe.evidence.update(effective_row_debited=True, historical_row_unchanged=True,
                               cards_before=cards_before, receipt_written=True,
                               statistics_before=stats_before, statistics_after=stats_after,
-                              statistics_written=True)
+                              statistics_written=True, rng="miss branch")
 
     for command in ("传承祈愿", "传承抽卡", "传承分解"):
         for label, value in (("zero", "0"), ("negative", "-2"), ("format", "two"), ("extra", "2 extra")):

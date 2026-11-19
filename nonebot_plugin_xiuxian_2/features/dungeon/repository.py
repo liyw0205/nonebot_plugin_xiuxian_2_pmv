@@ -98,21 +98,126 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
         return {"status": status, "quantity": int(row["quantity"]), "cost": int(row["cost"]), "stone": as_int_like(row["stone"]), "inventory": int(row["inventory"]), "response": str(row["response"]), "reason": self._receipt_reason(status, row["response"])}
 
     def purchase(self, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, expected_stone: int, max_goods: int, bind_flag: int = 1) -> dict[str, Any]:
-        operation_id,user_id,item_name,item_type=str(operation_id).strip(),str(user_id),str(item_name),str(item_type);item_id,quantity,unit_cost,expected_stone,max_goods,bind_flag=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods,bind_flag));payload=self._payload(user_id,item_id,quantity,bind_flag);cost=quantity*unit_cost
+        operation_id = str(operation_id).strip()
+        user_id, item_name, item_type = str(user_id), str(item_name), str(item_type)
+        item_id, quantity, unit_cost, expected_stone, max_goods, bind_flag = map(
+            int, (item_id, quantity, unit_cost, expected_stone, max_goods, bind_flag)
+        )
+        payload = self._payload(user_id, item_id, quantity, bind_flag)
+        cost = quantity * unit_cost
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            old=uow.query_one("SELECT payload,result_status,quantity,cost,stone,inventory,response FROM dungeon_purchase_operations WHERE operation_id=?",(operation_id,))
+            old = uow.query_one(
+                "SELECT payload,result_status,quantity,cost,stone,inventory,response "
+                "FROM dungeon_purchase_operations WHERE operation_id=?",
+                (operation_id,),
+            )
             if old:
-                if str(old["payload"])!=payload:return self._result("state_changed",quantity,cost,0,0,item_name,reason="operation_conflict")
-                status="duplicate" if str(old["result_status"])=="applied" else str(old["result_status"]);return {"status":status,"quantity":int(old["quantity"]),"cost":int(old["cost"]),"stone":as_int_like(old["stone"]),"inventory":int(old["inventory"]),"response":str(old["response"]),"reason":self._receipt_reason(status,old["response"])}
-            user=uow.query_one("SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",(user_id,))
-            if user is None:return self._record(uow,operation_id,payload,self._result("user_missing",quantity,cost,0,0,item_name))
-            stone=as_int_like(user["stone"])
-            if stone!=expected_stone:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,0,item_name,reason="stone_changed"))
-            if stone<cost:return self._record(uow,operation_id,payload,self._result("stone_insufficient",quantity,cost,stone,0,item_name))
-            item=uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?",(user_id,item_id));inventory,bound=(int(item["goods_num"]),int(item["bind_num"])) if item else (0,0)
-            if inventory<0 or bound<0 or bound>inventory:return self._record(uow,operation_id,payload,self._result("state_changed",quantity,cost,stone,inventory,item_name,reason="inventory_invalid"))
-            if inventory+quantity>max_goods:return self._record(uow,operation_id,payload,self._result("inventory_full",quantity,cost,stone,inventory,item_name))
-            new_stone,new_inventory=stone-cost,inventory+quantity;now=self.clock.now().isoformat();uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",(new_stone,user_id,expected_stone));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,item_type,quantity,now,now,quantity if bind_flag else 0));return self._record(uow,operation_id,payload,self._result("applied",quantity,cost,new_stone,new_inventory,item_name))
+                if str(old["payload"]) != payload:
+                    return self._result(
+                        "state_changed", quantity, cost, 0, 0, item_name,
+                        reason="operation_conflict",
+                    )
+                status = "duplicate" if str(old["result_status"]) == "applied" else str(old["result_status"])
+                return {
+                    "status": status,
+                    "quantity": int(old["quantity"]),
+                    "cost": int(old["cost"]),
+                    "stone": as_int_like(old["stone"]),
+                    "inventory": int(old["inventory"]),
+                    "response": str(old["response"]),
+                    "reason": self._receipt_reason(status, old["response"]),
+                }
+
+            user = uow.query_one(
+                "SELECT COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?",
+                (user_id,),
+            )
+            if user is None:
+                return self._record(
+                    uow, operation_id, payload,
+                    self._result("user_missing", quantity, cost, 0, 0, item_name),
+                )
+            stone = as_int_like(user["stone"])
+            if stone != expected_stone:
+                return self._record(
+                    uow, operation_id, payload,
+                    self._result("state_changed", quantity, cost, stone, 0, item_name, reason="stone_changed"),
+                )
+            if stone < cost:
+                return self._record(
+                    uow, operation_id, payload,
+                    self._result("stone_insufficient", quantity, cost, stone, 0, item_name),
+                )
+
+            item = uow.query_one(
+                "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num "
+                "FROM back WHERE user_id=? AND goods_id=?",
+                (user_id, item_id),
+            )
+            inventory, bound = (
+                (int(item["goods_num"]), int(item["bind_num"])) if item else (0, 0)
+            )
+            if inventory < 0 or bound < 0 or bound > inventory:
+                return self._record(
+                    uow, operation_id, payload,
+                    self._result("state_changed", quantity, cost, stone, inventory, item_name, reason="inventory_invalid"),
+                )
+            if inventory + quantity > max_goods:
+                return self._record(
+                    uow, operation_id, payload,
+                    self._result("inventory_full", quantity, cost, stone, inventory, item_name),
+                )
+
+            new_stone, new_inventory = stone - cost, inventory + quantity
+            new_bound = bound + (quantity if bind_flag else 0)
+            now = self.clock.now().isoformat()
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                "WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')=0",
+                (new_stone, user_id, expected_stone),
+            )
+            saved_stone = uow.query_one(
+                "SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,)
+            )
+            if (
+                changed.rowcount != 1
+                or saved_stone is None
+                or as_int_like(saved_stone["stone"]) != new_stone
+            ):
+                self._raise_write_rejected(
+                    "dungeon_purchase_stone_write_rejected", "actor"
+                )
+
+            inventory_write = uow.execute(
+                "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
+                "goods_num=back.goods_num+excluded.goods_num,"
+                "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,"
+                "update_time=excluded.update_time",
+                (user_id,item_id,item_name,item_type,quantity,now,now,quantity if bind_flag else 0),
+            )
+            saved_item = uow.query_one(
+                "SELECT goods_name,goods_type,goods_num,bind_num FROM back "
+                "WHERE user_id=? AND goods_id=?",
+                (user_id, item_id),
+            )
+            if (
+                inventory_write.rowcount != 1
+                or saved_item is None
+                or str(saved_item["goods_name"]) != item_name
+                or str(saved_item["goods_type"]) != item_type
+                or as_int_like(saved_item["goods_num"]) != new_inventory
+                or as_int_like(saved_item["bind_num"]) != new_bound
+            ):
+                self._raise_write_rejected(
+                    "dungeon_purchase_inventory_write_rejected", "inventory"
+                )
+
+            result = self._result(
+                "applied", quantity, cost, new_stone, new_inventory, item_name
+            )
+            return self._record(uow, operation_id, payload, result)
 
     @staticmethod
     def _receipt_reason(status, response):
@@ -128,8 +233,50 @@ class DungeonPurchaseSqlRepository(LegacyDungeonRepository):
         return {"status":status,"quantity":quantity,"cost":cost,"stone":stone,"inventory":inventory,"response":response,"reason":reason}
 
     @staticmethod
+    def _raise_write_rejected(reason: str, subject: str) -> None:
+        raise DomainError(
+            reason,
+            "dungeon purchase write did not persist the expected projection",
+            {"reason": reason, "subject": subject},
+        )
+
+    @staticmethod
     def _record(uow:DatabaseUnitOfWork,operation_id:str,payload:str,result:dict[str,Any])->dict[str,Any]:
-        uow.execute("INSERT INTO dungeon_purchase_operations(operation_id,payload,result_status,quantity,cost,stone,inventory,response) VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?,?)",(operation_id,payload,result["status"],result["quantity"],result["cost"],result["stone"],result["inventory"],result["response"]));return result
+        inserted = uow.execute(
+            "INSERT INTO dungeon_purchase_operations"
+            "(operation_id,payload,result_status,quantity,cost,stone,inventory,response) "
+            "VALUES(?,?,?,?,xiuxian_int_store(?,'stone','actor'),"
+            "xiuxian_int_store(?,'stone','actor'),?,?)",
+            (operation_id,payload,result["status"],result["quantity"],result["cost"],result["stone"],result["inventory"],result["response"]),
+        )
+        saved = uow.query_one(
+            "SELECT payload,result_status,quantity,cost,stone,inventory,response "
+            "FROM dungeon_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        expected = (
+            payload,
+            str(result["status"]),
+            int(result["quantity"]),
+            int(result["cost"]),
+            as_int_like(result["stone"]),
+            int(result["inventory"]),
+            str(result["response"]),
+        )
+        actual = None if saved is None else (
+            str(saved["payload"]),
+            str(saved["result_status"]),
+            int(saved["quantity"]),
+            int(saved["cost"]),
+            as_int_like(saved["stone"]),
+            int(saved["inventory"]),
+            str(saved["response"]),
+        )
+        if inserted.rowcount != 1 or actual != expected:
+            DungeonPurchaseSqlRepository._raise_write_rejected(
+                "dungeon_purchase_receipt_write_rejected", "actor"
+            )
+        return result
 
 
 class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):

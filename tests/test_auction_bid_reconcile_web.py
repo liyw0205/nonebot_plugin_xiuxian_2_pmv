@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 from nonebot_plugin_xiuxian_2.adapters.web.app import create_app
 from nonebot_plugin_xiuxian_2.bootstrap import build_runtime_context
@@ -24,6 +25,7 @@ class AuctionBidWebReconcileTests(unittest.TestCase):
     def test_direct_web_application_uses_same_bid_effects(self):
         with tempfile.TemporaryDirectory(prefix="auction-web-bid-") as directory:
             context = build_runtime_context(data_dir=directory, legacy_startup=False)
+            context.clock = SimpleNamespace(now=lambda: datetime.fromtimestamp(2, tz=timezone.utc))
             game_db = context.database.path("game_db")
             player_db = context.database.path("player_db")
             with DatabaseUnitOfWork(game_db) as uow:
@@ -32,6 +34,8 @@ class AuctionBidWebReconcileTests(unittest.TestCase):
                 apply_platform_schema(uow)
                 apply_auction_settlement(uow)
                 apply_auction_bid_operations(uow)
+                uow.execute("INSERT INTO auction_sessions(session_id,status,start_time,end_time,items_count,start_operation_id) "
+                            "VALUES('session','active',1,100,1,'start')")
                 uow.execute(
                     "INSERT INTO auction_current "
                     "(id,item_id,name,start_price,current_price,seller_id,seller_name,bids,bid_times,is_system,last_bid_time) "

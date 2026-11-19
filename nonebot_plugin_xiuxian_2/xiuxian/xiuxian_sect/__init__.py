@@ -10,7 +10,11 @@ from nonebot import require
 from ..on_compat import on_command
 from ..messaging.delivery import delivery_service
 from nonebot.log import logger
-from ..command_guard import guard_command, result_failure
+from ..command_guard import guard_command, result_failure, report_exception, failure_reply
+from nonebot.exception import MatcherException, ProcessException
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
+from ...core.player_reasons import reason_text
 from ..adapter_compat import (
     Bot,
     GROUP,
@@ -20,7 +24,7 @@ from ..adapter_compat import (
     MessageSegment,
     get_at_user_id,
 )
-from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group
+from ..xiuxian_utils.lay_out import assign_bot, Cooldown, assign_bot_group, ADMIN_IDS
 from nonebot.params import CommandArg
 from ..xiuxian_utils.data_source import jsondata
 from datetime import datetime, timedelta
@@ -62,7 +66,7 @@ from .sect_member_utils import (
     set_sect_list,
 )
 from ..xiuxian_utils.utils import (
-    check_user, number_to,
+    check_user, number_to, consume_player_stamina,
     send_msg_handler, handle_send,
     update_statistics_value, send_help_message,
     parse_page_arg, paginate_text_blocks, build_pagination_buttons
@@ -186,6 +190,7 @@ def _sect_operation_id(event, action, target_id):
 
 
 materialsupdate = require("nonebot_plugin_apscheduler").scheduler
+sect_application.task_timezone = materialsupdate.timezone
 upatkpractice = on_command("升级攻击修炼", priority=5, block=True)
 uphppractice = on_command("升级元血修炼", priority=5, block=True)
 upmppractice = on_command("升级灵海修炼", priority=5, block=True)
@@ -375,7 +380,12 @@ __sect_manage_help__ = """
     misfire_grace_time=300,
 )
 async def materialsupdate_():
-    grant_key = f"sect-materials:{runtime_clock.now().date().isoformat()}"
+    from zoneinfo import ZoneInfo
+
+    moment = runtime_clock.now()
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(getattr(materialsupdate, 'timezone', None) or ZoneInfo('Asia/Shanghai'))
+    grant_key = f"sect-materials:{moment.date().isoformat()}"
     all_sects = sect_application.list_scheduled_material_targets()
     granted = 0
     for s in all_sects:
@@ -384,7 +394,11 @@ async def materialsupdate_():
             sect_id=s[0],
             multiplier=config["发放宗门资材"]["倍率"],
         )
-        granted += int(result.applied)
+        _require_sect_scheduled_result(
+            result, 'material_grant', f'grant_key={grant_key} sect_id={s[0]}',
+            {'granted', 'duplicate', 'sect_missing', 'sect_inactive'},
+        )
+        granted += int(result.status == 'granted')
 
     logger.opt(colors=True).info(
         f"<green>已更新宗门资材和战力，本次发放 {granted} 个宗门</green>"
@@ -392,16 +406,22 @@ async def materialsupdate_():
 
 # 重置用户宗门任务次数、宗门丹药领取次数
 async def resetusertask():
+    from zoneinfo import ZoneInfo
+    from ..xiuxian_scheduler import scheduler as daily_scheduler
+
     maintenance_costs = {
         int(level): room_config["level_up_cost"]["建设度"]
         for level, room_config in config["宗门丹房参数"]["elixir_room_level"].items()
     }
-    result = sect_application.reset_daily_maintenance(
-        runtime_clock.now().date().isoformat(), maintenance_costs
+    moment = runtime_clock.now()
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(getattr(daily_scheduler, "timezone", None) or ZoneInfo("Asia/Shanghai"))
+    business_date = moment.date().isoformat()
+    result = sect_application.reset_daily_maintenance(business_date, maintenance_costs)
+    _require_sect_scheduled_result(
+        result, "daily_reset", f"business_date={business_date}",
+        {"applied", "duplicate"},
     )
-    if result.status == "operation_conflict":
-        logger.error("宗门每日重置 operation 配置冲突，本次未执行")
-        return
     if result.status == "applied":
         for outcome in result.outcomes:
             if outcome.status in {"downgraded", "disabled"}:
@@ -416,6 +436,15 @@ async def resetusertask():
             f"<green>已原子重置 {result.user_count} 名用户的宗门任务和丹药次数，并完成全部丹房维护</green>"
         )
 
+def _require_sect_scheduled_result(result, action: str, subject: str, accepted: set[str]) -> None:
+    status = result.get("status") if isinstance(result, dict) else getattr(result, "status", None)
+    if status not in accepted:
+        reason = result.get('reason') if isinstance(result, dict) else getattr(result, 'reason', '')
+        failed_subject = result.get('subject') if isinstance(result, dict) else getattr(result, 'subject', '')
+        raise RuntimeError(f"宗门定时操作失败：action={action} {subject} status={status or 'invalid_result'} "
+                           f"reason={reason or status or 'invalid_result'} subject={failed_subject or subject}")
+
+
 # 定时任务自动检测并处理宗门状态
 async def auto_handle_inactive_sect_owners():
     logger.info("⏳ 开始检测并处理宗门状态")
@@ -424,6 +453,7 @@ async def auto_handle_inactive_sect_owners():
     maintenance_key = (
         f"{maintenance_checked_at.date().isoformat()}:T{maintenance_slot:02d}"
     )
+    failures = []
     
     try:
         all_sects = sect_application.list_sects_with_member_count()
@@ -445,7 +475,7 @@ async def auto_handle_inactive_sect_owners():
                 # 获取宗门详细信息
                 sect_info = sect_application.get_inactive_owner_sect_state(sect_id)
                 if not sect_info:
-                    logger.error(f"获取宗门详细信息失败，跳过处理")
+                    logger.info(f"宗门维护跳过：sect_id={sect_id} status=sect_missing")
                     continue
                     
                 # ===== 第一阶段：优先处理已封闭山门的宗门 =====
@@ -469,6 +499,11 @@ async def auto_handle_inactive_sect_owners():
                             expected_active_candidate_ids=(),
                             checked_at=maintenance_checked_at,
                             inactivity_days=auto_change_sect_owner_cd,
+                        )
+                        _require_sect_scheduled_result(
+                            disbanded, "disband_empty", f"sect_id={sect_id}",
+                            {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                             "candidates_changed", "condition_changed"},
                         )
                         logger.info(
                             f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
@@ -510,6 +545,11 @@ async def auto_handle_inactive_sect_owners():
                             checked_at=maintenance_checked_at,
                             inactivity_days=auto_change_sect_owner_cd,
                         )
+                        _require_sect_scheduled_result(
+                            disbanded, "disband_no_successor", f"sect_id={sect_id}",
+                            {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                             "candidates_changed", "condition_changed"},
+                        )
                         logger.info(
                             f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
                         )
@@ -534,6 +574,11 @@ async def auto_handle_inactive_sect_owners():
                         eligible_user_ids=tuple(
                             str(candidate['user_id']) for candidate in active_candidates
                         ),
+                    )
+                    _require_sect_scheduled_result(
+                        result, "inherit", f"sect_id={sect_id}",
+                        {"inherited", "duplicate", "actor_missing", "actor_without_sect", "sect_changed",
+                         "sect_missing", "not_closed", "ineligible", "higher_priority"},
                     )
                     if result.applied:
                         logger.info(f"宗门【{sect_name}】继承完成：新宗主：{new_owner['user_name']}")
@@ -584,6 +629,11 @@ async def auto_handle_inactive_sect_owners():
                         checked_at=maintenance_checked_at,
                         inactivity_days=auto_change_sect_owner_cd,
                     )
+                    _require_sect_scheduled_result(
+                        disbanded, "disband_sole_owner", f"sect_id={sect_id}",
+                        {"disbanded", "duplicate", "sect_missing", "sect_changed", "members_changed",
+                         "candidates_changed", "condition_changed"},
+                    )
                     logger.info(
                         f"宗门 {sect_name}(ID:{sect_id}) 自动解散结果：{disbanded.status}"
                     )
@@ -592,7 +642,7 @@ async def auto_handle_inactive_sect_owners():
                 # 获取宗主信息
                 user_info = sect_application.get_inactive_owner_user_profile(owner_id)
                 if not user_info:
-                    logger.error(f"获取宗主信息失败：{owner_id}")
+                    logger.info(f"宗门维护跳过：sect_id={sect_id} actor_id={owner_id} status=actor_missing")
                     continue
                     
                 logger.info(f"检测到不活跃宗主：{user_info['user_name']} 已离线 {offline_days} 天")
@@ -602,6 +652,11 @@ async def auto_handle_inactive_sect_owners():
                     owner_id,
                     expected_sect_id=sect_id,
                 )
+                _require_sect_scheduled_result(
+                    result, "close", f"sect_id={sect_id}",
+                    {"closed", "duplicate", "actor_missing", "actor_without_sect", "sect_changed",
+                     "sect_missing", "already_closed", "not_owner"},
+                )
                 if result.applied:
                     logger.info(f"宗门【{sect_name}】处理完成：原宗主 {user_info['user_name']} 已降为长老")
                 else:
@@ -610,13 +665,17 @@ async def auto_handle_inactive_sect_owners():
                     )
                 
             except Exception as e:
-                logger.error(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
+                logger.exception(f"处理宗门 {sect_id} 时发生错误：{str(e)}")
+                failures.append(e)
                 continue
                 
     except Exception as e:
-        logger.error(f"定时任务执行出错：{str(e)}")
-    finally:
-        logger.info("✅ 宗门状态检测处理完成")
+        logger.exception(f"定时任务执行出错：{str(e)}")
+        failures.append(e)
+    if failures:
+        reasons = "; ".join(str(failure) for failure in failures)
+        raise RuntimeError(f"宗门状态检测失败：{len(failures)} 个异常；{reasons}") from failures[0]
+    logger.info("宗门状态检测处理完成")
 
 @sect_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
@@ -926,11 +985,11 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
                     elixir_room_level_up_sect_scale_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
+                    await sect_elixir_room_make.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门丹房升级已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("宗门建设", result))
+                    await handle_send(bot, event, result_failure("宗门建设", result))
                     await sect_elixir_room_make.finish()
                 safe_log_economy_change(
                     user_id=user_info["user_id"],
@@ -961,6 +1020,26 @@ async def sect_elixir_room_make_(bot: Bot, event: GroupMessageEvent | PrivateMes
 @sect_elixir_get.handle(parameterless=[Cooldown(cd_time=0)])
 async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门丹药领取"""
+    try:
+        await _claim_sect_elixir(bot, event)
+    except (MatcherException, ProcessException):
+        raise
+    except DomainError as exc:
+        if reason_text(exc.details.get("reason", "")) or reason_text(exc.code):
+            msg = failure_reply("领取宗门丹药", exc)
+            if exc.__cause__ is not None:
+                report_exception("领取宗门丹药诊断", exc, event=event)
+        else:
+            msg = report_exception("领取宗门丹药", exc, event=event)
+    except Exception as exc:
+        msg = report_exception("领取宗门丹药", exc, event=event)
+    else:
+        return
+    await handle_send(bot, event, msg)
+    await sect_elixir_get.finish()
+
+
+async def _claim_sect_elixir(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -969,6 +1048,14 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 
     sect_id = user_info['sect_id']
     user_id = user_info['user_id']
+    operation_id = _sect_operation_id(event, "elixir_claim", user_id)
+    previous = sect_application.elixir_claim_receipt(operation_id, user_id)
+    if previous is not None:
+        msg = "该次宗门丹药领取已完成：\n" + "\n".join(
+            f"{name} {amount} 枚" for _, name, _, amount in previous["rewards"]
+        )
+        await handle_send(bot, event, msg, md_type="宗门")
+        await sect_elixir_get.finish()
     sect_application.update_last_check_info_time(user_id)
     if sect_id:
         sect_position = user_info['sect_position']
@@ -979,21 +1066,26 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
             await sect_elixir_get.finish()
         else:
             sect_info = sect_application.get_sect_info(sect_id)
-            if int(sect_info['elixir_room_level']) == 0:
+            if sect_info is None:
+                raise DomainError("sect_missing", "sect is missing", {"subject": str(sect_id)})
+            room_level = require_exact_integer(sect_info['elixir_room_level'], field="elixir_room_level", subject=str(sect_id))
+            if room_level == 0:
                 msg = f"道友的宗门目前还未建设丹房！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
-            if int(user_info['sect_contribution']) < elixir_room_config['领取贡献度要求']:
+            if require_exact_integer(user_info['sect_contribution'], field="sect_contribution", subject=str(user_id)) < elixir_room_config['领取贡献度要求']:
                 msg = f"道友的宗门贡献度不满足领取条件，当前宗门贡献度要求：{elixir_room_config['领取贡献度要求']}点！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
             elixir_room_level_up_config = elixir_room_config['elixir_room_level']
+            if str(room_level) not in elixir_room_level_up_config:
+                raise DomainError("sect_elixir_level_unsupported", "unsupported elixir room level", {"subject": str(sect_id)})
             elixir_room_cost = elixir_room_level_up_config[str(sect_info['elixir_room_level'])]['level_up_cost']['建设度']
             if sect_info['sect_materials'] < elixir_room_cost:
                 msg = f"当前宗门资材无法维护丹房，请等待{config['发放宗门资材']['时间']}点发放宗门资材后尝试领取！"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
-            if int(user_info['sect_elixir_get']) == 1:
+            if require_exact_integer(user_info['sect_elixir_get'], field="sect_elixir_get", subject=str(user_id)) == 1:
                 msg = f"道友已经领取过了，不要贪心哦~"
                 await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_elixir_get.finish()
@@ -1024,8 +1116,9 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                         rewards.append((item_id, goods_info['name'], '丹药', amount))
 
             claim_outcome = sect_application.claim_elixir(
-                operation_id=_sect_operation_id(event, "elixir_claim", user_id) or f"sect:elixir:{user_id}:{sect_ids.new_id()}",
+                operation_id=operation_id,
                 user_id=user_id,
+                generated_rewards=True,
                 sect_id=sect_id,
                 contribution_required=elixir_room_config['领取贡献度要求'],
                 materials_required=elixir_room_cost,
@@ -1044,8 +1137,17 @@ async def sect_elixir_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
                     "materials_insufficient": "当前宗门资材无法维护丹房。",
                     "inventory_full": "背包已满，无法领取丹药。",
                 }
-                await handle_send(bot, event, result_failure("领取宗门丹药", result, messages=failure_messages))
+                subject = str(getattr(result, "subject", ""))
+                reason = getattr(result, "reason", "") or result.status
+                label = "本次领取回执" if "receipt" in reason else "本人" if subject == str(user_id) else f"编号{subject}"
+                await handle_send(bot, event, result_failure(
+                    "领取宗门丹药", result, messages=failure_messages, subjects={subject: label} if subject else None
+                ))
                 await sect_elixir_get.finish()
+            if claim_outcome.replayed or claim_data.get("status") == "duplicate":
+                msg = "该次宗门丹药领取已完成：\n" + "\n".join(
+                    f"{name} {amount} 枚" for _, name, _, amount in claim_data["rewards"]
+                )
             await handle_send(bot, event, msg, md_type="宗门", k1="领取丹药", v1="宗门丹药领取", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
             await sect_elixir_get.finish()
     else:
@@ -1293,11 +1395,11 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                     total_materials_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门功法搜寻已经完成，请刷新宗门信息。")
+                    await sect_mainbuff_get.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门功法搜寻已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("搜寻宗门功法", result))
+                    await handle_send(bot, event, result_failure("搜寻宗门功法", result))
                     await sect_mainbuff_get.finish()
 
                 # 构建结果消息
@@ -1391,11 +1493,11 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                     total_materials_cost,
                     owner_position=owner_position,
                 )
+                if result.status == "duplicate":
+                    await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
+                    await sect_secbuff_get.finish()
                 if not result.applied:
-                    if result.status == "duplicate":
-                        await handle_send(bot, event, "本次宗门神通搜寻已经完成，请刷新宗门信息。")
-                    else:
-                        await handle_send(bot, event, result_failure("搜寻宗门神通", result))
+                    await handle_send(bot, event, result_failure("搜寻宗门神通", result))
                     await sect_secbuff_get.finish()
 
                 # 构建结果消息
@@ -1577,11 +1679,11 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次攻击修炼升级已经完成，请刷新状态。")
+            await upatkpractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次攻击修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await upatkpractice.finish()
         msg = f"升级成功！\n道友当前攻击修炼等级\n> {useratkpractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级攻击修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1663,11 +1765,11 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
+            await uphppractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次元血修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await uphppractice.finish()
         msg = f"升级成功！\n道友当前元血修炼等级\n> {userhppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级元血修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1749,11 +1851,11 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             total_stone_cost,
             total_materials_cost,
         )
+        if result.status == "duplicate":
+            await handle_send(bot, event, "本次灵海修炼升级已经完成，请刷新状态。")
+            await upmppractice.finish()
         if not result.applied:
-            if result.status == "duplicate":
-                await handle_send(bot, event, "本次灵海修炼升级已经完成，请刷新状态。")
-            else:
-                await handle_send(bot, event, result_failure("升级宗门修炼", result))
+            await handle_send(bot, event, result_failure("升级宗门修炼", result))
             await upmppractice.finish()
         msg = f"升级成功！\n道友当前灵海修炼等级\n> {usermppractice + level_up_count}\n消耗灵石\n> {number_to(total_stone_cost)}枚\n消耗宗门资材\n> {number_to(total_materials_cost)}"
         await handle_send(bot, event, msg, md_type="宗门", k1="升级", v1="升级灵海修炼", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
@@ -1765,9 +1867,68 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         
         
 @sect_task_refresh.handle(parameterless=[Cooldown(cd_time=config['宗门任务刷新cd'])])
-@guard_command("刷新宗门任务")
 async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """刷新宗门任务"""
+    await _run_daily_sect_task('刷新宗门任务', _refresh_sect_task, bot, event)
+
+
+async def _run_daily_sect_task(action, handler, bot, event):
+    try:
+        return await handler(bot, event)
+    except (MatcherException, ProcessException):
+        raise
+    except DomainError as exc:
+        msg = failure_reply(action, exc) if reason_text(exc.details.get('reason', '')) or reason_text(exc.code) else report_exception(action, exc, event=event)
+    except Exception as exc:
+        msg = report_exception(action, exc, event=event)
+    await handle_send(bot, event, msg)
+
+
+def _task_failure(action, result, user_id):
+    subject = str(result.get('subject') or '')
+    reason = str(result.get('reason') or '')
+    label = '本次任务回执' if 'receipt' in reason else '本人' if subject == str(user_id) else f'宗门编号{subject}'
+    return result_failure(action, result, subjects={subject: label} if subject else None)
+
+
+async def _task_claim_replay(bot, event, user_id, action):
+    receipt = sect_application.task_claim_receipt(_sect_operation_id(event, action, user_id), user_id)
+    if receipt is None:
+        return False
+    await handle_send(bot, event, f"该次宗门任务操作已完成：{receipt['task_key']}。请查看当前任务。", md_type='宗门')
+    return True
+
+
+def _daily_sect_task(user_id):
+    task = get_user_sect_task(user_id)
+    if task is not None:
+        data = task.get('任务内容')
+        if not isinstance(data, dict) or not {'type', 'cost', 'give', 'sect', 'desc'}.issubset(data) or data['type'] not in {1, 2}:
+            raise DomainError('sect_task_data_invalid', 'invalid daily task contents', {'subject': str(user_id)})
+    return task
+
+
+async def _task_settlement_replay(bot, event, result, operation_id):
+    if result.get("weekly_event_status") == "pending":
+        from ..xiuxian_utils.game_events import record_required_sect_weekly_event
+
+        record_required_sect_weekly_event(
+            str(result["user_id"]),
+            "sect_task_complete",
+            1,
+            {
+                "source": "sect",
+                "action": "task_complete",
+                "trace_id": str(operation_id),
+                "settlement_operation_id": str(operation_id),
+                "sect_id": int(result["sect_id"]),
+            },
+        )
+    await handle_send(bot, event, f"该次宗门任务已完成：获得修为 {number_to(result['exp_reward'])}，贡献度 {result['sect_reward']}。", md_type='宗门')
+    await sect_task_complete.finish()
+
+
+async def _refresh_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -1775,13 +1936,15 @@ async def sect_task_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await sect_task_refresh.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    if await _task_claim_replay(bot, event, user_id, 'task_refresh'):
+        await sect_task_refresh.finish()
     if sect_id:
-        if get_user_sect_task(user_id):
+        if _daily_sect_task(user_id):
             refreshed_task = refresh_user_sect_task(
                 user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), return_failure=True
             )
             if "任务内容" not in refreshed_task:
-                await handle_send(bot, event, result_failure("刷新宗门任务", refreshed_task))
+                await handle_send(bot, event, _task_failure("刷新宗门任务", refreshed_task, user_id))
                 await sect_task_refresh.finish()
             if refreshed_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2015,9 +2178,12 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
     await sect_users.finish()
 
 @sect_task.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("接取宗门任务")
 async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """获取宗门任务"""
+    await _run_daily_sect_task('接取宗门任务', _claim_sect_task, bot, event)
+
+
+async def _claim_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -2025,6 +2191,8 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sect_task.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    if await _task_claim_replay(bot, event, user_id, 'task_claim'):
+        await sect_task.finish()
     if sect_id:
         user_now_num = int(user_info['sect_task'])
         if user_now_num >= config["每日宗门任务次上限"]:
@@ -2032,7 +2200,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             await handle_send(bot, event, msg)
             await sect_task.finish()
 
-        active_task = get_user_sect_task(user_id)
+        active_task = _daily_sect_task(user_id)
         if active_task:  # 已有任务
             if active_task['任务内容']['type'] == 1:
                 task_type = "⚔️"
@@ -2047,7 +2215,7 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             False, return_failure=True,
         )
         if "任务内容" not in claimed_task:
-            await handle_send(bot, event, result_failure("接取宗门任务", claimed_task))
+            await handle_send(bot, event, _task_failure("接取宗门任务", claimed_task, user_id))
             await sect_task.finish()
         if claimed_task['任务内容']['type'] == 1:
             task_type = "⚔️"
@@ -2062,10 +2230,13 @@ async def sect_task_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await sect_task.finish()
 
 
-@sect_task_complete.handle(parameterless=[Cooldown(cd_time=config['宗门任务完成cd'], stamina_cost = 3,)])
-@guard_command("完成宗门任务")
+@sect_task_complete.handle(parameterless=[Cooldown(cd_time=config['宗门任务完成cd'])])
 async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """完成宗门任务"""
+    await _run_daily_sect_task('完成宗门任务', _complete_sect_task, bot, event)
+
+
+async def _complete_sect_task(bot, event):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
     if not isUser:
@@ -2073,8 +2244,22 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await sect_task_complete.finish()
     user_id = user_info['user_id']
     sect_id = user_info['sect_id']
+    task_operation_id = _sect_operation_id(event, 'task_complete', user_id)
+    previous = sect_application.task_settlement_receipt(task_operation_id, user_id)
+    if previous is not None:
+        await _task_settlement_replay(bot, event, previous, task_operation_id)
+    if str(event.get_user_id()) not in ADMIN_IDS:
+        stamina = consume_player_stamina(user_id, 3, expected_stamina=require_exact_integer(user_info.get('user_stamina') or 0, field='user_stamina', subject=str(user_id)),
+                                         operation_id=_sect_operation_id(event, 'task_stamina', user_id))
+        if stamina.get('status') not in {'applied', 'duplicate'}:
+            if stamina.get('status') == 'state_changed' and not stamina.get('reason'):
+                stamina = {**stamina, 'reason': 'stamina_changed', 'subject': str(user_id)}
+            subject = str(stamina.get('subject') or '')
+            await handle_send(bot, event, result_failure('宗门任务体力消耗', stamina,
+                             subjects={subject: '本次体力回执' if 'receipt' in str(stamina.get('reason')) else '本人'} if subject else None))
+            await sect_task_complete.finish()
     if sect_id:
-        active_task = get_user_sect_task(user_id)
+        active_task = _daily_sect_task(user_id)
         if not active_task:
             msg = f"道友当前没有接取宗门任务哦！"
             await handle_send(bot, event, msg, md_type="宗门", k1="接取", v1="宗门任务接取", k2="完成", v2="宗门任务完成", k3="刷新", v3="宗门任务刷新")
@@ -2117,9 +2302,6 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(active_task['任务内容']['sect'])
-            task_operation_id = _sect_operation_id(
-                event, "task_complete", user_id
-            )
             settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
@@ -2131,11 +2313,14 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sect_stone,
                 active_task["任务名称"],
                 active_task["任务内容"],
+                enforce_current_period=True,
             )
             if not settlement.applied:
-                msg = result_failure("完成宗门任务", settlement)
+                msg = _task_failure("完成宗门任务", settlement, user_id)
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
+            if settlement.status == 'duplicate':
+                await _task_settlement_replay(bot, event, settlement, task_operation_id)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
@@ -2155,6 +2340,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
                         "trace_id": task_operation_id,
+                        "settlement_operation_id": task_operation_id,
+                        "require_sect_weekly": True,
                         "sect_id": sect_id, "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,
@@ -2199,9 +2386,6 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 get_exp = 1
                 exp_cap_note = "⚠️ 修为已近当前境界上限，本次所得修为收束为1点！\n"
             sect_stone = int(active_task['任务内容']['sect'])
-            task_operation_id = _sect_operation_id(
-                event, "task_complete", user_id
-            )
             settlement = sect_application.settle_task(
                 task_operation_id,
                 user_id,
@@ -2213,11 +2397,14 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 sect_stone,
                 active_task["任务名称"],
                 active_task["任务内容"],
+                enforce_current_period=True,
             )
             if not settlement.applied:
-                msg = result_failure("完成宗门任务", settlement)
+                msg = _task_failure("完成宗门任务", settlement, user_id)
                 await handle_send(bot, event, msg, md_type="宗门", k1="刷新", v1="宗门任务刷新", k2="完成", v2="宗门任务完成", k3="接取", v3="宗门任务接取", k4="日常", v4="日常")
                 await sect_task_complete.finish()
+            if settlement.status == 'duplicate':
+                await _task_settlement_replay(bot, event, settlement, task_operation_id)
             task_type_value = active_task['任务内容']['type']
             msg = (
                 f"**宗门任务**\n---\n✅ 任务完成\n"
@@ -2237,6 +2424,8 @@ async def sect_task_complete_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                     {
                         "source": "sect", "action": "task_complete", "skip_statistics": True,
                         "trace_id": task_operation_id,
+                        "settlement_operation_id": task_operation_id,
+                        "require_sect_weekly": True,
                         "sect_id": sect_id, "stone_delta": -int(costls), "exp_delta": get_exp,
                         "sect_contribution_delta": int(sect_stone), "sect_scale_delta": sect_stone,
                         "sect_materials_delta": sect_stone * 10,
@@ -2268,11 +2457,14 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await sect_owner_change.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
-    if user_info['sect_position'] != owner_position:
+    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
+    # A completed transfer must remain replayable after the former owner has
+    # been demoted; the repository still validates new requests against live
+    # authority and only permits a matching historical receipt through.
+    if user_info['sect_position'] != owner_position and not give_qq:
         msg = f"只有宗主才能进行传位。"
         await handle_send(bot, event, msg)
         await sect_owner_change.finish()
-    give_qq = get_at_user_id(args)  # 艾特的时候存到这里
     if give_qq:
         if give_qq == user_id:
             msg = f"无法对自己的进行传位操作。"
@@ -2280,12 +2472,23 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
             await sect_owner_change.finish()
         else:
             result = sect_application.transfer_owner(
-                _sect_operation_id(event, "transfer_owner", give_qq),
+                # The message id is the idempotency key; target stays in the
+                # repository payload so a reused message with another target
+                # is reported as an operation conflict.
+                _sect_operation_id(event, "transfer_owner", ""),
                 user_id,
                 give_qq,
                 owner_position=owner_position,
             )
-            if result.applied:
+            if result.status == "duplicate":
+                msg = "这条宗主传位请求已经完成，本次没有重复修改宗主和成员职位。"
+                await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员")
+                await sect_owner_change.finish()
+            elif result.status in {"operation_conflict", "state_changed"}:
+                msg = result_failure("宗主传位", result)
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
+            elif result.applied:
                 msg = f"传老宗主{result.actor_name or user_info['user_name']}法旨，即日起由{result.target_name}继任{result.sect_name}宗主"
                 await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
                 await sect_owner_change.finish()
@@ -2295,6 +2498,10 @@ async def sect_owner_change_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 await sect_owner_change.finish()
             elif result.status == "target_not_member":
                 msg = f"目标道友不在你管理的宗门内，请检查。"
+                await handle_send(bot, event, msg)
+                await sect_owner_change.finish()
+            elif result.status in {"not_owner", "sect_owner_changed", "sect_position_changed"}:
+                msg = "只有宗主才能进行传位。"
                 await handle_send(bot, event, msg)
                 await sect_owner_change.finish()
             else:
@@ -2351,6 +2558,9 @@ async def sect_rename_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         rename_data = rename_outcome.data or {}
         result = type("SectRenameView", (), rename_data)()
         result.applied = rename_outcome.ok
+        if rename_outcome.replayed or result.status == "duplicate":
+            await handle_send(bot, event, f"宗门已改名为{result.new_name}，本次操作未重复扣除资源。", md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
+            await sect_rename.finish()
         if result.status == "name_exists":
             msg = f"已存在同名宗门(自己宗门名字一样的就不要改了),请重新输入！"
             await handle_send(bot, event, msg, md_type="宗门", k1="改名", v1="宗门改名", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
@@ -2616,7 +2826,11 @@ async def sect_kick_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     kick_data = kick_outcome.data or {}
     result = type("SectKickView", (), kick_data)()
     result.applied = kick_outcome.ok
-    if result.status == "self_target":
+    if kick_outcome.replayed or result.status == "duplicate":
+        msg = "这条踢出宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("踢出宗门", kick_outcome)
+    elif result.status == "self_target":
         msg = f"无法对自己进行操作，试试退出宗门？"
     elif result.status == "different_sect":
         msg = f"{give_user['user_name']}不在你管理的宗门内，请检查。"
@@ -2650,10 +2864,6 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
         await handle_send(bot, event, msg, md_type="我要修仙")
         await sect_out.finish()
     user_id = user_info['user_id']
-    if not user_info['sect_id']:
-        msg = f"道友还未加入一方宗门。"
-        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
-        await sect_out.finish()
     position_this = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(position_this[0]) if len(position_this) == 1 else 0
     leave_outcome = sect_application.leave(
@@ -2664,12 +2874,23 @@ async def sect_out_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     leave_data = leave_outcome.data or {}
     result = type("SectLeaveView", (), leave_data)()
     result.applied = leave_outcome.ok
-    if result.status == "owner_cannot_leave":
+    if result.status == "not_in_sect" and not leave_outcome.replayed:
+        msg = "道友还未加入一方宗门。"
+        await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
+        await sect_out.finish()
+    if leave_outcome.replayed or result.status == "duplicate":
+        msg = "这条退出宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("退出宗门", leave_outcome)
+    elif result.status == "owner_cannot_leave":
         msg = f"宗主无法直接退出宗门，如确有需要，请完成宗主传位后另行尝试。"
         await handle_send(bot, event, msg, md_type="宗门", k1="传位", v1="宗主传位", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
         await sect_out.finish()
-    sect_name = result.sect_name or (sect_application.get_sect_info(int(user_info['sect_id'])) or {}).get('sect_name', '')
-    msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
+    elif result.status == "left":
+        sect_name = result.sect_name or (sect_application.get_sect_info(int(user_info['sect_id'])) or {}).get('sect_name', '')
+        msg = f"道友已退出{sect_name}，今后就是自由散修，是福是祸，犹未可知。"
+    else:
+        msg = result_failure("退出宗门", leave_outcome)
     await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
     await sect_out.finish()
 
@@ -2741,6 +2962,10 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         donation_data = donation_outcome.data or {}
         donation = type("SectDonationView", (), donation_data)()
         donation.applied = donation_outcome.ok
+        if donation_outcome.replayed or donation.status == "duplicate":
+            msg = "本次宗门捐献已经完成，请勿重复捐献。"
+            await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
+            await sect_donate.finish()
         if donation.status == "stone_insufficient":
             msg = f"道友的灵石数量小于欲捐献数量{donate_stone}，请检查"
             await handle_send(bot, event, msg, md_type="宗门", k1="捐献", v1="宗门捐献", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
@@ -2890,7 +3115,13 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
     position_data = position_outcome.data or {}
     result = type("SectPositionView", (), position_data)()
     result.applied = position_outcome.ok
-    if result.status == "target_not_member":
+    if position_outcome.replayed or result.status == "duplicate":
+        msg = "这条宗门职位变更请求已经完成，本次没有重复修改成员职位。"
+    elif result.status == "operation_conflict":
+        msg = result_failure("宗门职位变更", position_outcome)
+    elif result.status == "state_changed":
+        msg = result_failure("宗门职位变更", position_outcome)
+    elif result.status == "target_not_member":
         msg = f"请确保变更目标道友与你在同一宗门。"
     elif result.status == "target_not_below_actor":
         target_position = result.old_position
@@ -2918,7 +3149,7 @@ async def sect_position_update_(bot: Bot, event: GroupMessageEvent | PrivateMess
         msg = f"""传{actor_title}{result.actor_name or user_info['user_name']}法旨：
 即日起{result.target_name or give_user['user_name']}由{old_title}{action_text}本宗{new_title}"""
     else:
-        msg = f"请确保变更目标道友与你在同一宗门。"
+        msg = result_failure("宗门职位变更", position_outcome)
 
     await handle_send(bot, event, msg, md_type="宗门", k1="宗门", v1="我的宗门", k2="成员", v2="查看宗门成员", k3="帮助", v3="宗门帮助")
     await sect_position_update.finish()
@@ -2932,17 +3163,14 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await join_sect.finish()
     
-    # 检查是否已有宗门
-    sect_id = user_info['sect_id']
-    if user_info['sect_id']:
-        current_sect = sect_application.get_sect_info(sect_id)
-        current_sect_name = current_sect['sect_name'] if current_sect else sect_id
-        msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
-        await handle_send(bot, event, msg)
-        await join_sect.finish()
-    
     sect_input = args.extract_plain_text().strip()
     if not sect_input:
+        if user_info['sect_id']:
+            current_sect = sect_application.get_sect_info(user_info['sect_id'])
+            current_sect_name = current_sect['sect_name'] if current_sect else user_info['sect_id']
+            msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
+            await handle_send(bot, event, msg)
+            await join_sect.finish()
         msg = "请输入宗门编号或宗门名称！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await join_sect.finish()
@@ -2977,13 +3205,19 @@ async def join_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     result = type("SectJoinView", (), join_data)()
     result.applied = join_outcome.ok
     target_sect_name = getattr(result, "sect_name", None) or target_sect_name or sect_input
-    if result.applied:
+    if join_outcome.replayed or result.status == "duplicate":
+        msg = "这条加入宗门请求已经完成，本次没有重复修改成员关系。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("加入宗门", join_outcome)
+    elif result.applied:
         msg = (
             f"欢迎{user_info['user_name']}道友加入【{target_sect_name}】！"
             f"当前宗门人数：{result.member_count}/{result.member_limit}"
         )
     elif result.status == "already_in_sect":
-        msg = "道友已经加入其他宗门，无法重复加入！"
+        current_sect = sect_application.get_sect_info(user_info['sect_id']) if user_info['sect_id'] else None
+        current_sect_name = current_sect['sect_name'] if current_sect else user_info['sect_id']
+        msg = f"道友已经加入了宗门:{current_sect_name}，无法再加入其他宗门。"
     elif result.status == "sect_closed":
         msg = f"宗门【{target_sect_name}】已封闭，无法加入！"
     elif result.status == "join_closed":
@@ -3177,7 +3411,11 @@ async def sect_close_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         owner_position=owner_position,
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条关闭宗门加入请求已经完成，本次没有重复修改宗门状态。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("关闭宗门加入", result)
+    elif result.applied:
         msg = "已关闭宗门加入，其他修士将无法申请加入本宗！"
     elif result.status == "already_closed":
         msg = "宗门当前已经关闭加入。"
@@ -3215,7 +3453,11 @@ async def sect_open_join_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         owner_position=owner_position,
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条开放宗门加入请求已经完成，本次没有重复修改宗门状态。"
+    elif result.status in {"operation_conflict", "state_changed"}:
+        msg = result_failure("开放宗门加入", result)
+    elif result.applied:
         msg = "已开放宗门加入，其他修士可以申请加入本宗了！"
     elif result.status == "already_open":
         msg = "宗门当前已经开放加入。"
@@ -3277,21 +3519,24 @@ async def sect_close_mountain2_confirm(bot: Bot, event: GroupMessageEvent | Priv
     owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
-    if sect_position == owner_position:
-        result = sect_application.close_mountain(
-            _sect_operation_id(event, "close_mountain", sect_id),
-            user_info['user_id'],
-            owner_position=owner_position,
-            expected_sect_id=sect_id,
-        )
-        if result.applied:
-            msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
-        elif result.status == "already_closed":
-            msg = "宗门已经处于封闭状态。"
-        else:
-            msg = f"封闭山门失败（{result.status}）。"
-    else:
+    result = sect_application.close_mountain(
+        _sect_operation_id(event, "close_mountain", sect_id),
+        user_info['user_id'],
+        owner_position=owner_position,
+        expected_sect_id=sect_id,
+    )
+    if result.status == "duplicate":
+        msg = "这条封闭山门请求已经完成，宗门状态没有重复修改。"
+    elif result.status == "state_changed":
+        msg = result_failure("封闭山门", result)
+    elif result.applied:
+        msg = "已封闭山门！你已退位为长老，宗门现在处于无主状态。长老们可以使用【继承宗主】来继承宗主之位。"
+    elif result.status == "already_closed":
+        msg = "宗门已经处于封闭状态。"
+    elif result.status == "not_owner":
         msg = "只有宗主可以封闭山门！"
+    else:
+        msg = result_failure("封闭山门", result)
     
     await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
     await sect_close_mountain2.finish()
@@ -3311,44 +3556,25 @@ async def sect_inherit_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
         await sect_inherit.finish()
     
-    sect_info = sect_application.get_sect_info(sect_id)
-    if not sect_info['closed']:
-        msg = "宗门未封闭，无需继承！"
-        await handle_send(bot, event, msg)
-        await sect_inherit.finish()
-    
-    # 检查职位是否符合继承条件
-    if user_info['sect_position'] not in [1, 2, 6, 7]:  # 1=副宗主，2=长老, 6=大师兄，7=大师姐
-        msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_inherit.finish()
-    
-    # 检查是否有更高优先级的继承人
-    members = sect_application.list_sect_members(sect_id)
-    higher_priority = [
-        m for m in members 
-        if m['sect_position'] < user_info['sect_position'] 
-        and m['sect_position'] != 0  # 排除当前宗主
-    ]
-    
-    if higher_priority:
-        msg = "存在更高优先级的继承人，请等待他们继承！"
-        await handle_send(bot, event, msg, md_type="宗门", k1="继承", v1="继承宗主", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
-        await sect_inherit.finish()
-    
     result = sect_application.inherit_owner(
         _sect_operation_id(event, "inherit_owner", sect_id),
         user_info['user_id'],
         expected_sect_id=sect_id,
     )
-    if result.applied:
+    if result.status == "duplicate":
+        msg = "这条继承宗主请求已经完成，宗门状态没有重复修改。"
+    elif result.status == "state_changed":
+        msg = result_failure("继承宗主", result)
+    elif result.applied:
         msg = f"恭喜{result.actor_name or user_info['user_name']}继承宗主之位！宗门已解除封闭状态并开放加入。"
     elif result.status == "higher_priority":
         msg = "存在更高优先级的继承人，请等待他们继承！"
     elif result.status == "ineligible":
         msg = "只有副宗主、长老、大师兄、大师姐可以继承宗主之位！"
+    elif result.status == "not_closed":
+        msg = "宗门未封闭，无需继承！"
     else:
-        msg = f"继承失败（{result.status}）。"
+        msg = result_failure("继承宗主", result)
     await handle_send(bot, event, msg)
     await sect_inherit.finish()
 

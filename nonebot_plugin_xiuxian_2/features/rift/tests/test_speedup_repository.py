@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ....infrastructure.database import DatabaseUnitOfWork
+from ....infrastructure.database import DatabaseUnitOfWork, MigrationRunner
 from ....plugin import apply_platform_schema, build_migrations, migrations_for_database
 from ..application import RiftApplication
 from ..migrations import apply_rift_speedup_operations
@@ -70,6 +70,40 @@ class RiftSpeedupRepositoryTests(unittest.TestCase):
                 ).fetchone()
                 self.assertEqual(operation[0], json.dumps(["u", 9, 50], ensure_ascii=True))
                 self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=9").fetchone()[0], 0)
+
+    def test_production_entry_rejects_cooldown_projection_drift_without_consuming_item(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            self._create_state(database)
+            with db_backend.transaction(database) as conn:
+                conn.execute("UPDATE user_cd SET scheduled_time=90 WHERE user_id='u'")
+
+            result = RiftSpeedupSqlRepository(database).apply(
+                "drifted-cooldown", "u", 9, None, None, 50
+            )
+
+            self.assertEqual((result.status, result.reason), ("state_changed", "rift_duration_changed"))
+            with db_backend.connection(database) as conn:
+                self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=9").fetchone()[0], 1)
+                self.assertEqual(conn.execute("SELECT duration FROM rift_entries WHERE user_id='u'").fetchone()[0], 100)
+                self.assertEqual(conn.execute("SELECT scheduled_time FROM user_cd WHERE user_id='u'").fetchone()[0], 90)
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_speedup_operations").fetchone()[0], 0)
+
+    def test_production_entry_rejects_invalid_cooldown_projection_without_consuming_item(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            self._create_state(database)
+            with db_backend.transaction(database) as conn:
+                conn.execute("UPDATE user_cd SET scheduled_time='rift' WHERE user_id='u'")
+
+            result = RiftSpeedupSqlRepository(database).apply(
+                "invalid-cooldown", "u", 9, None, None, 50
+            )
+
+            self.assertEqual((result.status, result.reason), ("state_changed", "rift_duration_invalid"))
+            with db_backend.connection(database) as conn:
+                self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=9").fetchone()[0], 1)
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_speedup_operations").fetchone()[0], 0)
 
     def test_missing_startup_migration_is_rejected_without_request_ddl(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -153,6 +187,109 @@ class RiftSpeedupRepositoryTests(unittest.TestCase):
                 self.assertEqual(conn.execute("SELECT scheduled_time FROM user_cd WHERE user_id='u'").fetchone()[0], 100)
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_speedup_operations").fetchone()[0], 0)
 
+    def test_known_write_rejections_roll_back_all_speedup_state(self):
+        cases = (
+            (
+                "CREATE TRIGGER reject_item BEFORE UPDATE OF goods_num ON back "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_item_write_rejected",
+                "item-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER rewrite_entry AFTER UPDATE OF duration ON rift_entries "
+                "BEGIN UPDATE rift_entries SET duration=99 WHERE user_id='u'; END",
+                "rift_speedup_entry_write_rejected",
+                "entry-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_cd BEFORE UPDATE OF scheduled_time ON user_cd "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_cooldown_write_rejected",
+                "cd-rejected",
+                "u",
+            ),
+            (
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_speedup_operations "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "rift_speedup_receipt_write_rejected",
+                "receipt-rejected",
+                "receipt-rejected",
+            ),
+            (
+                "CREATE TRIGGER rewrite_receipt AFTER INSERT ON rift_speedup_operations "
+                "BEGIN UPDATE rift_speedup_operations SET new_time=99 WHERE operation_id='receipt-rewritten'; END",
+                "rift_speedup_receipt_write_rejected",
+                "receipt-rewritten",
+                "receipt-rewritten",
+            ),
+        )
+        for trigger, reason, operation_id, subject in cases:
+            with self.subTest(reason=reason):
+                with tempfile.TemporaryDirectory() as temp:
+                    database = Path(temp) / "game.db"
+                    self._create_state(database)
+                    with db_backend.transaction(database) as conn:
+                        conn.execute(trigger)
+
+                    result = RiftSpeedupSqlRepository(database).apply(
+                        operation_id, "u", 9, None, None, 50
+                    )
+
+                    self.assertEqual((result.status, result.reason, result.subject), (
+                        "state_changed", reason, subject,
+                    ))
+                    with db_backend.connection(database) as conn:
+                        self.assertEqual(tuple(conn.execute(
+                            "SELECT goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=9"
+                        ).fetchone()), (1, 1))
+                        self.assertEqual(tuple(conn.execute(
+                            "SELECT duration,rift_data FROM rift_entries WHERE user_id='u'"
+                        ).fetchone()), (100, '{"name":"test","time":100}'))
+                        self.assertEqual(conn.execute(
+                            "SELECT scheduled_time FROM user_cd WHERE user_id='u'"
+                        ).fetchone()[0], 100)
+                        self.assertEqual(conn.execute(
+                            "SELECT COUNT(*) FROM rift_speedup_operations"
+                        ).fetchone()[0], 0)
+
+    def test_receipt_rejection_recovers_with_same_operation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            self._create_state(database)
+            with db_backend.transaction(database) as conn:
+                conn.execute(
+                    "CREATE TRIGGER reject_receipt BEFORE INSERT ON rift_speedup_operations "
+                    "BEGIN SELECT RAISE(IGNORE); END"
+                )
+
+            first = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            self.assertEqual((first.status, first.reason, first.subject), (
+                "state_changed", "rift_speedup_receipt_write_rejected", "recover"
+            ))
+            with db_backend.transaction(database) as conn:
+                conn.execute("DROP TRIGGER reject_receipt")
+
+            recovered = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            replayed = RiftSpeedupSqlRepository(database).apply("recover", "u", 9, None, None, 50)
+            self.assertEqual((recovered.status, recovered.new_time, replayed.status), (
+                "applied", 50, "duplicate"
+            ))
+            with db_backend.connection(database) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT goods_num FROM back WHERE user_id='u' AND goods_id=9"
+                ).fetchone()[0], 0)
+                self.assertEqual(conn.execute(
+                    "SELECT duration FROM rift_entries WHERE user_id='u'"
+                ).fetchone()[0], 50)
+                self.assertEqual(conn.execute(
+                    "SELECT scheduled_time FROM user_cd WHERE user_id='u'"
+                ).fetchone()[0], 50)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM rift_speedup_operations"
+                ).fetchone()[0], 1)
+
     def test_bound_item_decrement_preserves_inventory_invariant(self):
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "game.db"
@@ -187,6 +324,32 @@ class RiftSpeedupRepositoryTests(unittest.TestCase):
         self.assertIn("rift.004", routed["game_db"])
         for database_key in ("player_db", "trade_db", "impart_db", "message_db"):
             self.assertNotIn("rift.004", routed[database_key])
+
+    def test_startup_runner_applies_rift_speedup_migration_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "game.db"
+            migration = next(
+                item for item in migrations_for_database(build_migrations(), "game_db")
+                if item.version == "rift.004"
+            )
+            runner = MigrationRunner((migration,))
+
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                self.assertEqual(runner.apply(uow), ["rift.004"])
+            with DatabaseUnitOfWork(database, immediate=True) as uow:
+                self.assertEqual(runner.apply(uow), [])
+                columns = {
+                    row["name"]
+                    for row in uow.query_all("PRAGMA table_info(rift_speedup_operations)")
+                }
+                history = uow.query_one(
+                    "SELECT version,name,checksum FROM schema_migrations WHERE version='rift.004'"
+                )
+
+            self.assertTrue({"operation_id", "payload", "new_time", "rift_data", "create_time"}.issubset(columns))
+            self.assertEqual(history["version"], "rift.004")
+            self.assertEqual(history["name"], migration.name)
+            self.assertEqual(history["checksum"], migration.checksum)
 
     def test_migration_upgrades_legacy_replay_table_without_losing_rows(self):
         with tempfile.TemporaryDirectory() as temp:

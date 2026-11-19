@@ -218,6 +218,78 @@ class WorkClaimApplicationTests(unittest.TestCase):
             self.assertEqual(replay.data["exp"], first.data["exp"])
             self.assertEqual(repository.calls, 1)
 
+    def test_known_write_rejection_is_failed_and_retries_after_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = _Repository("state_changed")
+            original_settle = repository.settle
+            calls = {"count": 0}
+
+            def settle_with_recovery(*args, **kwargs):
+                calls["count"] += 1
+                if calls["count"] == 1:
+                    return {
+                        "status": "state_changed",
+                        "reason": "work_settlement_receipt_write_rejected",
+                        "subject": "op-retry",
+                    }
+                return original_settle(*args, **kwargs)
+
+            repository.settle = settle_with_recovery
+            app = self._application(
+                WorkSettlementApplication, Path(directory) / "game.db", repository
+            )
+            kwargs = {
+                "operation_id": "op-retry", "user_id": "u",
+                "expected_work": {"create_time": "start", "scheduled_time": "采药"},
+                "exp_gain": 10, "item": None, "max_exp": 100, "max_goods_num": 99,
+            }
+            rejected = app.settle(**kwargs)
+            self.assertEqual((rejected.status, rejected.code), ("failed", "work_settlement_receipt_write_rejected"))
+            self.assertEqual(rejected.data["subject"], "op-retry")
+            self.assertIn("悬赏结算回执保存失败", rejected.message)
+            repository.status = "applied"
+            applied = app.settle(**kwargs)
+            self.assertTrue(applied.ok)
+            self.assertEqual(calls["count"], 2)
+
+    def test_actual_repository_rejection_recovers_through_application_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,exp INTEGER)")
+                uow.execute("INSERT INTO user_xiuxian VALUES('u',90)")
+                uow.execute("CREATE TABLE user_cd(user_id TEXT PRIMARY KEY,type INTEGER,create_time TEXT,scheduled_time TEXT)")
+                uow.execute("INSERT INTO user_cd VALUES('u',2,'start','采药')")
+                uow.execute("CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_name TEXT,goods_type TEXT,goods_num INTEGER,create_time TEXT,update_time TEXT,bind_num INTEGER,UNIQUE(user_id,goods_id))")
+                from ..migrations import apply_work_abort_cleanup, apply_work_offer_snapshots, apply_work_settlement_operations
+                apply_work_abort_cleanup(uow)
+                apply_work_offer_snapshots(uow)
+                apply_work_settlement_operations(uow)
+                uow.execute("INSERT INTO work_active_snapshots(user_id,snapshot,updated_at) VALUES('u','{}','now')")
+                uow.execute("INSERT INTO work_offer_snapshots(user_id,snapshot,updated_at) VALUES('u','{}','now')")
+                OperationLedger().ensure_schema(uow)
+                uow.execute("CREATE TRIGGER reject_receipt BEFORE INSERT ON work_settlement_operations BEGIN SELECT RAISE(IGNORE); END")
+            app = WorkSettlementApplication(database)
+            kwargs = {
+                "operation_id": "actual-retry", "user_id": "u",
+                "expected_work": {"create_time": "start", "scheduled_time": "采药"},
+                "exp_gain": 10, "item": {"id": 1, "name": "灵草", "type": "药材"},
+                "max_exp": 100, "max_goods_num": 99,
+            }
+            failed = app.settle(**kwargs)
+            self.assertEqual((failed.status, failed.code), ("failed", "work_settlement_receipt_write_rejected"))
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("DROP TRIGGER reject_receipt")
+            applied = app.settle(**kwargs)
+            duplicate = app.settle(**kwargs)
+            self.assertTrue(applied.ok)
+            self.assertTrue(duplicate.replayed)
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(uow.query_one("SELECT exp FROM user_xiuxian WHERE user_id='u'")["exp"], 100)
+                self.assertEqual(uow.query_one("SELECT type FROM user_cd WHERE user_id='u'")["type"], 0)
+                self.assertEqual(uow.query_one("SELECT goods_num FROM back WHERE user_id='u' AND goods_id=1")["goods_num"], 1)
+                self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM work_settlement_operations")["n"], 1)
+
     def test_repository_duplicate_is_replay_without_grants(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("duplicate")

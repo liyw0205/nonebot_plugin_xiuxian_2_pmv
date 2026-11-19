@@ -299,6 +299,74 @@ class ArenaChallengeSettlementTests(unittest.TestCase):
             self.feature_settle("rollback")
         self.assertEqual(self.pristine_state(), self.state())
 
+    def _assert_feature_write_rejection(self, trigger: str, reason: str, subject: str, operation: str):
+        case = self.__class__("test_feature_repository_commits_win_and_replays")
+        case.setUp()
+        try:
+            database = case.game if any(name in trigger for name in ("user_xiuxian", "settlement_operations")) else case.player
+            with db_backend.transaction(database) as conn:
+                conn.execute(trigger)
+            result = case.feature_settle(operation)
+            self.assertEqual((result["status"], result["reason"], result["subject"]),
+                             ("state_changed", reason, subject))
+            self.assertEqual(case.pristine_state(), case.state())
+            with db_backend.connection(case.game) as conn:
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM arena_challenge_settlement_operations"
+                ).fetchone()[0], 0)
+        finally:
+            case.tearDown()
+
+    def test_feature_repository_write_rejections_roll_back_each_projection(self):
+        cases = (
+            (
+                "CREATE TRIGGER reject_challenger BEFORE UPDATE OF score ON arena "
+                "WHEN NEW.user_id='user' BEGIN SELECT RAISE(IGNORE); END",
+                "arena_settlement_challenger_write_rejected", "user", "reject-challenger",
+            ),
+            (
+                "CREATE TRIGGER reject_opponent BEFORE UPDATE OF score ON arena "
+                "WHEN NEW.user_id='other' BEGIN SELECT RAISE(IGNORE); END",
+                "arena_settlement_opponent_write_rejected", "other", "reject-opponent",
+            ),
+            (
+                "CREATE TRIGGER reject_challenger_vitals BEFORE UPDATE OF hp ON user_xiuxian "
+                "WHEN NEW.user_id='user' BEGIN SELECT RAISE(IGNORE); END",
+                "arena_settlement_challenger_vitals_write_rejected", "user", "reject-challenger-vitals",
+            ),
+            (
+                "CREATE TRIGGER reject_opponent_vitals BEFORE UPDATE OF hp ON user_xiuxian "
+                "WHEN NEW.user_id='other' BEGIN SELECT RAISE(IGNORE); END",
+                "arena_settlement_opponent_vitals_write_rejected", "other", "reject-opponent-vitals",
+            ),
+            (
+                "CREATE TRIGGER reject_receipt BEFORE INSERT ON arena_challenge_settlement_operations "
+                "BEGIN SELECT RAISE(IGNORE); END",
+                "arena_settlement_receipt_write_rejected", "reject-receipt", "reject-receipt",
+            ),
+        )
+        for trigger, reason, subject, operation in cases:
+            with self.subTest(reason=reason):
+                self._assert_feature_write_rejection(trigger, reason, subject, operation)
+
+    def test_feature_repository_rechecks_projection_after_receipt_trigger(self):
+        case = self.__class__("test_feature_repository_commits_win_and_replays")
+        case.setUp()
+        try:
+            with db_backend.transaction(case.game) as conn:
+                conn.execute(
+                    "CREATE TRIGGER rewrite_receipt AFTER INSERT ON arena_challenge_settlement_operations "
+                    "BEGIN UPDATE arena_challenge_settlement_operations SET result_json='{}' "
+                    "WHERE operation_id='rewrite-receipt'; END"
+                )
+            result = case.feature_settle("rewrite-receipt")
+            self.assertEqual((result["status"], result["reason"], result["subject"]), (
+                "state_changed", "arena_settlement_receipt_write_rejected", "rewrite-receipt"
+            ))
+            self.assertEqual(case.pristine_state(), case.state())
+        finally:
+            case.tearDown()
+
 
 if __name__ == "__main__":
     unittest.main()

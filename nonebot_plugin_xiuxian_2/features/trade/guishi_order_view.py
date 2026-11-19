@@ -10,13 +10,14 @@ Pure rendering: no I/O, no clock reads, no NoneBot.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
 from typing import Any, Mapping, Sequence
 
 from .guishi_lifecycle import (
     DEFAULT_GUISHI_END_HOUR,
-    order_deadline,
-    order_remaining_seconds,
+    baitan_deadline,
+    business_time,
+    qiugou_deadline,
     parse_created_at,
 )
 
@@ -49,6 +50,7 @@ def order_status_line(
     created_at: Any = None,
     now: datetime,
     end_hour: int = DEFAULT_GUISHI_END_HOUR,
+    business_timezone: tzinfo | None = None,
 ) -> str:
     """One status line: the historical fields plus the deadline or remaining time."""
 
@@ -64,13 +66,17 @@ def order_status_line(
     )
 
     created = parse_created_at(created_at)
-    deadline = order_deadline(created, end_hour=end_hour)
+    if created is not None and business_timezone is not None:
+        created = business_time(created, business_timezone)
+    deadline_rule = qiugou_deadline if is_qiugou else baitan_deadline
+    deadline = deadline_rule(created, end_hour=end_hour)
     if deadline is None:
         return f"{base} {marker}：未知（历史订单）"
+    now = business_time(now, business_timezone or timezone.utc)
     if now >= deadline:
         return f"{base} {marker}：已{marker}（等待清理）"
     remaining_text = format_remaining(
-        order_remaining_seconds(created, now, end_hour=end_hour)
+        max(int((deadline - now).total_seconds()), 0)
     )
     return (
         f"{base} {marker}：{deadline.strftime('%m-%d %H:%M')}"
@@ -84,6 +90,7 @@ def order_status_lines(
     *,
     now: datetime,
     end_hour: int = DEFAULT_GUISHI_END_HOUR,
+    business_timezone: tzinfo | None = None,
 ) -> list[str]:
     """Render every order of one player, preserving the query order."""
 
@@ -94,6 +101,7 @@ def order_status_lines(
             created_at=anchors.get(str(order.get("id") or "")),
             now=now,
             end_hour=end_hour,
+            business_timezone=business_timezone,
         )
         for order in orders or []
     ]

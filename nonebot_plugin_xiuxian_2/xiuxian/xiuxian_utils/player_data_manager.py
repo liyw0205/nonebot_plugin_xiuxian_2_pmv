@@ -12,6 +12,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
+from ...core.errors import DomainError
 from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param
 
 
@@ -101,6 +102,25 @@ def _field_list_cache_charge(key, value):
             nested = (part for pair in item.items() for part in pair) if kind is dict else iter(item)
             stack.append((nested, depth + 1))
     return total
+
+
+class DocumentWriteRejected(DomainError):
+    def __init__(self, table_name, user_id, *, projection_mismatch=False):
+        if projection_mismatch:
+            code = "player_document_projection_mismatch"
+            message = "数据库中的状态与请求不一致"
+        else:
+            code = "player_document_write_rejected"
+            message = "数据库未保存状态变更"
+        super().__init__(
+            code, message, {"reason": code, "subject": user_id, "table": table_name}
+        )
+
+
+def _encode_doc_field(value):
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return None if value is None else str(value)
 
 
 class PlayerDataManager:
@@ -554,16 +574,7 @@ class PlayerDataManager:
                     for k, v in zip(fields, old_row):
                         old_map[k] = v
 
-            new_map = {}
-            for f in fields:
-                v = data.get(f)
-                if isinstance(v, (dict, list)):
-                    v = json.dumps(v, ensure_ascii=False)
-                elif v is None:
-                    v = None
-                else:
-                    v = str(v)
-                new_map[f] = v
+            new_map = {field: _encode_doc_field(data.get(field)) for field in fields}
 
             if dirty_check and exists:
                 changed = any(old_map.get(f) != new_map.get(f) for f in fields)
@@ -589,22 +600,51 @@ class PlayerDataManager:
         原子化读改写：
         mutator(doc) -> bool(是否有变化) 或 None(默认视为有变化)
         """
-        self._ensure_table_exists(table_name)
         user_id = str(user_id)
-
+        table_sql = self._quote_ident(table_name)
+        columns = [self._quote_ident(field) for field in fields]
+        select = f"SELECT {','.join(['user_id', *columns])} FROM {table_sql} WHERE user_id=%s"
         with self._conn_lock:
-            doc = self.get_doc(user_id, table_name, fields=fields, default_factory=default_factory)
-            if doc is None and default_factory:
-                doc = default_factory()
-                doc["user_id"] = user_id
-            elif doc is None:
-                doc = {"user_id": user_id}
+            self._ensure_table_exists(table_name)
+            for field in fields:
+                self._ensure_field_exists(table_name, field, "TEXT")
+            with db_backend.transaction(self.database_path) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                row = conn.execute(select, (user_id,)).fetchone()
+                if row is None:
+                    doc = default_factory() if default_factory else {}
+                    doc["user_id"] = user_id
+                else:
+                    doc = {
+                        field: self._json_load_if_possible(value)
+                        for field, value in zip(("user_id", *fields), row)
+                    }
+                changed = mutator(doc)
+                if changed is not None and not changed:
+                    return doc
 
-            ret = mutator(doc)
-            need_save = True if ret is None else bool(ret)
-            if need_save:
-                self.save_doc(user_id, table_name, doc, fields=fields, dirty_check=True)
-            return doc
+                values = tuple(_encode_doc_field(doc.get(field)) for field in fields)
+                if row is None:
+                    placeholders = ",".join(["%s"] * (len(columns) + 1))
+                    write = conn.execute(
+                        f"INSERT INTO {table_sql} ({','.join(['user_id', *columns])}) "
+                        f"VALUES ({placeholders})",
+                        (user_id, *values),
+                    )
+                elif tuple(row)[1:] != values:
+                    assignments = ", ".join(f"{column}=%s" for column in columns)
+                    write = conn.execute(
+                        f"UPDATE {table_sql} SET {assignments} WHERE user_id=%s",
+                        (*values, user_id),
+                    )
+                else:
+                    return doc
+                if write.rowcount != 1:
+                    raise DocumentWriteRejected(table_name, user_id)
+                saved = conn.execute(select, (user_id,)).fetchone()
+                if saved is None or tuple(saved)[1:] != values:
+                    raise DocumentWriteRejected(table_name, user_id, projection_mismatch=True)
+                return doc
 
     def close(self):
         with self._conn_lock:

@@ -7,14 +7,150 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class RiftSpeedupResult:
-    def __init__(self, status: str, new_time: int = 0, rift_data: dict | None = None, create_time: str | None = None, *, reason: str = "") -> None:
+    def __init__(self, status: str, new_time: int = 0, rift_data: dict | None = None, create_time: str | None = None, *, reason: str = "", subject: str = "") -> None:
         self.status, self.new_time, self.rift_data, self.create_time = status, new_time, rift_data or {}, create_time
-        self.reason = reason
+        self.reason, self.subject = reason, subject
+
+
+class _SpeedupWriteRejected(Exception):
+    def __init__(self, result: RiftSpeedupResult) -> None:
+        self.result = result
 
 
 class RiftSpeedupSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
+
+    @staticmethod
+    def _json_matches(value: object, expected: object) -> bool:
+        try:
+            return json.loads(str(value)) == expected
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return False
+
+    def _apply_writes(
+        self,
+        uow: DatabaseUnitOfWork,
+        *,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        current: dict,
+        current_duration: int,
+        create_time: object,
+        updated: dict,
+        new_time: int,
+        payload: str,
+        back_columns: set[str],
+    ) -> RiftSpeedupResult:
+        inventory = uow.query_one(
+            "SELECT goods_num" + (",bind_num" if "bind_num" in back_columns else "")
+            + " FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        if inventory is None or int(inventory.get("goods_num", 0) or 0) < 1:
+            return RiftSpeedupResult("item_missing", current_duration, current, create_time, subject=user_id)
+        before_goods = int(inventory["goods_num"])
+        before_bind = int(inventory.get("bind_num", 0) or 0)
+        expected_goods = before_goods - 1
+        expected_bind = min(max(before_bind - 1, 0), before_goods - 1)
+        snapshot = json.dumps(updated, ensure_ascii=False, sort_keys=True)
+        bind_update = ""
+        if "bind_num" in back_columns:
+            bind_update = ",bind_num=MIN(MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
+
+        try:
+            with uow.savepoint("rift_speedup"):
+                consumed = uow.execute(
+                    "UPDATE back SET goods_num=goods_num-1" + bind_update
+                    + " WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=1",
+                    (user_id, item_id),
+                )
+                saved_inventory = uow.query_one(
+                    "SELECT goods_num" + (",bind_num" if "bind_num" in back_columns else "")
+                    + " FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )
+                if (
+                    consumed.rowcount != 1
+                    or saved_inventory is None
+                    or int(saved_inventory.get("goods_num", -1)) != expected_goods
+                    or ("bind_num" in back_columns and int(saved_inventory.get("bind_num", -1)) != expected_bind)
+                ):
+                    raise _SpeedupWriteRejected(RiftSpeedupResult(
+                        "state_changed", current_duration, current, create_time,
+                        reason="rift_speedup_item_write_rejected", subject=user_id,
+                    ))
+
+                changed_entry = uow.execute(
+                    "UPDATE rift_entries SET rift_data=?,duration=? WHERE user_id=? AND status='active'",
+                    (snapshot, new_time, user_id),
+                )
+                saved_entry = uow.query_one(
+                    "SELECT rift_data,status,duration FROM rift_entries WHERE user_id=?", (user_id,)
+                )
+                if (
+                    changed_entry.rowcount != 1
+                    or saved_entry is None
+                    or str(saved_entry["status"]) != "active"
+                    or int(saved_entry["duration"]) != new_time
+                    or not self._json_matches(saved_entry["rift_data"], updated)
+                ):
+                    raise _SpeedupWriteRejected(RiftSpeedupResult(
+                        "state_changed", current_duration, current, create_time,
+                        reason="rift_speedup_entry_write_rejected", subject=user_id,
+                    ))
+
+                changed_cd = uow.execute(
+                    "UPDATE user_cd SET scheduled_time=? WHERE user_id=? AND type=3", (new_time, user_id)
+                )
+                saved_cd = uow.query_one(
+                    "SELECT type,create_time,scheduled_time FROM user_cd WHERE user_id=?", (user_id,)
+                )
+                try:
+                    saved_scheduled = int(saved_cd["scheduled_time"]) if saved_cd is not None else None
+                except (TypeError, ValueError):
+                    saved_scheduled = None
+                if (
+                    changed_cd.rowcount != 1
+                    or saved_cd is None
+                    or int(saved_cd["type"]) != 3
+                    or str(saved_cd["create_time"]) != str(create_time)
+                    or saved_scheduled != new_time
+                ):
+                    raise _SpeedupWriteRejected(RiftSpeedupResult(
+                        "state_changed", current_duration, current, create_time,
+                        reason="rift_speedup_cooldown_write_rejected", subject=user_id,
+                    ))
+
+                receipt = uow.execute(
+                    "INSERT INTO rift_speedup_operations(operation_id,payload,new_time,rift_data,create_time) "
+                    "VALUES(?,?,?,?,?)",
+                    (operation_id, payload, new_time, snapshot, create_time),
+                )
+                saved_receipt = uow.query_one(
+                    "SELECT payload,new_time,rift_data,create_time FROM rift_speedup_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                receipt_matches = False
+                if saved_receipt is not None:
+                    try:
+                        receipt_matches = (
+                            str(saved_receipt["payload"]) == payload
+                            and int(saved_receipt["new_time"]) == new_time
+                            and self._json_matches(saved_receipt["rift_data"], updated)
+                            and str(saved_receipt["create_time"]) == str(create_time)
+                        )
+                    except (TypeError, ValueError):
+                        receipt_matches = False
+                if receipt.rowcount != 1 or not receipt_matches:
+                    raise _SpeedupWriteRejected(RiftSpeedupResult(
+                        "state_changed", current_duration, current, create_time,
+                        reason="rift_speedup_receipt_write_rejected", subject=operation_id,
+                    ))
+        except _SpeedupWriteRejected as rejected:
+            return rejected.result
+        return RiftSpeedupResult("applied", new_time, updated, create_time, subject=user_id)
 
     def apply(self, operation_id: str, user_id: str, item_id: int, expected_rift: dict | None, expected_cd: dict | None, remaining_ratio: int) -> RiftSpeedupResult:
         if not operation_id or not user_id or int(item_id) <= 0 or not 0 < int(remaining_ratio) < 100:
@@ -59,6 +195,28 @@ class RiftSpeedupSqlRepository:
             current = json.loads(str(entry["rift_data"]))
             current_cd = {"type": int(cd["type"]), "create_time": cd["create_time"], "scheduled_time": cd["scheduled_time"]}
             current_duration = int(entry["duration"])
+            if expected_snapshot is None:
+                # The production command intentionally uses the database as its
+                # snapshot.  Still reject a split cooldown projection instead
+                # of consuming an item while silently overwriting it.
+                try:
+                    scheduled_duration = int(cd["scheduled_time"])
+                except (TypeError, ValueError):
+                    return RiftSpeedupResult(
+                        "state_changed",
+                        current_duration,
+                        current,
+                        cd["create_time"],
+                        reason="rift_duration_invalid",
+                    )
+                if scheduled_duration != current_duration:
+                    return RiftSpeedupResult(
+                        "state_changed",
+                        current_duration,
+                        current,
+                        cd["create_time"],
+                        reason="rift_duration_changed",
+                    )
             if current_duration != int(current.get("time", 0)) or (
                 expected_snapshot is not None
                 and (current != expected_rift or current_cd != expected_cd)
@@ -72,23 +230,19 @@ class RiftSpeedupSqlRepository:
             back_columns = {
                 str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")
             }
-            bind_update = ""
-            if "bind_num" in back_columns:
-                bind_update = ",bind_num=MIN(MAX(COALESCE(bind_num,0)-1,0),goods_num-1)"
-            consumed = uow.execute(
-                "UPDATE back SET goods_num=goods_num-1" + bind_update
-                + " WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=1",
-                (user_id, int(item_id)),
+            return self._apply_writes(
+                uow,
+                operation_id=operation_id,
+                user_id=user_id,
+                item_id=int(item_id),
+                current=current,
+                current_duration=current_duration,
+                create_time=cd["create_time"],
+                updated=updated,
+                new_time=new_time,
+                payload=payload,
+                back_columns=back_columns,
             )
-            if consumed.rowcount != 1:
-                return RiftSpeedupResult("item_missing", int(entry["duration"]), current, cd["create_time"])
-            snapshot = json.dumps(updated, ensure_ascii=False, sort_keys=True)
-            if uow.execute("UPDATE rift_entries SET rift_data=?,duration=? WHERE user_id=? AND status='active'", (snapshot, new_time, user_id)).rowcount != 1:
-                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"], reason="rift_duration_changed" if current_duration != int(current.get("time", 0)) else "rift_snapshot_changed" if current != expected_rift else "activity_type_changed" if current_cd["type"] != expected_cd["type"] else "training_start_changed" if current_cd["create_time"] != expected_cd["create_time"] else "rift_duration_changed")
-            if uow.execute("UPDATE user_cd SET scheduled_time=? WHERE user_id=? AND type=3", (new_time, user_id)).rowcount != 1:
-                return RiftSpeedupResult("state_changed", int(entry["duration"]), current, cd["create_time"], reason="rift_duration_changed" if current_duration != int(current.get("time", 0)) else "rift_snapshot_changed" if current != expected_rift else "activity_type_changed" if current_cd["type"] != expected_cd["type"] else "training_start_changed" if current_cd["create_time"] != expected_cd["create_time"] else "rift_duration_changed")
-            uow.execute("INSERT INTO rift_speedup_operations(operation_id,payload,new_time,rift_data,create_time) VALUES(?,?,?,?,?)", (operation_id, payload, new_time, snapshot, cd["create_time"]))
-            return RiftSpeedupResult("applied", new_time, updated, cd["create_time"])
 
 
 __all__ = ["RiftSpeedupSqlRepository", "RiftSpeedupResult"]

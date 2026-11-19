@@ -1,6 +1,1215 @@
 # 当前项目状态
 
-最后核验：2026-11-13。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+最后核验：2026-11-18。本文是唯一活跃进度入口；旧重构文档仅作为历史记录，不再定义当前分支或禁止事项。
+
+## 最新交付：宗门成员加入完整玩家组（G2 checkpoint）
+
+隔离 SQLite 红复现确认旧 `加入宗门` 在成员 `UPDATE` 被 trigger 改写、永久加入回执
+`RAISE(IGNORE)` 或回执改写时仍返回成功，成员关系、职位或回执可能不符合成功语义；SQLite
+`ABORT` 原异常保留。现仓储在保存点内逐步核成员写入影响行数与最终投影、开放/封闭状态、人数
+及永久回执影响行数和最终投影；`sect_member_join_member_write_rejected`、
+`sect_member_join_state_write_rejected`、`sect_member_join_receipt_write_rejected` 携具体
+`reason/subject` 回滚整笔 trigger 副作用，解除故障后同操作号可恢复，改 actor 保留
+`operation_conflict`。应用层把已知拒写保留为可重试失败，handler 先处理 replay/duplicate 和
+失败原因，不再被已有宗门前置检查截断有效带参重放。
+
+真实 `加入宗门` dispatch 覆盖名称参数、成员职位/人数/永久回执实际数据、同消息重放、同号冲突、
+成员写改写与回执 `IGNORE` 恢复，以及开放/封闭、容量、已有宗门和 SQLite `ABORT` 契约。
+OneBot 文本、QQ Markdown、发送失败降级为 mock 合同。受影响组合 `48 passed, 41 subtests`，
+新增参数组 `2 passed`；受影响 compileall 与 `git diff --check` 通过。仅使用 `/home` venv、
+共享锁和隔离 SQLite，未访问线上数据库、部署、`/root/myenv` 或真实 QQ；用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门商店兑换。** 先在隔离 SQLite 以真实 `宗门兑换` matcher/DI/handler
+红复现背包写入、周限购、宗门贡献/资材和永久回执的 `IGNORE`、改写、ABORT，核旧路径是否伪成功、
+资产/物品/回执是否部分提交；再覆盖正整数/默认/0/负数/非数字/多余参数、限购/资源/背包边界、
+重放/改参冲突、具体 `reason/subject`、完整回滚与同消息恢复、三库实际数据和 OneBot/QQ mock
+合同。不扩定时任务、商店之外玩法、性能或全仓审计。
+
+## 最新交付：宗门加入开放/关闭双入口完整玩家组（G2 checkpoint）
+
+隔离 SQLite 红复现确认旧 `开放宗门加入`/`关闭宗门加入` 在 `join_open` trigger 改写、永久回执
+`RAISE(IGNORE)` 或回执改写时仍返回成功，状态或回执可能不符合成功语义；SQLite `ABORT` 原异常保留。
+
+现仓储在 savepoint 内核对状态写入影响行数与 `sect_owner/closed/join_open` 最终投影，再核对永久回执影响行数及
+`actor_id/sect_id` 最终回读。四类已知拒写均携具体 `reason/subject`，事务完整回滚并支持解除故障后同操作号恢复；
+历史操作号换 actor 返回 `operation_conflict`。两个 handler 先处理 `duplicate`、冲突和 `state_changed`，不再被
+`applied` 误渲染为成功。
+
+真实 `关闭宗门加入`/`开放宗门加入` dispatch 覆盖实际 `join_open`、两张永久回执、成功 replay、冲突及状态/回执故障
+恢复；OneBot 文本、QQ Markdown、发送失败降级为 mock 合同。受影响组合 `48 passed, 39 subtests`，新增参数组
+`2 passed`，compileall 与 `git diff --check` 通过。冻结清单测试因用户既有删除
+`docs/refactor_phase2_legacy_path_items.json` 单独失败；该删除按约束保留且不暂存。
+
+**本组后续冻结已转为宗门商店兑换；成员加入证据见文档顶部。**
+
+## 最新交付：宗门改名完整玩家组（G2 checkpoint）
+
+隔离真实 `宗门改名` dispatch 复现两类伪正常：同消息 replay 由账本返回 `replayed=True`，旧 handler
+仍渲染长成功文案；宗门名称、易名符、永久回执的 `RAISE(IGNORE)` 或 trigger 改写未被逐写核验，
+可返回成功或留下副作用。改参数冲突则需保留账本首笔并给出具体原因。
+
+现 repository 对名称/储备、易名符和永久回执逐步检查影响行数及最终投影；
+`sect_rename_state_write_rejected`、`sect_rename_card_write_rejected`、
+`sect_rename_receipt_write_rejected` 在事务回滚后携 `reason/subject` 返回，SQLite `ABORT` 原异常
+透传。应用层将已知拒写记为可恢复失败，解除故障后同操作号重试；handler 识别 replay/duplicate，
+只提示已完成且不重复扣资源。改参仍返回 `operation_conflict`，不改写首笔回执。
+
+真实参数组覆盖合法改名、空白/超长/同名、费用/易名符边界、同消息 replay/改参冲突、三处拒写恢复，
+以及 OneBot 文本、QQ Markdown、发送失败降级 mock 合同；仓储覆盖三处 `IGNORE`、trigger 改写和
+`ABORT`，核名称/宗门储备/道具/回执实际数据及完整回滚。受影响组合 `298 passed, 43 subtests`
+（含旧宗门命令/捐献回归），改名定向 `6 passed, 3 subtests`；architecture `ok=true`、inventory、
+受影响 compileall、`git diff --check` 通过。仅使用 `/home` venv、共享锁和隔离 SQLite，未访问线上
+数据库/部署/`/root/myenv`，真实 QQ 未联调；用户既有 JSON 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门职位变更。** 先在隔离 SQLite 以真实 `宗门职位变更` matcher/DI/handler
+复现成员职位写入、永久回执的 `IGNORE`/改写/ABORT 与 replay/冲突，再覆盖职位名/编号、权限与名额
+边界、具体 `reason/subject`、整笔回滚/恢复、实际成员数据和 OneBot/QQ mock 合同；不扩宗门传位、
+踢人/退宗、定时任务、性能或全仓审计。
+
+## 最新交付：宗门捐献完整玩家组（G2 checkpoint）
+
+隔离 SQLite 与真实 `宗门捐献` dispatch 复现了两层伪正常：首次成功后的同消息回放由
+`OperationLedger` 返回 `replayed=True`，旧 handler 只看历史数据状态 `donated`，再次输出成功
+文案；改参数请求则由账本抛出 `OperationConflictError`，未进入具体拒绝回复而被命令兜底成泛化异常。
+仓储故障注入还确认玩家扣款/贡献、宗门建设/资材和永久回执三处 `RAISE(IGNORE)`、trigger 改写
+均必须整笔回滚，SQLite `ABORT` 原异常保留。
+
+现 `sect_donate` 同时识别 `donation_outcome.replayed` 与仓储 `duplicate`，重放只提示已完成、不
+重复扣款；`SectApplication._execute` 将账本改参冲突转为 `reason=operation_conflict,
+subject=actor` 的具体拒绝，不改写首笔回执。仓储继续逐写核 `rowcount`/最终投影，已知拒写保留
+`sect_donation_member_write_rejected`、`sect_donation_assets_write_rejected`、
+`sect_donation_receipt_write_rejected` 并在解除触发器后以同操作号恢复。
+
+真实参数组覆盖正整数、空白/0/负数/非数字/多余参数/超大数、同消息重放、改参冲突、三处拒写
+恢复和 OneBot 文本、QQ Markdown、发送失败降级 mock 合同；隔离数据核玩家灵石/贡献、宗门三项
+资产、永久回执与完整回滚。受影响仓储/应用/入口组合 `12 passed, 5 subtests passed`，参数
+矩阵两组 `6 passed, 3 subtests passed`；architecture `ok=true`、inventory、受影响 compileall、
+`git diff --check` 均通过。仅使用 `/home` venv、共享锁和隔离 SQLite，未访问线上数据库/部署/
+`/root/myenv`，真实 QQ 未联调；用户既有 JSON 删除保持且不暂存，main/Release 不动。
+
+**下一冻结完整玩家组：宗门改名。** 先以真实 `宗门改名` matcher/DI/handler 在隔离 SQLite 复现
+名称/费用/道具/永久回执的 IGNORE、改写、ABORT 和 replay/冲突，再覆盖合法/空白/重复名称、费用
+与道具边界、具体 `reason/subject`、完整回滚/恢复、实际数据和 OneBot/QQ mock 合同；不扩成员
+管理、商店、定时任务、性能或全仓审计。
+
+## 最新交付：宗门三项修炼升级完整玩家组（G2 checkpoint）
+
+隔离 SQLite 与真实 `升级攻击修炼`、`升级元血修炼`、`升级灵海修炼` dispatch 复现了两类
+伪正常：永久回执 `INSERT ... RAISE(IGNORE)` 时旧仓储仍可能返回成功并提交玩家等级、
+错误的宗门资材扣减及 trigger 副作用；同一消息在玩家等级已推进后会被动态参数误判为
+`operation_conflict`。旧实现还未核玩家灵石写入，导致玩家资产链与兼容实现不一致。
+
+现 `SectPracticeSqlRepository` 在玩家灵石/等级、宗门资材和永久回执每一步检查影响行数与
+最终投影，已知 `sect_practice_player_write_rejected`、`sect_practice_assets_write_rejected`、
+`sect_practice_receipt_write_rejected` 携 `reason/subject` 退出事务并完整回滚 trigger 副作用；
+SQLite `ABORT` 原异常透传。重复操作按同一入口、升级步数和成本识别 `duplicate`，允许玩家
+当前等级已到目标后的同消息回放；改数量仍保留具体 `operation_conflict`。三个 handler 显式
+优先处理 `duplicate`，不再被全局 `applied` 误渲染为再次成功。
+
+真实参数组覆盖三入口合法数量、同消息重放/改参数冲突、空白默认值、0/负数/非数字/多余参数/
+单次上限、职位和资材边界；回读玩家灵石/三项等级、宗门资材与 `sect_used_stone`、永久回执及
+`integrity_check`。仓储覆盖三处 IGNORE/改写、ABORT、整笔回滚与故障解除恢复；OneBot 文本、
+QQ Markdown、发送失败降级为 mock 合同。受影响组合 `16 passed`，参数矩阵 `3/3`，架构、编译、
+diff 均通过；仅使用 `/home` venv 和隔离 SQLite，未触碰线上库/部署/环境，真实 QQ 未联调。
+
+本组代码与测试已白名单普通提交推送 `develop`：`325811edfcf913a6b91d3e12338e55ac2577d249`，
+`git ls-remote` 与显式更新后的 `origin/develop` 均核得同 SHA；`main` 仍未变。用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除、`.codex-goal.md` 不暂存不提交。总 goal/G2--G5、
+真实客户端和发布门禁仍未完成，`main`/Release 不动；下一冻结组为宗门捐献完整玩家组，先做隔离
+红复现，不外推本组结论。
+
+## 最新交付：宗门功法/神通搜寻双入口完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实 `宗门功法搜寻` / `宗门神通搜寻` dispatch 复现永久回执
+`INSERT ... RAISE(IGNORE)` 伪成功：旧路径返回 `applied`，宗门目录、灵石和资材已变化，
+回执为0，更新触发副作用已提交。根因是搜寻仓储只校验目录/资产 UPDATE，未检查永久回执
+影响行数或最终回读；同时 `duplicate` 被全局 `applied` 判定遮住，重复搜寻被渲染成再次成功。
+
+现仓储校验目录版本、目录/资产写入影响行数与最终投影、永久回执影响行数与最终投影；
+已知 `sect_buff_search_state_write_rejected`、`sect_buff_search_receipt_write_rejected` 在
+事务退出后携 `reason/subject` 返回，整笔回滚并清除触发副作用，SQLite `ABORT` 原异常透传；
+故障解除后同操作号恢复，成功重放不重复扣费。两个 handler 先处理 `duplicate`，避免把已完成
+回执渲染成新成功。
+
+仓储回归覆盖目录/回执 `IGNORE`、触发器改写、`ABORT`、旧目录参数冲突、完整快照回滚与恢复；
+真实参数组覆盖双入口合法无参搜寻、同消息重放、宗主权限、灵石边界、回执拒写恢复，以及
+OneBot纯文本、QQ Markdown/发送失败降级 mock 合同。受影响组合 `45 passed, 1 deselected,
+56 subtests`；真实参数 handoff `1/1`、矩阵 `4/4`；compileall、`git diff --check`通过。
+仅使用项目 `/home` venv 与隔离SQLite，未访问线上库/部署/共享环境，真实QQ未联调；无新迁移。
+
+本组代码与测试待白名单普通提交推送 `develop` 后核远端 SHA；用户既有
+`docs/refactor_phase2_legacy_path_items.json` 删除、`.codex-goal.md` 不暂存不提交。G2/G3--G5、
+真实客户端和发布门禁仍未完成，main/Release不动；下一组仍须从现有G2矩阵冻结并先红复现。
+
+## 最新交付：学习宗门功法完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实`学习宗门功法` dispatch 复现永久回执 `INSERT ... RAISE(IGNORE)` 伪成功：旧路径
+回复成功、扣除宗门资材并写入 `BuffInfo`，回执为0且trigger副作用已提交。根因是
+`learn_main` 在 savepoint 内直接返回，外层事务因此提交，同时不检查三步写入影响行数或最终回读。
+
+现仓储对启动迁移表 fail-closed，资材 UPDATE、`BuffInfo` UPDATE 和永久回执 INSERT 均校验
+`rowcount` 与最终投影；已知 `sect_mainbuff_materials_write_rejected`、
+`sect_mainbuff_buff_write_rejected`、`sect_mainbuff_receipt_write_rejected` 在外层事务回滚后
+携 `reason/subject` 返回，经应用、指令回复和 ledger 保留具体原因。trigger 改写被最终回读拒绝，
+SQLite `ABORT` 原异常透传；故障解除后同操作号可恢复，成功重放不重复扣费/写回执。
+
+真实参数组覆盖合法功法名、同消息重放、空白/未知名、资材不足、职位限制、回执IGNORE后恢复，
+以及OneBot纯文本、QQ Markdown/发送失败降级mock合同；仓储覆盖资材/BuffInfo/回执三处IGNORE、
+回执改写、ABORT和副作用整笔回滚。定向组合 `21 passed, 2 subtests passed`，相关源码/兼容筛选
+`7 passed`；architecture `ok=true`、inventory、compileall、`git diff --check`通过。仅使用项目
+`/home` venv与隔离SQLite，未访问线上库/部署/共享环境，真实QQ未联调。
+
+代码与测试随后白名单普通提交推送 `develop`；用户既有 `docs/refactor_phase2_legacy_path_items.json`
+删除、`.codex-goal.md`和辅助报告不提交。G2/G3--G5、真实客户端和发布门禁仍未完成，main/Release
+不动；下一相关完整组冻结为宗门神通学习，先做同样的隔离红复现，不外推本组结论。
+
+## 最新交付：学习宗门神通完整玩家组（G2 checkpoint）
+
+隔离SQLite与真实`学习宗门神通` dispatch 复现同类伪正常：永久学习回执 `INSERT ... RAISE(IGNORE)`
+时旧路径返回 `learned`，宗门资材与 `BuffInfo.sec_buff` 已变化，回执为0且trigger副作用提交。
+现 `learn_secondary` 对迁移表、资材 UPDATE、`BuffInfo` UPDATE、永久回执 INSERT 做影响行数和最终
+回读；`sect_secbuff_materials_write_rejected`、`sect_secbuff_buff_write_rejected`、
+`sect_secbuff_receipt_write_rejected` 在外层事务回滚后保留 `reason/subject`，应用/ledger/指令
+回复可见。trigger改写拒绝，SQLite `ABORT` 原异常透传；故障解除后同操作号恢复，已学习职位/资材
+门槛和历史规则保持。
+
+真实参数覆盖合法神通名、成功后的实际职位重放提示、空白/未知名、资材不足、职位限制、回执IGNORE
+恢复；仓储覆盖三处IGNORE、ABORT、副作用回滚，OneBot文本、QQ Markdown/发送失败降级为mock合同。
+定向 `16 passed, 4 subtests passed`，真实handoff `1/1`、参数矩阵 `3/3`，compileall/diff通过；
+未触碰线上库、部署或共享环境，真实QQ未联调。本组随后白名单提交推送develop，goal与用户JSON删除不提交。
+
+下一相关完整组冻结为`宗门功法/神通搜寻`双入口：隔离红证据已确认搜寻回执 `INSERT ... RAISE(IGNORE)`
+仍返回 `applied`，灵石/资材和目录变更提交、永久回执为0、trigger副作用为1；下一轮仅覆盖真实搜寻
+matcher/DI/handler、双类型目录写入、权限/资材边界、回执拒写/改写/ABORT、恢复/重放与适配器合同，
+不扩学习、奖励、性能或全仓审计。
+
+## 当前交付：宗门任务完成与周常同门勤务可靠记账（G2 checkpoint）
+
+隔离三库的真实`宗门任务完成`dispatch复现伪正常：灵石、经验、次数、统计及主结算回执已
+提交，命令却回复成功；`sect_weekly_goal`仍为`progress=0,participants={}`，IGNORE trigger
+副作用实际提交。根因是周常仓储只返回内存投影、不核UPDATE是否持久化，安全事件包装吞掉失败，
+指令继续成功回复。
+
+新增`sect.020`：旧任务回执默认`legacy`，新结算回执以`pending`表示周常待记账。周常进度、
+参与者与`pending→recorded`同事务核影响行数和最终回读；已知拒写回滚周常事务及trigger副作用，
+保留`reason/subject`，SQLite原异常透传。同消息重放只补`pending`，不再扣费、发奖或增加统计。
+保留HP/灵石消耗、奖励、次数及周常周期；旧回执不猜补记。
+
+真实参数组覆盖无参HP/灵石任务、周常IGNORE具体提示、SQLite ABORT原异常日志、恢复和同消息
+重放；回读三库资产、体力、统计、结算状态、周常参与者及完整性。OneBot文本、QQ Markdown与
+发送失败降级为mock合同，未真机。参数报告`3/3 pass`；仓储/应用/入口及历史兼容组合
+`149 passed, 38 subtests passed`，有重叠不累计。受影响编译、diff、
+architecture/inventory通过。仅用`/home` venv、共享锁和隔离SQLite，不跑全量、不轮询CI。
+
+本组已白名单普通提交`65625de2192149e66d6ccc7bc8587083220897a3`并推送`develop`，远端
+`refs/heads/develop`核得同SHA；用户JSON删除、goal及辅助报告不提交，线上库/部署/环境及
+`main`/Release不动。下一组已转为宗门神通学习，仍需独立红复现与完整玩家验收；总goal仍active。
+
+## 最近交付：每分钟体力恢复与玩家任务交接
+
+宗门任务/体力消费已推develop；ee843e83精确CI44045484742已核completed/success，
+复用该绿基线。隔离首轮8fail/1pass证实IGNORE、改写、缺文件/列和非法恢复配置仍让
+真实调度回调EXECUTED，IGNORE还提交trigger副作用；原SQLite ABORT正确回滚并报错。
+现恢复批次逐行校验/最终回读，拒写在当前批次事务内回滚并向APScheduler抛错，原异常
+透传；此前已提交批次保留且停止后续。非法配置、缺迁移携具体reason/subject；真实任务
+注册、pending激活重试、interval边界和实际触发通过隔离APScheduler核验。参数链在隔离
+三库贯穿恢复失败→指令仍体力不足→恢复成功→任务消费及成功消息回放，OneBot/QQ为
+mock合同，无真机或部署验证。受影响组合113 passed、139 subtests passed，重叠不累计。
+architecture含inventory、独立inventory、受影响编译/diff通过，新恢复回归已接CI。
+过程中的event traceback断言和参数mock配置/冷却等夹具错误已修正，未放宽业务断言；
+精确提交`a739d7f8de1e328489ba5c37867f8c4a7184cfdb`的CI44051907668已核
+completed/success，不复跑已绿全量。功能与测试已推送develop，main未变。
+
+保持每分钟恢复量/上限/按rowid分批、NULL与重复行兼容；下一tick是原规则下新一次恢复，
+不新增永久周期回执、断点自动补跑或补偿策略，不扩restore/其他玩法/性能或全仓。
+用户JSON删除与goal/辅助资料不提交；线上库/部署/环境及main/Release不动。
+
+## 最近交付：世界BOSS兑换完整玩家闭环
+
+用户指定复用定时任务优先 goal，不新建重复 goal。5c5ca20c/CI43947994349已核绿，复用该
+全量基线，不重跑全量。现有真实SQLite故障注入证实积分、周限购、背包和业务回执的
+`RAISE(IGNORE)`/trigger改写会造成早期步骤未校验；更靠后的 `operation_ledger` 最终
+UPDATE 被忽略后，资产及业务回执已提交，旧路径仍可能输出成功而重试卡在处理中。
+
+现写入逐步检查行数与最终回读，末尾重新核对积分、周限购、背包和永久回执；已知拒写
+携 `reason/subject`，整笔回滚 trigger 副作用并释放未结算请求。共享 `OperationLedger.finish`
+核验最终账本结果及审计行后才写完成日志。若业务已提交而账本未收尾，玩家只收到待核查，
+同请求从已验证的业务回执只修账本、不重扣分/发物；新 envelope 和可通过请求哈希验证的旧
+数组 payload 均覆盖，进程中断遗留 `started` 也可恢复。未知数据库异常保留 traceback。
+
+真实 `world-boss-purchase` matcher/DI 参数组覆盖默认数量/别名/限购裁切、余额/上限/错误参数、
+成功重放/冲突、三步 IGNORE/改写/ABORT 与恢复，以及资产提交后 ledger 忽略、旧数组回执和
+`started` 状态恢复。OneBot纯文本和QQ Markdown/发送失败降级为mock合同，未真机。当前入口
+pytest不是unittest discover覆盖，已加入CI定向pytest组。定向组合32 passed/3 deselected；
+入口/应用/仓储/账本/迁移组合72 passed、2 subtests；受影响文件compileall、architecture、
+inventory、`git diff --check`均通过。不重跑已绿全量。
+
+本组代码/功能文档与测试已在develop完成定向验证；白名单提交推送后只单点核验精确SHA CI，不合main、不发版。
+只用 `/home` 项目共享环境与隔离三库，未访问或修改 `/root/xiu2`、`/root/myenv` 或线上服务；
+用户JSON删除和 `.codex-goal.md` 保留且不提交。
+
+## 已完成：世界BOSS讨伐结算写入与账本恢复（develop checkpoint）
+
+本组交付范围为玩家 `世界BOSS讨伐` 的真实 dispatch→战斗结果→`BossApplication.settle`→
+体力/冷却/积分/灵石/修为/统计/首领状态/永久回执/ledger，先隔离复现各持久化步骤的
+IGNORE/改写/ABORT 与业务提交后 ledger 中断。验证错误 reason/subject、完整回滚与 trigger
+副作用、同请求重试/重放不重复扣体力或发奖，并核对三库数据与完整性。保留伤害上限、
+奖励、每日额度、冷却与战斗规则；OneBot/QQ只做短mock合同，不做真机，不扩刷新/天罚/其他
+商店或全仓审计。已存在的 `world-boss-refresh` 参数链只验证正常讨伐与重放，不替代本组
+故障路径；源码疑点先以隔离数据库建立红证据，不预判根因。线上库/部署/环境、main/Release
+保持不动，完整目标完成且发布门禁满足前不合 main。
+
+## G2切片：宗门周常奖励领取完整玩家组（开发验收）
+
+隔离SQLite红复现证实永久回执`INSERT ... RAISE(IGNORE)`仍返回applied：玩家资产从
+`(10,20,30)`变为`(26,26,49)`，宗门资产从`(100,200)`变为`(121,223)`，背包多5件、
+BOSS积分多25、两个目标已标领取但永久回执为0；回执触发器副作用也会随错误的成功事务留下。
+现仓储逐项校验写影响行数，并在末步重新回读玩家/宗门资产、背包/绑定、积分、目标状态和回执；
+任何已知拒写在attached game+player事务内完整回滚，之后以`reason/subject`返回。
+具体`sect_weekly_*_write_rejected`穿过应用与真实指令回复；未知SQLite `ABORT`原异常透传，
+同消息故障解除后可完成，成功重放不重复奖励。
+
+真实matcher/DI/handler参数组覆盖无参全领、目标别名单领、未知/未完成/已领、退宗、背包上限、
+永久回执IGNORE后的具体失败/整笔恢复/同消息成功重放，以及SQLite ABORT/原异常可见/恢复。
+核对三库资产与领取状态快照、trigger副作用、永久回执和`integrity_check`；OneBot文本、QQ
+Markdown及发送失败降级为mock合同，未做真机。仓储/应用/入口组合`28 passed, 8 subtests`；
+新增永久回执自身被trigger改写回归后，仓储文件`10 passed, 6 subtests`；补入退宗场景后的
+参数入口文件`15 passed`。各组有重叠、不累计。architecture gate返回`ok`，独立inventory `3 passed`，
+受影响文件`compileall`与`git diff --check`通过。保持既有奖励、周期、进度、回执格式与迁移；
+不碰线上库、部署、共享环境或`/root/myenv`，不跑全量/轮询CI。
+
+本组已白名单普通提交推送develop：`41690951c0230e0794e95edc6902b5f50aa80abc`，
+`origin/develop`核得同SHA；未查CI。随后仓储红复现成为“宗门任务完成→同门勤务可靠记账”
+完整组起点，当前实现与验收见顶部最新交付，不再是下一待办。G2--G5与真实客户端/发布门禁
+未完成，用户JSON删除和`.codex-goal.md`不暂存，不合main或发版。
+
+## 宗门任务体力消费与永久回执（当前交付）
+
+上一任务完整组已普通推develop：e54ed250f59a02bc314672b058c9ab33bc145c42，远端
+一致、main仍5bef9e06。精确CI44040298434已核completed/failure，6243项unittest
+仅task_settlement_clock_injected静态检查失败：新增task_timezone使旧完整构造串
+不匹配。本组允许额外关键字，同时保留clock注入与实际使用检查，新增移除clock
+反例验证门禁仍拒绝；原失败测试定向通过，未watch/重跑全量。
+
+沿已冻结体力交接，首6fail/2pass证实user拒写仅state_changed、回执拒写和改写/
+末步篡改仍applied；ABORT原本正确回滚。真实指令另红证实具体写拒绝被覆盖成体力
+快照变化。现扣减/回执逐步行数+最后回读，已知拒绝跨出事务后转结果，体力及trigger
+副作用整笔回滚，任务结算不开始；两个stamina_{user,receipt}_write_rejected携
+主体至实际宗门指令和共享Cooldown。正常快照竞争、坏体力/历史回执各保留原因，
+SQLite原异常/失败投递透传；恢复后的旧成功仍权威，不重扣。保留旧first-row投影、
+无operation调用和管理员免体力规则，无新迁移，不改recover/restore或其他玩法。
+
+28项新回归涵盖两步IGNORE/改写/末步篡改/ABORT、无回执调用、原payload身份、
+历史/坏数值/并发、共享依赖具体原因与失败投递。sect-task-stamina真实dispatch/
+DI/handler核六种拒写恢复、体力不足→实际恢复任务→ABORT安全定位→同消息恢复、
+旧消息与管理员免消耗；核三库资产/永久回执/统计/integrity，24个OneBot/QQ文本/
+Markdown/降级mock合同，无真机。首参数成功文案夹具和扩展ABORT冷却夹具已纠正，
+时钟门禁反例绕过只读结果缓存后正确生效，未删除业务断言或放宽发布门禁。
+
+初受影响组合57pass/138subtests；扩展后118pass/138subtests，唯一失败为上述冷却
+夹具，修正后参数包装1pass。最后管理员兼容及实际任务参数/handler10pass，相关
+源码13pass；最后原因/失败投递组合42pass/138subtests，缺迁移与请求冲突也保留
+具体回复。重叠不累计，其余绿基线复用。architecture含inventory、独立inventory、
+受影响编译/diff通过，仅白名单普通推develop。用户JSON删除和goal/
+辅助资料不提交，线上库/部署/环境及main/Release不动。
+
+下一相关有限目标为本批定时交付证据与发布条件收口：核精确SHA CI自然状态、已有
+魔修/pending/鬼市/拍卖/BOSS/宗门链与参数矩阵，不借等待新增全仓审计或性能工作。
+体力恢复异常路径未由本消费组验证，不外推其已闭环。G2其余功能、G3--G5、冻结
+JSON既有删除与真实QQ展示门禁保留，原goal active，完整批次和发布条件前不合main。
+
+## 宗门每日次数重置与丹房维护（develop checkpoint）
+
+上一资材完整组1ab871e91d9b3e40c35c3c80928ce38ef94a29f5的精确CI44022748659
+已核completed/success，复用绿基线，不watch或重跑全量。本组仅既有
+daily_reset_sect_task→resetusertask→reset_daily_maintenance及玩家读取/领取链。
+隔离首5fail证实四步IGNORE仍真实EXECUTED、提交副作用/成功回执，及UTC取错上海
+业务日。现玩家重置、资材扣减、降级和永久回执逐步检查行数/最终回读，已知拒绝
+退出事务后才转结果；全部玩家/宗门及trigger副作用整日回滚。四个
+sect_daily_reset_{user,material,level,receipt}_write_rejected分别携玩家/宗门/业务日
+到实际任务ERROR，坏数值/坏回执/缺迁移保留具体原因，原SQLite异常透传。
+
+业务日期转换调度时区，默认上海，旧naive按本地解释；同日重放保留新次数和任务。
+费用/排序/无主无房/未知等级不改，无新迁移；大数用既有精确存储，历史带空格的
+JSON费用payload按结构比较，旧成功回执零改写，实际费用变化仍operation_conflict。
+legacy保留schema准备及原DTO，写入委派同一feature校验。
+
+30项新回归涵盖四步IGNORE/改写/ABORT/末步篡改、整日恢复、六种正常状态、真实
+声明/pending连续失败重试/08:00:15边界/触发、时区/大数/坏数据及旧兼容。
+sect-daily-maintenance两条真实dispatch/DI/handler贯穿次数上限→实际重置→三宗门
+查询→别名领取/任务接取→同日保留新状态→次日领取；另四步拒写与ABORT→原状态
+读取→重建应用恢复。核对三库资产/状态/回执/outbox/ledger/统计/任务与integrity，
+OneBot/QQ文本/Markdown/降级8个mock合同，无真机。初参数误查回执不存在user_id列
+及新大数夹具断言放错位置均已纠正，不计产品故障，不删除业务断言。
+
+原5红与旧维护/feature/失败可见性35pass；最终新回归+参数包装31pass/1deselected，
+旧维护/feature/失败可见性/schema/资材及参数62pass/1deselected，各组重叠不累计。
+architecture含inventory、独立inventory、受影响编译/diff通过，新回归接CI。
+本完整组白名单普通推develop，用户JSON删除和goal/辅助资料不提交。线上库/部署/
+环境及main/Release不动；G2--G5与总goal保持active，完整批次和发布门禁前不合main。
+
+## 宗门日重置后的丹药领取（develop checkpoint）
+
+每日维护c8992fc5ccacab76a444d2cebd83348ca8111bf3的精确CI44027622264已单点核
+completed/success，未watch或重跑全量。main仍5bef9e06、正式Release仍v1.3.17。
+
+沿同一goal完成每日任务到领取的交接，保持贡献/资材仅作为门槛、原奖励生成/职位/
+库存规则，无新迁移。首3仓储红+1应用红证明少发药却已领、发药未标已领、发药无
+永久回执仍applied且提交trigger副作用，ledger错误成功阻止重建应用恢复。首应用
+夹具漏建ledger，补齐后稳定红，不计为产品故障。
+
+现背包INSERT/UPDATE、每日已领标志与永久回执行数/最终回读，已知拒绝跨出事务
+再转结果，整笔含副作用回滚。item/user/receipt三个sect_elixir_*_write_rejected
+及eligibility晚期篡改原因/主体贯穿应用、failed回执和指令；坏数值/坏回执/缺迁移
+保留具体原因。原异常透传，诊断二次失败保留原错误链；写入失败可同请求恢复，
+started预约可继续。已提交业务但诊断失败时，永久回执可补完诊断，不再发药。
+
+聊天服务端随机奖励不纳入玩家请求指纹，避免重新生成误判改参，显式API奖励参数
+仍参与冲突检查。玩家旧消息先读本人成功回执；跨日/退宗后回放也不占新次数，
+并发晚到的回放显示实际历史奖励。旧成功payload零改写，legacy保留原DTO、NULL
+职位拒绝和旧物品元数据更新规则，委派同一写校验。未知异常安全定位/日志、正常
+流程和失败投递均有回归；发送失败不宣称业务回滚。
+
+44项新回归含三步IGNORE/改写/ABORT/末步篡改、已有物品/绑定/多药/重复ID库存
+上限/大数/坏数据、旧回放与兼容、同key和不同key竞争、started/诊断失败恢复、
+实际handler和Flask CSRF/失败/同key恢复。两条sect-elixir-claim真实dispatch/DI/
+handler从实际日重置→三步拒写/原ABORT→重建同消息恢复→别名/次日旧消息/新领取，
+另高级丹房不同随机结果重试与具体门槛拒绝，核三库资产/回执/ledger/统计/任务与
+integrity；16个OneBot/QQ文本/Markdown/降级mock合同，未真机。
+
+原4红与旧组13pass/2subtests；新增扩展/旧组47pass/2subtests，Web初跑因CSRF夹具
+键误写1fail/41pass，纠正后该例通过；领取/每日参数42pass/1deselected，八个受影响
+模块84pass/2subtests，最后异常/相关源码56pass/234deselected。各组重叠不累计。
+最终领取参数包装1pass/2deselected，含两条真实场景及晚到回放实际奖励断言。
+architecture含inventory及独立inventory通过，受影响编译/diff后白名单普通交付
+develop。用户JSON删除和goal/辅助资料不提交，线上库/部署/环境及main/Release不动。
+
+## 日重置后的任务接取、刷新与完成交接（develop checkpoint）
+
+继续原goal。上一领取ffcd1521的精确CI44031986435已核completed/failure：6242项
+unittest仅一条失败，资格拒绝文案含推测连接词。本组保留原因码与原契约，修正文案，
+test_reason_finalization定向通过；不把失败CI写成绿，不watch或复跑全量。
+
+隔离首24fail/8pass证实接取/刷新两步、完成四步的IGNORE/改写/末步篡改可伪成功，
+前三步原行数异常虽回滚但没有本组原因；实际参数链另证旧消息及失败重试重复扣体力。
+现八步逐写行数/最后回读，已知拒绝跨出事务才转结果，含trigger副作用整笔回滚；
+八种sect_task_{claim,refresh,settlement}_*_write_rejected携玩家/宗门/请求主体到回复。
+坏任务/回执/次数及资产、缺迁移和SQLite原异常保留具体原因，不合成未知错误。
+
+聊天先读本人永久成功回执，跨日、退宗及已有新任务也只回放，不覆盖新任务或重记
+统计；晚到duplicate使用真实历史奖励。完成指令保留原冷却，首次出门独立扣3体力，
+同消息故障恢复用既有幂等体力接口，不再重复扣；结算回滚不代表该体力返还。
+任务业务日和时间用注入时钟及调度时区，默认上海；刷新/聊天完成拒绝跨日快照。
+新大整数精确存储，旧REAL/科学记数成功回执零改写，小数气血/修为/建设度保留。
+legacy仅准备原schema后委派同一校验，DTO保留并补reason/subject；无新迁移，原
+任务生成/消耗/奖励/上限不改，不扩周常/建设/经济/性能或全仓审计。
+
+新回归覆盖八步拒写/改写/ABORT/末步篡改、恢复重放、并发、坏数值/旧兼容、业务日
+及三个实际handler的已知/未知/正常流程/失败投递。sect-task-daily两条真实dispatch/
+DI/handler从实际日重置→接取→刷新→气血/灵石完成、八步拒写→重建同消息恢复，
+核三库资产/永久回执/统计/体力/integrity；8成功回放与32拒写消息合同覆盖OneBot/
+QQ文本/Markdown/降级，均mock，未真机。夹具别名/冷却、缺nonebot.init、统计列
+猜错及结构校验误放共享读取的问题均已纠正，保留原投影与业务断言。
+
+12个受影响模块组合135pass/171subtests；最后小数兼容/相关源码68pass，随后旧
+settlement模块与真实参数包装17pass。各组重叠不累计，不复跑已绿全量。
+architecture含inventory、独立inventory通过；受影响编译/diff后白名单普通交付
+develop。用户JSON删除和goal/辅助资料不提交；线上库/部署/环境及main/Release不动。
+
+本组随后冻结宗门完成任务依赖的体力扣减与永久回执交接（当前结果见本文顶部）：
+先隔离SQLite复现
+IGNORE/改写/末步篡改，再核具体原因、整笔回滚、同请求恢复/回放、原体力不足与
+快照冲突、实际宗门指令及OneBot/QQ合同。既有定时恢复仅作为可控初始状态验证，
+不增加自动补跑/恢复策略，不扩其他体力玩法或全仓。总goal/G2--G5、冻结JSON与
+真实QQ展示门禁保持active，完整批次及发布门禁通过前不合main、不发版。
+
+## 宗门定时资材与玩家读取（develop checkpoint）
+
+96d6d935/CI44018801363已核completed/success，包含上一每日重置静态契约修正；
+69073cee仅三文档，CI44019699806也已核completed/success，绿基线复用，不watch或复跑全量。
+本组只沿已有sect_materials_grant路径验证：实际注册/触发和业务日、宗门资材/战力
+与永久回执原子写入、拒写/异常保留具体原因、逐宗门已有成功保留与失败重试，及
+实际玩家宗门信息读取。先隔离SQLite证实普通返回/成功日志是否掩盖缺迁移或拒写，
+不把源码疑点当已证实；保持倍率/目标顺序/历史回执/正常缺失与无宗主竞争规则。
+不扩周常领取/丹房维护/其他宗门玩法/奖励规则/性能或全仓审计。真实指令参数与
+三库状态/回执/完整性、OneBot/QQ合同及受影响回归形成闭环后白名单推develop。
+项目venv/共享锁/临时库，线上库/部署/环境不动；用户JSON删除和goal/辅助资料
+不提交，G2--G5和总goal保持active，完整门禁前不合main或发版。
+
+首轮7fail证实两步IGNORE/改写及末步篡改仍granted、缺迁移实际任务伪EXECUTED、
+UTC取错上海业务日。现状态与回执逐步行数/最后回读，已知拒绝退出事务后才转结果，
+整宗门含trigger副作用回滚；两个sect_material_*_write_rejected携宗门编号到实际
+任务ERROR，坏数值/缺迁移各保留原因，原SQLite异常透传。按调度时区取业务日，
+已成功宗门和后续新资材保留，恢复只补剩余，重复发放日志计0。倍率/排序/正常缺失
+与无宗主竞争/历史成功回执不改，无新迁移；legacy仅schema准备后委派同一校验。
+
+新超int64写入使用既有xiuxian_int_store，资材与战力避免affinity变REAL后无法验证；
+既有成员REAL/科学记数旧战力回执解析保持。旧大数测试2fail固定新写REAL舍入，
+现更新新写精确BLOB断言并新增旧REAL回放零写，保留既有历史转换语义。
+25项新回归覆盖实际声明/连续注册失败pending/cron边界/真实触发、跨日/时区、
+两步拒写/改写/ABORT与副作用回滚/剩余恢复、坏数值与大数/旧回执/正常竞争。
+两条sect-material-schedule真实dispatch/DI/handler贯穿任务发放→我的宗门及别名→
+成员名字分页/无命中→同日重放/次日，另第二宗门拒写与重建应用恢复，核对三库
+资产/回执/outbox/ledger/统计与integrity_check。OneBot/QQ四种消息合同仅mock。
+参数初跑两场景因CR换行断言失败，随后一条无命中文案断言错误，均纠正夹具且保留
+业务断言，不计独立产品bug。最终11受影响模块88pass；架构含inventory、独立
+inventory、受影响编译/diff均通过，白名单普通推develop。用户JSON删除和goal/
+辅助资料不提交；总goal/G2--G5与发布门禁保持，main/Release和线上库/部署/环境不动。
+
+## 定时批次证据与发布条件收口（当前）
+
+人工场次交接已普通提交推送96d6d935337fbae49a6350354520bafba980d710。
+精确SHA CI44018801363现已确认completed/success；没有重启、watch或复跑全量，
+上一轮本地绿基线复用。legacy_scheduler交付表已补齐拍卖队列/
+竞拍和世界BOSS刷新/每日重置/人工交接；e5c7e881的失败CI与96d6d935中的静态
+契约修正分别记录，不以其他绿CI冒充该失败已通过。
+
+当前SHA的inventory-only有280有参入口，126直接分配、154pending，执行结果0。
+这只是case主命令索引：世界BOSS列表已在真实场景执行却仍pending，世界BOSS兑换
+只有未知商品拒绝场景也会标explicit_cases。实际完整性须核对场景调用/业务断言与
+运行结果，不能据计数宣称G2完成。报告仅保留本地，不提交开发辅助资料。
+
+96d6d935及文档69073cee的精确CI已success；G2剩余功能、G3--G5、用户冻结JSON既有
+删除和真实QQ展示未验仍限制发布。README安装指main、正式Release保持v1.3.17；
+不合main、不发版、不改线上库/部署/环境。收口期间未冻结或实施新玩法/经济规则/
+天罚/商店/性能审计。后续完整功能需先在本入口冻结；原goal保持active。
+
+## 世界BOSS人工生成与定时场次交接（develop checkpoint）
+
+继续原goal。首组8fail证实人工状态/回执IGNORE或改写伪成功、坏状态当空列表、
+同消息改变境界/名称仍回放，以及schema_missing被合成配置变化。现状态UPSERT/
+永久回执INSERT逐步校验行数并最后回读，已知拒绝跨出事务后才转结果，整笔含
+trigger副作用回滚；两个world_boss_spawn_*_write_rejected分别携global/操作号。
+坏状态/回执、缺迁移、配置/场次变化、非法境界/名称和生成数据均保留reason/subject。
+新回执存原始请求，旧payload按历史首领兼容显式参数；成功先回放且同步当前状态，
+不把历史满血首领恢复进缓存。旧服务仅保留schema准备，委派同一feature校验。
+
+71项新回归覆盖两步IGNORE/改写/ABORT/末步篡改、坏状态/回执、旧payload、真实
+定时刷新后受伤缓存、兼容服务、两handler未知定位/正常流程/失败投递，以及11种
+原因的OneBot/QQ文本/Markdown/降级。三条world-boss-manual-spawn真实dispatch/
+DI/handler覆盖定时刷新→指定/随机替换→玩家查询/分页→下一槽→旧请求回放，另覆
+权限/缺参/多参/非法目标/同消息改参数零写及两步拒写后重建应用同消息恢复；核对
+三库资产/永久积分/回执/outbox/统计/任务与integrity_check。发送/图片为mock，无真机。
+
+人工/旧兼容/刷新/feature仓储129pass；参数包装1pass（3条真实场景）；管理员
+门禁/运行时/全量刷新/战斗组58pass、29subtests；相关源码8pass（238deselected），
+各组重叠不累计。参数初跑2例夹具遗漏最高境界玩家和重建应用读取配置，已纠正并
+保留业务断言。architecture含inventory、独立inventory、受影响编译/diff均通过，
+新pytest与参数包装已接CI。上一e5c7e881/CI44016104819已核completed/failure：
+6237项unittest仅静态门禁要求旧日志源码失败，现检查具体reason/subject和失败退出
+分支，保留运行时失败日志回归；不重跑全量，不把上次CI记为绿。
+
+本组仅白名单普通交付develop；下一有限完整目标是定时优先批次证据和发布条件收口，
+只核本次精确SHA CI、已交付魔修/pending/鬼市/拍卖/世界BOSS及现有参数矩阵和未决
+门禁，不重新全仓审计或新开天罚/商店/经济/性能。G2--G5、用户冻结JSON删除和
+真实QQ展示门禁保留，main/Release不动；线上库/部署/环境不动，原goal active。
+用户删除与goal/辅助资料不提交，不以任一checkpoint代替完整批次或发布验收。
+
+## 世界BOSS每日额度重置（develop checkpoint）
+
+继续原goal，上一完整刷新b9a354d104d5641927794a5dbebc0bbddc57a543已推develop，
+精确SHA CI44011718379单点已核completed/success，不watch或复跑已绿全量。
+本组只处理每日重置的注册/真实触发/业务日期、冻结名单/分块回执、拒写进度保留与
+恢复和玩家读取/管理员指令；线上库/部署/环境未动，不扩其他任务或性能审计。
+
+首组13fail证实上海零点取UTC前一天、任务/名单/额度/用户回执/进度IGNORE或改写
+伪成功，用户回执拒写导致循环空转。现默认日期转换调度时区；冻结登记与名单一笔
+事务，分块另事务，每步行数+最后回读，已知拒绝退出事务后返回，整块含trigger
+副作用回滚。五个world_boss_reset_*_write_rejected携业务日/玩家，坏进度与字段
+数值各保留原因；running失败立即返回，实际APScheduler报ERROR而非完成。
+已完成分块/同日新增额度保留，只恢复pending；删除玩家skipped，新增不入冻结名单。
+旧completed父回执保持权威，兼容30天明细清理；旧服务只保留schema准备，写入委派
+同一feature校验。不新增迁移、不改永久积分/经济规则、不新增历史日期自动补跑。
+
+72项新定向回归涵盖实际声明/pending连续失败恢复/cron边界/触发、五步IGNORE和
+改写/原ABORT/末步篡改/后玩家拒绝整块回滚、坏进度/字段、旧服务与明细清理合同、
+正常流程/未知定位/失败投递；两条world-boss-daily-reset真实dispatch/DI/handler
+贯穿权限/默认及多余参数/本地跨日/额度读取、故障重建应用同消息恢复与重复零写。
+核对三库资产/永久积分/回执/统计及integrity_check，OneBot/QQ文本/MD/降级仅mock，
+未真机。首扩展组103pass/9fail来自新夹具事件缺字段、命令名误写、证据字段位置及
+已知错误日志被探针标为exception；纠正夹具并精确断言预期错误，未删业务断言。
+随后参数/每日组69pass；九个受影响模块144pass；最后字段原因/源码合同组89pass
+（229deselected），各组重叠不累计。architecture含inventory、受影响编译/diff验证
+后仅白名单普通交付develop；新增pytest和参数包装进CI。goal/辅助资料不提交，
+用户JSON既有删除不恢复/暂存。G2--G5及发布门禁未完，main/Release保持不动。
+
+本组交付后下一有限目标是定时优先批次的证据/发布门禁收口：只核本次精确SHA CI、
+魔修/调度桥pending/鬼市/拍卖/世界BOSS已交付链及现有参数矩阵，列出下一可完整
+验证的相关功能；不再新开全仓故障审计，不重新运行未变绿基线，总goal保持active。
+
+## 世界BOSS定时全量刷新（develop checkpoint）
+
+继续同一goal，拍卖竞拍44d001a2已推develop，等待区498a9f32的CI44005611091
+已核success；最新竞拍CI44007297793上次单点仍运行，不watch或复跑全量。
+当前279个有参入口清单中159项尚未分配显式语义场景，这只是清单，不是测试结果。
+下一完整功能仅世界BOSS定时全量刷新：启动注册失败可见与恢复、实际触发/业务
+时钟槽、状态与永久回执的原子交接、缓存一致与玩家读取/讨伐、同请求恢复重放及
+OneBot/QQ合同。源码中的吞注册异常、拒绝后正常返回、未校验写入先隔离红复现。
+不扩单体生成、天罚、兑换、日额度重置或全仓审计；已通过基线复用。项目venv/
+共享锁/临时SQLite验证，不碰线上库/部署/环境；用户JSON删除和goal/辅助资料
+保留且不提交。仅完整验证代码推develop，G2--G5与发布门禁未完，不合main/发版。
+
+首组11红实证注册异常被吞、状态/回执IGNORE或改写伪refreshed、实际任务伪EXECUTED、
+未用业务时钟及坏JSON覆盖。现两步行数和最后回读，整笔含trigger副作用回滚；
+两个world_boss_refresh_*_write_rejected与subject经应用/任务/管理员回复保留。
+启动异常透传且pending可恢复，任务拒绝ERROR；缺迁移/配置/场次/生成数据/坏回执
+各保留具体原因，未知SQLite原链/安全定位、正常流程和失败投递透传。时间槽用注入
+业务时钟，同一时刻跨时区不变，同槽重放同步当前受伤状态，不复活历史满血BOSS。
+
+真实参数链另证首次空冷却被校验拒绝、负编号按正数解释；现空时间允许且CAS用
+COALESCE，冷却原文由feature仓储读取，避免展示函数时区转换；实际结算时间及
+日/周仍必填。查询/分页/讨伐严格整参数校验，全量生成多参零写。三条world-boss-refresh
+真实dispatch/DI/handler覆盖实际定时刷新→查询/分页→四次有效讨伐（NULL/带时区/
+旧本地/空串）→重放→下一时间槽、普通玩家权限拒绝、两步拒写与重建同消息恢复；
+核对三库余额/体力/扣血/永久回执/outbox/统计/任务/缓存及integrity_check。
+
+受影响12模块组合97pass/3subtests、1失败来自新夹具未建立兼容冷却投影；补齐后
+最新刷新/参数/相关源码组56pass，重叠不累计。初参数夹具的最高境界/冷却/战斗日志
+结构也已纠正，不算独立业务bug。47项刷新/消息回归加3条真实参数场景进入CI；
+OneBot/QQ实际纯文本门面仅mock，图片/战斗/发送mock，未真机。architecture含
+inventory、受影响编译/diff通过。44d001a2/CI44007297793已单点核success，不watch。
+本组白名单普通交付develop后，下一相关有限功能仅世界BOSS每日额度重置：任务
+注册/实际触发/业务日期、分块状态和回执持久化、失败保留进度与恢复、用户限额读取
+及具体原因；先隔离复现，不顺带扩商店/天罚/经济或全仓。原goal继续active。
+
+## 拍卖竞拍资金与拍品交接（develop checkpoint）
+
+等待区完整交接已普通提交推送498a9f3208447acf40f01fc1cd627f2050c81796，远端
+develop已核一致，main仍5bef9e06；精确SHA CI44005611091单次查询in_progress，
+不watch或重跑全量。继续同一goal，下一有限功能仅竞拍资金与拍品交接：当前出价
+扣款、替换上一竞价退款、拍品更新及永久回执；IGNORE/改写/已知参与者缺失拒绝
+完整回滚，原因/主体从仓储经应用/账本到真实命令保留，故障解除同请求恢复。
+保持加价/手续费/经济规则与旧回放，先用隔离SQLite证实，不把源码疑点当根因。
+随后真实参数/三库资产回执统计/OneBot和QQ合同及受影响回归；不扩其他市场或
+全仓。共享锁/项目venv/临时库，线上库/部署/环境不动；用户JSON删除、goal及
+辅助资料不提交，G2--G5和总goal active，完整批次与发布门禁前main/Release不动。
+
+隔离SQLite先9红证实：扣款IGNORE误报不足并提交trigger副作用；退款拒写或
+上一竞拍者缺失会提交新买家扣款；拍品/回执IGNORE或改写仍bid。现先核双方
+账户，四步写入逐一行数与最终状态回读，已知拒绝跨出事务后才返回，资产及副作用
+完整回滚。四种auction_bid_*_write_rejected/subject经应用/账本/实际命令保留，
+新写入拒绝failed可同请求恢复；历史业务rejected保持原回放，无新迁移或旧账重写。
+坏余额明确拒绝，原大数精度/本人加价差额/其他人替换退款规则不改。诊断失败不
+遮原原因或SQLite异常；命令保留原原因并记录诊断异常定位，失败投递/流程透传。
+
+29项新仓储/应用回归覆盖IGNORE/改写、原ABORT、末回执篡改早先余额/拍品、
+大数/坏余额/本人差额、兼容入口、failed恢复、旧拒绝回放及诊断双故障。
+market-auction-bid-write真实dispatch/DI/handler贯穿玩家上架/实际开场→首竞价→
+替换竞价四步拒写/ABORT→重建同请求恢复→本人加价→实际到期成交；核对三库
+余额/拍品/永久回执/outbox/实际统计、重复零额外写和integrity_check。
+命令/消息初组126pass；九个受影响模块84pass；最后原因/兼容/消息组154pass，
+各组重叠不累计。OneBot/QQ文本/Markdown/发送降级及未知/流程合同仅mock，
+未真机。architecture含inventory、受影响compileall/diff通过，新回归已接CI。
+本轮等待区及竞拍两个完整功能闭环交付develop，仍为progress；批次证据和剩余
+G2--G5/发布门禁继续保留，不以任一提交自动合main或发版。下一步限核本批次CI
+终态和既有参数矩阵中尚缺的玩家路径，冻结下一组后再实施，不重新全仓审计。
+
+## 拍卖玩家等待区完整交接（develop checkpoint）
+
+上一goal轮结算/领取两项交付属于progress。520a79df/CI44001821163本轮已单点核
+completed/success，不watch或重跑已绿全量。定时优先批次证据已归档于
+docs/features/legacy_scheduler.md；完整G2--G5及发布门禁仍未完成。按交易矩阵
+下一有限功能组仅玩家上架/下架等待区：扣/退一件物品、队列增删和永久回执三步，
+拒写/改写含副作用整笔回滚，具体reason/subject和故障解除后的同请求恢复；保留
+可交易库存/绑定/装备、本人归属、队列上限和历史成功回放。真实参数/两库资产/
+第三库统计/OneBot与QQ合同组成闭环，未确认问题先红复现。只核这组交接，不扩
+竞价经济、性能或其他仓储。项目venv/共享锁/临时数据；用户JSON删除与goal/
+辅助资料不提交，线上库/部署/环境不动，main/Release保持不动。
+
+初12红中1条AFTER INSERT错挂已有背包UPSERT的UPDATE，纠正夹具，不算独立
+业务故障；其余已证实拒写伪completed或误报stock_insufficient并提交trigger副作用。
+现扣/退物、队列增删、永久回执逐步行数和最终回读，已知拒绝跨出UoW后才转结果，
+两库含副作用完整回滚。三个auction_queue_*_write_rejected与subject贯穿兼容DTO
+和实际上架/下架；坏库存保留数值原因，同操作改底价明确冲突，历史成功先回放。
+未知SQLite原链/安全定位、NoneBot正常流程和失败发送异常透传；原绑定返还、装备、
+本人归属、上限规则保持。无新schema或历史回执重写。
+
+新增33项仓储回归和两条market-auction-queue真实dispatch/DI/handler，覆盖六步
+IGNORE/ABORT、重建应用同消息恢复/重放、非法/多余参数零写、上限/满包/绑定装备、
+三库资产/永久回执/实际统计与integrity_check；剩余拍品实际APScheduler开场/到期
+返还。OneBot/QQ文本/Markdown/发送降级及异常流程合同仅mock，未真机。
+受影响六模块组合181pass/4fail，四例来自扩展消息夹具漏竞拍配置键；修正后消息组
+100pass，其余85项绿复用，重叠不累计。architecture含inventory、受影响编译/diff
+通过；新增pytest与参数包装进CI。白名单普通推develop，完整goal保持active。
+下一相关完整目标仅拍卖竞拍扣款/替换上一竞价退款/拍品/永久回执交接的拒写恢复，
+先隔离红复现；不改加价/手续费/经济规则、不扩其他市场或全仓。批次和发布门禁未
+满足，main/Release不动，用户JSON删除与goal/辅助资料不提交。
+
+## 定时优先批次证据与剩余门禁（develop checkpoint）
+
+本轮两个完整目标已普通推develop：结算774b67ec48bc5a97ce8a7f550a766659c1d3bd12，
+精确SHA CI43999705305已核completed/success；领取
+520a79df2fc7c611823de0c5149722811e038064，CI44001821163已单点核success，
+不watch/重跑已绿全量。最新本地受影响领取组135pass，结算151pass及最后原因
+组103pass，各组重叠不累计。architecture含inventory、受影响编译/diff通过。
+新增31条结算/20条领取回归和真实命令包装均已进CI；仅mock OneBot/QQ，无真机。
+
+下一相关有限目标仅归档魔修/调度桥pending恢复/鬼市时间与返还/拍卖生命周期的
+已交付证据和总goal未决项，按现有参数矩阵指出下一可独立完成的功能组；只读核
+文档/现有CI，不将归档扩成新一轮全仓故障审计，不重跑未变基线。G2--G5仍未完成，
+用户冻结JSON既有删除继续阻塞Phase2发布门禁，真实QQ展示未验；main仍5bef9e06，
+不合并/发版。用户删除、goal与本地辅助资料保留且不提交；线上库/部署/环境不动。
+
+## 拍卖待领取取回与重试（develop checkpoint）
+
+结算持久化已普通提交推送774b67ec48bc5a97ce8a7f550a766659c1d3bd12，远端develop
+一致、main仍5bef9e06。复用151项受影响组合、后加诊断原因组103项和已绿
+eac10e62/CI43996331825；计数重叠不累计，不watch/全量重跑。继续原goal，下一
+相关完整目标仅结算寄存后的玩家取回：背包发物/绑定数、待领取标记、永久领取
+回执三步的拒写/改写、整笔回滚和同消息恢复；指定拍品/全领、满背包部分可领、
+本人归属及旧回执兼容。覆盖真实成交寄存→我的拍卖领取参数→临时SQLite/实际
+资产与回执→OneBot/QQ/未知异常/失败发送合同。三步未校验先用本地/tmp隔离脚本
+3fail证实均claimed却丢物/留未领标记/丢永久回执，再实施修复；不扩竞价经济、
+其他市场或全仓审计。共享锁/项目venv/临时库；
+用户JSON删除与goal/辅助资料不提交，线上库/部署/环境不动。完整G2--G5/发布
+门禁未满足，goal保持active，不合main/发布。
+
+现三步行数和最后累计库存/绑定、已领/受阻行、永久回执回读，已知拒绝跨出UoW
+后才转结果，整笔含trigger副作用回滚；三个auction_claim_*_write_rejected与
+subject贯穿实际命令。坏库存保留具体原因，不猜账；更新限定本人/行ID、业务
+时钟写领取时间。故障解除同请求恢复，原成功/满包回执不重写；另红复现满包旧
+duplicate被succeeded算成功，现保持受阻/明确此前未领，新请求才领。未知异常
+安全定位/原链、正常流程及失败回复发送透传。
+
+market-auction-claim真实dispatch/DI/handler从两件中标/一件流拍的实际到期任务
+寄存，贯穿全领/指定/他人归属/部分满包、三步IGNORE/ABORT、重建同消息恢复/
+重复、流拍卖家取回。核对三库库存绑定/资产/永久回执/实际统计及integrity_check。
+初组103pass；追加现有库存UPDATE、满包回执、旧schema回放后，最终受影响5模块
+135pass（含20项新仓储回归；和初组重叠不累计）。OneBot/QQ文本/MD/降级及异常
+流程合同仅mock，未真机。architecture含inventory、受影响compileall/diff通过。
+一次组合误写不存在的view模块未执行任何测试，修正路径后才有上述135pass；不
+将其算回归失败或通过。白名单普通交付develop，复用结算151/103组及已绿CI，
+不扩全量或其他市场故障审计；完整goal保持active，不合main/发布。
+
+## 拍卖到期结算持久化与重试（develop checkpoint）
+
+上一goal轮已交付ee80d0ac/eac10e62两个完整闭环，属于progress。起点develop为
+eac10e625d0260b04ab9c0c243cf5d228efd72be，CI43996331825本轮单点已核success，
+复用已绿ee80d0ac/CI43995218089及89项定向基线，不watch/全量重跑。仅冻结收尾
+发物/待领取、卖家入账/旧竞价退款、成交历史、拍品删除、场次结束及回执的写入
+拒绝和恢复。先隔离SQLite复现IGNORE/改写，再修整场事务回滚、具体reason/subject
+从判定到任务/应用/命令，以及新失败重试和旧回执兼容。覆盖实际APScheduler、
+真实命令/可控时钟、资产历史统计/回执/完整性、OneBot/QQ短合同。保持原成交/
+流拍/满背包寄存规则；不扩奖励、经济规则、性能或其他仓储。所有验证用项目venv/
+共享锁/临时库；用户JSON删除、goal/辅助资料不提交，线上库/部署/环境不动。
+完整G2--G5/发布门禁未满足，继续active，不合main/发布。
+
+首轮18fail已证实八类IGNORE/改写下伪settled、败者退款拒写误报账号缺失、实际
+收尾/启动任务EXECUTED。现每步行数和所有写入后的最终回读，累计发物/绑定数与
+余额校验，具体七类auction_settlement_*_rejected和subject贯穿兼容DTO/应用/
+账本/任务/命令；拒绝跨出UoW后转结果，整场含trigger副作用完整回滚。新拒写
+failed可重试，原账号/目录缺失与旧rejected回执仍稳定回放；未知SQLite原链透传。
+18条原红转绿；追加多拍品后步拒绝/累计、末回执篡改早先资产/历史/寄存、流拍
+返还、业务拒绝旧回放、未知ABORT与兼容DTO等共29条通过。
+
+两条market-auction-settlement-write真实dispatch/DI/handler覆盖上架/竞拍→六步
+任务ERROR与管理员拒绝→未知ABORT安全定位→重建应用/推进时钟/同消息恢复，及
+满背包成交/流拍的寄存拒写恢复。真实命令另红复现满背包成交被回复为流拍；现保留
+成交价与待领取，恢复后各一件寄存。三库资产/历史/回执/outbox/实际统计与完整性
+核对，重复命令和实际任务零业务写。受影响11模块151pass；OneBot/QQ文本/MD/
+降级及流程/失败投递合同通过，未真机。计数与原18/29组重叠不累计；未运行全量。
+追加两条实际调度红复现诊断账本再次失败遮住原拒绝/原SQLite错误，现保留具体
+DomainError原因至生命周期错误，未知原异常透传并链上诊断异常；业务回滚，保留
+started预约，解除故障后同任务继续。最后仅受影响5模块103pass（与151项重叠），
+architecture含inventory、受影响编译/diff通过，白名单普通交付develop；不watch。
+
+## 拍卖开场持久化交接（develop checkpoint）
+
+调度生命周期已普通提交推送ee80d0ac881f28f080adca9f39eabdc19f6cf397，远端develop
+一致、main仍5bef9e06。精确SHA CI43995218089单次查询in_progress，不watch。
+继续原goal，仅冻结开场交接四步：拍品插入、玩家等待区删除、场次创建、永久回执。
+先隔离复现IGNORE/trigger改写能否返回started却丢失/重复拍品；若证实，完整事务
+回滚与具体reason/subject贯穿实际任务和手动开启、故障解除重试/历史重放及数据/
+消息合同。复用上一切片时区/生命周期/适配器绿基线，不扩竞价经济或结算资产审计。
+只用临时SQLite/项目venv/共享锁；用户JSON删除、goal/辅助资料不提交，线上库/
+部署/环境/main/Release不动，G2--G5及总goal active。
+
+首轮12fail已证实四步IGNORE/改写仍返回started，实际任务三类伪成功；场次插入
+IGNORE虽最终产生错误，却是交接已提交后读取空结束时间的AttributeError，既未
+保留写入原因也未回滚。现四步行数与全部写入后的最终回读均校验，已知拒绝异常
+跨出UoW后才转换结果，整事务回滚game/trade及trigger副作用；四种
+auction_start_*_write_rejected带拍品/等待区/场次/操作号subject。未知SQLite异常
+继续原链透传，成功历史回放/空拍品/原规则不变，无新增迁移或历史改写。
+
+四类IGNORE及四类改写含trigger钱包/队列副作用、最后回执trigger篡改早先拍品，
+均验证两库完整回滚，解除后同操作恢复/重放、实际任务ERROR→EXECUTED和完整性。
+新增market-auction-start-write通过真实玩家上架→管理员四步拒写→同消息恢复→
+重复开启零写→实际到期任务流拍返还/重复零写，三库资产/场次/回执/历史/统计核对；
+另两条生命周期旧链继续通过。开场/调度/消息/命令/兼容/结算/Web受影响8模块
+89pass（与此前组重叠不累计）；OneBot/QQ四种新原因文本/Markdown/降级绿，未真机。
+源码质量与时区/查询既有283项基线复用，不复跑全量。architecture含inventory、
+受影响编译/diff通过，白名单普通推
+develop，上一提交ee80d0ac CI43995218089二次单点仍in_progress，不watch或重跑。
+本轮两个完整功能闭环均保留独立证据，未将其缩为文案调整或标记完整G2--G5完成。
+
+## 拍卖调度与启动恢复完整生命周期（develop checkpoint）
+
+上一轮三项交付为实质进展；最新develop `3befe21b` 的精确SHA CI43988136572已核
+completed/success，不重复全量或watch。继续原goal，按交易矩阵尚缺拍卖真实命令链，
+仅冻结自动开启/到点收尾/启动对账与玩家竞拍状态的连续生命周期：共享业务时区、
+日期与秒级边界、显式拒绝原因及任务错误事件、启动失败可见和恢复重放。源码发现
+开启state_changed归为无物品、无场次有拍品只记日志、启动suppress=True等疑点，
+先用隔离SQLite/实际APScheduler/可控时钟复现，不以源码疑点当已证实。
+覆盖真实命令参数、有效窗口/截止、场次与资产回执重读、OneBot/QQ短合同和有界
+受影响回归；不扩拍卖规则、奖励、性能或全仓审计。复用鬼市/魔修与已绿CI基线。
+共享锁、项目venv、临时数据；不访问线上库、不部署/重启、不改共享环境、不发真实
+QQ。仅白名单普通推develop，本地goal/辅助资料与用户JSON删除不入提交。
+完整批次和发布门禁通过前不合main、不发版，G2--G5及总goal保持active。
+
+隔离SQLite/实际APScheduler首组8条失败证实跨日UTC日期、提前0.5秒收尾、孤儿拍品
+任务伪成功、启动对账吞异常、截止后扣款及结算故障解除后因end_time变化无法重试。
+旧已结束回执首轮受跨日干扰，固定同一本地/UTC日期后单条仍红，单独确认拒绝被
+归为无拍品；未将其首轮计为独立证据。追加3条红证实有场次无拍品伪成功及Web
+提交旧bid_time绕过截止；真实拍卖活动命令另复现naive/aware时间相减异常。
+
+现自动开启用scheduler业务日期；明确区分empty/已开竞争与回执失效/冲突/孤儿，
+reason/subject从判定处经过兼容DTO、命令和任务保留。两种场次/拍品缺失均报错，
+启动默认不再suppress，生命周期桥失败后可重试。截止在竞价事务内检查，Web使用
+服务端时钟，历史成功回执仍先回放；到点收尾以场次截止锚点形成稳定重试payload，
+不改写旧账或既有冲突回执。活动/列表/信息按业务时区显示并区分截止待结算，旧无
+now的状态API保持naive兼容。未知异常保留原链/定位，正常流程与失败发送透传。
+
+两条market-auction-lifecycle通过真实dispatch/DI/handler：玩家上架→实际任务开启→
+活动时间/参数→结束前0.5秒竞拍→截止拒绝→启动结算ABORT完整回滚→时钟推进恢复
+和重放，另孤儿拍品自动/管理员/玩家具体拒绝后恢复。核对三库资产、场次、拍品、
+回执、成交历史与实际统计/integrity_check；OneBot/QQ文本、Markdown、发送降级及
+流程/未知异常合同通过，无真实QQ。原始链首轮已绿；扩入活动页后的红复现已转绿。
+受影响16模块组合94pass/1fail，唯一失败为未修改仙肆源码计数要求>=5，HEAD与当前
+均4次，确认既有断言不代表本次回归；保留测试不改仙肆。另时区/查询/可见性/源码
+质量组合283pass（含246源码质量）；不累计成全量。最后新增坏时间和兼容reason
+透传组29pass（与前组重叠）；architecture含inventory、受影响编译/diff均通过。
+CI新增拍卖定时/消息pytest，参数包装进入unittest发现。
+该checkpoint当时未覆盖的IGNORE/trigger改写开场交接已在顶部下一目标补齐；
+旧失败ledger哈希不重写、结算业务拒绝回执保持原语义的限制继续保留。
+
+## 鬼市批量清空消费者故障闭环（develop checkpoint）
+
+取消/到期返还完整闭环已普通提交推送 `859dcf8e`，远端develop一致，main仍5bef9e06。
+精确SHA CI43985949187后续单次已核completed/success，不watch。190项/25subtests及另一个源码
+合同1项通过，architecture含inventory、受影响编译/diff通过。继续原goal，仅冻结同仓储
+消费者“清空鬼市”的权限、部分成功、具体拒绝、未知异常、恢复/重放及适配器回复。
+隔离 `/tmp/codex_guishi_clear_consumer_audit.py` 已1条红复现：真实handler调用实际
+取消仓储，退款被IGNORE时余额/订单/回执保持原状，却回复“成功清空鬼市！共处理
+0条订单”，未保留原因或订单号。现已实现消费者修复，红用例转绿。
+不扩大管理员功能或交易玩法。只用模拟管理员和临时库，不发送真实消息。
+下一完整目标包含实际数据/回执不重退、逐单拒绝/剩余订单、成功与失败并存的准确
+回复、OneBot/QQ短合同；复用本轮仓储绿证据。goal/main/发布及用户删除限制不变。
+
+清空命令逐单保留具体拒绝和订单号，未知异常有原日志/安全定位并继续其他订单；
+只统计applied，不把duplicate重复计为本次返还，正常竞争order_missing保留。
+最后重读剩余订单，有失败或剩余不回复全部成功；剩余读取失败明确未能核实。
+初始读取失败零业务写、名称读取失败仍列已提交返还，失败发送/正常流程异常透传。
+历史中文订单类型走同一既有仓储，未知类型/缺目录明确保留，不改权限和冷却。
+
+两条market-guishi-clear经真实dispatch/权限/DI/handler、隔离三库验证非管理员
+零写、管理员部分成功/回执IGNORE、SQLite ABORT原异常、恢复同消息不重退及
+中文历史类型/非法类型；三库资产回执/统计快照及integrity_check通过。首轮非管理员
+被matcher权限拒绝符合生产合同，夹具原误等handler文本，已改断言真实权限拒绝，
+未放开权限。消费者/适配器22项通过，另参数包装1项（2场景）和源码合同1项通过；
+QQ原生MD夹具补markdown_id字段后4条失败转绿，未改消息发送业务。仅mock文本/
+Markdown/降级，无真机；新增pytest模块进入既有CI步骤。architecture含inventory、
+受影响编译/diff通过；复用859dcf8e全绿CI，不复跑本地全量。
+本完整目标白名单推develop后，下一步仅归档定时优先批次已交付证据及未决发布门禁，
+不再扩成全仓故障审计。用户冻结JSON删除仍阻塞完整发布，G2--G5及总goal未完成，
+main/Release继续不动，goal和辅助脚本不提交。
+
+## 鬼市取消及到期返还完整恢复（develop checkpoint）
+
+寄存取物闭环已普通提交推送 `ab63691f`，远端develop一致，精确SHA CI43983257082
+单次查询in_progress，不watch。受影响137项/24subtests及修正后的旧六场景
+包装通过，architecture/inventory、受影响编译/diff绿，复用30c9a187已绿CI。
+继续原goal，下一范围仅鬼市取消求购退款、收摊退物和08:00到期退物：三步写入
+拒绝不能伪成功，完整单笔回滚并保留订单和具体reason/subject，恢复/历史回放不
+重复返还，部分成交只退剩余，批次部分提交如实回复。先隔离SQLite复现IGNORE/
+改写，再接真实命令/实际调度/三库统计及OneBot/QQ短合同；不扩大玩法或全仓。
+共享锁、项目venv、有界受影响组，线上库/部署/环境保持不动；用户JSON删除与
+goal/辅助资料不提交，完整批次和发布门禁通过前不合main、不发版。
+
+取消求购/收摊/到期清理现均在完整保存点检查返还、删单、回执行数与最终回读，
+IGNORE/改写和trigger副作用完整回滚本单，四种具体write_rejected及订单主体透传。
+坏订单数值/已成交量、负余额、坏背包和历史回执明确拒绝，不猜账，不改历史。
+退款保留存货，退物保留绑定数与上限，只退未成交部分；恢复/旧回放不重复返还。
+未知SQLite异常原链透传，取消命令有安全定位，流程/失败回复投递异常不吞。
+没有新增迁移，不宣称跨库WAL断电原子性、独立统计崩溃补记或全批回滚。
+
+隔离三类路径首轮复现无异常但资产/订单/回执错误；18个故障子场景中一条摆摊
+改写夹具误挂INSERT未实际触发，已改UPDATE，不将其算独立红证据。新增三条真实
+market-guishi-return参数链覆盖部分成交取消三步拒写/ABORT→重建应用→同消息
+恢复重放，收摊首单成功/次单拒写/剩余重试，以及07:59/08:00实际APScheduler的
+求购拒写、退款成功后退物拒写、恢复/重复任务。三库资产/回执/实际统计及完整性
+核验；具体原因/订单经过OneBot/QQ文本、Markdown蓝字和降级短合同，未真机。
+初组14pass/18subtests；追加组两处夹具问题（跨类型复用操作号、未记录统计列按零
+猜测）修正后41pass/23subtests；最终受影响组合190pass/25subtests，各组重叠不
+累计。另一个受影响源码合同单独1pass，其他CI基线复用；architecture含inventory、
+受影响编译/diff均通过，白名单交付develop后另核精确SHA CI。
+总goal/G2未完成，当前批次不合main、不发布，用户冻结JSON删除继续保留。
+
+## 鬼市寄存取物完整恢复（develop checkpoint）
+
+账户写入边界已普通提交推送 `30c9a187`；350项定向及10subtests、architecture含
+inventory、受影响编译/diff通过，精确SHA CI43978946744已绿，不重复全量。继续原goal，仅冻结
+鬼市寄存取物从真实命令到application/仓储/两库/统计/消息的完整路径：按物品全量
+取回、周末与旧消息重放、库存上限和绑定数、坏存货数据、写入被忽略/异常及完整
+回滚，恢复后同消息不重复发物或统计。先隔离SQLite复现三步写入未校验和坏条目
+被跳过的源码疑点，不以无异常/返回taken当作正确。保留现有全量取回及绑定规则，
+旧回执先验证兼容，不猜账、不批量改历史数据；只在该范围补具体原因/主体。
+首轮只在 `/tmp/codex_guishi_take_failure_audit.py` 运行四条隔离回归，全部红复现：
+背包INSERT被IGNORE后暂存3件消失且仍写成功回执；暂存UPDATE被IGNORE后原存货
+仍在、背包额外获得3件；回执INSERT被IGNORE后发物但无回执；取1001时1002的
+非法数量被解析跳过并随账户JSON重写而删除。四条均返回taken，说明成功返回不能
+证明正确。辅助脚本不提交；本目标生产修复与真实命令/消息闭环结果见下。
+30c9a187精确SHA的CI `43978946744` 已核completed/success，未watch或复跑全量。
+继续共享锁、有界受影响验证、项目venv，复用魔修/调度与已绿CI；不访问线上库，
+不更新重启部署、不改环境、不发真实QQ。用户JSON删除、goal/辅助资料不入提交；
+验证完白名单普通推develop，完整批次/发布门禁通过前main/Release保持不动。
+
+现取物三步写入纳入完整保存点，检查每步行数并在所有写入后回读，拒绝连同trigger
+副作用完整回滚，三种write_rejected具体原因/subject保留。坏JSON/非对象、重复键、
+非法/负数量、坏库存及历史回执分别明确拒绝，不丢弃条目、不改历史；未取物品保留
+原表示，维持全量领取及绑定规则。消息操作号独立于物品参数，事务内只读兼容旧
+后缀回执，多条旧回执明确冲突；旧成功回放先于周末及库存校验。应用注入业务时钟/
+时区，纯仓储旧API默认开放；旧应用成功测试改为固定周六。未知异常原样到handler
+后有日志/安全定位，失败回复发送失败与NoneBot流程异常透传。不新增迁移、不改
+数量上限，不宣称行为统计的崩溃补记或跨库WAL断电原子性。
+
+五条market-guishi-take真实命令链先独立通过：实际成交暂存→全取绑定、周末边界与
+周一回放、旧回执/参数冲突、多条历史歧义、库存上限/坏数据、三处IGNORE及SQLite
+ABORT→重建应用→同消息恢复/重放、真实matcher并发。三库快照含库存/绑定/余额/
+永久回执和实际统计，恢复后integrity_check通过；故意异常精确断言且未关闭普通
+探针监测。受影响组合首轮137 passed/24subtests，1条旧参数夹具因只固定命令时钟
+而应用读当天失败；现两层注入同一固定时钟，原资产和回执断言保留，该六场景组
+单独复验已通过（1个包装、6场景），不重跑未变化137项。OneBot/QQ仅mock普通文本/
+Markdown蓝字/发送降级，不宣称真机通过。
+架构含inventory、受影响编译/diff均通过，白名单推develop后核精确SHA CI；
+总goal/G2仍active，不合main、不发布，用户JSON删除及本地goal继续保留。
+
+## 鬼市参数与账户写入边界（develop checkpoint）
+
+起点develop `ebacbcb9`，CI `43968141711` 已单次核completed/success。上一goal轮
+有代码/回归/推送进展，继续原goal，不重复创建。仅冻结鬼市价格/默认与截断数量、
+订单/账户/单次金额上限、存取余额/手续费边界、同消息冲突/重放，以及对应已知拒绝
+和跨库回滚。保留既有截断/存储上限规则，不借边界测试改变经济规则或泛化性能。
+先用真实SQLite确认余额投影或回执UPDATE/INSERT被忽略时是否会提交单边钱包变更；
+若证实则修复整事务/保存点拒绝与具体reason/subject，再接真实命令参数/三库统计/
+OneBot/QQ短合同。仅共享锁、有界受影响组和项目venv；不访问线上数据库，不改
+部署/环境、不重启、不发真实QQ、不本地全量；用户JSON删除、goal及辅助资料不入
+提交。完整功能验证后白名单普通推develop，完整批次/发布门禁通过前main不动。
+
+隔离SQLite六条回归先确认真实单边写入：余额被IGNORE时存款仍扣100、提款仍入80，
+回执被IGNORE时两边余额已变但无回执，余额被trigger改写也返回完成。现在完整保存点
+覆盖钱包/鬼市余额/永久回执，检查行数并在全部写入后回读，拒绝连同trigger副作用
+完整回滚。保留stone_write_rejected、guishi_balance_write_rejected、
+guishi_receipt_write_rejected及原数值原因和subject，回复明确本人账户；未知SQLite
+异常仍透传。新账户INSERT忽略、钱包拒绝、回执改写、坏数值及Web历史拒绝回放均有
+回归。业务拒绝可同消息恢复，Web外层ledger仍保留原拒绝，新key才重新执行。
+未改10亿上限、既有提款clamp/手续费/订单数量截断和旧回执规则，没有新增迁移。
+
+真实命令另复现Unicode digit `²`通过isdigit却int失败、没有正常回复，存取两入口
+已局部处理转换失败，支持全角可解析数字并明确拒绝超长整数。七条新参数场景验证
+金额/余额相邻上限、小额手续费取整/满额提款、默认1/零负截1/11截10、10与11单、
+重放冲突与拒绝三库零写；四种余额/回执故障解除后同消息成功且不重复资产或统计。
+首次两条冲突场景误断言英文reason在玩家文本中，改为既有具体中文提示，保留零写
+断言；消息合同查出数字subject未呈现，按本人账户映射补齐，不删主体断言。
+最终存取仓储/精度两类/全部鬼市参数与消息/兼容服务/源码质量组合 **350 passed、
+10 subtests passed**（含源码质量246，和此前24/12通过项重叠不累计）。OneBot/QQ
+仅mock文本/Markdown蓝字/发送降级合同，未真机；三库integrity_check通过。
+架构含inventory、受影响编译/diff均通过；白名单推develop后另核精确SHA CI，
+复用ebacbcb9全绿基线，不watch或本地全量。总goal/G2仍未完成，用户JSON删除和
+发布blocker保留，不合main、不发布。下一相关完整目标只限鬼市寄存取物：按物品
+全量取回、周末与重放、库存上限/绑定数、坏存货数据、写入拒绝/回滚及真实回复链；
+先复现，不扩大交易玩法、性能或全仓审计。
+
+## 鬼市恢复跨截止与取消收敛（develop checkpoint）
+
+即时撮合恢复已白名单提交推送 `e274d04d`，CI `43965956414` 已核completed/success，
+不watch或本地全量。继续原goal的下一相关完整目标，仅处理恢复跨08:00截止/
+清理失败后继续成交和取消后pending收敛。隔离库本地红复现已确认两类订单：21:00
+创建、次日09:00恢复仍新成交2件/40灵石并标complete；无异常并非无bug。仅辅助
+复现文件位于/tmp，不提交；该次误收集夹具13项绿与既有证据重叠，不累计。
+本轮限定共享业务时钟/时区、创建锚点截止与每对事务内再判断，过期具体原因/双单
+保留，不猜历史缺锚点，不重写旧回执；实际取消/清理后重试收敛且不重复退款/统计。
+覆盖07:59/08:00/跨期、首对提交后时钟跨界、命令与实际调度、隔离资产回执统计/
+完整性和OneBot/QQ短合同。仍仅共享锁/项目venv/有界受影响组，线上/环境/main/
+Release不动，用户JSON删除和本地goal/辅助文件不入提交。
+
+现pending入口拒绝自身已到期订单；每对成交事务内再次检查双方锚点截止，采用同一
+应用时钟/业务时区，不让新单消费到期旧单，也不让首对提交后的跨08:00继续结算。
+qiugou_expired/baitan_expired保留具体双订单与pending，不假装无匹配complete；
+旧缺/非法锚点不猜测，旧成功回执先回放，取消/清理真正删除后恢复收敛且不重退。
+只注入应用撮合时钟，纯仓储无时钟旧API仍兼容；旧FIFO测试显式固定在其历史锚点
+对应的有效时间，不删除价格/数量/退款断言。新增真实命令链包含创建后未知异常的
+精确监测、08:00重放明确拒绝、实际APScheduler清理异常回滚/解除故障退款退物、
+pending完成和同消息/两任务重放。三库资产、回执、零成交统计及integrity_check
+均核对；OneBot/QQ过期原因Markdown/蓝字/降级短合同绿，未真机。
+新链与边界/消息15项先绿，最终10个受影响模块133 passed/6subtests，与既有79项
+组合重叠不累计。复用e274d04d全绿CI和未变化源码质量246项基线；architecture
+含inventory、受影响编译/diff门禁通过后白名单推develop，精确SHA CI另核。
+完整goal仍active，不合main、不发布、不改线上库/部署/环境。下一相关完整目标
+限鬼市价格/数量/账户上限的真实命令参数边界与已知拒绝、重放和回滚，不扩性能。
+
+## 鬼市即时撮合失败与中断恢复（develop checkpoint）
+
+起点develop `9cae5edd`，CI `43959625150` 单次核验 completed/success，复用绿基线，
+不watch或本地全量。沿现有goal只处理创建已提交后的即时撮合：真实SQLite复现冲突/无效
+类型伪正常、首对已成交后下一对失败、异常中断与同消息/实际调度恢复。创建回执
+增加持久pending/完成及具体失败原因/订单定位；旧回执不猜测重启一次撮合。每对
+成交维持原事务与价格规则，部分成功如实回复，重复不多扣资产或统计；失败不能
+回复全部完成，未知异常保留日志定位及原异常链，正常NoneBot流程异常透传。
+包含迁移隔离验证、真实命令参数/重建应用/两库与统计重读、OneBot/QQ消息短合同、
+受影响回归与发布门禁。仅项目venv/共享锁/有界检查，保护用户JSON删除，goal及
+辅助文件不入提交；不访问线上数据库、不改部署/环境、不重启、不发真实消息。
+验证代码及时白名单推develop，完整批次通过前不合main或发布。
+
+首轮真实仓储红回归确认永久成交回执冲突被当无匹配，第一对已成交后第二对无效
+结果仍正常返回。现明确区分正常竞争与冲突/非法类型；创建与pending同事务，新
+求购/摆摊首次和同消息重试均恢复该单，complete或无pending的历史回执不另启撮合。
+自动任务先恢复pending，具体失败进入EVENT_JOB_ERROR，不让另一operation ID绕过
+冲突。每对成交将六列买卖统计与资产/订单/永久回执一并提交，回放不重复统计。
+trade.015仅trade DB、trade.016仅player DB，旧迁移与结果缺字段兼容；缺迁移
+schema_missing零成交写，业务错误保留reason/subject和双订单，未知存储错误保留原
+异常与traceback。失败原因再写失败保留原业务错误及关联异常，完成写失败仍pending。
+RAISE(IGNORE)拒绝统计/完成更新也显式失败，不伪装完成。部分提交如实回复，不宣称
+整批回滚；跨库WAL断电原子性、创建统计崩溃补记和真机QQ均未宣称已解决。
+
+新增两条market-guishi-recovery真实dispatch/DI/handler：买单创建后异常、重建应用/
+同消息恢复和零额外重放；摆摊首对成交/次对冲突、保留原因及恢复第二对。三库实际
+余额/库存/回执/pending/complete/statistics重读，两种实际APScheduler失败与恢复，
+OneBot/QQ Markdown蓝字/降级短合同通过。新增场景曾被预期注入异常监测及裸连接
+integrity_check缺数值函数挡住；仅精确断言注入异常，改用真实UoW完整性检查，不
+关闭正常探针异常监测。受影响13模块142 passed/6subtests；最终新增IGNORE回归后
+相关72 passed/2subtests，与前组重叠不累计。源码质量246 passed；architecture含
+inventory、受影响编译、diff通过。仅白名单develop提交推送，精确SHA CI另核；总
+goal仍active。下一相关完整目标限撮合恢复跨08:00截止/清理失败后的状态判断与取消
+恢复，先证实是否存在过期订单继续成交，不扩性能或全仓审计。用户JSON删除和发布
+blocker不变，本地goal/辅助资料不提交。
+
+## 鬼市创建与收摊生命周期（develop checkpoint）
+
+继续既有goal，起点develop `2f17b57f`。该SHA CI43954272571已核验completed/success，
+复用魔修跨期SHA968a0034的全绿证据，不watch或本地全量。当前仅冻结鬼市创建
+消息重放/参数冲突、历史操作号兼容、库存截断与时间窗口、真实命令并发、部分成交
+取消退款、收摊部分失败/恢复和已知拒绝回复；验证创建CAS失败后完整回滚。
+真实dispatch/DI/handler接隔离迁移SQLite，核对资产、订单、回执、统计和重读；
+OneBot/QQ只做消息短合同，不声称真机通过。逐单收摊允许部分提交，必须报告保留
+订单及具体原因，不能声称全部取消或全批回滚。不扩性能、玩法或全仓审计。
+共享锁、有界定向检查、项目venv；不访问线上数据库、不改部署或/root/myenv、不
+重启、不发真实消息。仅白名单普通提交推送develop，goal/辅助文件和用户JSON删除
+不入提交；完整批次及发布门禁通过前保持main/Release不动。
+
+隔离回归先复现求购扣款CAS拒绝仍提交新订单和trigger资产改动；四条真实命令
+场景同时复现重复统计、闭市/库存阻挡旧请求、取消原因覆盖和收摊伪成功。后加
+摆摊CAS回归又确认被忽略的UPDATE仍提交trigger绑定数量改动。现两类创建均以
+完整保存点回滚已知CAS拒绝，解除故障后同操作成功且回放不重复。新消息操作号
+独立于参数，事务内兼容旧带参数回执并保留原行；多条旧回执或无法证明原请求的
+历史截断数量明确operation_conflict，不猜账。新摆摊在事务内截断库存，回执保留
+请求payload和实际数量，先回放再判断时间/上限/库存；重复请求不重复统计或撮合。
+取消保留not_owner/not_qiugou/operation_conflict及订单定位，只退部分成交的剩余额。
+收摊逐单提交与失败保留如实回复，恢复后不重复退物；只记录实际成功数量。
+
+新增五条market-guishi-lifecycle参数链进入既有unittest包装，包括真实matcher
+并发：同消息只预留一次、不同消息按剩余库存共预留10件；实查三库资产/回执/
+statistics，部分成交取消和收摊后核对已购暂存物与库存。两库integrity_check通过。
+OneBot普通文本、QQ Markdown蓝字及发送降级保留部分成功/原因/订单短合同通过；
+没有真实QQ展示。受影响首组306 passed/1新CAS回归失败；修复后相关55 passed，
+含历史兼容、取消/撮合/到期和最新五条参数链，与首组有重叠不累计。期间共享锁
+排队两次达600秒但未执行测试，未绕锁或终止其他任务。架构（含inventory）、
+受影响编译和diff通过；没有本地全量。先白名单普通提交推送develop，再核验精确
+SHA CI，不合main、不发布。总目标仍active；下一相关完整范围限即时撮合显式
+失败与创建后中断恢复，先建红回归，再决定恢复契约，不扩成全仓审计。
+
+## 同类任务显式失败闭环（develop checkpoint）
+
+魔修跨期/重放修复已普通提交推送 `968a0034`，精确SHA的CI `43951435416` 全绿，
+仅单次查询核验，没有长时间watch。继续既定五类任务范围，已确认宗门维护把解散/继承/封闭的schema_missing记为
+跳过，日重置operation_conflict直接返回；傀儡外层虽抛异常，内层失败却转成普通文字；
+NewAPI逐账号异常仍被内层continue吞掉，远端失败结果和历史写入警告也计入完成数量。
+本轮仅修上述显式结果的调度错误契约，不扩展资材、奖励、玩法或性能。副本邀请/
+体力恢复的未变化绿证据复用。宗门正常竞争/已处理、傀儡未成熟/不足/上限等业务
+跳过继续保留具体状态；批次部分成功不能宣称全部回滚。用真实APScheduler事件、
+隔离SQLite和mock远端验证失败、恢复、回执及实际数据；NewAPI不联网、不输出凭据。
+沿用共享锁、项目venv和白名单develop交付，本地goal/辅助资料与用户JSON删除不入提交。
+
+新增实际调度回归先复现13条失败，另1条既有回执异常回滚已正常透传：五条宗门维护
+分支与日重置冲突伪正常，日重置缺迁移丢失具体原因；傀儡缺迁移/坏时间伪正常；
+NewAPI逐账号异常/请求失败/远端拒绝/历史未写入都曾产生EVENT_JOB_EXECUTED。
+现上述失败进入EVENT_JOB_ERROR，保留原status/action/业务日期/本地主体定位及异常链。
+宗门失败汇总时不再输出完成，其他宗门可继续提交；傀儡保留既有逐人事务和正常业务
+跳过；NewAPI扫完剩余账号后带完成数量/各项原因失败，诊断详情保留在错误对象和历史，
+日志不拼接远端原文或凭据，不因历史补写而重发同次远端POST。未宣称整批回滚。
+
+十二个受影响模块 **100 passed**，包括真实SQLite宗门失败零写/恢复/部分成功、傀儡
+两库资产/收取锚点/回执异常完整回滚及恢复重放、NewAPI实际有限历史与mock远端；
+新参数夹具曾误用历史DTO字段，修为实际`index`投影，保留主体与历史数量断言。
+源码质量另 **246 passed**；architecture（含inventory）、受影响编译与diff通过，
+没有本地全量。新增回归位于既有定时CI模块。本地目标已更新；本轮白名单提交推送
+develop，精确SHA CI须另核验，完整目标仍active。下一完整切片回到鬼市创建/重放/
+冲突/并发/部分成交取消与收摊生命周期，先冻结范围，再验证真实命令、两库与消息合同。
+保持main/Release不动，不访问线上库、不重启、不改共享或部署环境、不发真实QQ。
+
+## 魔修窗口内启动与跨期恢复（develop checkpoint）
+
+继续现有本地 goal，不创建重复目标。起点 `5c5ca20c`，复用已全绿的精确 SHA CI
+`43947994349`，不重复全量或长时间 watch。本轮只读 `/root/xiu2` 调度/活动日志和
+时间配置：部署进程 TZ、系统时区和已安装 APScheduler 默认均为 Asia/Shanghai，
+现部署魔修源码仍直接读取 UTC 时钟小时，尚未包含 develop 时间修复。当前日志
+11月12至16日每天18:30至21:30均有刷新检查，未发现自动开启/结束成功日志；这只能
+证明检查执行，不能证明活动开启或无 bug。不读线上数据库，不更新/重启部署，
+不执行或修改 `/root/myenv`，不输出凭据、账户或原始玩家消息。
+
+冻结范围：隔离 SQLite 和可控时钟验证错过18:00后19:00首次讨伐、前日 active
+未关闭跨期恢复、同日人工关闭/已有结算后的重试，核对真实 handler、权威状态、
+永久回执和事务回滚；已知失败保持具体原因。注册失败 pending/重试、鬼市到期/
+周末提款与既有同类异常透传复用绿证据，只有新疑点或受影响项才复验。该闭环后
+下一相关目标限已审计同类任务的显式失败结果与调度器错误事件，不扩展性能或全仓审计。
+仅共享锁、有界测试、项目 venv、白名单 develop 提交推送；本地目标/辅助文件和用户
+冻结 JSON 删除不入提交。完整批次与发布门禁通过前不合 main、不发布。
+
+隔离回归先得到3 fail/1 pass：19:00空状态首次讨伐原本可恢复；前日active则被
+`invalid_transition`拒绝；已结束状态重放开启回执会返回旧active快照（人工关闭也
+影响cron日志）。现仅自动跨期允许合法且更晚的魔修日期在原事务内恢复，保留旧回执；
+同日active和人工关闭不重置，已存在开启回执时读取当前持久状态，不返回过时快照。
+回执与权威事件ID不一致仍明确`state_changed`，不猜测恢复。非法/倒退/同日跨期、
+人工start等保持`invalid_transition`零写；故障trigger证明新回执写入失败时完整保留
+旧状态，解除故障后同请求成功且只有一条回执。两种19:00首次入口均接真实讨伐/
+重放和22:00实际APScheduler关闭，核对HP/统计/回执/两期历史及integrity_check。
+魔修调度/生命周期/波次受影响五模块 **57 passed**；OneBot/QQ消息合同复用既有
+CI绿证据，没有真实QQ展示或线上活动状态核验。随后进入已冻结的同类任务失败结果闭环。
+新增跨期事务回归加入定时CI步骤；architecture（含inventory）、受影响编译和diff通过。
+
+## 调度桥激活失败后的重试（develop checkpoint）
+
+调度桥白名单已提交推送 `9d8d816e`。其 CI `43946333547` 执行 6156 项 unittest，
+只有传承历史重复行参数场景失败，后续步骤被跳过，不能称该 SHA 全绿。单独复验
+该 20 场景组曾通过；随后固定“中奖”随机分支精确复现：结算成功且卡片增加，但场景
+无条件断言卡片不变。现仅把该场景固定到原断言要求的“未中奖”分支，余额/历史整行/
+统计/回执与卡片断言全部保留，不改传承业务。包装测试同时输出失败场景的 JSON 详情，
+避免 CI 只有 exception 状态无法定位。该组 20 场景定向复验通过；相同外部强制中奖
+条件下，修复前稳定失败、修复后由场景自身固定未中奖并通过。受影响测试编译/diff
+通过，复用未变化架构基线。该 CI 收尾是当前冻结范围的唯一追加项。
+
+鬼市时间链已提交推送 `d8ecefe1`，精确 SHA CI `43945040484` 全绿：6154 项
+unittest、54 项定时 pytest，编译、architecture、inventory 和 diff 门禁均通过。
+继续定时任务伪正常审计时发现 `DeferredScheduler.activate` 在逐个注册前就设置
+active 并清空 pending；中途 `add_job` 失败后，同进程重试会直接返回，剩余任务
+可能未注册却不再报错。两项 bridge 回归先失败，隔离真实 runtime 又复现第二次启动
+变为 READY、魔修/灵脉仍缺失。现逐条成功后才移除 pending，全部注册成功后才设 active。
+
+中途失败与同 ID 外部任务冲突保留原异常；已注册任务不覆盖、不重复，失败与剩余
+声明不丢失，恢复期间新增声明也等待注册。故障持续两次时 jobs/not_ready、原异常
+实例及 traceback 均保留，恢复后 ready。独立 APScheduler 已实际触发恢复后的魔修
+回调，隔离迁移库写入 active/18:00 状态、唯一 lifecycle 回执，integrity_check=ok。
+该链使用无 NoneBot driver 的维护 runtime，不冒充真实驱动或 QQ 连接。首轮组合因
+旧启动测试缓存已删除临时资源路径而失败，现显式隔离 driver，不改业务断言。
+
+bridge、魔修、启动错误透传与同类任务组合 **33 passed**；鬼市注册/消息短合同另
+**30 passed**。architecture（含 inventory）、受影响编译与 diff 均通过；本轮按白名单
+普通提交/推送 develop，交付仍要求精确 SHA CI 通过。复用既有结算、参数/OneBot/QQ
+绿证据。本轮限激活恢复契约，
+不扩展性能或玩法，仅项目 venv、共享锁、有界定向门禁，不访问线上库、不重启、不
+发送真实消息；本地目标与用户冻结清单删除不入提交，保持 develop、不合 main。
+
+## 鬼市到期与周末完整时间链（develop checkpoint）
+
+本轮起点 `develop/origin/develop=d3fe7ce8`；该基线 CI `43940906913` 全绿，含
+6142 项 unittest、52 项定时 pytest 与架构/清单门禁。上轮为实质进展；本轮继续
+本地 `.codex-goal.md` 的 G2 定时任务范围，未恢复性能泛化。
+
+新增隔离回归先复现五处失败：历史 UTC 锚点按 UTC 日期到期、信息页多显示八小时、
+跨本地午夜求购被缩短一天、凌晨摊位截止显示与实际清理不一致、周六零点取款被拒。
+同时确认求购/摆摊创建回执仍读 SQLite 当前时间，绕过注入时钟；摆摊虽已用应用时钟
+更新背包，回执却用另一时钟，真实参数链因此曾把刚建摊位显示为已截止。
+
+现在 TradeApplication 显式接收业务时区；legacy 命令、runtime service 和 Web fallback
+均注入 scheduler 时区，独立构造默认 Asia/Shanghai，仍支持显式 UTC。存储时钟保持
+UTC；到期/信息展示先把已有创建锚点投影到业务日期，保留「求购创建次日08:00」
+规则，凌晨摆摊则显示本轮当天08:00。旧无偏移 SQLite 时间按 UTC 解析，不重写
+历史时间戳，不新增迁移；无锚点/非法锚点求购继续保留，已处理回执保持幂等。
+两种创建回执现与应用注入时钟一致。鬼市信息到期取消已知失败会返回具体原因和
+订单定位，不再忽略失败并展示为正常账户；任务侧失败透传契约继续保留。
+
+真实 dispatch/DI/handler 的鬼市组扩为六条（5 成功、1 拒绝），新增 07:59 信息 →
+08:00 实际 APScheduler → 真实取消退款/重读/重复任务、以及周五23:59/周六00:00/
+周一回放旧请求与拒绝新请求；凌晨摆摊也核对信息截止、真实库存退回和两库完整性。
+定向组合 **80 passed、2 subtests passed**，六条参数链通过；随后新增的 Web fallback
+同瞬间 UTC/Asia/Shanghai 实际请求与到期并发竞争两项也分别通过。统计有重叠不累计。
+包括创建时钟故障整事务回滚、部分成交到期只退未成交额、历史锚点零改写与缺锚点零写。
+OneBot 文本、QQ Markdown 蓝字和发送失败降级短合同复用受影响组；没有真实 QQ。
+architecture（含 inventory）、受影响源码/测试编译和 diff 门禁均通过；白名单已提交
+推送 `d8ecefe1`，精确 SHA CI `43945040484` 全绿（6154 项 unittest、54 项定时 pytest）。
+
+G2 尚未完成：创建消息 replay/payload 冲突、真实命令并发、部分成交后玩家取消、
+收摊和其他玩家功能组继续待验。保留用户冻结 JSON 删除与 Phase 2 blocker，本地目标
+不入提交；仅普通提交/推送 develop，不合 main、不发版、不接触线上库或重启服务。
+
+## 鬼市同类定时任务与真实参数链（develop checkpoint）
+
+本轮起点 `develop/origin/develop=042eb03b`，继续本地 `.codex-goal.md` 的完整目标，
+优先收口定时任务伪正常；未扩展性能优化。魔修修复继续保留在 develop，未合 main。
+重新按当前 live matcher 与参数场景建立矩阵（见 `docs/features/trade.md`），当前
+市场参数基线 23 项通过；鬼市原有 repository 证据不冒充真实命令参数覆盖。
+
+同类审计确认鬼市摆摊与周末取物也直接读取 UTC 小时/星期，和 Asia/Shanghai
+调度器不一致；现投影到 scheduler 时区，真实 handler 覆盖本地 `[20:00,次日08:00)`
+和周末跨日边界。自动撮合、求购到期取消、摆摊清理将 operation 冲突/无效类型等
+失败结果向调度器抛错，保留具体 status 与订单定位；正常幂等、订单竞争和背包满保留。
+求购/摆摊多余参数现在明确格式拒绝，不再忽略后结算。
+
+真实注册命令组新增四条可重放场景：存款/冻结/撮合/暂存取回，求购取消退款，非法
+参数零写，未售摊位自动退回与重复任务幂等。核对隔离 SQLite 的双边余额、库存、
+订单、取物/取消/清理回执及两库 integrity_check。定时/命令/OneBot/QQ 组合
+**51 passed**；源码合同另 **6 passed**；此前交易受影响组 **67 passed** 与其有
+重叠，均不累计。新增 cron 注册断言与 integrity_check 后仅复验受影响两项。
+独立内存 APScheduler 验证成功/失败分别产生执行/错误事件；QQ 只验证共享回复的
+Markdown 蓝字及降级合同，没有真实消息。CI 原先 unittest discover 不执行 pytest
+函数，现增加限定定时任务步骤，四条参数链通过 unittest 包装进入既有 CI。
+
+最终复核又补齐魔修连续链：真实内存 APScheduler 触发开启 → 隔离 SQLite 持久化 →
+19:00 真实讨伐 handler/application 结算 → 同消息回放 → 22:00 调度关闭并拒绝新讨伐。
+核对 BOSS 扣血、参与次数/伤害统计、永久回执与 integrity_check；战斗计算和消息发送
+使用 mock，状态读取/生命周期/讨伐结算使用真实 repository。缺生命周期迁移时实际
+产生 EVENT_JOB_ERROR，保留 schema_missing，且没有开启成功日志或活动状态写入。
+魔修 live cron 也核对本地 18:00/22:00 和波次末次边界；最新魔修组 **18 passed**，
+与上述组合重叠不累计。复用未变化的交易/消息和 architecture 绿基线。
+
+G2 保持进行中：鬼市历史到期锚点与取灵石仍有 UTC 口径、创建请求 payload 冲突与
+并发/部分成交取消参数链、鬼市信息/收摊/其他玩家组均待后续完整切片；本轮不宣称
+所有交易或时区已收口。保留冻结 JSON 用户删除与 Phase 2 gate blocker，
+`.codex-goal.md` 仅本地。本地受影响门禁已通过，仅白名单普通提交/推送 develop；不合 main、
+不发布、不访问 `/root/xiu2` 数据库、不重启线上、不发送真实 QQ。
+
+## 定时任务伪正常与魔修入侵时区修复（develop checkpoint）
+
+2026-11-17 优先处理定时任务“日志失败但调度器收到成功”的问题，不扩展性能优化。
+该轮代码基线为 `fbbb8b63`，文档 checkpoint 为 `042eb03b`；工作区保留用户删除的
+`docs/refactor_phase2_legacy_path_items.json`，不恢复、不提交。根因是 APScheduler 使用
+`Asia/Shanghai` 而 `SystemClock` 提供 UTC：魔修开启、结束、业务日期、波次槽位和
+`讨伐魔修` 状态判断原先直接读取 UTC 小时，导致本地有效窗口被判为未开启。
+
+修复统一以 scheduler 时区投影世界事件业务时间，保留灵脉既有 UTC 墙钟存储解析契约；
+魔修任务与灵脉任务均由兼容 manifest 显式指向、经 deferred scheduler bridge 在 `jobs`
+阶段激活。隔离 SQLite 真实回调已验证 18:00 自动开启、重复触发只产生一条 lifecycle
+回执、22:00 自动结束；`[18:00,22:00)` 边界、本地跨日 period、持久状态读取和真实
+`讨伐魔修` handler 均有回归。灵脉 `00:30` 幂等槽位也改用本地业务日期。
+
+同类伪正常失败路径已审计并改为向调度器透传：傀儡收取、副本邀请扫描（含失败结果）、
+NewAPI 自动签到、体力恢复和宗门不活跃维护；失败保留 traceback，不记录“完成”。又修复
+世界事件生命周期/波次/灵脉自动回调把 `schema_missing`、`state_changed`、
+`invalid_transition` 或 `operation_conflict` 当作成功日志的伪正常路径；正常幂等的灵脉
+`already_active`/`not_triggered` 仍保留。新增启动激活和失败透传回归，当前受影响组合
+复测为 **55 passed、4 个子测试通过**（与既有 554/20 组合有重叠，不累计），含魔修调度、世界事件/灵脉、
+启动与任务失败可见性、秘境全组、贴纸 Web/应用、OneBot/QQ 合同和源码质量；另以
+隔离 SQLite 真实运行了 `RiftApplication.speedup` 普通/大加速 handler，核对 50/10、
+operation ID、道具扣减、回执和回复文本。未运行全量测试、真实 QQ/OneBot WebSocket、
+生产库或线上服务，未部署、未重启、未发送真实消息。
+
+白名单普通提交 `c29bb71d`、`fbbb8b63` 及文档 checkpoint `0d3d8146`、`042eb03b`
+已推送 `develop`；未合入 `main`、未创建 Release。Phase 2
+冻结清单缺失仍是独立 blocker，不能以本轮定时任务或 G1 focused 通过替代。
+
+本 checkpoint 仅允许在受影响门禁完成后普通提交并推送 `develop`；`.codex-goal.md`、
+用户删除和其他未列入白名单的本地状态不得提交。Phase 2 冻结清单缺失仍是独立 blocker，
+不能通过改 hash、删断言或恢复用户文件伪造通过；未合入 `main`，未创建 Release。
 
 ## 货币精确比较与结算一致性（v1.3.3 已交付）
 

@@ -200,15 +200,17 @@ def test_scheduler_and_admin_entries_share_resumable_daily_service():
         )
     ]
     assert "result = await set_boss_limits_reset()" in admin_handler
-    assert 'if result.status == "schema_missing":' in admin_handler
+    assert "_boss_reset_failure(" in admin_handler
     assert "elif result.succeeded:" in admin_handler
-    assert "else:\n        msg = f\"世界BOSS额度重置未完成：{result.status}\"" in admin_handler
+    assert "getattr(result, 'reason', '') or result.status" in admin_handler
+    assert "getattr(result, 'subject', '') or result.business_date" in admin_handler
 
     reset_body = boss_source[
         boss_source.index("async def set_boss_limits_reset(") : boss_source.index("@boss_help.handle")
     ]
     assert "if result.succeeded:" in reset_body
-    assert 'logger.error(f"世界BOSS额度重置未完成：{result.status}")' in reset_body
+    assert "if not result.succeeded or result.task_status != \"running\":" in reset_body
+    assert "getattr(result, 'reason', '') or result.status" in reset_body
 
     limit_source = (
         root / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_boss/boss_limit.py"

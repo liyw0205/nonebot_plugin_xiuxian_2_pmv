@@ -201,6 +201,37 @@ def test_install_status_returns_job_dto_and_unknown_job_404(sticker_client):
     ]
 
 
+def test_install_query_parameters_and_error_terminal_status_are_preserved(sticker_client):
+    client, application, _ = sticker_client
+    _login(client)
+
+    queued = client.post(
+        "/api/messages/stickers/install?pack_id=pack-a&force=true",
+        headers={"X-CSRF-Token": CSRF_TOKEN},
+    )
+    assert queued.status_code == 202
+    assert queued.get_json() == application.install_result
+
+    application.status_result = {
+        "success": False,
+        "job_id": "job-1",
+        "status": "error",
+        "stage": "failed",
+        "percent": 37,
+        "message": "摘要校验失败",
+        "error": "归档摘要不匹配",
+        "pack_id": "pack-a",
+    }
+    failed = client.get("/api/messages/stickers/install/job-1")
+    assert failed.status_code == 200
+    assert failed.get_json()["status"] == "error"
+    assert failed.get_json()["error"] == "归档摘要不匹配"
+    assert application.calls == [
+        ("start_install", {"pack_id": "pack-a", "force": True}),
+        ("install_status", {"job_id": "job-1"}),
+    ]
+
+
 def test_file_route_serves_image_headers_and_rejects_traversal_and_symlinks(sticker_client):
     client, application, packs_root = sticker_client
     _login(client)

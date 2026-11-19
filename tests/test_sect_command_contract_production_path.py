@@ -173,6 +173,7 @@ class SectCommandContractProductionPathTests(unittest.TestCase):
             apply_sect_operations,
             apply_sect_task_claim_operations,
             apply_sect_task_settlement_operations,
+            apply_sect_task_weekly_event_status,
             apply_sect_task_state,
         )
         from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
@@ -181,6 +182,7 @@ class SectCommandContractProductionPathTests(unittest.TestCase):
             apply_sect_task_state(uow)
             apply_sect_task_claim_operations(uow)
             apply_sect_task_settlement_operations(uow)
+            apply_sect_task_weekly_event_status(uow)
             # `sect.019` owns the command receipt ledgers; the request path only verifies.
             apply_sect_operations(uow)
 

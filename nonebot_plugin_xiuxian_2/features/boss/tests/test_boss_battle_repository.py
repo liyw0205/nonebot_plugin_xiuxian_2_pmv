@@ -1,11 +1,129 @@
 import sqlite3
 
-from ..migrations import apply_boss_player_schema
+import pytest
+
+from ....core.errors import DomainError
+from ..migrations import apply_boss_player_schema, apply_boss_settlement
 from ..application import BossApplication
 from ..repository import BossPurchaseSqlRepository
 from ....infrastructure.database import DatabaseUnitOfWork
 
 from tests.test_world_boss_battle_settlement import create_databases, settle
+
+
+def _battle_snapshot(game, player):
+    with sqlite3.connect(game) as connection:
+        game_state = (
+            connection.execute("SELECT * FROM user_xiuxian ORDER BY user_id").fetchall(),
+            connection.execute("SELECT * FROM user_cd ORDER BY user_id").fetchall(),
+            connection.execute("SELECT * FROM back ORDER BY user_id,goods_id").fetchall(),
+            connection.execute("SELECT * FROM world_boss_battle_operations ORDER BY operation_id").fetchall(),
+            connection.execute("SELECT * FROM isolated_effect ORDER BY value").fetchall(),
+        )
+    with sqlite3.connect(player) as connection:
+        player_state = (
+            connection.execute("SELECT * FROM boss ORDER BY user_id").fetchall(),
+            connection.execute("SELECT * FROM boss_limit ORDER BY user_id").fetchall(),
+            connection.execute("SELECT * FROM world_boss_state ORDER BY state_key").fetchall(),
+            connection.execute('SELECT * FROM statistics ORDER BY user_id').fetchall(),
+            connection.execute('SELECT * FROM xiuxian_tasks ORDER BY user_id').fetchall(),
+            connection.execute("SELECT * FROM isolated_effect ORDER BY value").fetchall(),
+        )
+    return game_state, player_state
+
+
+_SILENT_BATTLE_WRITE_FAULTS = [
+    pytest.param(
+        "daily",
+        "player",
+        "CREATE TRIGGER battle_fault BEFORE UPDATE OF boss_stone ON boss "
+        "BEGIN INSERT INTO isolated_effect VALUES('daily'); SELECT RAISE(IGNORE); END",
+        None,
+        id="daily-allowance-ignore",
+    ),
+    pytest.param(
+        "inventory",
+        "game",
+        "CREATE TRIGGER battle_fault BEFORE INSERT ON back "
+        "BEGIN INSERT INTO isolated_effect VALUES('inventory'); SELECT RAISE(IGNORE); END",
+        {"id": 9001, "name": "首领遗物", "type": "神物", "quantity": 1, "bind": True},
+        id="inventory-ignore",
+    ),
+    pytest.param(
+        "statistics",
+        "player",
+        "CREATE TRIGGER battle_fault BEFORE INSERT ON statistics "
+        "BEGIN INSERT INTO isolated_effect VALUES('statistics'); SELECT RAISE(IGNORE); END",
+        None,
+        id="statistics-ignore",
+    ),
+    pytest.param(
+        "tasks",
+        "player",
+        "CREATE TRIGGER battle_fault BEFORE INSERT ON xiuxian_tasks "
+        "BEGIN INSERT INTO isolated_effect VALUES('tasks'); SELECT RAISE(IGNORE); END",
+        None,
+        id="task-progress-ignore",
+    ),
+    pytest.param(
+        "stamina",
+        "game",
+        "CREATE TRIGGER battle_fault AFTER UPDATE OF user_stamina ON user_xiuxian "
+        "BEGIN INSERT INTO isolated_effect VALUES('stamina'); "
+        "UPDATE user_xiuxian SET user_stamina=89 WHERE user_id=NEW.user_id; END",
+        None,
+        id="player-state-rewrite",
+    ),
+    pytest.param(
+        "state",
+        "player",
+        "CREATE TRIGGER battle_fault AFTER UPDATE OF bosses ON world_boss_state "
+        "BEGIN INSERT INTO isolated_effect VALUES('state'); "
+        "UPDATE world_boss_state SET bosses='[]' WHERE state_key=NEW.state_key; END",
+        None,
+        id="boss-session-rewrite",
+    ),
+    pytest.param(
+        "receipt",
+        "game",
+        "CREATE TRIGGER battle_fault BEFORE INSERT ON world_boss_battle_operations "
+        "BEGIN INSERT INTO isolated_effect VALUES('receipt'); SELECT RAISE(IGNORE); END",
+        None,
+        id="permanent-receipt-ignore",
+    ),
+]
+
+
+@pytest.mark.parametrize("stage,database,trigger,item", _SILENT_BATTLE_WRITE_FAULTS)
+def test_silent_battle_settlement_write_is_a_known_atomic_rejection(
+    tmp_path, stage, database, trigger, item
+):
+    game, player, activity = create_databases(tmp_path)
+    with DatabaseUnitOfWork(player) as uow:
+        apply_boss_player_schema(uow)
+        uow.execute("CREATE TABLE isolated_effect(value TEXT)")
+    with DatabaseUnitOfWork(game) as uow:
+        apply_boss_settlement(uow)
+        uow.execute("CREATE TABLE isolated_effect(value TEXT)")
+    target_database = player if database == "player" else game
+    with DatabaseUnitOfWork(target_database) as uow:
+        uow.execute(trigger)
+
+    before = _battle_snapshot(game, player)
+    repository = BossPurchaseSqlRepository(game, player, activity)
+    try:
+        result = settle(repository, item=item)
+    except DomainError as exc:
+        assert exc.code == f"boss_battle_{stage}_write_rejected"
+        assert exc.details.get("reason") == exc.code
+        assert exc.details.get("subject") == "10001"
+    else:
+        pytest.fail(
+            f"{stage} write was reported {result.status!r}; "
+            f"before={before!r}; after={_battle_snapshot(game, player)!r}"
+        )
+
+    assert _battle_snapshot(game, player) == before
 
 
 def test_default_boss_repository_settlement_is_feature_owned(tmp_path):

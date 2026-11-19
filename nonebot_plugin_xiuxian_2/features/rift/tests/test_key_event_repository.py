@@ -103,6 +103,33 @@ class RiftKeyEventRepositoryTests(unittest.TestCase):
         with db_backend.connection(self.player_db) as conn:
             self.assertEqual(conn.execute('SELECT "explore_count" FROM rift').fetchone()[0], 9)
 
+    def test_key_receipt_rejection_uses_key_reason_and_recovers(self) -> None:
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_key_receipt BEFORE INSERT ON rift_key_event_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+
+        rejected = self.settle("key-reason")
+        self.assertEqual(
+            (rejected.status, rejected.reason, rejected.subject),
+            ("state_changed", "rift_key_event_receipt_write_rejected", "key-reason"),
+        )
+        with db_backend.connection(self.game_db) as conn:
+            self.assertEqual(
+                tuple(conn.execute("SELECT stone,exp,hp,mp FROM user_xiuxian").fetchone()),
+                (1000, 500, 100, 80),
+            )
+            self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE goods_id=20001").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT status FROM rift_entries").fetchone()[0], "active")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM rift_key_event_operations").fetchone()[0], 0)
+
+        with db_backend.transaction(self.game_db) as conn:
+            conn.execute("DROP TRIGGER reject_key_receipt")
+        recovered = self.settle("key-reason")
+        replay = self.settle("key-reason")
+        self.assertEqual((recovered.status, replay.status), ("applied", "duplicate"))
+
 
 if __name__ == "__main__":
     unittest.main()

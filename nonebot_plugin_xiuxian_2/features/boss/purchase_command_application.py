@@ -124,7 +124,35 @@ class BossPurchaseCommandApplication:
                 return self._invalid("schema_missing")
             raise
         if previous is not None:
-            return {**dict(previous), "action": "purchase"}
+            previous = dict(previous)
+            repair = previous.pop("_ledger_repair", None)
+            if repair is None:
+                return {**previous, "action": "purchase"}
+            request_payload = {
+                key: repair[key]
+                for key in ("user_id", "item_id", "quantity", "unit_cost", "weekly_limit", "max_goods_num")
+            }
+            if "requested_quantity" in repair:
+                request_payload["requested_quantity"] = repair["requested_quantity"]
+            try:
+                outcome = self.application.recover_committed_purchase(
+                    operation_id=operation_id,
+                    user_id=user_id,
+                    request_payload=request_payload,
+                    result=previous,
+                )
+            except DomainError as exc:
+                code = getattr(exc, "code", None) or "operation_conflict"
+                return {"action": "purchase", "status": str(code),
+                        "reason": str(exc.details.get("reason") or code),
+                        "subject": str(exc.details.get("subject") or user_id),
+                        "replayed": False, "item_id": item_id}
+            data = dict(getattr(outcome, "data", None) or {})
+            status = "duplicate" if getattr(outcome, "ok", False) and getattr(outcome, "replayed", False) else data.get(
+                "status", getattr(outcome, "code", None) or getattr(outcome, "status", "failed")
+            )
+            return {"action": "purchase", "status": status, "replayed": bool(getattr(outcome, "replayed", False)),
+                    "item_id": repair["item_id"], "item_name": repair["item_name"], **data}
 
         try:
             profile = self.repository.profile(user_id)
@@ -174,7 +202,10 @@ class BossPurchaseCommandApplication:
             )
         except DomainError as exc:
             code = getattr(exc, "code", None) or "operation_conflict"
-            return {"action": "purchase", "status": str(code), "replayed": False, "item_id": item_id, "item_name": item["name"]}
+            reason = exc.details.get("reason") or str(code)
+            subject = exc.details.get("subject") or user_id
+            return {"action": "purchase", "status": str(code), "reason": str(reason), "subject": str(subject),
+                    "replayed": False, "item_id": item_id, "item_name": item["name"]}
         data = dict(getattr(outcome, "data", None) or {})
         status = "duplicate" if getattr(outcome, "ok", False) and getattr(outcome, "replayed", False) else data.get("status", getattr(outcome, "code", None) or getattr(outcome, "status", "failed"))
         return {

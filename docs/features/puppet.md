@@ -62,6 +62,11 @@
 
 `auto_harvest` 仍注册在兼容调度器上（job id 与摘要不变），拥有 `coalesce=True`、`max_instances=1` 和 `misfire_grace_time=300`；启用用户分页有上界。收取的事务边界未因本片扩展，也不新增 job。
 
+定时入口以 `scheduled=True` 调用共享收取入口：`schema_missing`、坏时间、坏等级、
+缺玩家灵田数据、奖励缺失和写入竞争等失败结果必须带原 status 抛回调度器，不能转换成
+文字后作为任务成功。未成熟、已关闭、洞天缺失、库存上限、灵石不足以及遍历后玩家
+已删除等原业务跳过保留；普通命令仍按原状态渲染。跨库写回执异常保持整事务回滚。
+
 ## 配置、灰度与回滚
 
 `puppet_enabled` / `XIUXIAN_PUPPET_ENABLED` 默认开启。关闭后新 application/Web 路由不注册，旧命令兼容入口可按发布策略继续提供回滚路径。

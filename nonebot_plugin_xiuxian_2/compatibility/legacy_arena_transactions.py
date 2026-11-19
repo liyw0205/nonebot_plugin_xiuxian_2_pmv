@@ -327,6 +327,7 @@ class ArenaPurchaseResult:
     purchased: int
     inventory: int
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -459,6 +460,7 @@ class ArenaChallengePurchaseResult:
     bought: int
     extra: int
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -528,6 +530,7 @@ class ArenaChallengeTicketResult:
     challenges_remaining: int
     challenge_cap: int
     reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:

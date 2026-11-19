@@ -13,6 +13,13 @@ _SQLITE_MIN_INT = -(2**63)
 _PROTECTION_STATES = {"on", "off", "refusal"}
 
 
+def _same_sql_number(actual, expected) -> bool:
+    try:
+        return float(actual) == float(expected)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _integer_like(value) -> int:
     # Match user-row snapshots: float -> str -> Decimal changes large REAL values.
     return as_int_like(value)
@@ -242,10 +249,11 @@ class PartnerCultivationSqlRepository:
                     return result("state_changed", reason="usage_changed", subject=user_id)
 
             rows = uow.query_all(
-                "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN (?,?)",
+                "SELECT user_id,exp,power,hp,mp,atk,level_up_rate FROM user_xiuxian WHERE user_id IN (?,?)",
                 (user_id_1, user_id_2),
             )
-            current_exp = {str(row["user_id"]): _integer_like(row["exp"]) for row in rows}
+            user_snapshots = {str(row["user_id"]): row for row in rows}
+            current_exp = {user_id: _integer_like(row["exp"]) for user_id, row in user_snapshots.items()}
             for user_id, expected in ((user_id_1, expected_exp_1), (user_id_2, expected_exp_2)):
                 if user_id not in current_exp:
                     return result("state_changed", reason="user_missing", subject=user_id)
@@ -272,24 +280,59 @@ class PartnerCultivationSqlRepository:
                 (user_id_1, exp_1, power_1, hp_1, mp_1, atk_1, level_rate_1),
                 (user_id_2, exp_2, power_2, hp_2, mp_2, atk_2, level_rate_2),
             ):
+                before = user_snapshots[user_id]
                 changed = uow.execute(
                     "UPDATE user_xiuxian SET exp=CAST(COALESCE(exp,0) AS REAL)+CAST(? AS REAL),"
                     "power=?,hp=?,mp=?,atk=?,"
                     "level_up_rate=COALESCE(level_up_rate,0)+? WHERE user_id=?",
                     (gain, power, hp, mp, atk, rate, user_id),
                 )
-                if changed.rowcount != 1:
-                    raise RuntimeError("cultivation target changed inside settlement transaction")
+                saved = uow.query_one(
+                    "SELECT exp,power,hp,mp,atk,level_up_rate FROM user_xiuxian WHERE user_id=?",
+                    (user_id,),
+                )
+                expected_user = (
+                    float(before["exp"] or 0) + float(gain),
+                    power, hp, mp, atk,
+                    _integer_like(before["level_up_rate"] or 0) + rate,
+                )
+                actual_user = None if saved is None else tuple(
+                    saved[field] for field in ("exp", "power", "hp", "mp", "atk", "level_up_rate")
+                )
+                if changed.rowcount != 1 or actual_user is None or any(
+                    not _same_sql_number(actual, expected)
+                    for actual, expected in zip(actual_user, expected_user)
+                ):
+                    raise DomainError(
+                        "partner_cultivation_user_write_rejected",
+                        "partner cultivation player projection did not persist exactly",
+                        {"reason": "partner_cultivation_user_write_rejected", "subject": user_id},
+                    )
 
+                previous_stat = uow.query_one(
+                    'SELECT "双修次数" AS value FROM player_data.statistics WHERE user_id=?',
+                    (user_id,),
+                )
+                expected_stat = _integer_like(previous_stat["value"] if previous_stat else 0) + used_count
                 stat = uow.execute(
                     'UPDATE player_data.statistics SET "双修次数"=COALESCE("双修次数",0)+? '
                     "WHERE user_id=?",
                     (used_count, user_id),
                 )
-                if stat.rowcount == 0:
-                    uow.execute(
+                if stat.rowcount == 0 and previous_stat is None:
+                    stat = uow.execute(
                         'INSERT INTO player_data.statistics(user_id,"双修次数") VALUES(?,?)',
                         (user_id, used_count),
+                    )
+                saved_stat = uow.query_one(
+                    'SELECT "双修次数" AS value FROM player_data.statistics WHERE user_id=?',
+                    (user_id,),
+                )
+                if stat.rowcount != 1 or saved_stat is None or _integer_like(saved_stat["value"]) != expected_stat:
+                    raise DomainError(
+                        "partner_cultivation_statistics_write_rejected",
+                        "partner cultivation statistics did not persist exactly",
+                        {"reason": "partner_cultivation_statistics_write_rejected", "subject": user_id},
                     )
 
             if expected_affection_1 is not None:
@@ -311,6 +354,19 @@ class PartnerCultivationSqlRepository:
                                 "subject": "actor" if user_id == user_id_1 else "target",
                             },
                         )
+                    saved = uow.query_one(
+                        "SELECT affection FROM player_data.partner WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if saved is None or _integer_like(saved["affection"]) != expected + increase:
+                        raise DomainError(
+                            "partner_affection_write_rejected",
+                            "partner affection did not persist exactly",
+                            {
+                                "reason": "partner_affection_write_rejected",
+                                "subject": "actor" if user_id == user_id_1 else "target",
+                            },
+                        )
 
             for user_id, expected in (
                 (user_id_1, usage_snapshot_1),
@@ -326,30 +382,82 @@ class PartnerCultivationSqlRepository:
                             "INSERT INTO player_data.partner_two_exp_usage(user_id,used_count) VALUES(?,?)",
                             (user_id, used_count),
                         )
+                        saved = uow.query_one(
+                            "SELECT used_count FROM player_data.partner_two_exp_usage WHERE user_id=?",
+                            (user_id,),
+                        )
+                        if saved is None or int(saved["used_count"]) != used_count:
+                            raise DomainError(
+                                "partner_cultivation_usage_write_rejected",
+                                "partner usage insert did not persist exactly",
+                                {"reason": "partner_cultivation_usage_write_rejected", "subject": user_id},
+                            )
                         continue
                 changed = uow.execute(
                     "UPDATE player_data.partner_two_exp_usage SET used_count=used_count+?,"
                     "updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND used_count=?",
                     (used_count, user_id, expected),
                 )
-                if changed.rowcount != 1:
-                    raise RuntimeError("partner usage changed inside settlement transaction")
+                saved = uow.query_one(
+                    "SELECT used_count FROM player_data.partner_two_exp_usage WHERE user_id=?",
+                    (user_id,),
+                )
+                if changed.rowcount != 1 or saved is None or int(saved["used_count"]) != expected + used_count:
+                    raise DomainError(
+                        "partner_cultivation_usage_write_rejected",
+                        "partner usage update did not persist exactly",
+                        {"reason": "partner_cultivation_usage_write_rejected", "subject": user_id},
+                    )
 
             if invite_id:
                 changed = uow.execute(
                     "UPDATE player_data.partner_cultivation_invites SET status='accepted',"
-                    "resolved_at=strftime('%s','now') WHERE invite_id=? AND status='pending'",
+                    "resolved_at=? WHERE invite_id=? AND status='pending'",
+                    (now_timestamp, invite_id),
+                )
+                saved_invite = uow.query_one(
+                    "SELECT status,resolved_at FROM player_data.partner_cultivation_invites WHERE invite_id=?",
                     (invite_id,),
                 )
-                if changed.rowcount != 1:
-                    raise RuntimeError("partner invite changed inside settlement transaction")
+                if (
+                    changed.rowcount != 1
+                    or saved_invite is None
+                    or str(saved_invite["status"]) != "accepted"
+                    or saved_invite["resolved_at"] is None
+                    or float(saved_invite["resolved_at"]) != float(now_timestamp)
+                ):
+                    raise DomainError(
+                        "partner_cultivation_invite_write_rejected",
+                        "partner invite acceptance did not persist",
+                        {"reason": "partner_cultivation_invite_write_rejected", "subject": "target"},
+                    )
 
-            uow.execute(
+            inserted = uow.execute(
                 "INSERT INTO partner_cultivation_operations "
                 "(operation_id,payload,exp_1,exp_2,used_count,affection_1,affection_2) "
                 "VALUES(?,?,?,?,?,?,?)",
                 (operation_id, payload, exp_1, exp_2, used_count, affection_1, affection_2),
             )
+            receipt = uow.query_one(
+                "SELECT payload,exp_1,exp_2,used_count,affection_1,affection_2 "
+                "FROM partner_cultivation_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            expected_receipt = (
+                payload, _integer_like(exp_1), _integer_like(exp_2), used_count,
+                affection_1, affection_2,
+            )
+            actual_receipt = None if receipt is None else (
+                str(receipt["payload"]), _integer_like(receipt["exp_1"]),
+                _integer_like(receipt["exp_2"]), int(receipt["used_count"]),
+                int(receipt["affection_1"]), int(receipt["affection_2"]),
+            )
+            if inserted.rowcount != 1 or actual_receipt != expected_receipt:
+                raise DomainError(
+                    "partner_cultivation_receipt_write_rejected",
+                    "partner cultivation receipt did not persist exactly",
+                    {"reason": "partner_cultivation_receipt_write_rejected", "subject": operation_id},
+                )
             return result("applied")
 
 

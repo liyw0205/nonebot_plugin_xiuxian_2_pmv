@@ -25,7 +25,7 @@ def create_blueprint(*, application, settlement=None, permission, clock=None, id
                 operation_id=request.headers.get("Idempotency-Key") or payload.get("operation_id") or ids.new_id(),
                 auction_id=payload.get("auction_id", ""), bidder_id=payload.get("bidder_id", ""),
                 bid_price=payload.get("bid_price", 0), expected_price=payload.get("expected_price", 0),
-                expected_bids=payload.get("expected_bids", {}), bid_time=payload.get("bid_time", 0),
+                expected_bids=payload.get("expected_bids", {}), bid_time=clock.now().timestamp(),
             )
         except sqlite3.OperationalError as exc:
             if "no such table" not in str(exc):

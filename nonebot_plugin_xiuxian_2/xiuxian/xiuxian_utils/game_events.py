@@ -245,7 +245,7 @@ def _record_sect_weekly_progress(
     try:
         from ..xiuxian_sect.sect_weekly import record_sect_weekly_event
     except Exception as exc:
-        if meta.get("require_effects") is True:
+        if meta.get("require_effects") is True or meta.get("require_sect_weekly") is True:
             raise
         _log_warning(f"加载宗门周常入口失败：{exc}")
         return []
@@ -253,7 +253,7 @@ def _record_sect_weekly_progress(
     try:
         return record_sect_weekly_event(user_id, event_key, amount, meta)
     except Exception as exc:
-        if meta.get("require_effects") is True:
+        if meta.get("require_effects") is True or meta.get("require_sect_weekly") is True:
             raise
         _log_warning(f"记录宗门周常失败：user_id={user_id}, event={event_key}, error={exc}")
         return []
@@ -322,7 +322,8 @@ def record_game_event(
         result["statistics"] = _record_statistics(user_id, event_key, amount, meta)
     result["tasks"] = _record_task_progress(user_id, event_key, amount, meta)
     result["titles"] = _check_titles(user_id, meta)
-    result["sect_weekly"] = _record_sect_weekly_progress(user_id, event_key, amount, meta)
+    if meta.get("require_sect_weekly") is not True:
+        result["sect_weekly"] = _record_sect_weekly_progress(user_id, event_key, amount, meta)
     result["season_rank"] = _record_season_rank_progress(user_id, event_key, amount, meta)
 
     if meta.get("log_economy") or event_key in ECONOMY_EVENT_KEYS:
@@ -340,6 +341,9 @@ def record_game_event(
         if meta.get("require_effects") is True and not result["economy_log_id"]:
             raise RuntimeError("economy event projection was not persisted")
 
+    if meta.get("require_sect_weekly") is True:
+        result["sect_weekly"] = _record_sect_weekly_progress(user_id, event_key, amount, meta)
+
     return result
 
 
@@ -352,7 +356,10 @@ def safe_record_game_event(
     try:
         return record_game_event(user_id, event_key, amount, meta)
     except Exception as exc:
-        if meta and meta.get("require_effects") is True:
+        if meta and (
+            meta.get("require_effects") is True
+            or meta.get("require_sect_weekly") is True
+        ):
             raise
         _log_warning(f"记录玩法事件失败：user_id={user_id}, event={event_key}, error={exc}")
         return {
@@ -366,3 +373,16 @@ def safe_record_game_event(
             "season_rank": [],
             "economy_log_id": 0,
         }
+
+
+def record_required_sect_weekly_event(
+    user_id: str,
+    event_key: str,
+    amount: int = 1,
+    meta: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    required_meta = dict(meta or {})
+    required_meta["require_sect_weekly"] = True
+    return _record_sect_weekly_progress(
+        str(user_id), str(event_key), amount, required_meta
+    )

@@ -702,9 +702,9 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             and purchase_keywords.get("quantity") == "quantity"
             and purchase_keywords.get("clamp_quantity") == "True"
             and expression("repository", "purchase_result", "(str(payload[0]), int(payload[1]), int(payload[4])) != (str(user_id), int(item_id), int(quantity))")
-            and expression("repository", "purchase", "quantity = min(quantity, max(0, weekly_limit - purchased))")
-            and expression("repository", "purchase", "payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]")
-            and calls("repository", "purchase", "self._purchase_replay")
+            and expression("repository", "_purchase", "quantity = min(quantity, max(0, weekly_limit - purchased))")
+            and expression("repository", "_purchase", "payload_values = [user_id, item_id, item_name, item_type, quantity, unit_cost, weekly_limit, max_goods_num, int(bind_flag)]")
+            and calls("repository", "_purchase", "self._purchase_replay")
         ),
         "opponent_queries_and_all_cache_consumers_share_one_bounded_owner": (
             len(calls("handlers", None, "ArenaOpponentRepository")) == 1
@@ -749,9 +749,9 @@ def _arena_owner_status(sources: dict[str, str]) -> dict[str, bool]:
             expression("repository", "_replay_result", "result['status'] in {'applied', 'duplicate'}")
             and expression("repository", "_purchase_replay", "row['status'] == 'needs_reconcile' or row['result_json'] is None")
             and "INSERT INTO arena_purchase_operations" in repository_sql and "status,result_json" in repository_sql
-            and calls("repository", "purchase", "ArenaStateRepository._weekly")
+            and calls("repository", "_purchase", "ArenaStateRepository._weekly")
             and expression("state_repository", "_weekly", "reset.isocalendar()[:2] != today.isocalendar()[:2]")
-            and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle'}")
+            and expression("application", "_execute", "action in {'arena.purchase', 'arena.settle', 'arena.challenge_ticket', 'arena.challenge_purchase'}")
             and expression("application", "_execute", "type(self.repository) is ArenaChallengePurchaseSqlRepository")
             and expression("application", "_execute", "if not recoverable:\n    raise ConflictError('操作正在处理中', reason='operation_pending')")
             and "arena.010" in literals("plugin")
@@ -4373,7 +4373,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_task_claim_migration_game_only": '"sect.017"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.017"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "task_settlement_repository_owned": "class SectTaskSettlementSqlRepository" in sect_task_settlement_repository and "SectTaskSettlementSqlRepository" in sect_application,
             "task_settlement_request_path_has_no_ddl": "CREATE TABLE" not in sect_task_settlement_repository and "_schema_ready" in sect_task_settlement_repository and "schema_missing" in sect_task_settlement_repository,
-            "task_settlement_clock_injected": "SectTaskSettlementSqlRepository(self.database, clock=self.clock)" in sect_application and "self.clock.now()" in sect_task_settlement_repository,
+            "task_settlement_clock_injected": bool(re.search(r"SectTaskSettlementSqlRepository\(\s*self\.database,\s*clock=self\.clock\s*[,)]", sect_application)) and "self.clock.now()" in sect_task_settlement_repository,
             "task_settlement_migration_registered": all(token in plugin for token in ("sect.018", "apply_sect_task_settlement_operations")) and "sect_task_settlement_operations" in sect_migrations,
             "task_settlement_migration_game_only": '"sect.018"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.018"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
             "elixir_room_upgrade_application_owned": "sect_application.upgrade_elixir_room(" in sect_facade,
@@ -6121,7 +6121,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def test_real_batch_completion_callbacks_reject_non_success" in admin_mutation_tests
             ),
             "world_boss_failure_does_not_log_completion": (
-                'logger.error(f"世界BOSS额度重置未完成：{result.status}")' in activity_boss_entry
+                'logger.error("世界BOSS额度重置未完成：{} subject={}",' in activity_boss_entry
+                and "getattr(result, 'reason', '') or result.status" in activity_boss_entry
+                and "getattr(result, 'subject', '') or business_date" in activity_boss_entry
+                and 'if not result.succeeded or result.task_status != "running":' in activity_boss_entry
                 and "def test_real_boss_reset_loop_logs_failure_instead_of_completion" in admin_mutation_tests
             ),
             "xiangyuan_refund_rollback_and_missing_target_are_covered": (

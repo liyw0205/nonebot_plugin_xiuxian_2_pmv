@@ -3,8 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ...core.errors import DomainError
 from ...infrastructure.clock import SystemClock
-from .season_reward_repository import ArenaSeasonRewardRepository
+from .season_reward_repository import ArenaSeasonRewardRepository, ArenaSeasonRewardResult
+
+
+class ArenaSeasonRewardResetError(DomainError):
+    """A daily reward target stayed pending after a known write rejection."""
+
+    def __init__(self, result: ArenaSeasonRewardResult) -> None:
+        reason = result.reason or result.status
+        subject = result.subject or "unknown"
+        super().__init__(reason, f"{reason}: {subject}", {"reason": reason, "subject": subject})
 
 
 class ArenaSeasonRewardApplication:
@@ -91,6 +101,7 @@ class ArenaSeasonRewardApplication:
         now = self.clock.now()
         season_key = now.date().isoformat()
         settled: list[dict[str, Any]] = []
+        failures: list[ArenaSeasonRewardResult] = []
         for candidate in self.repository.daily_candidates():
             user_id = str(candidate["user_id"])
             position = int(candidate["position"])
@@ -118,7 +129,11 @@ class ArenaSeasonRewardApplication:
                         "status": result.status,
                     }
                 )
+            elif not result.succeeded:
+                failures.append(result)
+        if failures:
+            raise ArenaSeasonRewardResetError(failures[0])
         return tuple(settled)
 
 
-__all__ = ["ArenaSeasonRewardApplication"]
+__all__ = ["ArenaSeasonRewardApplication", "ArenaSeasonRewardResetError"]

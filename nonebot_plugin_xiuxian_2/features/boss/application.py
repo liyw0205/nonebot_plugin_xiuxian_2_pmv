@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from ...core.errors import ConflictError, DomainError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .battle_repository import WorldBossDailyLimitSnapshot
@@ -31,6 +32,8 @@ class BossSettlementResult:
     exp: int = 0
     integral: int = 0
     activity_lines: tuple[str, ...] = ()
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -122,8 +125,12 @@ class BossApplication:
     def daily_limit_snapshot(self, user_id: str) -> WorldBossDailyLimitSnapshot:
         return self._repository().daily_limit_snapshot(str(user_id))
 
+    def battle_checked_at_snapshot(self, user_id: str) -> str:
+        return self._repository().battle_checked_at_snapshot(str(user_id))
+
     def _execute(self, *, operation_id: str, user_id: str, action: str, payload: Mapping[str, Any], call) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
+            reservation = None
             try:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     existing = self.ledger.begin(uow, operation_id, action, payload)
@@ -132,6 +139,7 @@ class BossApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
+                    reservation = self.ledger.get(uow, operation_id, action)
                 raw = _data(call())
                 status = str(raw.get("status", "failed"))
                 normalized = {"status": status, **raw}
@@ -144,11 +152,78 @@ class BossApplication:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if action == "boss.purchase" and reservation is not None and exc.code in {
+                    "boss_integral_write_rejected",
+                    "boss_weekly_write_rejected",
+                    "boss_inventory_write_rejected",
+                    "boss_receipt_write_rejected",
+                }:
+                    try:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    except Exception as release_error:
+                        raise exc from release_error
+                if action == "boss.settle" and reservation is not None and exc.code.startswith("boss_battle_") and exc.code.endswith("_write_rejected"):
+                    try:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    except Exception as release_error:
+                        raise exc from release_error
+                    reason = str(exc.details.get("reason") or exc.code)
+                    subject = str(exc.details.get("subject") or "")
+                    return OperationOutcome.rejected(
+                        operation_id,
+                        action,
+                        "世界BOSS讨伐结算未能完整保存。",
+                        code=exc.code,
+                        data={"status": "state_changed", "reason": reason, "subject": subject},
+                        audit_category="boss",
+                    )
                 raise
             except Exception as exc:
                 self.ledger.record_failure(self.game_database, operation_id, action, payload, str(exc))
                 raise
+
+    def recover_committed_purchase(self, *, operation_id: str, user_id: str,
+                                   request_payload: Mapping[str, Any], result: Mapping[str, Any]) -> OperationOutcome[dict[str, Any]]:
+        """Finish only the ledger after the command repository validates a committed receipt."""
+        operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
+        action = "boss.purchase"
+        payload = dict(request_payload)
+        if not operation_id or not user_id or payload.get("user_id") != user_id:
+            raise ConflictError("已提交兑换回执的操作身份无法确认")
+
+        with trace_context(operation_id=operation_id, user_scope=user_id):
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                record = self.ledger.get(uow, operation_id, action)
+                if record is None or record.request_hash != request_hash(payload):
+                    raise ConflictError("已提交兑换回执与操作账本不匹配")
+                if record.status in {"applied", "rejected"}:
+                    previous = record.outcome()
+                    if previous is not None:
+                        return previous.replay()
+                    raise ConflictError("已提交兑换回执缺少有效账本结果")
+                if record.status not in {"started", "failed"}:
+                    raise ConflictError("兑换请求状态无法恢复")
+
+                status = str(result.get("status", "failed"))
+                normalized = {"status": status, **dict(result)}
+                if status in {"applied", "duplicate"}:
+                    consumed = {"integral": int(normalized.get("cost", 0) or 0)}
+                    granted = {key: int(normalized[key]) for key in ("stone", "exp", "integral")
+                               if key in normalized}
+                    outcome = OperationOutcome.applied(
+                        operation_id, action, data=normalized, consumed=consumed,
+                        granted=granted, audit_category="boss",
+                    )
+                else:
+                    outcome = OperationOutcome.rejected(
+                        operation_id, action, "世界BOSS操作未完成。", code=status,
+                        data=normalized, audit_category="boss",
+                    )
+                self.ledger.finish(uow, outcome)
+                return outcome
 
     def purchase(self, *, operation_id: str, user_id: str, item_id: int, item_name: str, item_type: str, quantity: int, unit_cost: int, weekly_limit: int, expected_integral: int, expected_weekly_purchases: Mapping[str, Any], max_goods_num: int, today: Any = None, requested_quantity: int | None = None) -> OperationOutcome[dict[str, Any]]:
         try:
@@ -158,7 +233,15 @@ class BossApplication:
             raise ValidationError(str(exc)) from exc
         payload = request.payload()
         def call():
-            raw = _data(self._repository().purchase(request.operation_id, request.user_id, request.item_id, request.item_name, request.item_type, request.quantity, request.unit_cost, request.weekly_limit, request.expected_integral, request.expected_weekly_purchases, request.max_goods_num, request.today))
+            repository = self._repository()
+            purchase_args = (request.operation_id, request.user_id, request.item_id, request.item_name,
+                             request.item_type, request.quantity, request.unit_cost, request.weekly_limit,
+                             request.expected_integral, request.expected_weekly_purchases,
+                             request.max_goods_num, request.today)
+            if request.requested_quantity is not None:
+                raw = _data(repository.purchase(*purchase_args, requested_quantity=request.requested_quantity))
+            else:
+                raw = _data(repository.purchase(*purchase_args))
             return {**raw, "item_id": request.item_id, "item_name": request.item_name, "item_type": request.item_type, "request": payload}
         return self._execute(operation_id=request.operation_id, user_id=request.user_id, action="boss.purchase", payload=payload, call=call)
 
@@ -204,10 +287,61 @@ class BossApplication:
             as_int_like(data.get("exp", 0) or 0),
             int(data.get("integral", 0) or 0),
             lines,
+            str(data.get("reason", "") or ""),
+            str(data.get("subject", "") or ""),
         )
 
-    def settlement_result_compat(self, *, operation_id: str) -> BossSettlementResult | None:
-        return self._settlement_result(self.settlement_result(operation_id=operation_id), "duplicate")
+    def settlement_result_compat(
+        self, *, operation_id: str, user_id: str | None = None
+    ) -> BossSettlementResult | None:
+        raw = self.settlement_result(operation_id=operation_id)
+        if raw is None:
+            return None
+        if user_id is not None:
+            self._recover_committed_settlement(
+                operation_id=str(operation_id), user_id=str(user_id), result=raw
+            )
+        return self._settlement_result(raw, "duplicate")
+
+    def _recover_committed_settlement(
+        self, *, operation_id: str, user_id: str, result: Any
+    ) -> None:
+        repository = self._repository()
+        payload_reader = getattr(repository, "settlement_payload", None)
+        if not callable(payload_reader):
+            return
+        payload = payload_reader(operation_id)
+        if not isinstance(payload, Mapping) or str(payload.get("user_id", "")) != user_id:
+            raise ConflictError("世界BOSS结算回执与玩家身份不匹配")
+        required = {
+            "user_id", "boss_index", "stamina_cost", "battle_limit", "expected_checked_at",
+            "checked_at", "max_goods_num", "daily_period", "weekly_period",
+        }
+        # Older permanent receipts omit timestamps and remain replayable, but cannot
+        # prove the newer ledger request fingerprint well enough for repair.
+        if set(payload) != required:
+            return
+
+        data = _data(result)
+        normalized = {"status": "duplicate", **data}
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            record = self.ledger.get(uow, operation_id, "boss.settle")
+            if record is None or record.status not in {"started", "failed", "needs_reconcile"}:
+                return
+            if record.request_hash != request_hash(payload):
+                raise ConflictError("世界BOSS结算回执与操作请求不匹配")
+            outcome = OperationOutcome.applied(
+                operation_id,
+                "boss.settle",
+                data=normalized,
+                consumed={"stamina": int(payload.get("stamina_cost", 0) or 0)},
+                granted={
+                    key: int(normalized.get(key, 0) or 0)
+                    for key in ("stone", "exp", "integral")
+                },
+                audit_category="boss",
+            )
+            self.ledger.finish(uow, outcome)
 
     def settle_compat(self, *, operation_id: str | None = None, **kwargs: Any) -> BossSettlementResult:
         if operation_id is not None:
@@ -221,16 +355,17 @@ class BossApplication:
     def spawn_snapshot(self, *, config_loader):
         return self._manual_spawn(config_loader).snapshot()
 
-    def spawn_result(self, operation_id: str, *, config_loader):
-        return self._manual_spawn(config_loader).get_result(operation_id)
+    def spawn_result(self, operation_id: str, *, config_loader, request=None):
+        return self._manual_spawn(config_loader).get_result(operation_id, request=request)
 
-    def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader):
+    def spawn(self, *, operation_id: str, expected_revision: int, expected_bosses: list[dict[str, Any]], expected_config: dict[str, Any], boss: dict[str, Any], config_loader, request=None):
         return self._manual_spawn(config_loader).spawn(
             operation_id=operation_id,
             expected_revision=expected_revision,
             expected_bosses=expected_bosses,
             expected_config=expected_config,
             boss=boss,
+            request=request,
         )
 
     def punishment_snapshot(self):

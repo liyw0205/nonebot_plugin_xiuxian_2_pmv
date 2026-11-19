@@ -7,9 +7,13 @@ def render_boss_purchase_reply(result: Mapping[str, Any]) -> str:
     """Render a purchase result without consulting the live shop or inventory."""
     status = str(result.get("status", "failed"))
     if status not in {"applied", "duplicate"}:
-        return {
+        messages = {
             "invalid_argument": "请输入正确的商品编号和数量。",
             "integral_insufficient": "兑换失败：世界积分不足。",
+            "boss_integral_write_rejected": "世界BOSS积分扣除保存失败，本次兑换已撤销，请检查后使用同一条指令重试。",
+            "boss_weekly_write_rejected": "世界BOSS周限购记录保存失败，本次兑换已撤销，请检查后使用同一条指令重试。",
+            "boss_inventory_write_rejected": "世界BOSS背包保存失败，本次兑换已撤销，请检查后使用同一条指令重试。",
+            "boss_receipt_write_rejected": "世界BOSS兑换回执保存失败，本次兑换已撤销，请检查后使用同一条指令重试。",
             "limit_reached": "该商品已到限购数量，无法继续兑换。",
             "inventory_full": "该商品持有数量已达上限。",
             "state_changed": "兑换未完成：活动进度已更新，请重新兑换。",
@@ -20,7 +24,13 @@ def render_boss_purchase_reply(result: Mapping[str, Any]) -> str:
             "operation_conflict": "兑换请求冲突，本次未结算。",
             "operation_pending": "兑换请求正在处理中，请稍后查询结果。",
             "operation_failed": "兑换请求未完成，请稍后核查结果。",
-        }.get(status, "兑换未完成：活动进度已更新，请重新兑换。")
+        }
+        message = messages.get(status, "兑换未完成：活动进度已更新，请重新兑换。")
+        reason = result.get("reason")
+        subject = result.get("subject")
+        if status.endswith("_write_rejected") and reason and subject:
+            message += f"\n原因：{reason}；主体：{subject}。"
+        return message
     quantity = result.get("quantity")
     if type(quantity) is not int or quantity <= 0:
         return "世界BOSS兑换回执异常，本次未结算，请联系管理员核查。"

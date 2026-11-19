@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, require_exact_integer
+from ...core.numeric import require_exact_integer
+from ...core.errors import DomainError
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from datetime import timezone, tzinfo
+from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from .guishi_lifecycle import DEFAULT_GUISHI_TIMEZONE, baitan_deadline, qiugou_deadline, business_time, parse_created_at
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,7 @@ class GuishiMatchResult:
     qiugou_completed: bool = False
     baitan_completed: bool = False
     price_refund: int = 0
+    statistics_recorded: bool = False
 
     @property
     def matched(self) -> bool:
@@ -31,8 +36,53 @@ class GuishiMatchResult:
 class GuishiOrderMatchSqlRepository:
     """Match one Guishi buy/sell pair in a single trade-db transaction."""
 
-    def __init__(self, trade_database: str | Path) -> None:
+    def __init__(self, trade_database: str | Path, *, player_database: str | Path | None = None,
+                 clock: Any | None = None, business_timezone: tzinfo = DEFAULT_GUISHI_TIMEZONE) -> None:
         self.trade_database = str(trade_database)
+        self.player_database = str(player_database) if player_database is not None else None
+        self.clock = clock
+        self.business_timezone = business_timezone
+
+    def _expired(self, uow: DatabaseUnitOfWork, order_id: str, order_type: str) -> bool:
+        if self.clock is None:
+            return False
+        if uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='guishi_order_create_operations'") is None:
+            return False
+        row = uow.query_one("SELECT MAX(created_at) AS created_at FROM guishi_order_create_operations "
+                            "WHERE order_id=? AND order_type IN (?,?)",
+                            (order_id, order_type, "求购" if order_type == "qiugou" else "摆摊"))
+        anchor = parse_created_at(row['created_at'])
+        if anchor is None:
+            return False
+        created = business_time(anchor, self.business_timezone)
+        deadline = qiugou_deadline(created) if order_type == "qiugou" else baitan_deadline(created)
+        return business_time(self.clock.now(), timezone.utc) >= deadline.astimezone(timezone.utc)
+
+    def pending_order_expiry(self, order_id: str) -> str | None:
+        with DatabaseUnitOfWork(self.trade_database, read_only=True) as uow:
+            row = uow.query_one("SELECT item_type FROM guishi_item WHERE id=?", (order_id,))
+            if row is None:
+                return None
+            if row['item_type'] not in {'qiugou', '求购', 'baitan', '摆摊'}:
+                return None
+            kind = "qiugou" if row['item_type'] in {'qiugou', '求购'} else "baitan"
+            return f"{kind}_expired" if self._expired(uow, order_id, kind) else None
+
+    @staticmethod
+    def _statistics(uow, user_id, keys, quantity, amount):
+        uow.execute("INSERT OR IGNORE INTO guishi_player.statistics(user_id) VALUES(?)", (user_id,))
+        columns = ",".join(f'"{key}"' for key in keys)
+        previous = uow.query_one(f"SELECT {columns} FROM guishi_player.statistics WHERE user_id=?", (user_id,))
+        if previous is None:
+            raise DomainError("statistics_write_rejected", "Guishi statistics insert was rejected",
+                              {"reason": "statistics_write_rejected", "subject": user_id})
+        values = [require_exact_integer(previous[key] or 0, field=key, subject=user_id) + delta
+                  for key, delta in zip(keys, (1, quantity, amount))]
+        assignments = ",".join(f'"{key}"=xiuxian_int_store(?)' for key in keys)
+        written = uow.execute(f"UPDATE guishi_player.statistics SET {assignments} WHERE user_id=?", (*values, user_id))
+        if written.rowcount != 1:
+            raise DomainError("statistics_write_rejected", "Guishi statistics update was rejected",
+                              {"reason": "statistics_write_rejected", "subject": user_id})
 
     @staticmethod
     def _payload(qiugou_order_id: str, baitan_order_id: str) -> str:
@@ -133,6 +183,10 @@ class GuishiOrderMatchSqlRepository:
                 return GuishiMatchResult("qiugou_invalid", qiugou_order_id, baitan_order_id)
             if str(baitan["item_type"]) not in {"baitan", "摆摊"}:
                 return GuishiMatchResult("baitan_invalid", qiugou_order_id, baitan_order_id)
+            if self._expired(uow, qiugou_order_id, "qiugou"):
+                return GuishiMatchResult("qiugou_expired", qiugou_order_id, baitan_order_id)
+            if self._expired(uow, baitan_order_id, "baitan"):
+                return GuishiMatchResult("baitan_expired", qiugou_order_id, baitan_order_id)
 
             buyer_id = str(qiugou["user_id"])
             seller_id = str(baitan["user_id"])
@@ -214,7 +268,21 @@ class GuishiOrderMatchSqlRepository:
                 qiugou_completed,
                 baitan_completed,
                 price_refund,
+                self.player_database is not None,
             )
+            if self.player_database is not None:
+                if not Path(self.player_database).is_file():
+                    raise DomainError("schema_missing", "Guishi statistics database is missing",
+                                      {"reason": "schema_missing", "subject": "guishi_match_statistics"})
+                uow.attach_database(self.player_database, "guishi_player")
+                columns = {row['name'] for row in uow.query_all('PRAGMA guishi_player.table_info(statistics)')}
+                required = {"user_id", "鬼市购买次数", "鬼市购买数量", "鬼市消费灵石",
+                            "鬼市售出次数", "鬼市售出数量", "鬼市收入灵石"}
+                if not required <= columns:
+                    raise DomainError("schema_missing", "Guishi statistics migration is missing",
+                                      {"reason": "schema_missing", "subject": "guishi_match_statistics"})
+                self._statistics(uow, buyer_id, ("鬼市购买次数", "鬼市购买数量", "鬼市消费灵石"), quantity, amount)
+                self._statistics(uow, seller_id, ("鬼市售出次数", "鬼市售出数量", "鬼市收入灵石"), quantity, amount)
             if operation_id:
                 uow.execute(
                     "INSERT INTO guishi_match_operations(operation_id,payload,result) "

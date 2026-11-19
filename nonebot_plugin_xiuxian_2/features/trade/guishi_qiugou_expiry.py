@@ -18,6 +18,7 @@ Design notes:
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import tzinfo
 from typing import Any, Callable
 
 from ...infrastructure.clock import SystemClock
@@ -25,6 +26,7 @@ from ...infrastructure.database import DatabaseUnitOfWork
 from .guishi_cancel_repository import GuishiOrderCancelResult
 from .guishi_lifecycle import (
     DEFAULT_GUISHI_END_HOUR,
+    business_time,
     parse_created_at,
     qiugou_is_expired,
 )
@@ -42,11 +44,13 @@ class GuishiQiugouExpiryService:
         cancel: Callable[..., GuishiOrderCancelResult],
         clock: Any | None = None,
         end_hour: int = DEFAULT_GUISHI_END_HOUR,
+        business_timezone: tzinfo | None = None,
     ) -> None:
         self.trade_database = str(trade_database)
         self.cancel = cancel
         self.clock = clock or SystemClock()
         self.end_hour = int(end_hour)
+        self.business_timezone = business_timezone
 
     @staticmethod
     def _table_exists(uow: DatabaseUnitOfWork, table: str) -> bool:
@@ -93,6 +97,8 @@ class GuishiQiugouExpiryService:
         expired: list[dict[str, Any]] = []
         for row in self._candidates(user_id):
             created_at = parse_created_at(row.get("created_at"))
+            if created_at is not None and self.business_timezone is not None:
+                created_at = business_time(created_at, self.business_timezone)
             if qiugou_is_expired(created_at, moment, end_hour=self.end_hour):
                 expired.append(row)
 

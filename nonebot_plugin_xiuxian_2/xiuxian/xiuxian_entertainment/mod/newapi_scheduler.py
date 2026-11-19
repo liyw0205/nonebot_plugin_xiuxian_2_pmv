@@ -26,3 +26,4 @@ async def newapi_auto_checkin_daily():
         )
     except Exception as e:
         logger.opt(colors=True).error(f"<red>NewAPI 自动签到失败：{e}</red>")
+        raise
