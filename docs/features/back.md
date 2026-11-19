@@ -39,6 +39,16 @@
 迁移 `back.001` 至 `back.017`；饰品词条锁定、洗练、分解、升阶和预设 operation 共用 game DB 的饰品操作表，通用物品批处理、聚灵旗替换、装备 operation、背包修复任务和宠物蛋 operation 也位于 game DB。player DB 仅作为显式 attached 事务参与方；attached accessory schema 由 `accessory_package.player_data.001/.002/.003` 启动迁移维护，其中 `.003` 提供三个预设列，历史背包字段通过兼容服务读取。
 ## 事务与失败回滚
 操作 ledger、审计和异常重试由应用层统一提供。
+
+`饰品预设 [1/2/3]`（别名 `预设饰品`）无参数时只读查看；保存仍记录当前四槽 UID，可覆盖原预设。
+`AccessoryPresetApplication` 在立即 attached 事务内保存 player DB 预设与 game DB 永久操作回执，
+逐步核对影响行数、回执 payload/result 和玩家文档最终投影，保留装备、背包及其他预设栏。
+状态拒写/改写分别返回 `accessory_preset_state_write_rejected` /
+`accessory_preset_state_projection_mismatch`；回执拒写/改写分别返回
+`accessory_preset_receipt_write_rejected` / `accessory_preset_receipt_projection_mismatch`。
+已知拒写携 `subject=preset:序号` 整笔回滚，玩家回复保留具体原因和预设编号；
+解除故障后同消息可恢复，成功回执重放不再写入。未知 SQLite 异常原样透传并回滚，
+并发竞争仍按装备/原预设快照拒绝，不改保存或装备规则。
 ## 定时任务
 既有 `daily_reset_day_num` 仍由 scheduler 在每日零点执行，写入改由
 `DailyPillUsageResetApplication -> DailyPillUsageResetSqlRepository` 承担。按 scheduler 时区生成
@@ -52,6 +62,8 @@ Web 和命令适配器不直接写库存。
 ## 测试与手工验收
 覆盖重复提交、库存上限、物品不足和异常回滚。
 - `python -m pytest -p no:cacheprovider nonebot_plugin_xiuxian_2/features/back/tests/test_daily_pill_usage_reset.py -q`
+- `python -m pytest -q tests/test_accessory_preset_application.py tests/test_accessory_preset_parameter_dispatch.py`：
+  隔离 SQLite、真实 matcher 参数/别名、拒写/改写/ABORT、恢复/重放与 OneBot/QQ 消息 mock；不代表真实 QQ 联调。
 ## 灰度开关、回滚和已知限制
 关闭开关回退旧背包入口；通用 Web 批处理只负责原子扣除背包物品，具体物品效果仍由各领域 handler/application 维护。
 

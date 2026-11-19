@@ -603,6 +603,159 @@ def register(case):
         assert after == before and "快速分解完成：1件" in replay, probe.evidence
 
     @case(
+        "accessory-preset-save-write-recovery",
+        "饰品预设",
+        "1 / 预设饰品 1",
+        "一件实际已装备饰品、三个预设栏和 game/player 隔离 SQLite",
+        "拒写整笔回滚并保留具体原因，恢复后同消息保存且 replay 不重复写",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_preset_save_write_recovery(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        assets = balances(probe), backpack(probe)
+        instances = seed_accessory_document(probe, [19001], equipped_slots=("手镯",))
+        empty_preset = {slot: None for slot in ("手镯", "戒指", "手环", "项链")}
+        probe.seed(player, "UPDATE player_accessory SET preset_1=? WHERE user_id='900001'",
+                   (json.dumps(empty_preset, ensure_ascii=False),))
+        receipt_sql = (
+            "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE action='save_preset' ORDER BY operation_id"
+        )
+        state_sql = "SELECT equipped,bag,preset_1 FROM player_accessory WHERE user_id='900001'"
+        faults = (
+            (player, "BEFORE UPDATE OF preset_1 ON player_accessory", "SELECT RAISE(IGNORE)",
+             "accessory_preset_state_write_rejected", "保存失败", "饰品预设"),
+            (player, "AFTER UPDATE OF preset_1 ON player_accessory",
+             "UPDATE player_accessory SET preset_1='{}' WHERE user_id=NEW.user_id",
+             "accessory_preset_state_projection_mismatch", "预设状态与保存请求不一致", "饰品预设"),
+            (game, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+             "accessory_preset_receipt_write_rejected", "回执保存失败", "预设饰品"),
+            (game, "AFTER INSERT ON accessory_transaction_operations",
+             "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+             "accessory_preset_receipt_projection_mismatch", "预设操作回执内容不一致", "饰品预设"),
+            (game, "BEFORE INSERT ON accessory_transaction_operations",
+             "SELECT RAISE(ABORT,'isolated preset abort')", None, None, "饰品预设"),
+        )
+        for number, (database, event, fault, reason, phrase, command) in enumerate(faults, start=970640):
+            before_state = probe.rows(player, state_sql)
+            before_receipts = probe.rows(game, receipt_sql)
+            probe.seed(database,
+                       f"CREATE TRIGGER reject_accessory_preset {event} BEGIN {fault}; END")
+            failed = await probe.command(command, f"{command} 1", number=number, allow_exception=reason is None)
+            after_state = probe.rows(player, state_sql)
+            after_receipts = probe.rows(game, receipt_sql)
+            probe.evidence[reason] = {
+                "reply": failed,
+                "state_unchanged": after_state == before_state,
+                "receipt_unchanged": after_receipts == before_receipts,
+            }
+            if reason is None:
+                errors = "\n".join(probe.calls[-1]["errors"])
+                assert "sqlite3.IntegrityError: isolated preset abort" in errors, errors
+            else:
+                assert phrase in failed and "饰品预设1" in failed, (reason, failed)
+            assert "已保存当前装备" not in failed, failed
+            assert after_state == before_state and after_receipts == before_receipts
+            probe.seed(database, "DROP TRIGGER reject_accessory_preset")
+            probe.clear_cooldowns()
+            recovered = await probe.command(command, f"{command} 1", number=number)
+            after_state = probe.rows(player, state_sql)
+            after_receipts = probe.rows(game, receipt_sql)
+            assert "已保存当前装备到饰品预设1" in recovered, recovered
+            assert json.loads(after_state[0][0])["手镯"] == instances[0]
+            assert json.loads(after_state[0][2]) == {
+                "手镯": instances[0]["uid"], "戒指": None, "手环": None, "项链": None,
+            }
+            assert len(after_receipts) == len(before_receipts) + 1
+            [receipt] = [row for row in after_receipts if row not in before_receipts]
+            assert receipt[0] == f"accessory:{number}:save_preset:900001:1"
+            assert json.loads(receipt[2])["preset_idx"] == 1
+            assert json.loads(receipt[3])["details"]["preset"] == json.loads(after_state[0][2])
+            replay_before = after_state, after_receipts
+            probe.clear_cooldowns()
+            replay = await probe.command(command, f"{command} 1", number=number)
+            assert "已保存当前装备到饰品预设1" in replay, replay
+            assert (probe.rows(player, state_sql), probe.rows(game, receipt_sql)) == replay_before
+            probe.seed(player, "UPDATE player_accessory SET preset_1=? WHERE user_id='900001'",
+                       (json.dumps(empty_preset, ensure_ascii=False),))
+            assert probe.rows(player, state_sql) == before_state
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        assert (balances(probe), backpack(probe)) == assets
+        probe.evidence.update(
+            equipped_uid=instances[0]["uid"],
+            state_rejected=True,
+            receipt_rejected=True,
+            recovered=True,
+            replay_unchanged=True,
+        )
+
+    @case(
+        "accessory-preset-parameters-readonly",
+        "饰品预设",
+        "查看、1/2/3、别名、非法参数",
+        "两件实际已装备饰品和 game/player 隔离 SQLite",
+        "查询只读，合法序号覆盖并持久化，非法参数明确拒绝且零写",
+        group="remaining-player-parameters",
+    )
+    async def accessory_preset_parameters_readonly(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        instances = seed_accessory_document(probe, [19001, 19002], equipped_slots=("手镯", "戒指"))
+        empty = {slot: None for slot in ("手镯", "戒指", "手环", "项链")}
+        old = dict(empty, 手镯="old-accessory")
+        valid = dict(empty, 手镯=instances[0]["uid"], 戒指=instances[1]["uid"])
+        probe.seed(player, "UPDATE player_accessory SET preset_1=?,preset_2=? WHERE user_id='900001'",
+                   (json.dumps(old, ensure_ascii=False), json.dumps(valid, ensure_ascii=False)))
+        state_sql = (
+            "SELECT equipped,bag,preset_1,preset_2,preset_3 FROM player_accessory "
+            "WHERE user_id='900001'"
+        )
+        receipt_sql = (
+            "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE action='save_preset' ORDER BY operation_id"
+        )
+        before_state, before_receipts = probe.rows(player, state_sql), probe.rows(game, receipt_sql)
+        view = await probe.command("饰品预设", "饰品预设")
+        alias_view = await probe.command("预设饰品", "预设饰品")
+        assert "【预设1】" in view and "【预设3】" in alias_view, (view, alias_view)
+        assert all(instance["name"] in reply for instance in instances for reply in (view, alias_view)), (
+            view, alias_view,
+        )
+        assert (probe.rows(player, state_sql), probe.rows(game, receipt_sql)) == (before_state, before_receipts)
+
+        for index, command in ((1, "预设饰品"), (2, "饰品预设"), (3, "饰品预设")):
+            probe.clear_cooldowns()
+            reply = await probe.command(command, f"{command} {index}", number=970660 + index)
+            assert f"已保存当前装备到饰品预设{index}" in reply, reply
+            if index == 1:
+                assert "本次已覆盖" in reply, reply
+            saved = probe.rows(player, state_sql)[0]
+            assert json.loads(saved[index + 1]) == {
+                "手镯": instances[0]["uid"], "戒指": instances[1]["uid"],
+                "手环": None, "项链": None,
+            }
+        saved_state, saved_receipts = probe.rows(player, state_sql), probe.rows(game, receipt_sql)
+        assert len(saved_receipts) == 3
+        for index, invalid in enumerate(("0", "4", "abc", "1 2"), start=1):
+            probe.clear_cooldowns()
+            reply = await probe.command("饰品预设", f"饰品预设 {invalid}", number=970670 + index)
+            assert "用法：饰品预设 1/2/3" in reply, reply
+            assert (probe.rows(player, state_sql), probe.rows(game, receipt_sql)) == (
+                saved_state, saved_receipts,
+            )
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(
+            equipped=[instance["uid"] for instance in instances],
+            query_readonly=True,
+            alias=True,
+            saved_indices=[1, 2, 3],
+            invalid_parameters=4,
+            receipts=len(saved_receipts),
+        )
+
+    @case(
         "accessory-decompose-legal-boundaries",
         "饰品分解",
         "真实背包/已装备饰品UID",

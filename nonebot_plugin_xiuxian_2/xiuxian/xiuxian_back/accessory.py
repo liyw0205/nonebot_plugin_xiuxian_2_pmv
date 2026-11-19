@@ -1458,8 +1458,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             deepcopy(_get_accessory_preset(user_id, preset_idx)),
         )
         if not save_result.succeeded:
+            from ..command_guard import result_failure
+
             await handle_send(
-                bot, event, _acc_fail_msg(save_result, action="保存预设")
+                bot, event,
+                result_failure(
+                    "保存预设", save_result,
+                    subjects={f"preset:{preset_idx}": f"饰品预设{preset_idx}"},
+                ),
             )
             return
 
