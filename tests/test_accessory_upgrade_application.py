@@ -5,12 +5,14 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.back.accessory_upgrade_application import (
     AccessoryUpgradeApplication,
 )
 from nonebot_plugin_xiuxian_2.features.back.migrations import apply_accessory_affix_operations
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 
 
 class FixedRandom:
@@ -164,6 +166,110 @@ class AccessoryUpgradeApplicationTests(unittest.TestCase):
                         "SELECT name FROM sqlite_master WHERE name='accessory_transaction_operations'"
                     ).fetchone()
                 )
+
+    def snapshot(self):
+        with sqlite3.connect(self.player) as conn:
+            state = conn.execute("SELECT * FROM player_accessory ORDER BY user_id").fetchall()
+        with sqlite3.connect(self.game) as conn:
+            receipts = conn.execute(
+                "SELECT operation_id,action,payload,result_json "
+                "FROM accessory_transaction_operations ORDER BY operation_id"
+            ).fetchall()
+        return state, receipts
+
+    def assert_rejected_write(self, database, event, fault, reason):
+        before = self.snapshot()
+        equipped, bag = self.state()
+        with sqlite3.connect(database) as conn:
+            conn.execute("CREATE TABLE isolated_upgrade_effect(effect INTEGER)")
+            conn.execute(
+                f"CREATE TRIGGER reject_upgrade {event} BEGIN "
+                f"INSERT INTO isolated_upgrade_effect VALUES(1); {fault}; END"
+            )
+        result = self.application.upgrade(
+            "rejected-upgrade", "u", "戒指", equipped, bag, ("material-1", "material-2"),
+        )
+        self.assertEqual((result.status, result.reason), ("failed", reason))
+        self.assertEqual(result.subject, "main")
+        self.assertEqual(self.snapshot(), before)
+        with sqlite3.connect(database) as conn:
+            self.assertEqual(conn.execute("SELECT * FROM isolated_upgrade_effect").fetchall(), [])
+            conn.execute("DROP TRIGGER reject_upgrade")
+        recovered = self.application.upgrade(
+            "rejected-upgrade", "u", "戒指", equipped, bag, ("material-1", "material-2"),
+        )
+        self.assertEqual(recovered.status, "applied")
+        self.assertEqual(self.state()[0]["戒指"]["quality"], 4)
+        self.assertEqual(self.state()[0]["戒指"]["wash_count"], 0)
+        self.assertEqual(self.state()[1], [self.other])
+        after = self.snapshot()
+        replay = self.application.replay("rejected-upgrade")
+        self.assertEqual((replay.status, replay.accessory), ("duplicate", recovered.accessory))
+        self.assertEqual(self.snapshot(), after)
+        for database in (self.game, self.player):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(uow.query_one("PRAGMA integrity_check"), {"integrity_check": "ok"})
+
+    def test_state_ignore_rolls_back_and_recovers(self):
+        self.assert_rejected_write(
+            self.player, "BEFORE UPDATE OF equipped ON player_accessory", "SELECT RAISE(IGNORE)",
+            "accessory_upgrade_state_write_rejected",
+        )
+
+    def test_state_rewrite_rolls_back_material_consumption(self):
+        self.assert_rejected_write(
+            self.player, "AFTER UPDATE OF equipped ON player_accessory",
+            "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+            "accessory_upgrade_state_projection_mismatch",
+        )
+
+    def test_receipt_ignore_rolls_back_upgrade(self):
+        self.assert_rejected_write(
+            self.game, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+            "accessory_upgrade_receipt_write_rejected",
+        )
+
+    def test_receipt_rewrite_rolls_back_upgrade(self):
+        self.assert_rejected_write(
+            self.game, "AFTER INSERT ON accessory_transaction_operations",
+            "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+            "accessory_upgrade_receipt_projection_mismatch",
+        )
+
+    def test_final_receipt_step_cannot_change_equipment(self):
+        execute = AttachedDatabaseUnitOfWork.execute
+
+        def corrupt_equipment(uow, sql, parameters=()):
+            cursor = execute(uow, sql, parameters)
+            if sql.startswith("INSERT INTO accessory_transaction_operations"):
+                execute(uow, "UPDATE player_data.player_accessory SET equipped='{}' WHERE user_id='u'")
+            return cursor
+
+        before = self.snapshot()
+        equipped, bag = self.state()
+        with patch.object(AttachedDatabaseUnitOfWork, "execute", corrupt_equipment):
+            result = self.application.upgrade(
+                "final-upgrade", "u", "戒指", equipped, bag, ("material-1", "material-2"),
+            )
+        self.assertEqual((result.status, result.reason, result.subject),
+                         ("failed", "accessory_upgrade_state_projection_mismatch", "main"))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_abort_keeps_original_exception_and_rolls_back_side_effects(self):
+        equipped, bag = self.state()
+        before = self.snapshot()
+        with sqlite3.connect(self.game) as conn:
+            conn.execute("CREATE TABLE isolated_upgrade_effect(effect INTEGER)")
+            conn.execute(
+                "CREATE TRIGGER abort_upgrade BEFORE INSERT ON accessory_transaction_operations "
+                "BEGIN INSERT INTO isolated_upgrade_effect VALUES(1); "
+                "SELECT RAISE(ABORT,'isolated accessory upgrade abort'); END"
+            )
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "isolated accessory upgrade abort"):
+            self.application.upgrade("abort-upgrade", "u", "戒指", equipped, bag, ("material-1", "material-2"))
+        self.assertEqual(self.snapshot(), before)
+        with sqlite3.connect(self.game) as conn:
+            self.assertEqual(conn.execute("SELECT * FROM isolated_upgrade_effect").fetchall(), [])
 
 
 if __name__ == "__main__":

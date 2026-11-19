@@ -886,6 +886,219 @@ def register(case):
                               skipped_equipped=True, invalid_parameters=6, other_presets_unchanged=True)
 
     @case(
+        "accessory-upgrade-write-recovery",
+        "饰品升阶",
+        "戒指 <合法同款材料UID>",
+        "实际已装备一阶戒指、同阶同款背包材料和隔离game/player SQLite",
+        "装备/背包或永久回执拒写整笔回滚，原因可见，恢复/replay不重复消耗",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_upgrade_write_recovery(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        assets = balances(probe), backpack(probe)
+        instances = seed_accessory_document(
+            probe, [19002, 19002, 19102], equipped_slots=("戒指",),
+        )
+        main, material, other = instances
+        state_sql = "SELECT equipped,bag FROM player_accessory WHERE user_id='900001'"
+        receipt_sql = (
+            "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE action='upgrade' ORDER BY operation_id"
+        )
+        initial = probe.rows(player, state_sql)
+        faults = (
+            (player, "BEFORE UPDATE OF equipped ON player_accessory", "SELECT RAISE(IGNORE)",
+             "升阶状态保存失败"),
+            (game, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+             "升阶操作回执保存失败"),
+            (player, "AFTER UPDATE OF equipped ON player_accessory",
+             "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+             "升阶状态与请求不一致"),
+            (game, "AFTER INSERT ON accessory_transaction_operations",
+             "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+             "升阶回执内容不一致"),
+            (game, "BEFORE INSERT ON accessory_transaction_operations",
+             "SELECT RAISE(ABORT,'isolated accessory upgrade abort')", None),
+        )
+        for number, (database, event, fault, phrase) in enumerate(faults, start=970780):
+            before_state, before_receipts = probe.rows(player, state_sql), probe.rows(game, receipt_sql)
+            command_text = f"饰品升阶 戒指 {material['uid']}"
+            probe.seed(database, f"CREATE TRIGGER reject_accessory_upgrade {event} BEGIN {fault}; END")
+            failed = await probe.command(
+                "饰品升阶", command_text, number=number, allow_exception=phrase is None,
+            )
+            after_state, after_receipts = probe.rows(player, state_sql), probe.rows(game, receipt_sql)
+            probe.evidence[str(number)] = {
+                "reply": failed,
+                "state_unchanged": after_state == before_state,
+                "receipt_unchanged": after_receipts == before_receipts,
+            }
+            if phrase is None:
+                errors = "\n".join(probe.calls[-1]["errors"])
+                assert "sqlite3.IntegrityError: isolated accessory upgrade abort" in errors, errors
+            else:
+                assert phrase in failed and main["uid"] in failed, probe.evidence
+            assert "升阶成功" not in failed and (after_state, after_receipts) == (
+                before_state, before_receipts,
+            ), probe.evidence
+            probe.seed(database, "DROP TRIGGER reject_accessory_upgrade")
+            recovered = await probe.command("饰品升阶", command_text, number=number)
+            assert "升阶成功" in recovered, recovered
+            upgraded_state, upgraded_receipts = probe.rows(player, state_sql), probe.rows(game, receipt_sql)
+            equipped = json.loads(upgraded_state[0][0])
+            bag = json.loads(upgraded_state[0][1])
+            assert equipped["戒指"]["uid"] == main["uid"]
+            assert equipped["戒指"]["quality"] == 2
+            assert equipped["戒指"]["wash_count"] == 0
+            assert bag == [other]
+            assert len(upgraded_receipts) == len(before_receipts) + 1
+            assert json.loads(upgraded_receipts[-1][2])["material_uids"] == [material["uid"]]
+            assert json.loads(upgraded_receipts[-1][3])["accessory"] == equipped["戒指"]
+            replay = await probe.command("饰品升阶", command_text, number=number)
+            assert "升阶成功" in replay, replay
+            assert (probe.rows(player, state_sql), probe.rows(game, receipt_sql)) == (
+                upgraded_state, upgraded_receipts,
+            )
+            probe.seed(player, "UPDATE player_accessory SET equipped=?,bag=? WHERE user_id='900001'",
+                       initial[0])
+        assert (balances(probe), backpack(probe)) == assets
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(
+            accessory_uid=main["uid"], material_uid=material["uid"],
+            state_rejected=True, receipt_rejected=True, recovered=True, replay_unchanged=True,
+        )
+
+    @case(
+        "accessory-upgrade-parameters",
+        "饰品升阶",
+        "部位 材料UID...，别名/品阶/材料边界",
+        "一至五阶实际饰品、同款材料与隔离game/player SQLite",
+        "按既有材料规则升阶、保留词条，非法/不足/不匹配零写",
+        group="remaining-player-parameters",
+    )
+    async def accessory_upgrade_parameters(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        assets = balances(probe), backpack(probe)
+        receipt_sql = (
+            "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE action='upgrade' ORDER BY operation_id"
+        )
+        for quality in (1, 2, 3, 4):
+            cost = 1 if quality <= 2 else quality - 1
+            extra = 1 if quality == 2 else 0
+            instances = seed_accessory_document(
+                probe, [19002] * (cost + extra + 1) + [19102], equipped_slots=("戒指",),
+            )
+            for instance in instances[:-1]:
+                instance.update(quality=quality, wash_count=8, locked_affixes=[0], affixes=[
+                    {"type": "攻击", "value": 0.12}, {"type": "速度", "value": 20},
+                ])
+            main, materials = instances[0], instances[1:cost + extra + 1]
+            equipped = {"手镯": None, "戒指": main, "手环": None, "项链": None}
+            probe.seed(player, "UPDATE player_accessory SET equipped=?,bag=? WHERE user_id='900001'",
+                       (json.dumps(equipped, ensure_ascii=False), json.dumps(instances[1:], ensure_ascii=False)))
+            command = "升阶饰品" if quality == 2 else "饰品升阶"
+            uids = [item["uid"] for item in materials]
+            if quality == 1:
+                uids.append(uids[0])
+            request = f"{command} 戒指 {' '.join(uids)}"
+            before_receipts = probe.rows(game, receipt_sql)
+            reply = await probe.command(command, request, number=970790 + quality)
+            assert "升阶成功" in reply, reply
+            actual = accessory_projection(probe)
+            upgraded = json.loads(actual[0][0])["戒指"]
+            assert upgraded["uid"] == main["uid"] and upgraded["quality"] == quality + 1
+            assert upgraded["wash_count"] == 0 and upgraded["locked_affixes"] == [0]
+            assert upgraded["affixes"][:2] == main["affixes"]
+            assert len(upgraded["affixes"]) == (3 if quality + 1 >= 4 else 2)
+            assert json.loads(actual[0][1]) == instances[cost + 1:]
+            receipts = probe.rows(game, receipt_sql)
+            assert len(receipts) == len(before_receipts) + 1
+            replay = await probe.command(command, request, number=970790 + quality)
+            assert "升阶成功" in replay and accessory_projection(probe) == actual
+            assert probe.rows(game, receipt_sql) == receipts
+
+        instances = seed_accessory_document(probe, [19002, 19002, 19102], equipped_slots=("戒指",))
+        main, material, other = instances
+        before = accessory_projection(probe), probe.rows(game, receipt_sql)
+        for number, (arguments, phrase) in enumerate((
+            ("", "用法：饰品升阶"),
+            ("戒指", "用法：饰品升阶"),
+            (f"鞋子 {material['uid']}", "部位错误"),
+            (f"项链 {material['uid']}", "当前未装备饰品"),
+            ("戒指 missing-material", "材料UID无效或不在背包中"),
+            (f"戒指 {main['uid']}", "材料UID无效或不在背包中"),
+            (f"戒指 {other['uid']}", "材料不匹配"),
+        ), start=970800):
+            reply = await probe.command("饰品升阶", f"饰品升阶 {arguments}", number=number)
+            assert phrase in reply, reply
+            assert (accessory_projection(probe), probe.rows(game, receipt_sql)) == before
+
+        for quality, arguments, phrase in (
+            (3, f"戒指 {material['uid']} {material['uid']}", "材料数量不足"),
+            (5, f"戒指 {material['uid']}", "已达最高五阶"),
+        ):
+            main["quality"] = quality
+            equipped = {"手镯": None, "戒指": main, "手环": None, "项链": None}
+            probe.seed(player, "UPDATE player_accessory SET equipped=? WHERE user_id='900001'",
+                       (json.dumps(equipped, ensure_ascii=False),))
+            before = accessory_projection(probe), probe.rows(game, receipt_sql)
+            reply = await probe.command("饰品升阶", f"饰品升阶 {arguments}", number=970810 + quality)
+            assert phrase in reply, reply
+            assert (accessory_projection(probe), probe.rows(game, receipt_sql)) == before
+        assert (balances(probe), backpack(probe)) == assets
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(qualities=[1, 2, 3, 4], max_quality_rejected=True, alias=True,
+                              material_boundaries=True, extra_material_preserved=True,
+                              duplicate_selection_deduplicated=True, replay_unchanged=True)
+
+    @case(
+        "accessory-upgrade-ambiguous-material",
+        "饰品升阶",
+        "戒指 <合法材料UID>，数据库中该UID对应两件",
+        "实际同款饰品、重复历史UID和隔离game/player SQLite",
+        "具体重复编号原因到玩家回复，零写并可在数据纠正后同消息恢复",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_upgrade_ambiguous_material(probe):
+        player, game = probe.context.paths.player_db, probe.context.paths.game_db
+        main, material = seed_accessory_document(
+            probe, [19002, 19002], equipped_slots=("戒指",),
+        )
+        bag = [material, dict(material)]
+        probe.seed(player, "UPDATE player_accessory SET bag=? WHERE user_id='900001'",
+                   (json.dumps(bag, ensure_ascii=False),))
+        receipt_sql = (
+            "SELECT operation_id,action,payload,result_json FROM accessory_transaction_operations "
+            "WHERE action='upgrade' ORDER BY operation_id"
+        )
+        before = accessory_projection(probe), probe.rows(game, receipt_sql), balances(probe), backpack(probe)
+        request = f"饰品升阶 戒指 {material['uid']}"
+        failed = await probe.command("饰品升阶", request, number=970825)
+        after = accessory_projection(probe), probe.rows(game, receipt_sql), balances(probe), backpack(probe)
+        probe.evidence.update(reply=failed, unchanged=after == before, main_uid=main["uid"],
+                              material_uid=material["uid"])
+        assert "所选升品材料编号对应多件饰品" in failed and main["uid"] in failed, probe.evidence
+        assert after == before
+        probe.seed(player, "UPDATE player_accessory SET bag=? WHERE user_id='900001'",
+                   (json.dumps([material], ensure_ascii=False),))
+        recovered = await probe.command("饰品升阶", request, number=970825)
+        assert "升阶成功" in recovered, recovered
+        assert json.loads(accessory_projection(probe)[0][0])["戒指"]["quality"] == 2
+        assert json.loads(accessory_projection(probe)[0][1]) == []
+        after_recovery = accessory_projection(probe), probe.rows(game, receipt_sql)
+        replay = await probe.command("饰品升阶", request, number=970825)
+        assert "升阶成功" in replay
+        assert (accessory_projection(probe), probe.rows(game, receipt_sql)) == after_recovery
+        for database in (game, player):
+            assert_dungeon_purchase_integrity(database)
+        probe.evidence.update(recovered=True, replay_unchanged=True)
+
+    @case(
         "accessory-decompose-legal-boundaries",
         "饰品分解",
         "真实背包/已装备饰品UID",

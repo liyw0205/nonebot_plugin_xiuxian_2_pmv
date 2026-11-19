@@ -55,6 +55,15 @@
 `accessory_quick_equip_state_write_rejected` / `...state_projection_mismatch` /
 `...receipt_write_rejected` / `...receipt_projection_mismatch` 和预设编号，整笔回滚后可同消息恢复。
 正常换装、已经装备时跳过、失效 UID 清理和空预设拒绝保持；成功回执优先重放，不重复换装。
+
+`饰品升阶 部位 材料UID1 [材料UID2 ...]`（别名 `升阶饰品`）升级该部位已装备的主饰品；
+一/二/三/四阶分别消耗 1/1/2/3 件同阶同款材料，重复参数去重，多余合法材料保留，五阶拒绝。
+升阶保留已有词条和合法锁定、补齐新阶词条并重置洗练次数。装备/背包和永久回执在同一保存点内写入，
+核影响行数、回执 payload/result 与完整玩家文档最终投影；状态拒写/改写保留
+`accessory_upgrade_state_write_rejected` / `...state_projection_mismatch`，回执拒写/改写保留
+`accessory_upgrade_receipt_write_rejected` / `...receipt_projection_mismatch`，携主饰品 UID 整笔回滚。
+领域的具体材料拒绝原因优先传到玩家回复，重复历史材料 UID 不再误报为材料不足。
+解除故障后同消息可恢复，成功回执重放不重复消耗；SQLite ABORT 原异常透传并回滚。
 ## 定时任务
 既有 `daily_reset_day_num` 仍由 scheduler 在每日零点执行，写入改由
 `DailyPillUsageResetApplication -> DailyPillUsageResetSqlRepository` 承担。按 scheduler 时区生成
@@ -72,6 +81,8 @@ Web 和命令适配器不直接写库存。
   隔离 SQLite、真实 matcher 参数/别名、拒写/改写/ABORT、恢复/重放与 OneBot/QQ 消息 mock；不代表真实 QQ 联调。
 - `python -m pytest -q tests/test_accessory_quick_equip_application.py tests/test_accessory_quick_equip_parameter_dispatch.py`：
   隔离换装/回执投影、状态和回执拒写/改写/ABORT、恢复与重放、1/2/3/空预设/非法参数及 OneBot/QQ 消息 mock。
+- `python -m pytest -q tests/test_accessory_upgrade_application.py tests/test_accessory_upgrade_parameter_dispatch.py`：
+  隔离两库的升阶/材料/回执投影、拒写/改写/ABORT、恢复/重放、品阶/参数边界、历史 UID 冲突和 OneBot/QQ 消息 mock。
 ## 灰度开关、回滚和已知限制
 关闭开关回退旧背包入口；通用 Web 批处理只负责原子扣除背包物品，具体物品效果仍由各领域 handler/application 维护。
 

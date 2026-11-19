@@ -1389,7 +1389,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(
                 bot,
                 event,
-                messages.get(result.status, _acc_fail_msg(result, action="饰品操作")),
+                _acc_fail_msg(result, action="饰品升阶", subject=result.subject)
+                if result.reason else messages.get(result.status, _acc_fail_msg(result)),
             )
             return
 

@@ -10,6 +10,11 @@ from ...infrastructure.database.attached_uow import AttachedDatabaseUnitOfWork
 from .accessory_upgrade_domain import AccessoryUpgradeChange, material_mismatch_reason, upgrade_material_count
 
 
+class _UpgradeWriteRejected(Exception):
+    def __init__(self, reason: str):
+        self.reason = reason
+
+
 class AccessoryUpgradeSqlRepository:
     """Atomically consume bag materials and upgrade an equipped accessory."""
 
@@ -27,6 +32,21 @@ class AccessoryUpgradeSqlRepository:
             return expected_type()
         decoded = json.loads(value) if isinstance(value, str) else value
         return decoded if isinstance(decoded, expected_type) else expected_type()
+
+    @classmethod
+    def _state_matches(cls, row: dict[str, Any] | None, expected: dict[str, Any]) -> bool:
+        if row is None:
+            return False
+        for key, value in expected.items():
+            if key in {"equipped", "bag"}:
+                try:
+                    if cls._json(json.loads(row[key])) != cls._json(json.loads(value)):
+                        return False
+                except (TypeError, ValueError):
+                    return False
+            elif row[key] != value:
+                return False
+        return True
 
     @classmethod
     def _result(cls, status: str, result_json: str) -> AccessoryUpgradeChange:
@@ -98,7 +118,7 @@ class AccessoryUpgradeSqlRepository:
                 return self._result("duplicate", str(previous["result_json"]))
 
             row = uow.query_one(
-                "SELECT equipped,bag FROM player_data.player_accessory WHERE user_id=?",
+                "SELECT * FROM player_data.player_accessory WHERE user_id=?",
                 (user_id,),
             )
             if row is None:
@@ -153,9 +173,11 @@ class AccessoryUpgradeSqlRepository:
             for index in sorted(material_indexes, reverse=True):
                 del bag[index]
             equipped[part] = updated
-            uow.execute(
-                "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
-                (json.dumps(equipped, ensure_ascii=False), json.dumps(bag, ensure_ascii=False), user_id),
+            subject = str(current.get("uid", "")) or part
+            expected_state = dict(row)
+            expected_state.update(
+                equipped=json.dumps(equipped, ensure_ascii=False),
+                bag=json.dumps(bag, ensure_ascii=False),
             )
             result_json = self._json(
                 {
@@ -167,12 +189,39 @@ class AccessoryUpgradeSqlRepository:
                     "details": None,
                 }
             )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, "upgrade", payload_json, result_json),
+            state_sql = "SELECT * FROM player_data.player_accessory WHERE user_id=?"
+            try:
+                with uow.savepoint("accessory_upgrade"):
+                    write = uow.execute(
+                        "UPDATE player_data.player_accessory SET equipped=?,bag=? WHERE user_id=?",
+                        (expected_state["equipped"], expected_state["bag"], user_id),
+                    )
+                    if write.rowcount != 1:
+                        raise _UpgradeWriteRejected("accessory_upgrade_state_write_rejected")
+                    if not self._state_matches(uow.query_one(state_sql, (user_id,)), expected_state):
+                        raise _UpgradeWriteRejected("accessory_upgrade_state_projection_mismatch")
+                    receipt = uow.execute(
+                        "INSERT INTO accessory_transaction_operations "
+                        "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                        (operation_id, "upgrade", payload_json, result_json),
+                    )
+                    if receipt.rowcount != 1:
+                        raise _UpgradeWriteRejected("accessory_upgrade_receipt_write_rejected")
+                    if uow.query_one(
+                        "SELECT action,payload,result_json FROM accessory_transaction_operations "
+                        "WHERE operation_id=?",
+                        (operation_id,),
+                    ) != {"action": "upgrade", "payload": payload_json, "result_json": result_json}:
+                        raise _UpgradeWriteRejected("accessory_upgrade_receipt_projection_mismatch")
+                    if not self._state_matches(uow.query_one(state_sql, (user_id,)), expected_state):
+                        raise _UpgradeWriteRejected("accessory_upgrade_state_projection_mismatch")
+            except _UpgradeWriteRejected as exc:
+                return AccessoryUpgradeChange(
+                    "failed", "upgrade", user_id, reason=exc.reason, subject=subject,
+                )
+            return AccessoryUpgradeChange(
+                "applied", "upgrade", user_id, required, 0, updated, subject=subject,
             )
-            return AccessoryUpgradeChange("applied", "upgrade", user_id, required, 0, updated)
 
 
 __all__ = ["AccessoryUpgradeSqlRepository"]
