@@ -8,7 +8,7 @@
 """
 from ..on_compat import on_command
 from nonebot.log import logger
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 
@@ -243,6 +243,7 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 
 @title_equip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("装备称号")
 async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """装备称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -268,6 +269,9 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     prior = title_application.get_result(operation_id)
     title_data = get_title_by_id(title_id) or {}
     if prior is not None and prior.succeeded:
+        if str(prior.title_id) != str(title_id):
+            await handle_send(bot, event, "本次称号请求与已处理记录冲突，请重新操作。")
+            await title_equip_cmd.finish()
         await handle_send(
             bot, event,
             f"成功装备称号【{title_data.get('name', prior.title_id or title_id)}】！\n"
@@ -290,12 +294,16 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         "title_locked": "你还未解锁该称号！",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status) or result_failure("装备称号", result)
+    subject = getattr(result, "subject", "")
+    result_msg = messages.get(result.status) or result_failure(
+        "装备称号", result, subjects={subject: f"称号 {subject}"} if subject else None,
+    )
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="卸下", v2="卸下称号", k3="存档", v3="我的修仙信息")
     await title_equip_cmd.finish()
 
 
 @title_unequip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("卸下称号")
 async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """卸下称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -327,7 +335,10 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         "not_equipped": "你当前没有装备任何称号！",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status) or result_failure("卸下称号", result)
+    subject = getattr(result, "subject", "")
+    result_msg = messages.get(result.status) or result_failure(
+        "卸下称号", result, subjects={subject: f"称号 {subject}"} if subject else None,
+    )
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2="装备称号", k3="存档", v3="我的修仙信息")
     await title_unequip_cmd.finish()
 

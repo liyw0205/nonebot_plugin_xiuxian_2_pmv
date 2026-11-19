@@ -11,7 +11,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import TitleTransactionResult
-from .repository import TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleRepository
+from .repository import TitleEquipmentWriteRejected, TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleRepository
 
 
 class TitleApplication:
@@ -100,7 +100,14 @@ class TitleApplication:
                             audit_category="title",
                             clock=self.clock,
                         )
+                    equipment = None
+                    if action in {"equip", "unequip"} and result.succeeded:
+                        equipment = self.repository.equipment_projection(uow, user_id, operation_id)
                     self.ledger.finish(uow, outcome)
+                    if equipment is not None:
+                        self.repository.verify_equipment_projection(
+                            uow, user_id, operation_id, equipment, result.title_id,
+                        )
                     return outcome
             except OperationConflictError:
                 return OperationOutcome.rejected(
@@ -112,10 +119,18 @@ class TitleApplication:
                     audit_category="title",
                     clock=self.clock,
                 )
+            except TitleEquipmentWriteRejected as exc:
+                return OperationOutcome.failed(
+                    operation_id, ledger_action, reason_text(exc.code), code=exc.code,
+                    data={"status": "failed", "title_id": exc.details["subject"],
+                          "reason": exc.code, "subject": exc.details["subject"]},
+                    audit_category="title", clock=self.clock,
+                )
             except DomainError:
                 raise
             except Exception as exc:
-                self.ledger.record_failure(self.database, operation_id, ledger_action, request, str(exc))
+                failure_payload = ledger_request if action in {"equip", "unequip"} else request
+                self.ledger.record_failure(self.database, operation_id, ledger_action, failure_payload, str(exc))
                 raise
 
     def _dispatch(

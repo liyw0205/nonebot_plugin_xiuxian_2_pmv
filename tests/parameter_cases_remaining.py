@@ -434,6 +434,130 @@ async def check_accessory_decompose_writes(probe, *, batch=False):
 
 def register(case):
     @case(
+        "title-equipment-receipt-recovery",
+        "装备称号",
+        "随包真实已解锁称号名称/ID与卸下称号",
+        "隔离player SQLite已有称号、永久回执和应用账本",
+        "合法装备/卸下遭状态/回执/末步改写时保留原因并整笔回滚，解除故障同消息恢复",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def title_equipment_receipt_recovery(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_title as title
+
+        player = probe.context.paths.player_db
+        title_ids = list(title.get_all_titles())[:2]
+        assert len(title_ids) == 2
+        first, second = map(str, title_ids)
+        unlocked = json.dumps([first, second])
+        receipts = "SELECT * FROM title_transaction_operations ORDER BY operation_id"
+        state = "SELECT * FROM title ORDER BY user_id"
+        assets = balances(probe), backpack(probe)
+        faults = (
+            ("BEFORE INSERT ON title_transaction_operations", "SELECT RAISE(IGNORE)", "称号装备操作回执保存失败"),
+            ("BEFORE UPDATE OF equipped ON title", "SELECT RAISE(IGNORE)", "称号佩戴结果保存失败"),
+            ("AFTER UPDATE OF equipped ON title", "UPDATE title SET unlocked='[]' WHERE user_id=NEW.user_id",
+             "称号装备状态与请求不一致"),
+            ("AFTER INSERT ON title_transaction_operations",
+             "UPDATE title_transaction_operations SET payload='[]' WHERE operation_id=NEW.operation_id",
+             "称号装备操作回执内容不一致"),
+            ("AFTER INSERT ON title_transaction_operations", "UPDATE title SET equipped='wrong' WHERE user_id='900001'",
+             "称号装备状态与请求不一致"),
+            ("AFTER INSERT ON operation_audit", "UPDATE title SET equipped='wrong' WHERE user_id='900001'",
+             "称号装备状态与请求不一致"),
+            ("BEFORE INSERT ON title_transaction_operations", "SELECT RAISE(ABORT,'isolated title equipment abort')", None),
+        )
+        for action_index, (command, request, initial, target) in enumerate((
+            ("装备称号", f"装备称号 {title.get_title_by_id(second)['name']}", first, second),
+            ("卸下称号", "卸下称号", second, ""),
+        )):
+            for fault_index, (event, fault, phrase) in enumerate(faults):
+                number = 970900 + action_index * 20 + fault_index
+                probe.managers[1].save_doc(
+                    "900001", "title", {"unlocked": unlocked, "equipped": initial},
+                    fields=["unlocked", "equipped"], dirty_check=False,
+                )
+                before = probe.rows(player, state), probe.rows(player, receipts)
+                metadata = tuple(probe.rows(player, f"SELECT * FROM {table} ORDER BY 1")
+                                 for table in ("operation_ledger", "operation_audit"))
+                probe.seed(player, f"CREATE TRIGGER reject_title_receipt {event} BEGIN {fault}; END")
+                failed = await probe.command(command, request, number=number, allow_exception=phrase is None)
+                after = probe.rows(player, state), probe.rows(player, receipts)
+                probe.evidence[f"{command}:{fault_index}"] = {"reply": failed, "unchanged": after == before}
+                if phrase is None:
+                    errors = "\n".join(probe.calls[-1]["errors"])
+                    assert "sqlite3.IntegrityError: isolated title equipment abort" in errors, errors
+                    assert "定位号" in failed and "isolated title equipment abort" not in failed, failed
+                else:
+                    assert phrase in failed and second in failed, probe.evidence
+                    assert tuple(probe.rows(player, f"SELECT * FROM {table} ORDER BY 1")
+                                 for table in ("operation_ledger", "operation_audit")) == metadata
+                assert "成功装备" not in failed and "成功卸下" not in failed and after == before
+                probe.seed(player, "DROP TRIGGER reject_title_receipt")
+                recovered = await probe.command(command, request, number=number)
+                assert ("成功卸下" if command == "卸下称号" else "成功装备") in recovered, recovered
+                assert probe.rows(player, "SELECT equipped FROM title WHERE user_id='900001'") == [(target,)]
+                settled = probe.rows(player, state), probe.rows(player, receipts)
+                replay = await probe.command(command, request, number=number)
+                assert "已经处理" in replay and (probe.rows(player, state), probe.rows(player, receipts)) == settled
+        assert (balances(probe), backpack(probe)) == assets
+        assert_dungeon_purchase_integrity(player)
+        probe.evidence.update(faults_per_action=len(faults), recovered=True, replay_unchanged=True)
+
+    @case(
+        "title-equipment-parameters",
+        "装备称号",
+        "合法名称/ID、同消息改参、已装备/锁定/空参数与卸下",
+        "隔离player SQLite已有两个已解锁称号与真实目录",
+        "合法装备和卸下，正常边界具体拒绝，同消息改参保留operation_conflict且不伪报成功",
+        group="remaining-player-parameters",
+    )
+    async def title_equipment_parameters(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_title as title
+
+        player = probe.context.paths.player_db
+        first, second, locked = map(str, list(title.get_all_titles())[:3])
+        probe.managers[1].save_doc(
+            "900001", "title", {"unlocked": json.dumps([first, second]), "equipped": first},
+            fields=["unlocked", "equipped"], dirty_check=False,
+        )
+        assets = balances(probe), backpack(probe)
+
+        def snapshot():
+            return (probe.rows(player, "SELECT * FROM title ORDER BY user_id"),
+                    probe.rows(player, "SELECT * FROM title_transaction_operations ORDER BY operation_id"))
+
+        request = f"装备称号 {title.get_title_by_id(second)['name']}"
+        applied = await probe.command("装备称号", request, number=970940)
+        assert "成功装备" in applied
+        before = snapshot()
+        conflict = await probe.command("装备称号", f"装备称号 {first}", number=970940)
+        probe.evidence.update(conflict_reply=conflict, unchanged=snapshot() == before)
+        assert "本次称号请求与已处理记录冲突" in conflict and "成功装备" not in conflict, probe.evidence
+        assert snapshot() == before
+        replay = await probe.command("装备称号", request, number=970940)
+        assert "已经处理" in replay and snapshot() == before
+        already = await probe.command("装备称号", f"装备称号 {second}", number=970941)
+        assert "已在装备中" in already
+        by_id = await probe.command("装备称号", f"装备称号 {first}", number=970942)
+        assert "成功装备" in by_id
+        assert probe.rows(player, "SELECT equipped FROM title WHERE user_id='900001'") == [(first,)]
+        before = snapshot()
+        for number, (argument, phrase) in enumerate((
+            ("", "请输入要装备的称号名称或ID"), ("missing-title", "称号不存在"), (locked, "还未解锁"),
+        ), start=970943):
+            rejected = await probe.command("装备称号", f"装备称号 {argument}", number=number)
+            assert phrase in rejected and snapshot() == before, rejected
+        removed = await probe.command("卸下称号", "卸下称号", number=970946)
+        assert "成功卸下" in removed
+        before = snapshot()
+        empty = await probe.command("卸下称号", "卸下称号", number=970947)
+        assert "没有装备任何称号" in empty and snapshot() == before
+        assert (balances(probe), backpack(probe)) == assets
+        assert_dungeon_purchase_integrity(player)
+        probe.evidence.update(name_and_id=True, conflict_rejected=True, locked_rejected=True, unequip=True)
+
+    @case(
         "accessory-bag-page-real",
         "饰品背包",
         "页码1",
