@@ -12,7 +12,7 @@ from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
-from ..command_guard import result_failure, report_exception
+from ..command_guard import guard_command, result_failure, report_exception
 from nonebot.exception import MatcherException, ProcessException
 
 from ..adapter_compat import (
@@ -231,7 +231,10 @@ def _missing_team_snapshot(team_id: str = "") -> TeamStateSnapshot:
 
 def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
     if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
-        return result_failure("队伍操作", result)
+        subjects = {}
+        if action == "create" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        return result_failure("创建队伍" if action == "create" else "队伍操作", result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -430,6 +433,7 @@ async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 # 组队逻辑
 # =========================
 @create_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("创建队伍")
 async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -439,11 +443,6 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "create", user_id)
-    replay = dungeon_team_application.operation_result(operation_id, "create")
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("create", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await create_team_cmd.finish()
-
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
 
     team_name = args.extract_plain_text().strip()

@@ -27,6 +27,7 @@ class TeamMutationResult:
     cooldown_until: str = ""
     cooldown_seconds: int = 0
     reason: str = ""
+    subject: str = ""
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,11 @@ class TeamExitResult:
     version: int = 0
     target_id: str = ""
     reason: str = ""
+
+
+class _TeamCreateWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
 class DungeonTeamRepository:
@@ -219,7 +225,7 @@ class DungeonTeamRepository:
     @classmethod
     def _sync_membership(
         cls, uow: DatabaseUnitOfWork, team_id: str, members: list[str], version: int
-    ) -> None:
+    ) -> int:
         """Keep the bounded member lookup projection aligned with teams.members."""
         uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (str(team_id),))
         rows = [
@@ -227,11 +233,14 @@ class DungeonTeamRepository:
             for member in dict.fromkeys(members)
             if str(member).strip()
         ]
+        inserted = 0
         if rows:
-            uow.executemany(
+            write = uow.executemany(
                 "INSERT INTO dungeon_team_members(team_id,member_id,version) VALUES(?,?,?)",
                 rows,
             )
+            inserted = max(int(write.rowcount), 0)
+        return inserted
 
     @staticmethod
     def _members(value: Any) -> list[str]:
@@ -400,6 +409,7 @@ class DungeonTeamRepository:
                 cooldown_until=str(data.get("cooldown_until", "")),
                 cooldown_seconds=int(data.get("cooldown_seconds", 0) or 0),
                 reason=str(data.get("reason") or ("legacy_rejection" if row["result_status"] == "state_changed" else "")),
+                subject=str(data.get("subject", "")),
             )
         except (TypeError, ValueError, json.JSONDecodeError):
             return TeamMutationResult(str(row["result_status"]), team_id=str(row["team_id"]), reason="receipt_corrupt")
@@ -421,23 +431,102 @@ class DungeonTeamRepository:
         payload = self._json({"action":"create","team_id":str(team_id),"team_name":str(team_name),"leader_id":str(leader_id),"group_id":str(group_id)})
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=str(team_id), target_id=str(leader_id), group_id=str(group_id))
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._mutation_schema_ready(uow):
-                return TeamMutationResult("schema_missing", team_id=str(team_id), target_id=str(leader_id), group_id=str(group_id))
-            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None:
-                return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
-            base = dict(team_id=str(team_id), team_name=str(team_name), leader_id=str(leader_id), target_id=str(leader_id), group_id=str(group_id))
-            if not group_id: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("group_required", **base))
-            user_exists = self._user_exists(uow, leader_id)
-            if user_exists is None: return TeamMutationResult("schema_missing", **base)
-            if not user_exists: return self._finish(uow, operation_id, "create", payload, TeamMutationResult("user_missing", **base))
-            if self._user_team(uow, leader_id): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("user_has_team", **base))
-            if self._active_session(uow, leader_id): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("session_active", **base))
-            if uow.query_one("SELECT 1 FROM teams WHERE user_id=?", (team_id,)): return self._finish(uow, operation_id, "create", payload, TeamMutationResult("team_exists", **base))
-            uow.execute("INSERT INTO teams(user_id,team_id,team_name,group_id,leader,members,create_time,max_members,description,version) VALUES(?,?,?,?,?,?,?,?,?,0)", (team_id,team_id,team_name,group_id,leader_id,json.dumps([leader_id]),created_at,4,""))
-            self._sync_membership(uow, team_id, [leader_id], 0)
-            return self._finish(uow, operation_id, "create", payload, TeamMutationResult("applied", member_count=1, max_members=4, **base))
+        base = dict(team_id=str(team_id), team_name=str(team_name), leader_id=str(leader_id), target_id=str(leader_id), group_id=str(group_id))
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._mutation_schema_ready(uow):
+                    return TeamMutationResult("schema_missing", **base)
+                old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                if old is not None:
+                    if old["payload"] != payload:
+                        return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
+                    return self._decode_mutation(old)
+
+                def finish(result: TeamMutationResult) -> TeamMutationResult:
+                    receipt_payload = self._json(result.__dict__)
+                    write = uow.execute(
+                        "INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)",
+                        (operation_id, payload, result.status, result.team_id, receipt_payload, "create"),
+                    )
+                    if write.rowcount != 1:
+                        raise _TeamCreateWriteRejected("dungeon_team_create_receipt_write_rejected", team_id)
+                    receipt = uow.query_one(
+                        "SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if receipt != {
+                        "payload": payload,
+                        "result_status": result.status,
+                        "team_id": result.team_id,
+                        "result_json": receipt_payload,
+                        "action": "create",
+                    }:
+                        raise _TeamCreateWriteRejected("dungeon_team_create_receipt_projection_mismatch", team_id)
+                    return result
+
+                if not group_id:
+                    return finish(TeamMutationResult("group_required", **base))
+                user_exists = self._user_exists(uow, leader_id)
+                if user_exists is None:
+                    return TeamMutationResult("schema_missing", **base)
+                if not user_exists:
+                    return finish(TeamMutationResult("user_missing", **base))
+                if self._user_team(uow, leader_id):
+                    return finish(TeamMutationResult("user_has_team", **base))
+                if self._active_session(uow, leader_id):
+                    return finish(TeamMutationResult("session_active", **base))
+                if uow.query_one("SELECT 1 FROM teams WHERE user_id=?", (team_id,)):
+                    return finish(TeamMutationResult("team_exists", **base))
+
+                members_json = json.dumps([leader_id])
+                expected_team = {
+                    "user_id": str(team_id),
+                    "team_id": str(team_id),
+                    "team_name": str(team_name),
+                    "group_id": str(group_id),
+                    "leader": str(leader_id),
+                    "members": members_json,
+                    "create_time": str(created_at),
+                    "max_members": 4,
+                    "description": "",
+                    "version": 0,
+                }
+                team_write = uow.execute(
+                    "INSERT INTO teams(user_id,team_id,team_name,group_id,leader,members,create_time,max_members,description,version) VALUES(?,?,?,?,?,?,?,?,?,0)",
+                    (team_id, team_id, team_name, group_id, leader_id, members_json, created_at, 4, ""),
+                )
+                if team_write.rowcount != 1:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_state_write_rejected", team_id)
+                team_columns = "user_id,team_id,team_name,group_id,leader,members,create_time,max_members,description,version"
+                team_state = uow.query_one(f"SELECT {team_columns} FROM teams WHERE user_id=?", (team_id,))
+                if team_state != expected_team:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_state_projection_mismatch", team_id)
+
+                member_write_count = self._sync_membership(uow, team_id, [leader_id], 0)
+                if member_write_count != 1:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_members_write_rejected", team_id)
+                members = uow.query_all(
+                    "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=? ORDER BY team_id,member_id",
+                    (team_id,),
+                )
+                expected_members = [{"team_id": str(team_id), "member_id": str(leader_id), "version": 0}]
+                if members != expected_members:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_members_projection_mismatch", team_id)
+
+                result = TeamMutationResult("applied", member_count=1, max_members=4, subject=str(team_id), **base)
+                finish(result)
+                team_state = uow.query_one(f"SELECT {team_columns} FROM teams WHERE user_id=?", (team_id,))
+                if team_state != expected_team:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_state_projection_mismatch", team_id)
+                members = uow.query_all(
+                    "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=? ORDER BY team_id,member_id",
+                    (team_id,),
+                )
+                if members != expected_members:
+                    raise _TeamCreateWriteRejected("dungeon_team_create_members_projection_mismatch", team_id)
+                return result
+        except _TeamCreateWriteRejected as exc:
+            return TeamMutationResult("failed", reason=exc.code, subject=str(exc.details.get("subject") or team_id), **base)
 
     def operation_result(self, operation_id: str, action: str = "") -> TeamMutationResult | None:
         if not self._database_exists():

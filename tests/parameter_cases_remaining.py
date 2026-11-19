@@ -1572,6 +1572,139 @@ def register(case):
         probe.evidence.update(team_id=team_id, replay_unchanged=True)
 
     @case(
+        "dungeon-team-create-write-recovery",
+        "创建队伍",
+        "合法队伍名与同消息恢复",
+        "注册玩家、真实组队迁移、群聊上下文和隔离 player SQLite",
+        "队伍主行拒写时不创建成员索引或成功回执，具体原因可见且故障解除后恢复",
+        group="remaining-player-parameters",
+    )
+    async def dungeon_team_create_write_recovery(probe):
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_dungeon as module
+
+        player = probe.context.paths.player_db
+        faults = (
+            ("team-ignore", "teams", "BEFORE INSERT", "NEW.user_id", "SELECT RAISE(IGNORE)", "dungeon_team_create_state_write_rejected", "队伍主记录保存失败"),
+            ("team-rewrite", "teams", "AFTER INSERT", "NEW.user_id", "UPDATE teams SET team_name='被触发器改写' WHERE user_id=NEW.user_id", "dungeon_team_create_state_projection_mismatch", "队伍主记录与创建请求不一致"),
+            ("members-ignore", "dungeon_team_members", "BEFORE INSERT", "NEW.team_id", "SELECT RAISE(IGNORE)", "dungeon_team_create_members_write_rejected", "队伍成员索引保存失败"),
+            ("members-rewrite", "dungeon_team_members", "AFTER INSERT", "NEW.team_id", "UPDATE dungeon_team_members SET version=9 WHERE team_id=NEW.team_id AND member_id=NEW.member_id", "dungeon_team_create_members_projection_mismatch", "队伍成员索引与创建请求不一致"),
+            ("receipt-ignore", "dungeon_team_operations", "BEFORE INSERT", "NEW.operation_id", "SELECT RAISE(IGNORE)", "dungeon_team_create_receipt_write_rejected", "队伍创建回执保存失败"),
+            ("receipt-rewrite", "dungeon_team_operations", "AFTER INSERT", "NEW.operation_id", "UPDATE dungeon_team_operations SET result_json='{}' WHERE operation_id=NEW.operation_id", "dungeon_team_create_receipt_projection_mismatch", "队伍创建回执与请求不一致"),
+            ("receipt-side-effect", "dungeon_team_operations", "AFTER INSERT", "NEW.operation_id", "UPDATE teams SET team_name='回执末步改写' WHERE user_id=NEW.team_id", "dungeon_team_create_state_projection_mismatch", "队伍主记录与创建请求不一致"),
+            ("members-abort", "dungeon_team_members", "BEFORE INSERT", "NEW.team_id", "SELECT RAISE(ABORT,'isolated team membership abort')", "unexpected", ""),
+        )
+        for index, (label, table, timing, condition_column, body, reason, phrase) in enumerate(faults):
+            number = 970010 + index
+            operation_id = f"dungeon-team-create:{number}:900001"
+            team_id = f"900100_{number}"
+            trigger = f"inject_dungeon_team_create_{index}"
+            expected = condition_column + (f"='{team_id}'" if condition_column == "NEW.user_id" or condition_column == "NEW.team_id" else f"='{operation_id}'")
+            probe.seed(
+                player,
+                f"CREATE TRIGGER {trigger} {timing} ON {table} WHEN {expected} BEGIN {body}; END",
+            )
+            text = await probe.command(
+                "创建队伍", "创建队伍 红测队", number=number,
+                allow_exception=reason == "unexpected",
+            )
+            evidence = {
+                "reply": text,
+                "teams": probe.rows(player, "SELECT user_id,team_name,members FROM teams WHERE user_id=?", (team_id,)),
+                "members": probe.rows(player, "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=?", (team_id,)),
+                "receipts": probe.rows(player, "SELECT operation_id,result_status,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,)),
+                "logs": probe.calls[-1]["logs"],
+            }
+            probe.evidence[label] = evidence
+            if reason == "unexpected":
+                assert "定位号：" in text and "内部异常" in text, evidence
+                assert any("isolated team membership abort" in row["exception"] for row in evidence["logs"]), evidence
+            else:
+                assert phrase in text and "红测队" in text, evidence
+            assert evidence["teams"] == [] and evidence["members"] == [] and evidence["receipts"] == [], evidence
+
+            probe.seed(player, f"DROP TRIGGER {trigger}")
+            recovered = await probe.command("创建队伍", "创建队伍 红测队", number=number)
+            assert "红测队" in recovered and "创建成功" in recovered, recovered
+            expected_rows = [("红测队", '["900001"]')]
+            assert probe.rows(player, "SELECT team_name,members FROM teams WHERE user_id=?", (team_id,)) == expected_rows
+            assert probe.rows(player, "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=?", (team_id,)) == [(team_id, "900001", 0)]
+            assert probe.rows(player, "SELECT operation_id,result_status FROM dungeon_team_operations WHERE operation_id=?", (operation_id,)) == [(operation_id, "applied")]
+            snapshot = module.dungeon_team_application.snapshot(team_id)
+            replay = await probe.command("创建队伍", "创建队伍 红测队", number=number)
+            assert "红测队" in replay and "创建成功" in replay, replay
+            assert module.dungeon_team_application.snapshot(team_id) == snapshot
+            conflict = await probe.command("创建队伍", "创建队伍 换参队伍", number=number)
+            assert "不同内容的请求" in conflict and "换参队伍" not in conflict, conflict
+            assert module.dungeon_team_application.snapshot(team_id) == snapshot
+            probe.evidence[label].update(recovered=True, replay_stable=True, changed_payload_conflict=True)
+            probe.seed(player, "DELETE FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+            probe.seed(player, "DELETE FROM dungeon_team_members WHERE team_id=?", (team_id,))
+            probe.seed(player, "DELETE FROM teams WHERE user_id=?", (team_id,))
+        for database in (player, probe.context.paths.game_db):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                assert uow.query_one("PRAGMA integrity_check") == {"integrity_check": "ok"}
+        probe.evidence["integrity_check"] = "ok"
+
+    @case(
+        "dungeon-team-create-parameters",
+        "创建队伍",
+        "空名称、别名、空格/长名称、群聊前置和已有队伍/会话边界",
+        "注册玩家、真实组队迁移及隔离 SQLite",
+        "合法名称原样保存，正常拒绝保留规则且不创建队伍",
+        group="remaining-player-parameters",
+    )
+    async def dungeon_team_create_parameters(probe):
+        from unittest.mock import patch
+        from nonebot.adapters.onebot.v11 import PrivateMessageEvent
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from tests import command_probe
+
+        player = probe.context.paths.player_db
+        assets_before = balances(probe), backpack(probe)
+        default = await probe.command("创建队伍", "创建队伍", number=970030)
+        assert "诊断道友的队伍" in default and "创建成功" in default, default
+        already = await probe.command("创建队伍", "创建队伍 第二支队伍", number=970031)
+        assert "已经在一个队伍中了" in already, already
+        probe.seed(
+            player,
+            "INSERT INTO player_dungeon_status(user_id,dungeon_status) VALUES('900002','exploring') "
+            "ON CONFLICT(user_id) DO UPDATE SET dungeon_status='exploring'",
+        )
+        session_row = probe.rows(
+            player,
+            "SELECT user_id,dungeon_status FROM player_dungeon_status WHERE user_id='900002'",
+        )
+        assert session_row == [("900002", "exploring")], session_row
+        active = await probe.command("创建队伍", "创建队伍 会话队伍", actor="900002", number=970032)
+        assert "探索会话进行中" in active, active
+        probe.seed(player, "UPDATE player_dungeon_status SET dungeon_status='not_started' WHERE user_id='900002'")
+        alias = await probe.command("新建队伍", "新建队伍 别名队伍", actor="900002", number=970033)
+        assert "别名队伍" in alias and "创建成功" in alias, alias
+        long_name = "合法名称 " + "长" * 160
+        long_reply = await probe.command("创建队伍", f"创建队伍   {long_name}   ", actor="900003", number=970034)
+        assert long_name in long_reply and "创建成功" in long_reply, long_reply
+        assert probe.rows(player, "SELECT team_name FROM teams WHERE user_id='900100_970034'") == [(long_name,)]
+
+        make_group_event = command_probe.make_event
+
+        def make_private_event(text, actor, number):
+            data = make_group_event(text, actor, number).model_dump()
+            data.pop("group_id")
+            data.update(message_type="private", sub_type="friend")
+            return PrivateMessageEvent.model_validate(data)
+
+        with patch.object(command_probe, "make_event", side_effect=make_private_event):
+            private = await probe.command("创建队伍", "创建队伍 私聊队伍", actor="900003", number=970035)
+        assert "只能在群聊中使用" in private, private
+        assert probe.rows(player, "SELECT user_id FROM teams WHERE user_id='private_970035'") == []
+        assert (balances(probe), backpack(probe)) == assets_before
+        for database in (player, probe.context.paths.game_db):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                assert uow.query_one("PRAGMA integrity_check") == {"integrity_check": "ok"}
+        probe.evidence.update(default_name=True, user_has_team=True, active_session=True, alias=True, free_text_name=True, group_required=True, assets_unchanged=True, integrity_check="ok")
+
+    @case(
         "arena-shop-page-real",
         "竞技场商店",
         "页码1",
