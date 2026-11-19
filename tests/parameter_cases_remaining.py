@@ -299,6 +299,125 @@ async def check_accessory_wash_writes(probe):
                           abort=True, recovery=True, replay_unchanged=True)
 
 
+async def check_accessory_decompose_writes(probe):
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_back.accessory import ACCESSORY_DECOMPOSE_GAIN
+
+    player, game = probe.context.paths.player_db, probe.context.paths.game_db
+    stone_sql = (
+        "SELECT goods_name,goods_type,goods_num,bind_num FROM back "
+        "WHERE user_id='900001' AND goods_id=20023"
+    )
+    receipt_sql = (
+        "SELECT operation_id,action,payload,result_json "
+        "FROM accessory_transaction_operations ORDER BY operation_id"
+    )
+    phrases = {
+        "accessory_decompose_stone_write_rejected": "分解所得洗练石未能保存",
+        "accessory_decompose_stone_projection_mismatch": "分解所得洗练石与应得数量不一致",
+        "accessory_decompose_state_write_rejected": "饰品分解状态保存失败",
+        "accessory_decompose_state_projection_mismatch": "饰品分解状态与请求不一致",
+        "accessory_decompose_receipt_write_rejected": "饰品分解操作回执保存失败",
+        "accessory_decompose_receipt_projection_mismatch": "饰品分解操作回执不一致",
+    }
+    faults = (
+        (game, False, "BEFORE INSERT ON back", "SELECT RAISE(IGNORE)",
+         "accessory_decompose_stone_write_rejected"),
+        (game, False, "AFTER INSERT ON back",
+         "UPDATE back SET bind_num=0 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+         "accessory_decompose_stone_projection_mismatch"),
+        (game, True, "BEFORE UPDATE OF goods_num ON back", "SELECT RAISE(IGNORE)",
+         "accessory_decompose_stone_write_rejected"),
+        (game, True, "AFTER UPDATE OF goods_num ON back",
+         "UPDATE back SET goods_num=0 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+         "accessory_decompose_stone_projection_mismatch"),
+        (player, True, "BEFORE UPDATE OF equipped ON player_accessory", "SELECT RAISE(IGNORE)",
+         "accessory_decompose_state_write_rejected"),
+        (player, True, "AFTER UPDATE OF equipped ON player_accessory",
+         "UPDATE player_accessory SET bag='[]' WHERE user_id=NEW.user_id",
+         "accessory_decompose_state_projection_mismatch"),
+        (game, True, "BEFORE INSERT ON accessory_transaction_operations", "SELECT RAISE(IGNORE)",
+         "accessory_decompose_receipt_write_rejected"),
+        (game, True, "AFTER INSERT ON accessory_transaction_operations",
+         "UPDATE accessory_transaction_operations SET result_json='{}' WHERE operation_id=NEW.operation_id",
+         "accessory_decompose_receipt_projection_mismatch"),
+        (game, True, "AFTER INSERT ON accessory_transaction_operations",
+         "UPDATE back SET bind_num=0 WHERE user_id='900001' AND goods_id=20023",
+         "accessory_decompose_stone_projection_mismatch"),
+        (player, True, "AFTER UPDATE OF equipped ON player_accessory",
+         "UPDATE player_accessory SET equipped='{}' WHERE user_id=NEW.user_id",
+         "accessory_decompose_state_projection_mismatch"),
+        (game, True, "BEFORE INSERT ON accessory_transaction_operations",
+         "SELECT RAISE(ABORT,'isolated accessory decompose abort')", None),
+    )
+    for database in (game, player):
+        probe.seed(database, "CREATE TABLE isolated_decompose_effect (effect INTEGER)")
+    initial_balances = balances(probe)
+    initial_backpack = [row for row in backpack(probe) if int(row[1]) != 20023]
+    for number, (database, existing, event, fault, reason) in enumerate(faults, start=970600):
+        instances = seed_accessory_document(probe, [19001, 19002, 19003], equipped_slots=("手镯",))
+        target = instances[1]
+        target_uid = target["uid"]
+        command_text = f"饰品分解 {target_uid}"
+        probe.seed(game, "DELETE FROM back WHERE user_id='900001' AND goods_id=20023")
+        if existing:
+            probe.seed(game, "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
+                       "VALUES('900001',20023,'洗练石','特殊道具',5,2)")
+        before_state = accessory_projection(probe)
+        before_stones = probe.rows(game, stone_sql)
+        before_receipts = probe.rows(game, receipt_sql)
+        probe.seed(database, f"CREATE TRIGGER reject_decompose {event} "
+                   f"BEGIN INSERT INTO isolated_decompose_effect VALUES(1); {fault}; END")
+        probe.clear_cooldowns()
+        text = await probe.command("饰品分解", command_text, number=number, allow_exception=reason is None)
+        failed_state = accessory_projection(probe)
+        failed_stones = probe.rows(game, stone_sql)
+        failed_receipts = probe.rows(game, receipt_sql)
+        probe.evidence["last_failure"] = {
+            "event": event, "reason": reason, "reply": text,
+            "state_unchanged": failed_state == before_state,
+            "stones_before": before_stones, "stones_after": failed_stones,
+            "receipt_delta": len(failed_receipts) - len(before_receipts),
+        }
+        if reason is None:
+            errors = "\n".join(probe.calls[-1]["errors"])
+            assert "sqlite3.IntegrityError: isolated accessory decompose abort" in errors, errors
+        else:
+            assert phrases[reason] in text and target_uid in text, text
+        assert "已分解：" not in text, text
+        assert failed_state == before_state and failed_stones == before_stones
+        assert failed_receipts == before_receipts
+        assert not probe.rows(database, "SELECT effect FROM isolated_decompose_effect")
+
+        probe.seed(database, "DROP TRIGGER reject_decompose")
+        probe.clear_cooldowns()
+        recovered = await probe.command("饰品分解", command_text, number=number)
+        assert "已分解：" in recovered, recovered
+        after_state = accessory_projection(probe)
+        after_stones = probe.rows(game, stone_sql)
+        after_receipts = probe.rows(game, receipt_sql)
+        gain = ACCESSORY_DECOMPOSE_GAIN[target["quality"]]
+        assert json.loads(after_state[0][0]) == json.loads(before_state[0][0])
+        assert json.loads(after_state[0][1]) == [instances[2]]
+        assert after_stones == [("洗练石", "特殊道具", (5 if existing else 0) + gain,
+                                 (2 if existing else 0) + gain)]
+        [receipt] = [row for row in after_receipts if row not in before_receipts]
+        assert receipt[0] == f"accessory:{number}:decompose:900001:{target_uid}"
+        assert json.loads(receipt[2])["expected_accessory"] == target
+        assert json.loads(receipt[3])["accessory"] == target
+        probe.clear_cooldowns()
+        replay = await probe.command("饰品分解", command_text, number=number)
+        assert "已分解：" in replay, replay
+        assert accessory_projection(probe) == after_state
+        assert probe.rows(game, stone_sql) == after_stones
+        assert probe.rows(game, receipt_sql) == after_receipts
+    assert balances(probe) == initial_balances
+    assert [row for row in backpack(probe) if int(row[1]) != 20023] == initial_backpack
+    assert_dungeon_purchase_integrity(game)
+    assert_dungeon_purchase_integrity(player)
+    probe.evidence.update(stone_insert=True, stone_update=True, state_write=True, receipt_write=True,
+                          projection_rewrites=True, abort=True, recovered=True, replay_unchanged=True)
+
+
 def register(case):
     @case(
         "accessory-bag-page-real",
@@ -418,6 +537,59 @@ def register(case):
     )
     async def accessory_wash_write_recovery(probe):
         await check_accessory_wash_writes(probe)
+
+    @case(
+        "accessory-decompose-write-recovery",
+        "饰品分解",
+        "真实背包饰品UID",
+        "合法背包与已装备饰品，洗练石有/无库存，隔离game/player SQLite",
+        "石料、饰品状态、回执拒写/改写均具体拒绝且整笔回滚，ABORT原样并可恢复重放",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def accessory_decompose_write_recovery(probe):
+        await check_accessory_decompose_writes(probe)
+
+    @case(
+        "accessory-decompose-legal-boundaries",
+        "饰品分解",
+        "真实背包/已装备饰品UID",
+        "合法饰品实例和达到/恰好未达上限的洗练石库存",
+        "已装备与容量拒绝零写，恰好达到上限成功返还绑定石料",
+        group="remaining-player-parameters",
+    )
+    async def accessory_decompose_boundaries(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_config import XiuConfig
+
+        game = probe.context.paths.game_db
+        instances = seed_accessory_document(probe, [19001, 19002], equipped_slots=("手镯",))
+        maximum = int(XiuConfig().max_goods_num)
+        probe.seed(game, "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
+                   "VALUES('900001',20023,'洗练石','特殊道具',?,0) ON CONFLICT(user_id,goods_id) "
+                   "DO UPDATE SET goods_num=excluded.goods_num,bind_num=0", (maximum,))
+        before = accessory_projection(probe), backpack(probe), balances(probe)
+        receipt_sql = "SELECT * FROM accessory_transaction_operations ORDER BY operation_id"
+        receipts = probe.rows(game, receipt_sql)
+        probe.clear_cooldowns()
+        equipped = await probe.command("饰品分解", f"饰品分解 {instances[0]['uid']}", number=970620)
+        assert "已装备饰品请先卸下" in equipped, equipped
+        probe.clear_cooldowns()
+        full = await probe.command("饰品分解", f"饰品分解 {instances[1]['uid']}", number=970621)
+        assert "洗练石已达背包上限" in full, full
+        assert (accessory_projection(probe), backpack(probe), balances(probe)) == before
+        assert probe.rows(game, receipt_sql) == receipts
+        probe.seed(game, "UPDATE back SET goods_num=? WHERE user_id='900001' AND goods_id=20023", (maximum - 1,))
+        probe.clear_cooldowns()
+        success = await probe.command("饰品分解", f"饰品分解 {instances[1]['uid']}", number=970621)
+        assert "已分解：" in success and "获得洗练石：1个" in success, success
+        assert probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=20023") == [(maximum, 1)]
+        assert json.loads(accessory_projection(probe)[0][1]) == []
+        assert json.loads(accessory_projection(probe)[0][0])["手镯"] == instances[0]
+        assert len(probe.rows(game, receipt_sql)) == len(receipts) + 1
+        assert_dungeon_purchase_integrity(game)
+        assert_dungeon_purchase_integrity(probe.context.paths.player_db)
+        probe.evidence.update(equipped_rejection=True, capacity_rejection=True, exact_capacity=True,
+                              rejection_unchanged=True, recovered=True)
 
     for command, query, marker in (
         ("查看饰品", "acc_missing_parameter", "未找到"),

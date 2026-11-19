@@ -1198,7 +1198,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"分解失败：{WASH_STONE_NAME}已达背包上限")
         return
     if not result.succeeded or result.accessory is None:
-        await handle_send(bot, event, _acc_fail_msg(result, action="分解"))
+        await handle_send(bot, event, _acc_fail_msg(result, action="分解", subject=uid))
         return
 
     decomposed = result.accessory
