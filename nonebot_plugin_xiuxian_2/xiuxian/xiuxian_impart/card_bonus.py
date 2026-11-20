@@ -33,21 +33,27 @@ def calculate_card_bonuses(cards, definitions):
     return bonuses
 
 
-def refresh_card_bonuses(conn, user_id, definitions):
+def refresh_card_bonuses(conn, user_id, definitions, schema="main"):
+    safe_schema = "".join(
+        char if char.isalnum() or char == "_" else "_" for char in str(schema)
+    )
     cards = dict(conn.execute(
-        "SELECT card_name,quantity FROM impart_cards WHERE user_id=%s", (str(user_id),)
+        f"SELECT card_name,quantity FROM {safe_schema}.impart_cards WHERE user_id=%s",
+        (str(user_id),),
     ).fetchall())
     bonuses = calculate_card_bonuses(cards, definitions)
     assignments = ",".join(f"{field}=%s" for field in BONUS_FIELDS)
     values = [bonuses[field] for field in BONUS_FIELDS]
     row = conn.execute(
-        "SELECT rowid FROM xiuxian_impart WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
+        f"SELECT rowid FROM {safe_schema}.xiuxian_impart "
+        "WHERE user_id=%s ORDER BY rowid ASC LIMIT 1",
         (str(user_id),),
     ).fetchone()
     if row is None:
         raise ValueError("impart user is missing")
     updated = conn.execute(
-        f"UPDATE xiuxian_impart SET {assignments} WHERE rowid=%s AND user_id=%s",
+        f"UPDATE {safe_schema}.xiuxian_impart SET {assignments} "
+        "WHERE rowid=%s AND user_id=%s",
         (*values, int(row[0]), str(user_id)),
     )
     if updated.rowcount != 1:

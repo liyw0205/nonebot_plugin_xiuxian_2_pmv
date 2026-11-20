@@ -9,9 +9,11 @@ from threading import RLock
 
 from ...core.errors import DomainError
 from ...core.numeric import crystal_precision_reason
+from ...features.impart.catalog import card_definitions
 from ...features.impart.legacy_state import crystal_balance
 
 from ..xiuxian_utils import db_backend
+from .card_bonus import refresh_card_bonuses
 
 @dataclass(frozen=True)
 class ImpartDrawResult:
@@ -150,6 +152,11 @@ class ImpartDrawService:
                         "ON CONFLICT(user_id,card_name) DO UPDATE SET "
                         "quantity=impart_cards.quantity+EXCLUDED.quantity",
                         (user_id, card_name, quantity),
+                    )
+                definitions = card_definitions()
+                if any(card in definitions for card in cards):
+                    refresh_card_bonuses(
+                        conn, user_id, definitions, schema="impart_data"
                     )
                 cards_json = json.dumps(list(cards), ensure_ascii=False, separators=(",", ":"))
                 conn.execute(
