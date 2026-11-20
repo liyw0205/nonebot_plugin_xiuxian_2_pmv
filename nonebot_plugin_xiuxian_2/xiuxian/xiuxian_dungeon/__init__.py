@@ -248,7 +248,9 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
                 subjects[result.subject] = f"入队玩家【{target.get('user_name', result.target_id)}】"
             else:
                 subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
-        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队"}.get(action, "队伍操作"), result, subjects=subjects)
+        if action == "reject" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"邀请【{result.subject}】"
+        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队", "reject": "拒绝组队"}.get(action, "队伍操作"), result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -578,6 +580,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 
 @reject_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("拒绝组队")
 async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -589,6 +592,8 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     operation_id = _team_operation_id(event, "reject", user_id)
     replay = dungeon_team_application.operation_result(operation_id, "reject")
     if replay is not None:
+        if replay.status in {"applied", "duplicate"} and isinstance(event, GroupMessageEvent) and replay.group_id and replay.group_id != str(event.group_id):
+            replay = TeamMutationResult("state_changed", reason="operation_conflict")
         await handle_send(bot, event, _team_mutation_message("reject", replay), md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 

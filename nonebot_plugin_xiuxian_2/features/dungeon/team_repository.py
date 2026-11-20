@@ -91,6 +91,11 @@ class _TeamJoinWriteRejected(DomainError):
         super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
+class _TeamRejectWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
+
+
 class DungeonTeamRepository:
     @staticmethod
     def _snapshot_reason(current, expected):
@@ -840,7 +845,73 @@ class DungeonTeamRepository:
             return self._finish(uow, operation_id, action, payload, TeamMutationResult("applied", **base), retry_receipt=retry_receipt)
 
     def reject(self, operation_id: str, invite_id: str, user_id: str, group_id: str = "", now_timestamp: float = 0) -> TeamMutationResult:
-        return self._resolve_invite("reject", operation_id, invite_id, user_id, group_id, now_timestamp)
+        payload = self._json({"action": "reject", "invite_id": invite_id, "user_id": user_id, "group_id": group_id})
+        base = dict(invite_id=invite_id, target_id=user_id, group_id=group_id)
+        if not self._database_exists():
+            return TeamMutationResult("schema_missing", **base)
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._table_ready(uow, "dungeon_team_operations", {"operation_id", "payload", "result_status", "team_id", "result_json", "action"}):
+                    return TeamMutationResult("schema_missing", **base)
+                old = uow.query_one("SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                if old is not None:
+                    if old["payload"] != payload or str(old["action"] or "") not in {"", "reject"}:
+                        return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
+                    try:
+                        stored = json.loads(str(old["result_json"] or "{}"))
+                    except (TypeError, ValueError):
+                        return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="receipt_corrupt")
+                    if not isinstance(stored, dict) or str(stored.get("status", old["result_status"])) != str(old["result_status"]):
+                        return TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="receipt_corrupt")
+                    return self._decode_mutation(old)
+                if not self._mutation_schema_ready(uow):
+                    return TeamMutationResult("schema_missing", **base)
+                columns = "invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at,created_at,resolved_operation_id"
+                if {"bot_id", "source_message_id", "notification_scene"} <= self._columns(uow, "dungeon_team_invites"):
+                    columns += ",bot_id,source_message_id,notification_scene"
+                invite_sql = f"SELECT {columns} FROM dungeon_team_invites WHERE invite_id=?"
+                invite = uow.query_one(invite_sql, (invite_id,))
+                expected_invite = dict(invite) if invite is not None else None
+
+                def verify_invite() -> None:
+                    if uow.query_one(invite_sql, (invite_id,)) != expected_invite:
+                        raise _TeamRejectWriteRejected("dungeon_team_reject_state_projection_mismatch", invite_id)
+
+                def finish(result: TeamMutationResult) -> TeamMutationResult:
+                    receipt_json = self._json(result.__dict__)
+                    write = uow.execute(
+                        "INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)",
+                        (operation_id, payload, result.status, result.team_id, receipt_json, "reject"),
+                    )
+                    if write.rowcount != 1:
+                        raise _TeamRejectWriteRejected("dungeon_team_reject_receipt_write_rejected", invite_id)
+                    receipt = uow.query_one("SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                    if receipt != {"payload": payload, "result_status": result.status, "team_id": result.team_id, "result_json": receipt_json, "action": "reject"}:
+                        raise _TeamRejectWriteRejected("dungeon_team_reject_receipt_projection_mismatch", invite_id)
+                    verify_invite()
+                    return result
+
+                if invite is None:
+                    return finish(TeamMutationResult("invite_invalid", reason="team_invite_missing", subject=invite_id, **base))
+                if str(invite["invitee_id"]) != user_id:
+                    return finish(TeamMutationResult("invite_invalid", reason="invite_subject_mismatch", subject=invite_id, **base))
+                base.update(team_id=str(invite["team_id"]), leader_id=str(invite["inviter_id"]), group_id=str(invite["group_id"]), expires_at=float(invite["expires_at"]))
+                if group_id and str(invite["group_id"]) != str(group_id):
+                    return finish(TeamMutationResult("wrong_group", **base))
+                if str(invite["status"]) != "pending" or invite["consumed_at"] is not None:
+                    return finish(TeamMutationResult("invite_invalid", reason="team_invite_resolved", subject=invite_id, **base))
+                consumed_at = uow.query_one("SELECT CURRENT_TIMESTAMP AS consumed_at")["consumed_at"]
+                expected_invite = {**invite, "status": "rejected", "consumed_at": consumed_at, "resolved_operation_id": operation_id}
+                write = uow.execute(
+                    "UPDATE dungeon_team_invites SET status='rejected',consumed_at=?,resolved_operation_id=? WHERE invite_id=? AND status='pending'",
+                    (consumed_at, operation_id, invite_id),
+                )
+                if write.rowcount != 1:
+                    raise _TeamRejectWriteRejected("dungeon_team_reject_state_write_rejected", invite_id)
+                verify_invite()
+                return finish(TeamMutationResult("applied", subject=invite_id, **base))
+        except _TeamRejectWriteRejected as exc:
+            return TeamMutationResult("failed", reason=exc.code, subject=str(exc.details.get("subject") or invite_id), **base)
 
     def expire(self, operation_id: str, invite_id: str, now_timestamp: float, *, lock_timeout: float = 30) -> TeamMutationResult:
         return self._resolve_invite("expire", operation_id, invite_id, "", "", now_timestamp, lock_timeout=lock_timeout)

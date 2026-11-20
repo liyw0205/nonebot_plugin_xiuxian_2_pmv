@@ -408,6 +408,10 @@ from tests.parameter_cases_team_join import register as register_team_join
 
 register_team_join(case)
 
+from tests.parameter_cases_team_reject import register as register_team_reject
+
+register_team_reject(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
