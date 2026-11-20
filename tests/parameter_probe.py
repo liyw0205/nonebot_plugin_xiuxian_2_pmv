@@ -460,6 +460,10 @@ from tests.parameter_cases_title_unlock import register as register_title_unlock
 
 register_title_unlock(case)
 
+from tests.parameter_cases_title_info import register as register_title_info
+
+register_title_info(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
