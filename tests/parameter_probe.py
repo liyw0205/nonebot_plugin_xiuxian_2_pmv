@@ -480,6 +480,10 @@ from tests.parameter_cases_title_grant import register as register_title_grant
 
 register_title_grant(case)
 
+from tests.parameter_cases_title_refresh import register as register_title_refresh
+
+register_title_refresh(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

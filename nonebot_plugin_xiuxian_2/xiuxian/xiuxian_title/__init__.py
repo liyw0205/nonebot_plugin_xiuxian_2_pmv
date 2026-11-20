@@ -686,6 +686,7 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
 
 
 @title_refresh_cmd.handle(parameterless=[Cooldown(cd_time=30)])
+@guard_command("刷新称号", known_rejections=("title_data_missing", "title_data_invalid"))
 async def title_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """刷新称号数据缓存"""
     bot, _ = await assign_bot(bot=bot, event=event)

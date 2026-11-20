@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple, Set
 from nonebot.log import logger
 from ...paths import get_paths
+from ...core.errors import DomainError
 
 from ..xiuxian_config import XiuConfig, convert_rank
 
@@ -631,7 +632,26 @@ def get_title_info_text(title_id: str) -> str:
 def refresh_title_cache():
     """刷新称号数据缓存"""
     global _TITLE_CACHE, _TITLE_CONDITION_KEY_CACHE
+    try:
+        with open(TITLE_JSONPATH, "r", encoding="UTF-8") as f:
+            refreshed = json.loads(f.read())
+    except FileNotFoundError as exc:
+        raise DomainError(
+            "title_data_missing", "称号配置文件缺失",
+            {"reason": "title_data_missing", "subject": "title_catalog"},
+        ) from exc
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.opt(exception=exc).error("称号数据JSON解析失败，保留最近有效缓存")
+        raise DomainError(
+            "title_data_invalid", "称号数据JSON格式错误",
+            {"reason": "title_data_invalid", "subject": "title_catalog"},
+        ) from exc
+    if not isinstance(refreshed, dict) or any(not isinstance(item, dict) for item in refreshed.values()):
+        raise DomainError(
+            "title_data_invalid", "称号数据结构格式错误",
+            {"reason": "title_data_invalid", "subject": "title_catalog"},
+        )
     _TITLE_CACHE.clear()
+    _TITLE_CACHE.update(refreshed)
     _TITLE_CONDITION_KEY_CACHE.clear()
-    load_title_data()
     logger.info("称号数据缓存已刷新")

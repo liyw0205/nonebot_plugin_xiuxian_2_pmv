@@ -226,6 +226,8 @@ REASONS = {
     "pet_fusion_write_rejected": "宠物融合结果保存失败，请联系管理员核对主宠物记录。",
     "pet_skill_write_rejected": "宠物技能结果保存失败，请联系管理员核对所选宠物技能。",
     "title_equip_write_rejected": "称号佩戴结果保存失败，请联系管理员核对当前称号记录。",
+    "title_data_missing": "称号配置文件缺失，本次未替换现有缓存，请联系管理员核对数据目录。",
+    "title_data_invalid": "称号配置JSON格式错误，本次未替换现有缓存，请联系管理员修复配置。",
     "title_equipment_state_projection_mismatch": "称号装备状态与请求不一致，本次操作已撤销，请联系管理员核对。",
     "title_equipment_receipt_write_rejected": "称号装备操作回执保存失败，本次操作已撤销，请稍后重试。",
     "title_equipment_receipt_projection_mismatch": "称号装备操作回执内容不一致，本次操作已撤销，请联系管理员核对。",
