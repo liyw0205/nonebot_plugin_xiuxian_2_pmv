@@ -9,7 +9,7 @@ from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
-from ..command_guard import result_failure, report_exception
+from ..command_guard import guard_command, result_failure, report_exception
 from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -1952,10 +1952,11 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await view_logs.finish()
 
 @view_data.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("修仙数据", known_rejections=("statistics_read_failed",))
 async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看修仙数据"""
     user_id = event.get_user_id()
-    stats_data = get_statistics_data(user_id)
+    stats_data = get_statistics_data(user_id, raise_errors=True)
     
     if not stats_data:
         msg = "暂无统计数据"

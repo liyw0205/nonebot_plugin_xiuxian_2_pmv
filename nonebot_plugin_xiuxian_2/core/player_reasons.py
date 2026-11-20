@@ -1,6 +1,7 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "statistics_read_failed": "统计数据读取失败，请稍后重试或联系管理员核查数据源。",
     "stamina_recovery_write_rejected": "体力恢复保存失败，当前批次已撤销，请联系管理员核对体力记录。",
     "stamina_recovery_config_invalid": "体力恢复配置无效，请联系管理员核对恢复量、上限和批次配置。",
     "stamina_user_write_rejected": "体力扣减保存失败，本次消耗已撤销，请联系管理员核对体力记录。",

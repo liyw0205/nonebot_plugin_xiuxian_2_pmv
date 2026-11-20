@@ -19,6 +19,7 @@ from ...features.info.profile_application import PlayerProfileApplication
 from ...features.info.activity_application import PlayerActivityApplication
 from ...features.info.attribute_application import PlayerAttributeApplication
 from ...features.base.stamina_application import PlayerStaminaApplication
+from ...core.errors import DomainError
 from base64 import b64encode
 from io import BytesIO
 from pathlib import Path
@@ -2385,7 +2386,7 @@ def clean_old_logs(keep_days=10, *, players_dir=None):
     except Exception as e:
         logger.error(f"清理旧日志时出错: {e}")
 
-def get_statistics_data(user_id: str, key: str = None):
+def get_statistics_data(user_id: str, key: str = None, *, raise_errors=False):
     """
     获取用户的统计数据
     
@@ -2403,13 +2404,25 @@ def get_statistics_data(user_id: str, key: str = None):
         if (impersonated_id := get_impersonating_target(original_user_id)) is not None:
             user_id_for_stats = impersonated_id
             logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
+        manager = _player_data_manager()
         if key:
-            return _player_data_manager().get_field_data(str(user_id_for_stats), "statistics", key)
+            return manager.get_field_data(str(user_id_for_stats), "statistics", key)
         
-        stats_data = _player_data_manager().get_fields(str(user_id_for_stats), "statistics")
-        del stats_data['user_id']
+        stats_data = manager.get_fields(
+            str(user_id_for_stats), "statistics", raise_errors=raise_errors
+        )
+        if stats_data is None:
+            return {}
+        stats_data.pop("user_id", None)
         return stats_data
     except Exception as e:
+        if raise_errors:
+            logger.opt(exception=e).error("修仙数据统计表读取失败 subject=statistics")
+            raise DomainError(
+                "statistics_read_failed",
+                "statistics data could not be read",
+                {"reason": "statistics_read_failed", "subject": "statistics"},
+            ) from e
         return {}
 
 def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
