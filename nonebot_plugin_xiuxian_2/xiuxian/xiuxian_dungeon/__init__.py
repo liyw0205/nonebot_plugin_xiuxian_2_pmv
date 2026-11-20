@@ -331,6 +331,14 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
 
 def _team_exit_message(action: str, result: TeamExitResult) -> str:
     if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
+        if action == "leave" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_leave_cooldown_"):
+                subjects = {result.subject: "离队玩家"}
+            elif result.reason.startswith("dungeon_team_leave_invite_"):
+                subjects = {result.subject: f"邀请【{result.subject}】"}
+            else:
+                subjects = {result.subject: f"队伍【{result.team_name or result.team_id}】"}
+            return result_failure("离开队伍", result, subjects=subjects)
         return result_failure("退出队伍", result)
     if result.status not in {"applied", "duplicate"}:
         return {
@@ -342,12 +350,13 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
             "session_active": "副本探索会话进行中，无法变更队伍！",
         }.get(result.status) or result_failure("退出队伍", result)
     if action == "leave":
+        cooldown_message = f"\n组队冷却至{result.cooldown_until}。" if result.target_id in result.cooldown_members else ""
         if result.disbanded:
-            return f"你已离开队伍【{result.team_name}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+            return f"你已离开队伍【{result.team_name}】，队伍已解散。" + cooldown_message
         if result.new_leader_id:
             leader = _sql_message().get_user_info_with_id(result.new_leader_id) or {}
-            return f"你已离开队伍【{result.team_name}】，队长已转让给{leader.get('user_name', result.new_leader_id)}。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-        return f"你已离开队伍【{result.team_name}】。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+            return f"你已离开队伍【{result.team_name}】，当前队长为{leader.get('user_name', result.new_leader_id)}。" + cooldown_message
+        return f"你已离开队伍【{result.team_name}】。" + cooldown_message
     if action == "kick":
         target = _sql_message().get_user_info_with_id(result.target_id) or {}
         return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。\n对方进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
@@ -614,6 +623,7 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @leave_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("离开队伍")
 async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
