@@ -15,18 +15,22 @@ import pytest
 @pytest.mark.parametrize("case_key", [
     "title-grant-write-recovery", "title-grant-abort-recovery",
     "title-grant-permission-contract", "title-grant-self-mention",
+    "title-grant-all-target-recovery", "title-grant-all-empty",
+    "title-grant-all-startup-failure", "title-grant-all-interrupted-recovery",
+    "title-grant-all-target-abort-recovery",
+    "title-grant-all-read-error-before-first-target",
 ])
 def test_real_title_grant(case_key):
     with tempfile.TemporaryDirectory() as directory:
         report = Path(directory) / "parameters.json"
         result = subprocess.run(
             [sys.executable, "-m", "tests.parameter_probe", "--case", case_key, "--report", str(report),
-             "--base-sha", "9364c021c5ee8ddda962f4ca2c3123fa6d15e157"],
+             "--base-sha", "2842027c40d3598477e64542265216302d0ab2ef"],
             cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True, timeout=180,
         )
+        assert result.returncode == 0, result.stdout + result.stderr
         evidence = json.loads(report.read_text(encoding="utf-8"))
         details = json.dumps(evidence["results"], ensure_ascii=False, indent=2)
-        assert result.returncode == 0, result.stdout + result.stderr + details
         assert evidence["summary"] == {"pass": 1}, details
 
 
@@ -65,6 +69,10 @@ def test_grant_failure_reason_and_subject_survive_actual_helper_and_adapters(rea
     reply, options = sent.await_args.args[2], sent.await_args.kwargs
     assert reason_text(reason) in reply and "称号【初入仙途】" in reply and "成功给" not in reply
     assert options == {}
+    batch_reply = (
+        "全服赠送称号【初入仙途】处理结束：已处理3/3，成功2，重复0，失败1\n"
+        "失败明细：\n玩家900002 / 称号30101：赠送称号操作回执保存失败（reason=title_grant_receipt_write_rejected）"
+    )
     config = SimpleNamespace(markdown_status=True, markdown_id="", markdown_id2="", markdown_button_status=False,
                              message_optimization=False, img=False, at_sender=False)
     for bot in (onebot, qq):
@@ -73,15 +81,17 @@ def test_grant_failure_reason_and_subject_survive_actual_helper_and_adapters(rea
               patch.object(utils, "is_group_event", return_value=True),
               patch.object(utils, "_allow_native_markdown", return_value=False), patch.object(utils, "_send_event_message", plain)):
             asyncio.run(utils.handle_send(bot, event, reply, **options))
-        plain.assert_awaited_once()
-        assert reply in str(plain.await_args.kwargs["message"])
+            asyncio.run(utils.handle_send(bot, event, batch_reply, **options))
+        assert plain.await_count == 2
+        assert batch_reply in str(plain.await_args.kwargs["message"])
     markdown = AsyncMock()
     with (patch.object(utils, "XiuConfig", return_value=config),
           patch.object(utils, "_allow_native_markdown", return_value=True),
           patch.object(utils, "handle_send_markdown", markdown)):
         asyncio.run(utils.handle_send(qq, event, reply, **options))
-    markdown.assert_awaited_once()
-    assert markdown.await_args.args == (qq, event, reply)
+        asyncio.run(utils.handle_send(qq, event, batch_reply, **options))
+    assert markdown.await_count == 2
+    assert markdown.await_args.args == (qq, event, batch_reply)
     assert markdown.await_args.kwargs == {"title": None, "button_id": None}
     fallback = AsyncMock()
     with (patch.object(utils, "XiuConfig", return_value=config),
@@ -89,4 +99,6 @@ def test_grant_failure_reason_and_subject_survive_actual_helper_and_adapters(rea
           patch.object(utils, "handle_send_markdown", AsyncMock(side_effect=RuntimeError("isolated title grant markdown failure"))),
           patch.object(utils, "handle_send2", fallback)):
         asyncio.run(utils.handle_send(qq, event, reply, **options))
-    fallback.assert_awaited_once_with(qq, event, reply)
+        asyncio.run(utils.handle_send(qq, event, batch_reply, **options))
+    assert fallback.await_count == 2
+    fallback.assert_awaited_with(qq, event, batch_reply)
