@@ -432,6 +432,10 @@ from tests.parameter_cases_team_view import register as register_team_view
 
 register_team_view(case)
 
+from tests.parameter_cases_dungeon_exit import register as register_dungeon_exit
+
+register_dungeon_exit(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

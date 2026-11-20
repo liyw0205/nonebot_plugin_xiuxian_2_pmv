@@ -221,7 +221,11 @@ class DungeonResetSqlRepository:
             values = (str(global_state["dungeon_id"] or ""), str(global_state["dungeon_name"] or ""), "not_started", 0, int(global_state["total_layers"] or 0), str(global_state["date"] or ""), int(global_state["reset_generation"] or 0), str(global_state["reset_operation_id"] or ""))
             if row is None:
                 uow.execute("INSERT INTO player_dungeon_status(user_id," + ",".join(columns) + ") VALUES(?" + ",?" * len(columns) + ")", (user_id, *values))
-            elif any(str(row[key] or "") != str(values[index]) for index, key in enumerate(columns) if key not in {"current_layer","total_layers","reset_generation"}) or any(int(row[key] or 0) != int(values[index]) for index, key in enumerate(columns) if key in {"current_layer","total_layers","reset_generation"}):
+                row = dict(zip(columns, values))
+            elif (str(row["dungeon_id"] or "") != values[0]
+                  or str(row["last_reset_date"] or "") != values[5]
+                  or int(row["reset_generation"] or 0) != values[6]
+                  or str(row["reset_operation_id"] or "") != values[7]):
                 uow.execute("UPDATE player_dungeon_status SET " + ",".join(f"{key}=?" for key in columns) + " WHERE user_id=?", (*values, user_id))
-            result = dict(zip(columns, values))
-            return {**result, "current_layer": int(result["current_layer"]), "total_layers": int(result["total_layers"]), "reset_generation": int(result["reset_generation"])}
+                row = dict(zip(columns, values))
+            return {**row, "current_layer": int(row["current_layer"] or 0), "total_layers": int(row["total_layers"] or 0), "reset_generation": int(row["reset_generation"] or 0)}

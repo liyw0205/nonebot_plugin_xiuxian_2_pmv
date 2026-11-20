@@ -13,6 +13,11 @@ from ...infrastructure.clock import SystemClock
 from .team_repository import DungeonTeamRepository
 
 
+class _DungeonExitWriteRejected(DomainError):
+    def __init__(self, reason: str, user_id: str) -> None:
+        super().__init__(reason, reason, {"subject": user_id})
+
+
 class DungeonRepository(Protocol):
     def purchase(self, *args: Any, **kwargs: Any) -> Any: ...
     def operation_result(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -798,6 +803,7 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             "status": "duplicate" if status == "applied" else status,
             "dungeon_status": str(row["dungeon_status"]),
             "reason": payload.get("_rejection_reason", "") or ("legacy_rejection" if status == "state_changed" else ""),
+            **({"subject": payload["_rejection_subject"]} if "_rejection_subject" in payload else {}),
         }
 
     def session_transition(self, operation_id: str, user_id: str, expected: dict[str, Any], dungeon: dict[str, Any], action: str) -> dict[str, Any]:
@@ -818,6 +824,8 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
                 return self._session_replay(old, payload)
             if not self._session_status_ready(uow):
                 return {"status": "schema_missing", "dungeon_status": ""}
+        if action == "exit":
+            return self._exit_transition(operation_id, user_id, expected, dungeon, payload)
         with DatabaseUnitOfWork(self.player_database,immediate=True) as uow:
             if not self._table_ready(uow, "dungeon_session_operations", self._SESSION_COLUMNS):
                 return {"status": "schema_missing", "dungeon_status": ""}
@@ -841,6 +849,76 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
             if action=="exit" and current["dungeon_status"]!="exploring":return self._record_session(uow,operation_id,payload,"not_exploring",current["dungeon_status"])
             new_status="exploring" if action=="enter" else "exited";uow.execute("UPDATE player_dungeon_status SET dungeon_status=? WHERE user_id=?",(new_status,user_id));return self._record_session(uow,operation_id,payload,"applied",new_status)
 
+    def _exit_transition(self, operation_id, user_id, expected, dungeon, payload):
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                if not self._table_ready(uow, "dungeon_session_operations", self._SESSION_COLUMNS):
+                    return {"status": "schema_missing", "dungeon_status": ""}
+                old = uow.query_one(
+                    "SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                if old:
+                    return self._session_replay(old, payload)
+                if not self._session_status_ready(uow):
+                    return {"status": "schema_missing", "dungeon_status": ""}
+                state_sql = "SELECT * FROM player_dungeon_status WHERE user_id=?"
+                final_state = uow.query_one(state_sql, (user_id,))
+
+                def check_state():
+                    if uow.query_one(state_sql, (user_id,)) != final_state:
+                        raise _DungeonExitWriteRejected("dungeon_exit_state_projection_mismatch", user_id)
+
+                def record(status, dungeon_status, reason=""):
+                    data = json.loads(payload)
+                    if reason:
+                        data.update(_rejection_reason=reason, _rejection_subject=user_id)
+                    stored_payload = json.dumps(data, ensure_ascii=True, sort_keys=True)
+                    receipt = {"payload": stored_payload, "result_status": status, "dungeon_status": dungeon_status}
+                    cursor = uow.execute(
+                        "INSERT INTO dungeon_session_operations(operation_id,payload,result_status,dungeon_status) VALUES(?,?,?,?)",
+                        (operation_id, stored_payload, status, dungeon_status),
+                    )
+                    if cursor.rowcount != 1:
+                        raise _DungeonExitWriteRejected("dungeon_exit_receipt_write_rejected", user_id)
+                    if uow.query_one(
+                        "SELECT payload,result_status,dungeon_status FROM dungeon_session_operations WHERE operation_id=?",
+                        (operation_id,),
+                    ) != receipt:
+                        raise _DungeonExitWriteRejected("dungeon_exit_receipt_projection_mismatch", user_id)
+                    # Receipt triggers can also change the state written earlier in this transaction.
+                    check_state()
+                    return {"status": status, "dungeon_status": dungeon_status, "reason": reason,
+                            **({"subject": user_id} if reason else {})}
+
+                if final_state is None:
+                    return record("state_changed", "", "dungeon_record_missing")
+                current = {key: int(final_state[key] or 0) if key in self._STATUS_INTEGER_FIELDS else str(final_state[key] or "")
+                           for key in self._SESSION_STATUS_FIELDS}
+                phase = current["dungeon_status"]
+                if not set(self._SESSION_STATUS_FIELDS) <= expected.keys():
+                    return record("state_changed", phase, "invalid_snapshot")
+                normalized = {key: int(expected[key] or 0) if key in self._STATUS_INTEGER_FIELDS else str(expected[key] or "")
+                              for key in self._SESSION_STATUS_FIELDS}
+                if current != normalized:
+                    return record("state_changed", phase, self._status_reason(current, normalized))
+                if current["dungeon_id"] != str(dungeon.get("dungeon_id", "")):
+                    return record("state_changed", phase, "dungeon_instance_changed")
+                if current["last_reset_date"] != str(dungeon.get("date", "")):
+                    return record("state_changed", phase, "dungeon_reset_changed")
+                if phase == "completed":
+                    return record("completed", phase)
+                if phase != "exploring":
+                    return record("not_exploring", phase)
+                cursor = uow.execute("UPDATE player_dungeon_status SET dungeon_status='exited' WHERE user_id=?", (user_id,))
+                if cursor.rowcount != 1:
+                    raise _DungeonExitWriteRejected("dungeon_exit_state_write_rejected", user_id)
+                final_state = {**final_state, "dungeon_status": "exited"}
+                check_state()
+                return record("applied", "exited")
+        except _DungeonExitWriteRejected as exc:
+            return {"status": "failed", "dungeon_status": "", "reason": exc.code, "subject": user_id}
+
     @staticmethod
     def _record_session(uow:DatabaseUnitOfWork,operation_id:str,payload:str,status:str,dungeon_status:str,reason:str="")->dict[str,Any]:
         if reason:
@@ -854,12 +932,14 @@ class DungeonSessionSqlRepository(DungeonPurchaseSqlRepository):
         try:
             stored = json.loads(str(row["payload"]))
             reason = stored.pop("_rejection_reason", "")
+            subject = stored.pop("_rejection_subject", None)
             matches = stored == json.loads(payload)
         except (TypeError, ValueError):
             return {"status":"state_changed", "dungeon_status":str(row["dungeon_status"]), "reason":"receipt_corrupt"}
         status = str(row["result_status"])
         return {"status":"state_changed" if not matches else "duplicate" if status == "applied" else status,
-                "dungeon_status":str(row["dungeon_status"]), "reason":"operation_conflict" if not matches else reason or ("legacy_rejection" if status == "state_changed" else "")}
+                "dungeon_status":str(row["dungeon_status"]), "reason":"operation_conflict" if not matches else reason or ("legacy_rejection" if status == "state_changed" else ""),
+                **({"subject": subject} if matches and subject is not None else {})}
 
 
 __all__ = ["DungeonPurchaseSqlRepository", "DungeonRepository", "DungeonSessionSqlRepository", "LegacyDungeonRepository"]

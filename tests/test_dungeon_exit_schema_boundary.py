@@ -29,4 +29,4 @@ def test_exit_schema_missing_never_reads_manager_or_reports_success():
     manager.get_player_status.assert_not_called()
     manager.get_dungeon_progress.assert_not_called()
     application.session_transition.assert_not_called()
-    send.assert_awaited_once_with(bot, event, "副本数据结构未就绪，请稍后重试。")
+    send.assert_awaited_once_with(bot, event, "副本操作：所需数据表或字段尚未完成初始化，请联系管理员执行启动迁移。")

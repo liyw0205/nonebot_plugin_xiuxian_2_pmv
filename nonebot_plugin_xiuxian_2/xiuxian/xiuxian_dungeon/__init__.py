@@ -1261,6 +1261,7 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 @dungeon_exit.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("退出副本")
 async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1289,10 +1290,10 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "当前未在副本探索中。")
     elif result_status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")
-    elif result_status == "state_changed":
-        await handle_send(bot, event, result_failure("退出副本", result))
-    else:
+    elif result_status in {"applied", "duplicate"}:
         await handle_send(bot, event, "已退出当前副本，进度将保留。")
+    else:
+        await handle_send(bot, event, result_failure("退出副本", result, subjects={str(user_id): "玩家"}))
     await dungeon_exit.finish()
 
 
