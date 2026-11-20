@@ -472,6 +472,10 @@ from tests.parameter_cases_achievement import register as register_achievement
 
 register_achievement(case)
 
+from tests.parameter_cases_achievement_check import register as register_achievement_check
+
+register_achievement_check(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
