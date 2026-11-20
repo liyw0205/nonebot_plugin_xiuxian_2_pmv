@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from nonebot.log import logger
+
+from ...core.errors import DomainError
 from ...core.numeric import normalize_user_row
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -19,7 +22,9 @@ class PlayerProfileSqlRepository:
     def __init__(self, database: str | Path) -> None:
         self.database = str(database)
 
-    def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
+    def get_user_profile(
+        self, user_id: int | str, *, raise_errors: bool = False
+    ) -> dict[str, Any] | None:
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
                 row = uow.query_one(
@@ -27,7 +32,16 @@ class PlayerProfileSqlRepository:
                     "ORDER BY rowid ASC LIMIT 1",
                     (str(user_id),),
                 )
-        except Exception:
+        except Exception as exc:
+            if raise_errors:
+                logger.opt(exception=exc).error(
+                    "玩家档案读取失败 subject=player_profile"
+                )
+                raise DomainError(
+                    "profile_read_failed",
+                    "player profile could not be read",
+                    {"reason": "profile_read_failed", "subject": "player_profile"},
+                ) from exc
             # A missing database/schema is not a reason to create one during a
             # command.  Callers treat the closed projection as an unknown user.
             return None

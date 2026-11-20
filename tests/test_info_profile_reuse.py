@@ -158,6 +158,21 @@ class BuffProjectionReuseTests(unittest.TestCase):
 
         self.assertEqual(2, handle.get_user_buff.call_count)
 
+    def test_read_only_projection_does_not_initialize_missing_buff_row(self):
+        from types import SimpleNamespace
+
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import buff_data
+
+        handle = SimpleNamespace(sql_message=Mock())
+        handle.sql_message.get_user_buff_info.return_value = None
+        with patch.object(buff_data, "_handle_module", return_value=handle):
+            projection = buff_data.UserBuffDate("u-1", initialize_missing=False)
+            self.assertEqual({}, projection.BuffInfo)
+            self.assertIsNone(projection.get_user_main_buff_data())
+
+        handle.sql_message.get_user_buff_info.assert_called_once_with("u-1")
+        self.assertFalse(hasattr(handle, "get_user_buff"))
+
 
 class TitleProjectionReuseTests(unittest.TestCase):
     def test_explicit_title_snapshot_skips_state_query(self):

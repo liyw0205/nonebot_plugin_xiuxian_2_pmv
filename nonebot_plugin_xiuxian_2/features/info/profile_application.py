@@ -17,7 +17,11 @@ class PlayerProfileApplication:
     ) -> None:
         self.repository = repository or PlayerProfileSqlRepository(database)
 
-    def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
+    def get_user_profile(
+        self, user_id: int | str, *, raise_errors: bool = False
+    ) -> dict[str, Any] | None:
+        if raise_errors:
+            return self.repository.get_user_profile(user_id, raise_errors=True)
         return self.repository.get_user_profile(user_id)
 
     def get_user_profile_by_name(self, user_name: str) -> dict[str, Any] | None:

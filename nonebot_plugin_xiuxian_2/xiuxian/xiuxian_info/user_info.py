@@ -14,7 +14,10 @@ from ..xiuxian_utils.utils import (
 )
 from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
+from ..command_guard import guard_command
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
+from ...core.errors import DomainError
+from ...features.impart.application import ImpartApplication
 from ...features.sect.sect_info_repository import SectInfoSqlRepository
 from ...paths import get_paths
 from ..xiuxian_utils.data_source import jsondata
@@ -62,8 +65,32 @@ def _base_attributes_from_profile(user_info):
         "mppractice": as_int_like(user_info.get("mppractice")),
     }
 
+
+def _profile_impart_data(user_id):
+    paths = get_paths()
+    application = ImpartApplication(
+        paths.game_db,
+        impart_database=paths.impart_db,
+        player_database=paths.player_db,
+    )
+    try:
+        return application.state(str(user_id), ensure=False)
+    except Exception as exc:
+        logger.opt(exception=exc).error(
+            "传承属性读取失败 subject=player_impart user_id={}", user_id
+        )
+        raise DomainError(
+            "profile_impart_read_failed",
+            "player impart attributes could not be read",
+            {"reason": "profile_impart_read_failed", "subject": "player_impart"},
+        ) from exc
+
 async def get_user_xiuxian_info(
-    user_id, *, user_info=None, equipped_title_id=_TITLE_ID_UNSET
+    user_id,
+    *,
+    user_info=None,
+    equipped_title_id=_TITLE_ID_UNSET,
+    impart_provider=None,
 ):
     """获取用户修仙信息的公共函数。
 
@@ -84,14 +111,16 @@ async def get_user_xiuxian_info(
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
 
-    user_buff_data = UserBuffDate(user_id)
+    user_buff_data = UserBuffDate(user_id, initialize_missing=False)
 
     # 统一属性口径；动态属性和信息展示共享本次命令的只读 Buff 快照。
-    final_attr = get_player_attributes(
-        user_id,
-        buff_data_provider=user_buff_data,
-        base_provider=lambda _user_id: _base_attributes_from_profile(user_info),
-    )
+    attribute_providers = {
+        "buff_data_provider": user_buff_data,
+        "base_provider": lambda _user_id: _base_attributes_from_profile(user_info),
+    }
+    if impart_provider is not None:
+        attribute_providers["impart_provider"] = impart_provider
+    final_attr = get_player_attributes(user_id, **attribute_providers)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
     level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
@@ -197,10 +226,9 @@ async def get_user_xiuxian_info(
     leveluprate = int(user_info['level_up_rate'])
     number = main_rate_buff["number"] if main_rate_buff is not None else 0
 
-    nt = NatalTreasure(user_id)
     natal_name_level = "无"
-    if nt.exists():
-        natal_data = nt.get_data()
+    natal_data = NatalTreasure.read_existing_data(user_id)
+    if natal_data is not None:
         natal_name_level = f"{natal_data.get('name', '未知法宝')} (Lv.{natal_data.get('level', 0)})"
 
     # ===== 获取称号信息 =====
@@ -272,20 +300,31 @@ async def get_user_xiuxian_info(
     return DETAIL_MAP, text_msg
 
 @xiuxian_message.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "我的修仙信息",
+    known_rejections=(
+        "profile_read_failed",
+        "profile_impart_read_failed",
+        "natal_treasure_read_failed",
+    ),
+)
 async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """普通文本版修仙信息"""
     from urllib.parse import quote
 
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
-    isUser, user_info, msg = check_user(event)
+    isUser, user_info, msg = check_user(event, raise_profile_errors=True)
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await xiuxian_message.finish()
 
     title_id = get_user_equipped_title(user_info["user_id"])
     detail_map, text_msg = await get_user_xiuxian_info(
-        user_info["user_id"], user_info=user_info, equipped_title_id=title_id
+        user_info["user_id"],
+        user_info=user_info,
+        equipped_title_id=title_id,
+        impart_provider=_profile_impart_data,
     )
 
     if XiuConfig().user_info_image:

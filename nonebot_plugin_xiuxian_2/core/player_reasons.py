@@ -1,6 +1,9 @@
 """Allowlisted business diagnostics; never render exception messages."""
 
 REASONS = {
+    "profile_read_failed": "玩家档案读取失败，请稍后重试或联系管理员核查数据源。",
+    "profile_impart_read_failed": "玩家传承属性读取失败，请稍后重试或联系管理员核查传承数据源。",
+    "natal_treasure_read_failed": "本命法宝档案读取失败，请稍后重试或联系管理员核查数据源。",
     "statistics_read_failed": "统计数据读取失败，请稍后重试或联系管理员核查数据源。",
     "stamina_recovery_write_rejected": "体力恢复保存失败，当前批次已撤销，请联系管理员核对体力记录。",
     "stamina_recovery_config_invalid": "体力恢复配置无效，请联系管理员核对恢复量、上限和批次配置。",

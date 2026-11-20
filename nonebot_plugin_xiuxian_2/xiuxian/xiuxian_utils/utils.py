@@ -121,7 +121,9 @@ def _player_profile():
     return _player_profile_application
 
 
-def get_user_profile(user_id: int | str):
+def get_user_profile(user_id: int | str, *, raise_errors: bool = False):
+    if raise_errors:
+        return _player_profile().get_user_profile(user_id, raise_errors=True)
     return _player_profile().get_user_profile(user_id)
 
 
@@ -383,7 +385,11 @@ def check_user_type(user_id, need_type):
 
     return isType, msg
 
-def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, str]):
+def check_user(
+    event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, str],
+    *,
+    raise_profile_errors: bool = False,
+):
     """
     判断用户信息是否存在 + 是否被关小黑屋
     参数:
@@ -417,7 +423,10 @@ def check_user(event_or_user_id: Union[GroupMessageEvent, PrivateMessageEvent, s
     else:
         return False, None, "传入参数类型错误！请提供event对象或用户QQ号字符串。"
 
-    user_info = get_user_profile(user_id_to_check)
+    if raise_profile_errors:
+        user_info = get_user_profile(user_id_to_check, raise_errors=True)
+    else:
+        user_info = get_user_profile(user_id_to_check)
 
     if user_info is None:
         msg = "修仙界没有道友的信息，请输入【我要修仙】加入！"

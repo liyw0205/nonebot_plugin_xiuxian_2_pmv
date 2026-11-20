@@ -1,4 +1,11 @@
 import json
+from pathlib import Path
+
+from nonebot.log import logger
+
+from ...core.errors import DomainError
+from ...infrastructure.database import DatabaseUnitOfWork
+from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .natal_config import *
 
@@ -30,6 +37,56 @@ class NatalTreasure:
         self.max_effect_slots = MAX_EFFECT_SLOTS # 效果槽位上限
         # 内部缓存法宝数据，减少数据库查询
         self._natal_data_cache = None
+
+    @classmethod
+    def read_existing_data(cls, user_id: int | str) -> dict | None:
+        """Read an existing treasure without creating its table, row, or columns."""
+        database = Path(get_paths().player_db)
+        if not database.is_file():
+            return None
+
+        try:
+            with DatabaseUnitOfWork(database, read_only=True, require_exists=True) as uow:
+                table = uow.query_one(
+                    "SELECT 1 AS present FROM sqlite_master "
+                    "WHERE type='table' AND name='natal_treasure'"
+                )
+                if table is None:
+                    return None
+                columns = {
+                    str(row[1])
+                    for row in uow.execute("PRAGMA table_info(natal_treasure)").fetchall()
+                }
+                if not {"user_id", "form"}.issubset(columns):
+                    raise ValueError("natal_treasure table is missing identity columns")
+
+                selected = [field for field in ("form", "name", "level") if field in columns]
+                row = uow.query_one(
+                    "SELECT " + ",".join(f'"{field}"' for field in selected)
+                    + " FROM natal_treasure WHERE user_id=?",
+                    (str(user_id),),
+                )
+        except Exception as exc:
+            logger.opt(exception=exc).error(
+                "本命法宝读取失败 subject=natal_treasure user_id={}", user_id
+            )
+            raise DomainError(
+                "natal_treasure_read_failed",
+                "natal treasure data could not be read",
+                {
+                    "reason": "natal_treasure_read_failed",
+                    "subject": "player_natal_treasure",
+                },
+            ) from exc
+
+        if row is None:
+            return None
+        form = row.get("form")
+        if isinstance(form, str) and form.isdigit():
+            form = int(form)
+        if not form:
+            return None
+        return {**row, "form": form}
 
     def _ensure_record(self):
         """

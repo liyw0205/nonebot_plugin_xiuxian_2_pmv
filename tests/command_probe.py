@@ -299,19 +299,31 @@ class FixtureSnapshot:
                 memory.backup(target, pages=256, progress=progress)
 
 
-def make_event(text, uid, number):
-    from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+def make_event(text, uid, number, *, event_type="group"):
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, PrivateMessageEvent
 
-    return GroupMessageEvent.model_validate({
-        "time": 1794412800, "self_id": 900000, "post_type": "message", "sub_type": "normal",
-        "message_type": "group", "group_id": 900100, "user_id": int(uid),
-        "message_id": number, "message": Message(text), "original_message": Message(text),
-        "raw_message": text, "font": 0, "to_me": True,
+    common = {
+        "time": 1794412800, "self_id": 900000, "post_type": "message",
+        "user_id": int(uid), "message_id": number, "message": Message(text),
+        "original_message": Message(text), "raw_message": text, "font": 0,
+        "to_me": True,
         "sender": {"user_id": int(uid), "nickname": "诊断道友", "role": "owner"},
+    }
+    if event_type == "private":
+        return PrivateMessageEvent.model_validate({
+            **common, "sub_type": "friend", "message_type": "private",
+        })
+    if event_type != "group":
+        raise ValueError(f"unsupported probe event type: {event_type}")
+    return GroupMessageEvent.model_validate({
+        **common, "sub_type": "normal", "message_type": "group", "group_id": 900100,
     })
 
 
-async def run_case(entry, scenario, number, *, input_text=None, actor=None, timeout=8):
+async def run_case(
+    entry, scenario, number, *, input_text=None, actor=None, timeout=8,
+    event_type="group",
+):
     import nonebot
     from nonebot.adapters.onebot.v11 import Adapter, Bot
     from nonebot.exception import StopPropagation
@@ -328,7 +340,7 @@ async def run_case(entry, scenario, number, *, input_text=None, actor=None, time
     uid = actor or uid
     argument = " 1" if scenario == "argument" else ""
     text = input_text if input_text is not None else entry["command"] + argument
-    event = make_event(text, uid, number)
+    event = make_event(text, uid, number, event_type=event_type)
     bot = Bot(Adapter(nonebot.get_driver()), "900000")
     replies, errors, logs, blocked = [], [], [], []
 
