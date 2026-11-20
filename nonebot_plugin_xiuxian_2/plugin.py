@@ -26,6 +26,7 @@ from .features.impart.migrations import (
     apply_impart_draw_player_statistics,
     apply_impart_exact_crystal_balances,
     apply_impart_exact_crystal_game_receipts,
+    apply_impart_card_bonus_recalculation,
     apply_impart_duplicate_row_reconciliation,
     apply_impart_love_sand_operations,
     apply_impart_love_sand_player_statistics,
@@ -480,6 +481,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("impart.010", "impart_exact_crystal_game_receipts", apply_impart_exact_crystal_game_receipts),
         Migration("impart.011", "impart_exact_crystal_balances", apply_impart_exact_crystal_balances),
         Migration("impart.012", "impart_duplicate_row_reconciliation", apply_impart_duplicate_row_reconciliation),
+        Migration("impart.013", "impart_card_bonus_recalculation", apply_impart_card_bonus_recalculation),
         Migration("impart_pk.002", "impart_pk_operations", apply_impart_pk_operations),
         Migration("impart_pk.003", "impart_pk_player_operations", apply_impart_pk_player_operations),
         Migration("impart_pk.004", "impart_pk_impart_operations", apply_impart_pk_impart_operations),
@@ -686,6 +688,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "impart_pk.005",
         "impart_pk.006",
         "impart.011",
+        "impart.013",
         "impart.003",
         "impart.005",
         "impart.007",
@@ -796,7 +799,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "trade.015", "auction.004"})
-_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart.009", "impart.011", "impart.012", "impart_pk.004"})
+_IMPART_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "impart.007", "impart.009", "impart.011", "impart.012", "impart.013", "impart_pk.004"})
 _MESSAGE_DATABASE_MIGRATION_VERSIONS = frozenset({"platform.001", "message.001"})
 
 

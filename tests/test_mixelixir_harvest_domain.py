@@ -114,6 +114,10 @@ class HarvestCountTests(unittest.TestCase):
         self.assertEqual(rules.harvest_count(-5, -5, 0, 0), 0)
         self.assertEqual(rules.harvest_count(None, None, None, None), 0)
 
+    def test_fractional_card_and_buff_bonuses_combine_before_whole_unit_floor(self) -> None:
+        self.assertEqual(rules.harvest_count(1, 0, 0.5, 0.5), 2)
+        self.assertEqual(rules.harvest_count(1, 0, 0.5, 0.4), 1)
+
 
 class RollRewardsTests(unittest.TestCase):
     def names(self, goods_id):
