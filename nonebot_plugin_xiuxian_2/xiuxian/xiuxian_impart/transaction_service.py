@@ -837,7 +837,9 @@ class ImpartPrayerSettlementService:
                     (card_name, existing.get(card_name, 0) + amount)
                     for card_name, amount in increments.items()
                 )
-                refresh_card_bonuses(conn, user_id, definitions)
+                refresh_card_bonuses(
+                    conn, user_id, definitions, schema="impart_data"
+                )
 
                 cards_json = json.dumps(cards, ensure_ascii=False, separators=(",", ":"))
                 new_cards_json = json.dumps(new_cards, ensure_ascii=False, separators=(",", ":"))

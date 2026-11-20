@@ -22,6 +22,7 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.impart_uitls import (
     get_impart_card_description,
     re_impart_data,
 )
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.impart_data import IMPART_DATA
 from nonebot_plugin_xiuxian_2.features.impart.migrations import (
     apply_impart_card_operations,
     apply_impart_exact_crystal_balances,
@@ -176,6 +177,25 @@ class CardBonusRefreshTests(unittest.TestCase):
             manager.update_impart_atk_per.call_args.args[0], 0.15
         )
         self.assertEqual(manager.update_impart_atk_per.call_args.args[1], "u")
+
+    def test_legacy_direct_card_add_refreshes_persisted_bonus(self):
+        with db_backend.transaction(self.db) as conn:
+            conn.execute("DELETE FROM impart_cards WHERE user_id=%s", ("u",))
+            conn.execute(
+                "UPDATE xiuxian_impart SET impart_atk_per=0 WHERE user_id=%s", ("u",)
+            )
+
+        manager = IMPART_DATA.__new__(IMPART_DATA)
+        manager.conn = db_backend.connect(self.db)
+        manager.cursor = manager.conn.cursor()
+        manager.data_all = self.defs
+        try:
+            self.assertEqual(manager.data_person_add("u", "攻击卡"), (True, 1))
+            self.assertAlmostEqual(self.bonuses()[0], 0.1)
+            self.assertEqual(manager.data_person_add("u", "攻击卡"), (False, 2))
+            self.assertAlmostEqual(self.bonuses()[0], 0.15)
+        finally:
+            manager.conn.close()
 
     def test_half_card_bonus_is_visible_in_percentage_and_card_description(self):
         self.assertEqual(format_impart_percent(0.025), "2.5%")
