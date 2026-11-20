@@ -9,6 +9,9 @@ The historical package owns command names during the compatibility release. New 
 `装备称号 名称或ID` 只允许装备本人已解锁称号；`卸下称号`（别名 `取消称号`）取消当前装备。
 已装备、未解锁、当前未装备、空参数和不存在名称保留各自的具体回复；同消息请求不同称号返回操作冲突。
 
+`赠送称号 名称或ID [道号/@目标]` 仅限超级用户；目标省略时发给操作人。单人目标须已注册，@提及按消息中的用户 ID 解析。
+称号状态、永久操作回执和操作账本在玩家库事务内核对；已知拒写会说明失败位置与称号并整体撤销，故障解除后可重试原消息。
+
 ## Web API
 No new HTTP route is exposed in this migration slice. Existing URLs remain served by the legacy web adapter.
 
@@ -41,6 +44,8 @@ Run the feature application test and the full architecture gate. Repeat the same
 - `python -m pytest -q tests/test_title_equipment_recovery.py tests/test_title_equipment_parameter_dispatch.py`：
   隔离 SQLite 的装备/卸下拒写、改写、回执/审计末步副作用、ABORT、整笔回滚、恢复/重放、真实名称/ID 参数和
   OneBot/QQ Markdown/失败回退 mock；不代表真实 QQ 联调。
+- `python -m pytest -q tests/test_title_grant_parameter_dispatch.py tests/test_title_grant_recovery.py tests/test_title_grant_transaction.py`：
+  单人赠送的真实 matcher、权限/目标参数、隔离 SQLite 状态与回执拒写恢复、ABORT 原异常、同消息 replay 和 OneBot/QQ mock 合同。
 
 ## 灰度开关、回滚和已知限制
 The old transaction service remains as a facade for one complete release cycle; the compatibility hit counter determines when the import shim can be removed.

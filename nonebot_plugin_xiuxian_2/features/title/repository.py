@@ -148,6 +148,11 @@ class TitleBatchUnlockWriteRejected(DomainError):
         super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
+class TitleGrantWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
+
+
 class TitleRepository:
     """Owns the historical title projection in ``player_db``."""
 
@@ -322,7 +327,7 @@ class TitleRepository:
         previous = self._previous(uow, operation_id, payload)
         if previous is not None:
             return previous
-        row = uow.query_one("SELECT unlocked FROM title WHERE user_id = ?", (user_id,))
+        row = uow.query_one("SELECT * FROM title WHERE user_id = ?", (user_id,))
         actual = _decode_titles(row["unlocked"]) if row else ()
         if actual != unlocked:
             return TitleTransactionResult("state_changed", reason="title_unlocked_changed")
@@ -331,16 +336,32 @@ class TitleRepository:
         updated = tuple(sorted((*actual, title_id)))
         value = json.dumps(updated, ensure_ascii=False)
         if row is None:
-            uow.execute("INSERT INTO title(user_id,unlocked,equipped) VALUES (?, ?, '')", (user_id, value))
+            changed = uow.execute("INSERT INTO title(user_id,unlocked,equipped) VALUES (?, ?, '')", (user_id, value))
+            expected_state = {"user_id": user_id, "unlocked": value, "equipped": ""}
         else:
+            expected_state = {**row, "unlocked": value}
             changed = uow.execute(
                 "UPDATE title SET unlocked = ? WHERE user_id = ? AND COALESCE(unlocked,'') = ?",
                 (value, user_id, str(row["unlocked"] or "")),
             )
-            if changed.rowcount != 1:
-                raise DomainError("title_unlock_write_rejected", "title unlock write count mismatch")
-        self._record(uow, operation_id, payload, "applied", title_id)
+        if changed.rowcount != 1:
+            raise TitleGrantWriteRejected("title_grant_state_write_rejected", title_id)
+        if uow.query_one("SELECT * FROM title WHERE user_id=?", (user_id,)) != expected_state:
+            raise TitleGrantWriteRejected("title_grant_state_projection_mismatch", title_id)
+        if self._record(uow, operation_id, payload, "applied", title_id) != 1:
+            raise TitleGrantWriteRejected("title_grant_receipt_write_rejected", title_id)
+        self.verify_grant_projection(
+            uow, user_id, operation_id,
+            (expected_state, {"payload": payload, "result_status": "applied", "title_id": title_id}), title_id,
+        )
         return TitleTransactionResult("applied", title_id)
+
+    def verify_grant_projection(self, uow, user_id, operation_id, expected, subject):
+        state, receipt = self.equipment_projection(uow, user_id, operation_id)
+        if state != expected[0]:
+            raise TitleGrantWriteRejected("title_grant_state_projection_mismatch", subject)
+        if receipt != expected[1]:
+            raise TitleGrantWriteRejected("title_grant_receipt_projection_mismatch", subject)
 
     def unlock_batch(
         self,

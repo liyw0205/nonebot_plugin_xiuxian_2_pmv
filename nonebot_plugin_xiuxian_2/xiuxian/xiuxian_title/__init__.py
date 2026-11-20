@@ -122,6 +122,8 @@ _UNLOCK_REJECTIONS = tuple(f"title_batch_unlock_{step}_{failure}" for step in ("
                            for failure in ("write_rejected", "projection_mismatch")) + (
     "title_batch_unlock_ledger_projection_mismatch", "title_unlocked_changed", "operation_conflict",
 )
+_GRANT_REJECTIONS = tuple(f"title_grant_{step}_{failure}" for step in ("state", "receipt", "ledger")
+                          for failure in ("write_rejected", "projection_mismatch"))
 
 
 def _unlock_failure_subjects(exc):
@@ -496,6 +498,7 @@ async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 
 @title_grant_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("赠送称号", known_rejections=_GRANT_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     赠送称号
@@ -625,7 +628,10 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             "already_unlocked": f"用户已拥有称号【{title_name}】",
             "operation_conflict": "本次赠送请求与已处理记录冲突",
         }
-        await handle_send(bot, event, result_failure("发放或回收称号", result, messages=messages))
+        await handle_send(bot, event, result_failure(
+            "发放或回收称号", result, messages=messages,
+            subjects={title_id: f"称号【{title_name}】"},
+        ))
 
 
 @title_refresh_cmd.handle(parameterless=[Cooldown(cd_time=30)])
