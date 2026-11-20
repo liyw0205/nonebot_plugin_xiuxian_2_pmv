@@ -468,6 +468,10 @@ from tests.parameter_cases_title_list import register as register_title_list
 
 register_title_list(case)
 
+from tests.parameter_cases_achievement import register as register_achievement
+
+register_achievement(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
