@@ -59,6 +59,7 @@ class IMPART_DATA(object):
                 
                 # 迁移数据
                 migrated_count = 0
+                migrated_users = set()
                 for user_id, cards in json_data.items():
                     if isinstance(cards, list):
                         # 旧格式：列表
@@ -69,13 +70,25 @@ class IMPART_DATA(object):
                         for card_name, count in card_count.items():
                             self._insert_card(user_id, card_name, count)
                             migrated_count += 1
+                            migrated_users.add(str(user_id))
                     elif isinstance(cards, dict):
                         # 新格式：字典
                         for card_name, count in cards.items():
                             self._insert_card(user_id, card_name, count)
                             migrated_count += 1
-                
+                            migrated_users.add(str(user_id))
+
                 if migrated_count > 0:
+                    if self.conn.table_exists("xiuxian_impart"):
+                        for user_id in migrated_users:
+                            impart_user = self.conn.execute(
+                                "SELECT 1 FROM xiuxian_impart WHERE user_id=%s LIMIT 1",
+                                (user_id,),
+                            ).fetchone()
+                            if impart_user is not None:
+                                refresh_card_bonuses(self.conn, user_id, self.data_all)
+                        self.conn.commit()
+
                     logger.opt(colors=True).info(f"<green>成功迁移{migrated_count}条卡牌数据到数据库</green>")
                     
                     # 备份原JSON文件
