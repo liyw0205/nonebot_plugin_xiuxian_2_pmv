@@ -62,6 +62,7 @@ from ...features.dungeon.explore_snapshot import (
 from ...features.dungeon.team_application import DungeonTeamApplication
 from ...features.dungeon.invite_expiry import DungeonInviteExpiryWorker
 from ...features.dungeon.team_repository import TeamExitResult, TeamMutationResult, TeamStateSnapshot
+from ...features.dungeon.repository import DUNGEON_EXPLORE_WRITE_REJECTIONS
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
@@ -1009,6 +1010,8 @@ async def _send_explore_response(bot: Bot, event, response: dict) -> None:
     if battle_messages:
         try:
             await send_msg_handler(bot, event, battle_messages)
+        except (MatcherException, ProcessException):
+            raise
         except Exception:
             logger.exception("副本战报发送失败，结算 operation 已保留完整战报")
     await handle_send(
@@ -1300,7 +1303,19 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
 # =========================
 # 探索副本
 # =========================
+def _explore_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    player, separator, item = subject.partition(":")
+    label = f"玩家【{player}】" if player.isdigit() else ""
+    if label and separator and item.isdigit():
+        label += f"的物品【{item}】"
+    return {subject: label} if label else {}
+
+
 @explore_dungeon.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("探索副本", known_rejections=DUNGEON_EXPLORE_WRITE_REJECTIONS + (
+    "dungeon_status_initialization_write_rejected", "dungeon_status_initialization_projection_mismatch",
+), subjects=_explore_failure_subjects)
 async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
@@ -1317,13 +1332,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         else f"dungeon-explore:{dungeon_ids.new_id()}:{user_id}"
     )
 
-    try:
-        replay_data = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
-        replay = replay_data
-    except Exception:
-        logger.exception("读取副本探索 operation 失败")
-        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-        await explore_dungeon.finish()
+    replay = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
 
     if replay.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法重放。")
@@ -1332,16 +1341,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await _send_explore_response(bot, event, replay.get("response") or {})
         await explore_dungeon.finish()
     if replay.get("phase") == "prepared":
-        try:
-            resumed = dungeon_application.settle(
-                operation_id=operation_id,
-                user_id=user_id,
-                max_goods_num=XiuConfig().max_goods_num,
-            )
-        except Exception:
-            logger.exception("恢复副本探索 operation 失败")
-            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-            await explore_dungeon.finish()
+        resumed = dungeon_application.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
         if resumed.get("phase") == "completed":
             await _send_explore_response(bot, event, resumed.get("response") or {})
         else:
@@ -1353,20 +1357,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     async def reject(result_status: str, message: str, status=None) -> None:
         status = status or {}
         response = _explore_response(message)
-        try:
-            stored_data = dungeon_application.resolve_rejection(
-                operation_id=operation_id,
-                user_id=user_id,
-                result_status=result_status,
-                response=response,
-                max_goods_num=XiuConfig().max_goods_num,
-                current_layer=int(status.get("current_layer", 0) or 0),
-                dungeon_status=str(status.get("dungeon_status", "")),
-            )
-            await _send_explore_response(bot, event, stored_data.get("response") or response)
-        except Exception:
-            logger.exception("持久化副本探索拒绝响应失败")
-            await handle_send(bot, event, "副本探索校验失败：处理过程异常。")
+        stored_data = dungeon_application.resolve_rejection(
+            operation_id=operation_id,
+            user_id=user_id,
+            result_status=result_status,
+            response=response,
+            max_goods_num=XiuConfig().max_goods_num,
+            current_layer=int(status.get("current_layer", 0) or 0),
+            dungeon_status=str(status.get("dungeon_status", "")),
+        )
+        await _send_explore_response(bot, event, stored_data.get("response") or response)
 
     player_status = dungeon_manager.get_player_status(user_id)
     if player_status["dungeon_status"] == "completed":
@@ -1542,14 +1542,9 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     if frozen_intent:
         intent = frozen_intent
     if not frozen_intent:
-        try:
-            intent_result = dungeon_application.prepare_intent(
-                operation_id=operation_id, user_id=user_id, intent=intent
-            )
-        except Exception:
-            logger.exception("持久化副本探索 resolution intent 失败")
-            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-            await explore_dungeon.finish()
+        intent_result = dungeon_application.prepare_intent(
+            operation_id=operation_id, user_id=user_id, intent=intent
+        )
         if intent_result.get("phase") == "intent" and isinstance(intent_result.get("intent"), dict):
             if _snapshot_digest(intent_result["intent"]) != _snapshot_digest(intent):
                 await reject(
@@ -1853,22 +1848,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         "resolved": resolved,
         "response": response,
     }
-    try:
-        prepared_data = dungeon_application.prepare_resolution(
-            operation_id=operation_id, user_id=user_id, plan=plan
+    prepared = dungeon_application.prepare_resolution(
+        operation_id=operation_id, user_id=user_id, plan=plan
+    )
+    settled = None
+    if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
+        settled = dungeon_application.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=XiuConfig().max_goods_num,
         )
-        prepared = prepared_data
-        settled = None
-        if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
-            settled = dungeon_application.settle(
-                operation_id=operation_id,
-                user_id=user_id,
-                max_goods_num=XiuConfig().max_goods_num,
-            )
-    except Exception:
-        logger.exception("副本探索事务结算失败")
-        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-        await explore_dungeon.finish()
 
     if prepared.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法结算。")

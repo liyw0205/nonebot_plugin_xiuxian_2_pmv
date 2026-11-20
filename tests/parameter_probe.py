@@ -448,6 +448,10 @@ from tests.parameter_cases_dungeon_history import register as register_dungeon_h
 
 register_dungeon_history(case)
 
+from tests.parameter_cases_dungeon_explore import register as register_dungeon_explore
+
+register_dungeon_explore(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

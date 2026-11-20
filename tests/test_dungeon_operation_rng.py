@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import random
 import unittest
 from types import SimpleNamespace
@@ -21,6 +22,18 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import player_fight
 
 
 class DungeonOperationRandomTests(unittest.TestCase):
+    def test_manager_copy_keeps_resolution_overrides_off_the_live_singleton(self):
+        singleton = DungeonManager._instance
+        manager = object.__new__(DungeonManager)
+        manager.current_dungeon = SimpleNamespace(id="published")
+        copied = copy.copy(manager)
+        self.assertIsNot(copied, manager)
+        copied.sync_current_dungeon = lambda: None
+        copied.current_dungeon = SimpleNamespace(id="frozen")
+        self.assertEqual(manager.current_dungeon.id, "published")
+        self.assertEqual(manager.sync_current_dungeon.__func__, DungeonManager.sync_current_dungeon)
+        self.assertIs(DungeonManager._instance, singleton)
+
     def test_event_plan_uses_a_repeatable_operation_scoped_source(self):
         dungeon = SimpleNamespace(
             type="explore",

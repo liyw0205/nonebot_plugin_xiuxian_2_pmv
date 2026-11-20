@@ -59,6 +59,21 @@ class _Recorder:
 
 
 class GuardUnitTests(unittest.IsolatedAsyncioTestCase):
+    async def test_known_rejection_can_resolve_its_specific_business_subject(self):
+        recorder = _Recorder()
+
+        @guard_command("探索副本", send=recorder, known_rejections=("dungeon_explore_resources_write_rejected",),
+                       subjects=lambda exc: {exc.details["subject"]: "玩家【900002】"})
+        async def handler(bot, event):
+            raise DomainError("dungeon_explore_resources_write_rejected", "isolated rejection", {"subject": "900002"})
+
+        with patch("nonebot_plugin_xiuxian_2.xiuxian.command_guard.report_exception") as reporter:
+            await handler(None, None)
+        reporter.assert_not_called()
+        self.assertEqual(len(recorder.calls), 1)
+        self.assertIn("玩家【900002】", recorder.calls[0][2])
+        self.assertIn("副本探索玩家资源保存失败", recorder.calls[0][2])
+
     async def test_explicit_operation_conflict_is_a_known_rejection(self):
         recorder = _Recorder()
 

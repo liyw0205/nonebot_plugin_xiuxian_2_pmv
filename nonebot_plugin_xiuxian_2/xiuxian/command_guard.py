@@ -147,6 +147,7 @@ def guard_command(
     *,
     send: Callable[..., Awaitable[Any]] | None = None,
     known_rejections: tuple[str, ...] = (),
+    subjects: Callable[[DomainError], dict[str, str]] | None = None,
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """Make ``action`` answer the player when its handler raises."""
 
@@ -164,7 +165,10 @@ def guard_command(
                 if isinstance(exc, DomainError) and (known_code in known_rejections or known_code == "currency_precision_unavailable") and (
                     reason_text(exc.details.get("reason", "")) or reason_text(known_code)
                 ):
-                    reply = failure_reply(action, exc)
+                    reply = result_failure(action, {
+                        "reason": exc.details.get("reason") or known_code,
+                        "subject": exc.details.get("subject", ""),
+                    }, subjects=subjects(exc)) if subjects is not None else failure_reply(action, exc)
                 else:
                     reply = report_exception(action, exc, event=event)
                 sender = send
