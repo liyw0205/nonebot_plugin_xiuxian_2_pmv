@@ -199,40 +199,44 @@ class CardBonusRefreshTests(unittest.TestCase):
             manager.conn.close()
 
     def test_legacy_json_import_refreshes_existing_role_bonus(self):
-        with tempfile.TemporaryDirectory() as directory:
-            data_path = Path(directory) / "impart_person.json"
-            data_path.write_text(
-                json.dumps({"u": {"攻击卡": 2}}, ensure_ascii=False),
-                encoding="utf-8",
-            )
-            with db_backend.transaction(self.db) as conn:
-                conn.execute("DELETE FROM impart_cards WHERE user_id=%s", ("u",))
-                conn.execute(
-                    "UPDATE xiuxian_impart SET impart_atk_per=%s WHERE user_id=%s",
-                    (0.2, "u"),
-                )
-
-            manager = IMPART_DATA.__new__(IMPART_DATA)
-            manager.dir_path_person = Path(directory)
-            manager.data_path_person = data_path
-            manager.data_all = self.defs
-            manager.conn = db_backend.connect(self.db)
-            manager.cursor = manager.conn.cursor()
-            try:
-                manager._migrate_existing_data()
-                self.assertAlmostEqual(self.bonuses()[0], 0.15)
-                self.assertTrue(data_path.with_suffix(".json.backup").exists())
-                with db_backend.connection(self.db) as conn:
-                    self.assertEqual(
-                        conn.execute(
-                            "SELECT quantity FROM impart_cards "
-                            "WHERE user_id=%s AND card_name=%s",
-                            ("u", "攻击卡"),
-                        ).fetchone()[0],
-                        2,
+        for cards in ({"攻击卡": 2}, ["攻击卡", "攻击卡"]):
+            with self.subTest(cards=cards):
+                with tempfile.TemporaryDirectory() as directory:
+                    data_path = Path(directory) / "impart_person.json"
+                    data_path.write_text(
+                        json.dumps({"u": cards}, ensure_ascii=False),
+                        encoding="utf-8",
                     )
-            finally:
-                manager.conn.close()
+                    with db_backend.transaction(self.db) as conn:
+                        conn.execute(
+                            "DELETE FROM impart_cards WHERE user_id=%s", ("u",)
+                        )
+                        conn.execute(
+                            "UPDATE xiuxian_impart SET impart_atk_per=%s WHERE user_id=%s",
+                            (0.2, "u"),
+                        )
+
+                    manager = IMPART_DATA.__new__(IMPART_DATA)
+                    manager.dir_path_person = Path(directory)
+                    manager.data_path_person = data_path
+                    manager.data_all = self.defs
+                    manager.conn = db_backend.connect(self.db)
+                    manager.cursor = manager.conn.cursor()
+                    try:
+                        manager._migrate_existing_data()
+                        self.assertAlmostEqual(self.bonuses()[0], 0.15)
+                        self.assertTrue(data_path.with_suffix(".json.backup").exists())
+                        with db_backend.connection(self.db) as conn:
+                            self.assertEqual(
+                                conn.execute(
+                                    "SELECT quantity FROM impart_cards "
+                                    "WHERE user_id=%s AND card_name=%s",
+                                    ("u", "攻击卡"),
+                                ).fetchone()[0],
+                                2,
+                            )
+                    finally:
+                        manager.conn.close()
 
     def test_half_card_bonus_is_visible_in_percentage_and_card_description(self):
         self.assertEqual(format_impart_percent(0.025), "2.5%")
