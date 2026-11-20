@@ -507,6 +507,10 @@ from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
 
+from tests.parameter_cases_ranking import register as register_ranking
+
+register_ranking(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
