@@ -83,14 +83,7 @@ class CardBonusRefreshTests(unittest.TestCase):
                 self.assertAlmostEqual(bonuses["impart_atk_per"], expected)
                 self.assertAlmostEqual(self.bonuses()[0], expected)
 
-    def test_persisted_half_bonus_reaches_final_combat_attributes(self):
-        with db_backend.transaction(self.db) as conn:
-            conn.execute(
-                "UPDATE impart_cards SET quantity=%s WHERE card_name=%s",
-                (2, "攻击卡"),
-            )
-            refresh_card_bonuses(conn, "u", self.defs, schema="main")
-
+    def test_persisted_first_and_half_bonus_reach_final_combat_attributes(self):
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
             _int_after_float_math,
             get_final_attributes,
@@ -111,31 +104,51 @@ class CardBonusRefreshTests(unittest.TestCase):
             "hppractice": 0,
             "mppractice": 0,
         }
-        attributes = get_final_attributes(
-            "u",
-            base_provider=lambda _user_id: base,
-            buff_info_provider=lambda _user_id: {},
-            item_provider=lambda _item_id: {},
-            impart_provider=lambda _user_id: {
-                "impart_atk_per": self.bonuses()[0]
-            },
-            accessory_provider=lambda _user_id: {"equipped": {}},
-            tianti_provider=lambda _user_id: {},
-        )
+        for quantity, expected_bonus, expected_attack in (
+            (1, 0.1, 110),
+            (2, 0.15, 115),
+        ):
+            with self.subTest(quantity=quantity):
+                with db_backend.transaction(self.db) as conn:
+                    conn.execute(
+                        "UPDATE impart_cards SET quantity=%s WHERE card_name=%s",
+                        (quantity, "攻击卡"),
+                    )
+                    bonuses = refresh_card_bonuses(
+                        conn, "u", self.defs, schema="main"
+                    )
 
-        self.assertEqual(attributes["final_atk"], 115)
+                self.assertAlmostEqual(bonuses["impart_atk_per"], expected_bonus)
+                attributes = get_final_attributes(
+                    "u",
+                    base_provider=lambda _user_id: base,
+                    buff_info_provider=lambda _user_id: {},
+                    item_provider=lambda _item_id: {},
+                    impart_provider=lambda _user_id: {
+                        "impart_atk_per": self.bonuses()[0]
+                    },
+                    accessory_provider=lambda _user_id: {"equipped": {}},
+                    tianti_provider=lambda _user_id: {},
+                )
+                self.assertEqual(attributes["final_atk"], expected_attack)
 
     def test_new_and_legacy_calculators_keep_the_25_card_cap(self):
         definition = {"攻击卡": {"type": "impart_atk_per", "vale": 0.1}}
-        for quantity in (25, 26):
+        for quantity, expected in (
+            (1, 0.1),
+            (2, 0.15),
+            (5, 0.3),
+            (25, 1.3),
+            (26, 1.3),
+        ):
             with self.subTest(quantity=quantity):
                 cards = {"攻击卡": quantity}
                 new_value = calculate_card_bonuses(cards, definition)["impart_atk_per"]
                 legacy_value = calculate_legacy_card_bonuses(cards, definition)[
                     "impart_atk_per"
                 ]
-                self.assertAlmostEqual(new_value, 1.3)
-                self.assertAlmostEqual(legacy_value, 1.3)
+                self.assertAlmostEqual(new_value, expected)
+                self.assertAlmostEqual(legacy_value, expected)
 
     def test_persisted_bonus_caps_at_25_without_clamping_card_inventory(self):
         for quantity in (25, 26):

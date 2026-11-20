@@ -24,7 +24,7 @@ class T(unittest.TestCase):
   with db_backend.connection(self.i) as c:
    self.assertEqual([tuple(row) for row in c.execute('SELECT wish,impart_num FROM xiuxian_impart ORDER BY rowid')],[(10,2),(55,66)])
 
- def test_legacy_draw_refreshes_first_and_duplicate_card_bonuses(self):
+ def test_separate_draw_batches_accumulate_duplicate_card_half_bonus(self):
   with tempfile.TemporaryDirectory() as temp:
    root=Path(temp); game=root/'game.db'; impart=root/'impart.db'
    bonus_columns=','.join(f'{field} REAL DEFAULT 0' for field in BONUS_FIELDS)
