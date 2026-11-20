@@ -135,6 +135,26 @@ class TowerStateRepository:
             )
             return state
 
+    def read(self, user_id: str, today: date) -> dict[str, Any]:
+        """Read the display projection without initializing or persisting repairs."""
+        user_id = str(user_id).strip()
+        if not user_id:
+            raise ValueError("user_id is required")
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT current_floor,max_floor,score,weekly_purchases FROM tower WHERE user_id=?",
+                (user_id,),
+            )
+            if row is None:
+                return self._default(today)
+            result = dict(row)
+            result["current_floor"] = as_int_like(result["current_floor"])
+            result["max_floor"] = as_int_like(result["max_floor"])
+            result["score"] = as_int_like(result["score"])
+            weekly, _ = self._weekly(result["weekly_purchases"], today)
+            result["weekly_purchases"] = weekly
+            return result
+
     def reset_all_floors(
         self, *, operation_id: str, source: str, period_key: str
     ) -> TowerFloorResetResult:

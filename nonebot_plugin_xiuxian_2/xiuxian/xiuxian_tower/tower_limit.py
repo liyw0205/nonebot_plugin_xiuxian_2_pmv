@@ -30,6 +30,10 @@ class TowerLimit:
         state_application = self._state_application_override or _state_application()
         return state_application.get(user_id)
 
+    def read_user_tower_info(self, user_id):
+        state_application = self._state_application_override or _state_application()
+        return state_application.read(user_id)
+
     def get_weekly_purchases(self, user_id, item_id):
         weekly = self.get_user_tower_info(user_id)["weekly_purchases"]
         return int(weekly.get(str(item_id), 0))
