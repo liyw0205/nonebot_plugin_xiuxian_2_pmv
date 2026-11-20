@@ -420,6 +420,10 @@ from tests.parameter_cases_team_leave import register as register_team_leave
 
 register_team_leave(case)
 
+from tests.parameter_cases_team_kick import register as register_team_kick
+
+register_team_kick(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

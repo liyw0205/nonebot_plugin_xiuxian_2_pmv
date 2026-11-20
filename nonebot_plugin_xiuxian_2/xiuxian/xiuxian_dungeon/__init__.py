@@ -331,6 +331,14 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
 
 def _team_exit_message(action: str, result: TeamExitResult) -> str:
     if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
+        if action == "kick" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_kick_cooldown_"):
+                subjects = {result.subject: "被移除队员"}
+            elif result.reason.startswith("dungeon_team_kick_invite_"):
+                subjects = {result.subject: f"邀请【{result.subject}】"}
+            else:
+                subjects = {result.subject: f"队伍【{result.team_name or result.team_id}】"}
+            return result_failure("踢出队伍", result, subjects=subjects)
         if action == "leave" and getattr(result, "subject", ""):
             if result.reason.startswith("dungeon_team_leave_cooldown_"):
                 subjects = {result.subject: "离队玩家"}
@@ -359,7 +367,8 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
         return f"你已离开队伍【{result.team_name}】。" + cooldown_message
     if action == "kick":
         target = _sql_message().get_user_info_with_id(result.target_id) or {}
-        return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。\n对方进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+        cooldown_message = f"\n对方组队冷却至{result.cooldown_until}。" if result.target_id in result.cooldown_members else ""
+        return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。" + cooldown_message
     return f"队伍【{result.team_name}】已解散。\n全体成员进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
 
 
@@ -653,6 +662,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 
 @kick_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("踢出队伍")
 async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -662,13 +672,6 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "kick", user_id)
-    replay = dungeon_team_application.exit_operation_result(
-        operation_id, "kick", user_id
-    )
-    if replay is not None:
-        await handle_send(bot, event, _team_exit_message("kick", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await kick_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -676,6 +679,13 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
+    replay = dungeon_team_application.exit_operation_result(
+        operation_id, "kick", user_id, target_user_id
+    )
+    if replay is not None:
+        await handle_send(bot, event, _team_exit_message("kick", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await kick_team_cmd.finish()
+
     team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     team_snapshot = dungeon_team_application.snapshot(team_id)
     exit_result = dungeon_team_application.kick(
