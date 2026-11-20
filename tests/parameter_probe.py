@@ -440,6 +440,10 @@ from tests.parameter_cases_dungeon_status import register as register_dungeon_st
 
 register_dungeon_status(case)
 
+from tests.parameter_cases_dungeon_info import register as register_dungeon_info
+
+register_dungeon_info(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
