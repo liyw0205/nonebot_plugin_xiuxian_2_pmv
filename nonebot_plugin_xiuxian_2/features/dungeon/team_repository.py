@@ -112,6 +112,11 @@ class _TeamKickWriteRejected(DomainError):
         super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
+class _TeamDisbandWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
+
+
 class DungeonTeamRepository:
     @staticmethod
     def _snapshot_reason(current, expected):
@@ -1008,54 +1013,127 @@ class DungeonTeamRepository:
         except (TypeError, ValueError, json.JSONDecodeError):
             return TeamExitResult("state_changed", reason="receipt_corrupt")
 
-    def _finish_exit(self, uow: DatabaseUnitOfWork, operation_id: str, payload: str, result: TeamExitResult) -> TeamExitResult:
-        uow.execute("INSERT INTO dungeon_team_exit_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(result.__dict__, ensure_ascii=True, default=list)))
-        return result
-
-    def _exit_mutation(self, action: str, operation_id: str, actor_id: str, target_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
+    def disband(self, operation_id: str, actor_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
         if expected is None:
-            return TeamExitResult("team_missing", target_id=target_id)
-        payload = self._json({"action": action, "actor_id": str(actor_id), "target_id": str(target_id), "team_id": expected.team_id})
+            return TeamExitResult("team_missing")
+        base = dict(team_id=expected.team_id, team_name=expected.team_name)
+        payload = self._json({"action": "disband", "actor_id": str(actor_id), "target_id": "", "team_id": expected.team_id})
         if not self._database_exists():
-            return TeamExitResult("schema_missing", expected.team_id, expected.team_name, target_id=target_id)
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._mutation_schema_ready(uow):
-                return TeamExitResult("schema_missing", expected.team_id, expected.team_name, target_id=target_id)
-            old = uow.query_one("SELECT payload,result_json FROM dungeon_team_exit_operations WHERE operation_id=?", (operation_id,))
-            if old is not None:
-                if str(old["payload"]) != payload:
-                    return TeamExitResult("state_changed", reason="operation_conflict")
-                data = json.loads(str(old["result_json"]))
-                data["cooldown_members"] = tuple(data.get("cooldown_members") or ())
-                data["status"] = "duplicate" if data.get("status") == "applied" else data.get("status", "state_changed")
-                if data["status"] == "state_changed" and not data.get("reason"):
-                    data["reason"] = "legacy_rejection"
-                return TeamExitResult(**data)
-            row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (expected.team_id,))
-            if row is None: return self._finish_exit(uow, operation_id, payload, TeamExitResult("team_missing", expected.team_id, expected.team_name, target_id=target_id))
-            current = TeamStateSnapshot(expected.team_id, str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
-            if current != expected: return self._finish_exit(uow, operation_id, payload, TeamExitResult("state_changed", expected.team_id, expected.team_name, target_id=target_id, reason=self._snapshot_reason(current, expected)))
-            if actor_id not in current.members: return self._finish_exit(uow, operation_id, payload, TeamExitResult("actor_not_member", current.team_id, current.team_name, target_id=target_id))
-            if action in {"kick", "disband"} and actor_id != current.leader_id: return self._finish_exit(uow, operation_id, payload, TeamExitResult("actor_not_leader", current.team_id, current.team_name, target_id=target_id))
-            if action in {"leave", "kick"} and target_id not in current.members: return self._finish_exit(uow, operation_id, payload, TeamExitResult("target_not_member", current.team_id, current.team_name, target_id=target_id))
-            if action == "kick" and actor_id == target_id: return self._finish_exit(uow, operation_id, payload, TeamExitResult("self_target", current.team_id, current.team_name, target_id=target_id))
-            if any(self._active_session(uow, member) for member in current.members): return self._finish_exit(uow, operation_id, payload, TeamExitResult("session_active", current.team_id, current.team_name, target_id=target_id))
-            members = list(current.members); affected = list(members) if action == "disband" else [target_id]; disbanded = action == "disband" or (action == "leave" and len(members) == 1); new_leader = ""
-            if disbanded: changed = uow.execute("DELETE FROM teams WHERE user_id=? AND version=?", (current.team_id, current.version))
-            else:
-                members.remove(target_id); new_leader = members[0] if target_id == current.leader_id else current.leader_id; changed = uow.execute("UPDATE teams SET members=?,leader=?,version=version+1 WHERE user_id=? AND version=?", (json.dumps(members), new_leader, current.team_id, current.version))
-            if changed.rowcount != 1: raise DomainError("team_members_write_rejected", "team exit write count mismatch")
-            if disbanded:
-                uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (current.team_id,))
-            else:
-                self._sync_membership(uow, current.team_id, members, current.version + 1)
-            cooldown_members = []
-            for member in affected:
-                first = uow.query_one("SELECT had_first_join FROM team_cd WHERE user_id=?", (member,))
-                if first and int(first["had_first_join"] or 0) == 1:
-                    uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) ON CONFLICT(user_id) DO UPDATE SET join_cd_until=excluded.join_cd_until", (member, str(cooldown_until))); cooldown_members.append(member)
-            uow.execute("UPDATE dungeon_team_invites SET consumed_at=CURRENT_TIMESTAMP,status='team_changed',resolved_operation_id=? WHERE status='pending' AND team_id=?", (operation_id, current.team_id))
-            return self._finish_exit(uow, operation_id, payload, TeamExitResult("applied", current.team_id, current.team_name, new_leader, disbanded, tuple(cooldown_members), str(cooldown_until), current.version + 1, target_id))
+            return TeamExitResult("schema_missing", **base)
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._mutation_schema_ready(uow):
+                    return TeamExitResult("schema_missing", **base)
+                old = uow.query_one("SELECT payload,result_json FROM dungeon_team_exit_operations WHERE operation_id=?", (operation_id,))
+                if old is not None:
+                    if old["payload"] != payload:
+                        return TeamExitResult("state_changed", reason="operation_conflict")
+                    try:
+                        data = json.loads(str(old["result_json"]))
+                        if not isinstance(data, dict):
+                            return TeamExitResult("state_changed", reason="receipt_corrupt")
+                        data["cooldown_members"] = tuple(data.get("cooldown_members") or ())
+                        data["status"] = "duplicate" if data.get("status") == "applied" else data.get("status", "state_changed")
+                        if data["status"] == "state_changed" and not data.get("reason"):
+                            data["reason"] = "legacy_rejection"
+                        return TeamExitResult(**data)
+                    except (TypeError, ValueError):
+                        return TeamExitResult("state_changed", reason="receipt_corrupt")
+
+                # Freeze every member's cooldown before any write can change a later decision.
+                team_sql = f"SELECT {self._TEAM_COLUMNS} FROM teams WHERE user_id=?"
+                team = uow.query_one(team_sql, (expected.team_id,))
+                expected_team = dict(team) if team is not None else None
+                member_sql = "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=? ORDER BY member_id"
+                expected_members = uow.query_all(member_sql, (expected.team_id,))
+                member_ids = tuple(self._members(team["members"])) if team is not None else expected.members
+                cooldown_sql = "SELECT user_id,join_cd_until,had_first_join FROM team_cd WHERE user_id=?"
+                expected_cooldowns = {member: uow.query_one(cooldown_sql, (member,)) for member in member_ids}
+                affected = tuple(member for member in member_ids if expected_cooldowns[member]
+                                 and int(expected_cooldowns[member]["had_first_join"] or 0) == 1)
+                invite_columns = "invite_id,team_id,inviter_id,invitee_id,group_id,expires_at,status,consumed_at,created_at,resolved_operation_id"
+                if {"bot_id", "source_message_id", "notification_scene"} <= self._columns(uow, "dungeon_team_invites"):
+                    invite_columns += ",bot_id,source_message_id,notification_scene"
+                invite_sql = f"SELECT {invite_columns} FROM dungeon_team_invites WHERE team_id=? ORDER BY invite_id"
+                expected_invites = uow.query_all(invite_sql, (expected.team_id,))
+                pending_ids = [row["invite_id"] for row in expected_invites if row["status"] == "pending"]
+
+                def verify_state() -> None:
+                    if uow.query_one(team_sql, (expected.team_id,)) != expected_team:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_state_projection_mismatch", expected.team_id)
+                    if uow.query_all(member_sql, (expected.team_id,)) != expected_members:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_members_projection_mismatch", expected.team_id)
+                    for member, cooldown in expected_cooldowns.items():
+                        if uow.query_one(cooldown_sql, (member,)) != cooldown:
+                            raise _TeamDisbandWriteRejected("dungeon_team_disband_cooldown_projection_mismatch", member)
+                    actual_invites = uow.query_all(invite_sql, (expected.team_id,))
+                    if actual_invites != expected_invites:
+                        actual_by_id = {row["invite_id"]: row for row in actual_invites}
+                        subject = next((row["invite_id"] for row in expected_invites
+                                        if actual_by_id.get(row["invite_id"]) != row), expected.team_id)
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_invite_projection_mismatch", subject)
+
+                def finish(result: TeamExitResult) -> TeamExitResult:
+                    receipt_json = json.dumps(result.__dict__, ensure_ascii=True, default=list)
+                    write = uow.execute("INSERT INTO dungeon_team_exit_operations(operation_id,payload,result_json) VALUES(?,?,?)",
+                                        (operation_id, payload, receipt_json))
+                    if write.rowcount != 1:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_receipt_write_rejected", expected.team_id)
+                    receipt = uow.query_one("SELECT payload,result_json FROM dungeon_team_exit_operations WHERE operation_id=?", (operation_id,))
+                    if receipt != {"payload": payload, "result_json": receipt_json}:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_receipt_projection_mismatch", expected.team_id)
+                    verify_state()
+                    return result
+
+                if team is None:
+                    return finish(TeamExitResult("team_missing", **base))
+                current = TeamStateSnapshot(expected.team_id, str(team["team_name"] or ""), str(team["leader"] or ""),
+                                            tuple(self._members(team["members"])), int(team["version"] or 0))
+                if current != expected:
+                    return finish(TeamExitResult("state_changed", reason=self._snapshot_reason(current, expected), subject=expected.team_id, **base))
+                if actor_id not in current.members:
+                    return finish(TeamExitResult("actor_not_member", **base))
+                if actor_id != current.leader_id:
+                    return finish(TeamExitResult("actor_not_leader", **base))
+                if any(self._active_session(uow, member) for member in current.members):
+                    return finish(TeamExitResult("session_active", **base))
+                canonical_members = [{"team_id": expected.team_id, "member_id": member, "version": current.version}
+                                     for member in sorted(set(current.members))]
+                if expected_members != canonical_members:
+                    raise _TeamDisbandWriteRejected("dungeon_team_disband_members_projection_mismatch", expected.team_id)
+
+                consumed_at = uow.query_one("SELECT CURRENT_TIMESTAMP AS consumed_at")["consumed_at"]
+                changed = uow.execute("DELETE FROM teams WHERE user_id=? AND version=?", (current.team_id, current.version))
+                if changed.rowcount != 1:
+                    raise _TeamDisbandWriteRejected("dungeon_team_disband_state_write_rejected", expected.team_id)
+                expected_team = None
+                verify_state()
+                removed = uow.execute("DELETE FROM dungeon_team_members WHERE team_id=?", (current.team_id,))
+                if removed.rowcount != len(expected_members):
+                    raise _TeamDisbandWriteRejected("dungeon_team_disband_members_write_rejected", expected.team_id)
+                expected_members = []
+                verify_state()
+                for member in affected:
+                    changed = uow.execute("INSERT INTO team_cd(user_id,join_cd_until,had_first_join) VALUES(?,?,1) "
+                                          "ON CONFLICT(user_id) DO UPDATE SET join_cd_until=excluded.join_cd_until",
+                                          (member, str(cooldown_until)))
+                    if changed.rowcount != 1:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_cooldown_write_rejected", member)
+                    expected_cooldowns[member].update(join_cd_until=str(cooldown_until))
+                    verify_state()
+                for invite_id in pending_ids:
+                    changed = uow.execute("UPDATE dungeon_team_invites SET consumed_at=?,status='team_changed',resolved_operation_id=? "
+                                          "WHERE invite_id=? AND status='pending'", (consumed_at, operation_id, invite_id))
+                    if changed.rowcount != 1:
+                        raise _TeamDisbandWriteRejected("dungeon_team_disband_invite_write_rejected", str(invite_id))
+                    for row in expected_invites:
+                        if row["invite_id"] == invite_id:
+                            row.update(consumed_at=consumed_at, status="team_changed", resolved_operation_id=operation_id)
+                    verify_state()
+                return finish(TeamExitResult("applied", disbanded=True, cooldown_members=affected,
+                                             cooldown_until=str(cooldown_until), version=current.version + 1, **base))
+        except _TeamDisbandWriteRejected as exc:
+            return TeamExitResult("failed", reason=exc.code, subject=str(exc.details.get("subject") or expected.team_id), **base)
 
     def leave(self, operation_id: str, actor_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
         if expected is None:
@@ -1333,9 +1411,6 @@ class DungeonTeamRepository:
                                              cooldown_until=str(cooldown_until), version=current.version + 1, **base))
         except _TeamKickWriteRejected as exc:
             return TeamExitResult("failed", reason=exc.code, subject=str(exc.details.get("subject") or expected.team_id), **base)
-
-    def disband(self, operation_id: str, actor_id: str, expected: TeamStateSnapshot | None, cooldown_until: str) -> TeamExitResult:
-        return self._exit_mutation("disband", operation_id, actor_id, "", expected, cooldown_until)
 
     def pending_invite(self, user_id: str, now_timestamp: float) -> TeamInviteSnapshot | None:
         if not self._database_exists():
