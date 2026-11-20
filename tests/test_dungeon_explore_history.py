@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from nonebot_plugin_xiuxian_2.features.dungeon import migrations as dungeon_migrations
 from nonebot_plugin_xiuxian_2.features.dungeon.explore_history import (
@@ -220,6 +221,39 @@ class DungeonExploreHistoryTests(unittest.TestCase):
             self.assertEqual(
                 format_dungeon_explore_history({"ok": True, "total": 0}), EMPTY_TEXT
             )
+
+    def test_invalid_history_time_cannot_affect_recent_totals_or_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = HistoryFixture(Path(temp))
+            fixture.add("valid", "u", layer=2, updated_at="2026-01-09 12:00:00")
+            for index, stamp in enumerate(("not-a-time", "2026-01-09 garbage", "", " ")):
+                fixture.add(f"invalid-{index}", "u", layer=999, updated_at=stamp)
+            before = fixture.database.read_bytes()
+            summary = DungeonExploreHistoryApplication(fixture.database, clock=FixedClock()).summary("u")
+            self.assertEqual((summary["total"], summary["best_layer"], summary["battles"]), (1, 2, 1))
+            self.assertEqual([row["updated_at"] for row in summary["recent"]], ["2026-01-09 12:00:00"])
+            self.assertEqual(fixture.database.read_bytes(), before)
+
+    def test_time_window_and_sorting_compare_instants_in_compatible_formats(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = HistoryFixture(Path(temp))
+            fixture.add("before", "u", updated_at="2026-01-03T11:59:59+00:00", message="expired")
+            fixture.add("boundary", "u", updated_at="2026-01-03T20:00:00+08:00", message="boundary")
+            fixture.add("newer", "u", updated_at="2026-01-09 12:00:00", message="newer")
+            fixture.add("older", "u", updated_at="2026-01-09T19:00:00+08:00", message="older")
+            before = fixture.database.read_bytes()
+            summary = DungeonExploreHistoryApplication(fixture.database, clock=FixedClock()).summary("u")
+            self.assertEqual(summary["total"], 3)
+            self.assertEqual([row["message"] for row in summary["recent"]], ["newer", "older", "boundary"])
+            self.assertEqual(fixture.database.read_bytes(), before)
+
+    def test_aware_clock_preserves_offset_for_utc_receipt_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = HistoryFixture(Path(temp))
+            fixture.add("boundary", "u", updated_at="2026-01-03 12:00:00")
+            clock = SimpleNamespace(now=lambda: NOW.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8))))
+            summary = DungeonExploreHistoryApplication(fixture.database, clock=clock).summary("u")
+            self.assertEqual(summary["total"], 1)
 
     def test_handler_manifest_and_help_contract(self) -> None:
         source = DUNGEON.read_text(encoding="utf-8")

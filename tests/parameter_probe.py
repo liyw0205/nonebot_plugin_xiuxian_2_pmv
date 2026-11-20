@@ -444,6 +444,10 @@ from tests.parameter_cases_dungeon_info import register as register_dungeon_info
 
 register_dungeon_info(case)
 
+from tests.parameter_cases_dungeon_history import register as register_dungeon_history
+
+register_dungeon_history(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
