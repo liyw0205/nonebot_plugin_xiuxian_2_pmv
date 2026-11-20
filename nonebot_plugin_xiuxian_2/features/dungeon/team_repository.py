@@ -96,6 +96,11 @@ class _TeamRejectWriteRejected(DomainError):
         super().__init__(reason, reason, {"reason": reason, "subject": subject})
 
 
+class _TeamTransferWriteRejected(DomainError):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason, reason, {"reason": reason, "subject": subject})
+
+
 class DungeonTeamRepository:
     @staticmethod
     def _snapshot_reason(current, expected):
@@ -580,28 +585,82 @@ class DungeonTeamRepository:
         payload = self._json({"action":"transfer","team_id":expected.team_id,"actor_id":str(actor_id),"target_id":str(target_id)})
         if not self._database_exists():
             return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._mutation_schema_ready(uow):
-                return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
-            old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
-            if old is not None: return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
-            row = uow.query_one("SELECT team_name,leader,members,version FROM teams WHERE user_id=?", (expected.team_id,))
-            base = dict(team_id=expected.team_id, team_name=expected.team_name, leader_id=expected.leader_id, member_count=len(expected.members), target_id=str(target_id), version=expected.version)
-            if row is None: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("team_missing", **base))
-            current = TeamStateSnapshot(expected.team_id, str(row["team_name"] or ""), str(row["leader"] or ""), tuple(self._members(row["members"])), int(row["version"] or 0))
-            if current != expected: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("state_changed", reason=self._snapshot_reason(current, expected), **base))
-            if actor_id != current.leader_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("actor_not_leader", **base))
-            if target_id == actor_id: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("self_target", **base))
-            if target_id not in current.members: return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("target_not_member", **base))
-            if any(self._active_session(uow, member) for member in current.members): return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("session_active", **base))
-            changed = uow.execute("UPDATE teams SET leader=?,version=version+1 WHERE user_id=? AND version=?", (target_id, current.team_id, current.version))
-            if changed.rowcount != 1: raise DomainError("team_leader_write_rejected", "team mutation write count mismatch")
-            uow.execute(
-                "UPDATE dungeon_team_members SET version=? WHERE team_id=?",
-                (current.version + 1, current.team_id),
-            )
-            base.update(leader_id=str(target_id), version=current.version + 1)
-            return self._finish(uow, operation_id, "transfer", payload, TeamMutationResult("applied", **base))
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._mutation_schema_ready(uow):
+                    return TeamMutationResult("schema_missing", team_id=expected.team_id, target_id=str(target_id), version=expected.version)
+                old = uow.query_one("SELECT payload,result_status,team_id,result_json FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                if old is not None:
+                    return self._decode_mutation(old) if old["payload"] == payload else TeamMutationResult("state_changed", team_id=str(old["team_id"]), reason="operation_conflict")
+
+                team_columns = "user_id,team_id,team_name,group_id,leader,members,create_time,max_members,description,version"
+                team_sql = f"SELECT {team_columns} FROM teams WHERE user_id=?"
+                team_row = uow.query_one(team_sql, (expected.team_id,))
+                base = dict(team_id=expected.team_id, team_name=expected.team_name, leader_id=expected.leader_id,
+                            member_count=len(expected.members), target_id=str(target_id), version=expected.version)
+                member_sql = "SELECT team_id,member_id,version FROM dungeon_team_members WHERE team_id=? ORDER BY member_id"
+                expected_members = uow.query_all(member_sql, (expected.team_id,))
+                expected_team = dict(team_row) if team_row is not None else None
+
+                def verify_state() -> None:
+                    if uow.query_one(team_sql, (expected.team_id,)) != expected_team:
+                        raise _TeamTransferWriteRejected("dungeon_team_transfer_state_projection_mismatch", expected.team_id)
+                    if uow.query_all(member_sql, (expected.team_id,)) != expected_members:
+                        raise _TeamTransferWriteRejected("dungeon_team_transfer_members_projection_mismatch", expected.team_id)
+
+                def finish(result: TeamMutationResult) -> TeamMutationResult:
+                    receipt_json = self._json(result.__dict__)
+                    write = uow.execute(
+                        "INSERT INTO dungeon_team_operations(operation_id,payload,result_status,team_id,result_json,action) VALUES(?,?,?,?,?,?)",
+                        (operation_id, payload, result.status, result.team_id, receipt_json, "transfer"),
+                    )
+                    if write.rowcount != 1:
+                        raise _TeamTransferWriteRejected("dungeon_team_transfer_receipt_write_rejected", expected.team_id)
+                    receipt = uow.query_one("SELECT payload,result_status,team_id,result_json,action FROM dungeon_team_operations WHERE operation_id=?", (operation_id,))
+                    if receipt != {"payload": payload, "result_status": result.status, "team_id": result.team_id,
+                                  "result_json": receipt_json, "action": "transfer"}:
+                        raise _TeamTransferWriteRejected("dungeon_team_transfer_receipt_projection_mismatch", expected.team_id)
+                    verify_state()
+                    return result
+
+                if team_row is None:
+                    return finish(TeamMutationResult("team_missing", **base))
+                current = TeamStateSnapshot(expected.team_id, str(team_row["team_name"] or ""), str(team_row["leader"] or ""),
+                                            tuple(self._members(team_row["members"])), int(team_row["version"] or 0))
+                if current != expected:
+                    return finish(TeamMutationResult("state_changed", reason=self._snapshot_reason(current, expected), **base))
+                if actor_id != current.leader_id:
+                    return finish(TeamMutationResult("actor_not_leader", **base))
+                if target_id == actor_id:
+                    return finish(TeamMutationResult("self_target", **base))
+                if target_id not in current.members:
+                    return finish(TeamMutationResult("target_not_member", **base))
+                if any(self._active_session(uow, member) for member in current.members):
+                    return finish(TeamMutationResult("session_active", **base))
+
+                canonical_members = [{"team_id": expected.team_id, "member_id": member, "version": current.version}
+                                     for member in sorted(set(current.members))]
+                if expected_members != canonical_members:
+                    raise _TeamTransferWriteRejected("dungeon_team_transfer_members_projection_mismatch", expected.team_id)
+                changed = uow.execute("UPDATE teams SET leader=?,version=version+1 WHERE user_id=? AND version=?",
+                                      (target_id, current.team_id, current.version))
+                if changed.rowcount != 1:
+                    raise _TeamTransferWriteRejected("dungeon_team_transfer_state_write_rejected", expected.team_id)
+                expected_team.update(leader=str(target_id), version=current.version + 1)
+                verify_state()
+
+                changed_members = uow.execute("UPDATE dungeon_team_members SET version=? WHERE team_id=?",
+                                              (current.version + 1, current.team_id))
+                if changed_members.rowcount != len(expected_members):
+                    raise _TeamTransferWriteRejected("dungeon_team_transfer_members_write_rejected", expected.team_id)
+                expected_members = [{**row, "version": current.version + 1} for row in expected_members]
+                verify_state()
+                base.update(leader_id=str(target_id), version=current.version + 1)
+                return finish(TeamMutationResult("applied", **base))
+        except _TeamTransferWriteRejected as exc:
+            return TeamMutationResult("failed", team_id=expected.team_id, team_name=expected.team_name,
+                                      target_id=str(target_id), reason=exc.code,
+                                      subject=str(exc.details.get("subject") or expected.team_id))
 
     def invite(self, operation_id: str, invite_id: str, team_id: str, inviter_id: str, invitee_id: str, group_id: str, expires_at: float, now_timestamp: float, *, bot_id: str = "", source_message_id: str = "", notification_scene: str = "") -> TeamMutationResult:
         payload = self._json({"action":"invite","invite_id":invite_id,"team_id":team_id,"inviter_id":inviter_id,"invitee_id":invitee_id,"group_id":group_id})

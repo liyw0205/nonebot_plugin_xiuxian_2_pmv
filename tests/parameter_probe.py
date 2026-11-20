@@ -412,6 +412,10 @@ from tests.parameter_cases_team_reject import register as register_team_reject
 
 register_team_reject(case)
 
+from tests.parameter_cases_team_transfer import register as register_team_transfer
+
+register_team_transfer(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

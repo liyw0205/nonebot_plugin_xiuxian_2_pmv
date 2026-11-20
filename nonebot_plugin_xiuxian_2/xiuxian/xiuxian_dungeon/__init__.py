@@ -250,7 +250,9 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
                 subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
         if action == "reject" and getattr(result, "subject", ""):
             subjects[result.subject] = f"邀请【{result.subject}】"
-        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队", "reject": "拒绝组队"}.get(action, "队伍操作"), result, subjects=subjects)
+        if action == "transfer" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队", "reject": "拒绝组队", "transfer": "转移队长"}.get(action, "队伍操作"), result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -741,6 +743,7 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
 
 @transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("转移队长")
 async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -750,13 +753,6 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "transfer", user_id)
-    replay = dungeon_team_application.operation_result(
-        operation_id, "transfer"
-    )
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("transfer", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await transfer_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -764,6 +760,16 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
+    replay = dungeon_team_application.operation_result(
+        operation_id, "transfer"
+    )
+    if replay is not None:
+        if replay.target_id and replay.target_id != target_user_id:
+            replay = TeamMutationResult("state_changed", team_id=replay.team_id, team_name=replay.team_name,
+                                         target_id=target_user_id, reason="operation_conflict")
+        await handle_send(bot, event, _team_mutation_message("transfer", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
     team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     snapshot = dungeon_team_application.snapshot(team_id)
     result = dungeon_team_application.transfer(
