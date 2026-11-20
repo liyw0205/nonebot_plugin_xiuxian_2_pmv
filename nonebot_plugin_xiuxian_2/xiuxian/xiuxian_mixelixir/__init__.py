@@ -36,6 +36,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.mixelixir.application import MixelixirApplication
+from ...features.mixelixir.domain import refine_output_counts
 
 from .transaction_service import MixelixirHarvestLevelUpgradeService
 from .transaction_service import MixelixirRecipeService
@@ -718,9 +719,14 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 record_key = str(id)
                 current = records.get(record_key, {"name": goods_info["name"], "num": 0})
                 now_num = int(current.get("num", 0) or 0)
-                exp_count = max(0, min(num, int(goods_info["mix_all"]) - now_num))
+                reward_quantity, exp_count = refine_output_counts(
+                    num, now_num, goods_info["mix_all"]
+                )
                 exp_gain = (int(goods_info["mix_exp"]) + int(main_exp)) * exp_count
-                records[record_key] = {"name": goods_info["name"], "num": now_num + num}
+                records[record_key] = {
+                    "name": goods_info["name"],
+                    "num": now_num + reward_quantity,
+                }
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
                 operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
@@ -737,7 +743,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     furnace_id=furnace_id,
                     reward_id=int(id),
                     reward_name=str(goods_info["name"]),
-                    reward_quantity=int(num),
+                    reward_quantity=reward_quantity,
                 )
                 started = _mixelixir_result(outcome)
                 started.task_id = str(getattr(started, "task_id", ""))

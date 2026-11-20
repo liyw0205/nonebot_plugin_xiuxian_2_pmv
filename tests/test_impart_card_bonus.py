@@ -135,6 +135,27 @@ class CardBonusRefreshTests(unittest.TestCase):
                 self.assertAlmostEqual(new_value, 1.3)
                 self.assertAlmostEqual(legacy_value, 1.3)
 
+    def test_persisted_bonus_caps_at_25_without_clamping_card_inventory(self):
+        for quantity in (25, 26):
+            with self.subTest(quantity=quantity):
+                with db_backend.transaction(self.db) as conn:
+                    conn.execute(
+                        "UPDATE impart_cards SET quantity=%s WHERE card_name=%s",
+                        (quantity, "攻击卡"),
+                    )
+                    bonuses = refresh_card_bonuses(
+                        conn, "u", self.defs, schema="main"
+                    )
+                with db_backend.connection(self.db) as conn:
+                    stored_quantity = conn.execute(
+                        "SELECT quantity FROM impart_cards WHERE user_id=%s AND card_name=%s",
+                        ("u", "攻击卡"),
+                    ).fetchone()[0]
+
+                self.assertEqual(stored_quantity, quantity)
+                self.assertAlmostEqual(bonuses["impart_atk_per"], 1.3)
+                self.assertAlmostEqual(self.bonuses()[0], 1.3)
+
     def test_legacy_recalculation_uses_half_weight_for_duplicate_cards(self):
         data_manager = Mock()
         data_manager.data_person_list.return_value = {"攻击卡": 2}

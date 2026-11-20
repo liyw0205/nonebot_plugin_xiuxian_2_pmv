@@ -1383,6 +1383,87 @@ def register(case):
         probe.evidence.update(status_read=True, readonly=True)
 
     @case(
+        "cultivation-half-card-count-boundary",
+        "双修",
+        "剩余上限为半次时拒绝执行",
+        "双方真实角色与隔离数据；发起方有0.5传承次数加成且已用完整数上限",
+        "不得把半次额度当成可执行次数或在range中抛出TypeError；无结算写入",
+        group="remaining-player-parameters",
+        outcome="rejection",
+    )
+    async def cultivation_half_card_count_boundary(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
+
+        game, player = probe.context.paths.game_db, probe.context.paths.player_db
+        probe.player(exp=500)
+        probe.player("900002", exp=300)
+        for uid in ("900001", "900002"):
+            probe.impart(uid)
+            partner.two_exp_cd.find_user(uid)
+        probe.impart("900001", impart_two_exp=0.5)
+        limit = int(partner.two_exp_limit)
+        probe.seed(
+            player,
+            "UPDATE partner_two_exp_usage SET used_count=? WHERE user_id='900001'",
+            (limit,),
+        )
+        probe.seed(
+            player,
+            "INSERT INTO status(user_id,two_exp_protect) VALUES('900002','off') "
+            "ON CONFLICT(user_id) DO UPDATE SET two_exp_protect='off'",
+        )
+        exp_sql = "SELECT user_id,exp FROM user_xiuxian WHERE user_id IN ('900001','900002') ORDER BY user_id"
+        usage_sql = "SELECT user_id,used_count FROM partner_two_exp_usage ORDER BY user_id"
+        before_exp = probe.rows(game, exp_sql)
+        before_usage = probe.rows(player, usage_sql)
+        remaining = await probe.command("我的双修次数", "我的双修次数", number=969999)
+
+        text = await probe.command(
+            "双修", "双修 诊断对手", number=970000, allow_exception=True
+        )
+
+        assert "剩余双修次数0次" in remaining, remaining
+        assert probe.calls[-1]["status"] == "pass", probe.calls[-1]
+        assert "今日双修次数已用尽" in text, text
+        assert probe.rows(game, exp_sql) == before_exp
+        assert probe.rows(player, usage_sql) == before_usage
+        assert probe.rows(game, "SELECT operation_id FROM partner_cultivation_operations") == []
+
+        probe.seed(
+            player,
+            "UPDATE partner_two_exp_usage SET used_count=0 WHERE user_id='900001'",
+        )
+        probe.seed(
+            player,
+            "UPDATE partner_two_exp_usage SET used_count=? WHERE user_id='900002'",
+            (limit,),
+        )
+        probe.impart("900002", impart_two_exp=0.5)
+        probe.seed(
+            player,
+            "UPDATE status SET two_exp_protect='on' WHERE user_id='900002'",
+        )
+        target_exp = probe.rows(game, exp_sql)
+        target_usage = probe.rows(player, usage_sql)
+        probe.clear_cooldowns()
+        invite_text = await probe.command(
+            "双修", "双修 诊断对手", number=970001
+        )
+        assert "今日双修次数已用尽" in invite_text, invite_text
+        assert probe.rows(game, exp_sql) == target_exp
+        assert probe.rows(player, usage_sql) == target_usage
+        assert probe.rows(player, "SELECT status FROM partner_cultivation_invites") == []
+        assert probe.rows(game, "SELECT operation_id FROM partner_cultivation_operations") == []
+        probe.evidence.update(
+            actor_raw_remaining=0.5,
+            target_raw_remaining=0.5,
+            executable_remaining=0,
+            exp_unchanged=True,
+            usage_unchanged=True,
+            no_receipt=True,
+        )
+
+    @case(
         "partner-protection-enable",
         "双修保护",
         "开启",

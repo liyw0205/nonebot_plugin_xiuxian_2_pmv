@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime, timezone
 
 from ...core.numeric import as_int_like
@@ -20,6 +21,17 @@ def _is_none_like(value):
 def safe_int(value, default=0):
     """Use the same integer interpretation as normalized database snapshots."""
     return as_int_like(value, default)
+
+
+def whole_count_limit(base_limit, impart_bonus=0, buff_bonus=0):
+    """Floor the combined limit once, after fractional bonuses are summed."""
+    return math.floor(base_limit + impart_bonus + buff_bonus)
+
+
+def remaining_whole_count(base_limit, impart_bonus=0, buff_bonus=0, used_count=0):
+    """Return executable uses after summing fractional count bonuses."""
+    whole_limit = whole_count_limit(base_limit, impart_bonus, buff_bonus)
+    return max(whole_limit - int(used_count), 0)
 
 
 def _normalize_id_list(value):
