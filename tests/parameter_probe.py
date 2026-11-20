@@ -456,6 +456,10 @@ from tests.parameter_cases_dungeon_shop import register as register_dungeon_shop
 
 register_dungeon_shop(case)
 
+from tests.parameter_cases_title_unlock import register as register_title_unlock
+
+register_title_unlock(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

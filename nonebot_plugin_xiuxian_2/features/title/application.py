@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from ...core.player_reasons import reason_text
 
 from pathlib import Path
@@ -11,7 +13,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.observability import trace_context
 from .domain import TitleTransactionResult
-from .repository import TitleEquipmentWriteRejected, TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleRepository
+from .repository import TitleBatchUnlockWriteRejected, TitleEquipmentWriteRejected, TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleRepository
 
 
 class TitleApplication:
@@ -63,6 +65,7 @@ class TitleApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
+                    unlock_reservation = self.ledger.get(uow, operation_id, ledger_action) if action == "unlock_batch" else None
                     result = self._dispatch(uow, action, operation_id, user_id, request)
                     data = result.to_dict()
                     if result.status in {"applied", "duplicate", "already_equipped"}:
@@ -103,11 +106,25 @@ class TitleApplication:
                     equipment = None
                     if action in {"equip", "unequip"} and result.succeeded:
                         equipment = self.repository.equipment_projection(uow, user_id, operation_id)
+                    unlock_projection = self.repository.equipment_projection(uow, user_id, operation_id) if action == "unlock_batch" and result.succeeded else None
                     self.ledger.finish(uow, outcome)
                     if equipment is not None:
                         self.repository.verify_equipment_projection(
                             uow, user_id, operation_id, equipment, result.title_id,
                         )
+                    if unlock_projection is not None:
+                        self.repository.verify_unlock_projection(uow, user_id, operation_id, unlock_projection, result.title_id)
+                        saved = self.ledger.get(uow, operation_id, ledger_action)
+                        try:
+                            saved_result = json.loads(saved.result_json or "null") if saved is not None else None
+                        except (TypeError, ValueError):
+                            saved_result = None
+                        if (saved is None or unlock_reservation is None
+                                or saved.request_hash != unlock_reservation.request_hash
+                                or saved.created_at != unlock_reservation.created_at
+                                or saved.status != outcome.status
+                                or saved_result != json.loads(json.dumps(outcome.to_dict(), default=str))):
+                            raise TitleBatchUnlockWriteRejected("title_batch_unlock_ledger_projection_mismatch", result.title_id)
                     return outcome
             except OperationConflictError:
                 return OperationOutcome.rejected(
@@ -119,7 +136,7 @@ class TitleApplication:
                     audit_category="title",
                     clock=self.clock,
                 )
-            except TitleEquipmentWriteRejected as exc:
+            except (TitleEquipmentWriteRejected, TitleBatchUnlockWriteRejected) as exc:
                 return OperationOutcome.failed(
                     operation_id, ledger_action, reason_text(exc.code), code=exc.code,
                     data={"status": "failed", "title_id": exc.details["subject"],
@@ -129,7 +146,7 @@ class TitleApplication:
             except DomainError:
                 raise
             except Exception as exc:
-                failure_payload = ledger_request if action in {"equip", "unequip"} else request
+                failure_payload = ledger_request if action in {"equip", "unequip", "unlock_batch"} else request
                 self.ledger.record_failure(self.database, operation_id, ledger_action, failure_payload, str(exc))
                 raise
 

@@ -33,6 +33,7 @@ from .title_data import (
     get_title_condition_snapshot,
 )
 from ...paths import get_paths
+from ...core.errors import DomainError
 from ...features.title.application import TitleApplication, TitleGrantTargetApplication
 from ...features.title.eligibility import TitleEligibilityApplication
 from .title_transaction_service import TitleTransactionService
@@ -112,8 +113,20 @@ def _unlock_titles_from_event(event, user_id: str):
         title_ids=title_ids,
     )
     if not result.succeeded:
-        return [], expected, snapshot
+        reason = getattr(result, "reason", "") or result.status
+        raise DomainError(reason, reason, {"reason": reason, "subject": getattr(result, "subject", "") or getattr(result, "title_id", "")})
     return unlockable, [*expected, *title_ids], snapshot
+
+
+_UNLOCK_REJECTIONS = tuple(f"title_batch_unlock_{step}_{failure}" for step in ("state", "receipt")
+                           for failure in ("write_rejected", "projection_mismatch")) + (
+    "title_batch_unlock_ledger_projection_mismatch", "title_unlocked_changed", "operation_conflict",
+)
+
+
+def _unlock_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    return {subject: f"称号【{subject}】"} if subject else {}
 
 # ===== 注册命令 =====
 title_list_cmd = on_command("我的称号", aliases={"称号列表", "查看称号"}, priority=5, block=True)
@@ -167,6 +180,7 @@ def _format_achievement_record(record: dict) -> str:
 
 
 @title_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("我的称号", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看我的称号（分页）"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -344,6 +358,7 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
 
 @title_check_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("检查称号", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """手动检查可解锁称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -368,6 +383,7 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
 
 @achievement_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("我的成就", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看称号成就进度"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -419,6 +435,7 @@ async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
 
 @achievement_check_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("检查成就", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def achievement_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """手动检查成就称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
