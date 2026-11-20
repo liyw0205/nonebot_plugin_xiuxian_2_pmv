@@ -1,13 +1,27 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardComposeService
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.transaction_service import CardDisassembleService
-from nonebot_plugin_xiuxian_2.features.impart.card_bonus import BONUS_FIELDS, refresh_card_bonuses
+from nonebot_plugin_xiuxian_2.features.impart.card_bonus import (
+    BONUS_FIELDS,
+    calculate_card_bonuses,
+    refresh_card_bonuses,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.card_bonus import (
+    calculate_card_bonuses as calculate_legacy_card_bonuses,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.impart_uitls import (
+    format_impart_percent,
+    get_impart_card_description,
+    re_impart_data,
+)
 from nonebot_plugin_xiuxian_2.features.impart.migrations import (
     apply_impart_card_operations,
     apply_impart_exact_crystal_balances,
@@ -42,14 +56,113 @@ class CardBonusRefreshTests(unittest.TestCase):
     def test_compose_refreshes_bonus_in_same_transaction(self):
         result = CardComposeService(self.db).compose("compose", "u", "攻击卡", "气血卡", 9, 4, 5, self.defs)
         self.assertTrue(result.succeeded)
-        self.assertEqual(self.bonuses(), (0.1, 0.4))
+        self.assertAlmostEqual(self.bonuses()[0], 0.25)
+        self.assertAlmostEqual(self.bonuses()[1], 0.6)
 
     def test_disassemble_refreshes_bonus_in_same_transaction(self):
         with db_backend.transaction(self.db) as conn:
             conn.execute("UPDATE impart_cards SET quantity=6 WHERE card_name=%s", ("攻击卡",))
         result = CardDisassembleService(self.db).disassemble("split", "u", "攻击卡", 1, 6, 0, 2, self.defs)
         self.assertTrue(result.succeeded)
-        self.assertEqual(self.bonuses(), (0.2, 0.2))
+        self.assertAlmostEqual(self.bonuses()[0], 0.3)
+        self.assertAlmostEqual(self.bonuses()[1], 0.5)
+
+    def test_first_copy_is_full_and_second_copy_is_half_in_persisted_state(self):
+        for quantity, expected in ((1, 0.1), (2, 0.15)):
+            with self.subTest(quantity=quantity):
+                with db_backend.transaction(self.db) as conn:
+                    conn.execute(
+                        "UPDATE impart_cards SET quantity=%s WHERE card_name=%s",
+                        (quantity, "攻击卡"),
+                    )
+                    bonuses = refresh_card_bonuses(
+                        conn, "u", self.defs, schema="main"
+                    )
+                self.assertAlmostEqual(bonuses["impart_atk_per"], expected)
+                self.assertAlmostEqual(self.bonuses()[0], expected)
+
+    def test_persisted_half_bonus_reaches_final_combat_attributes(self):
+        with db_backend.transaction(self.db) as conn:
+            conn.execute(
+                "UPDATE impart_cards SET quantity=%s WHERE card_name=%s",
+                (2, "攻击卡"),
+            )
+            refresh_card_bonuses(conn, "u", self.defs, schema="main")
+
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
+            _int_after_float_math,
+            get_final_attributes,
+        )
+
+        self.assertEqual(_int_after_float_math(114.99999999999999), 115)
+        self.assertEqual(_int_after_float_math(114.9), 114)
+
+        base = {
+            "user_id": "u",
+            "nickname": "测试玩家",
+            "level": "江湖好手",
+            "exp": 1000,
+            "base_hp": 500,
+            "base_mp": 500,
+            "base_atk": 100,
+            "atkpractice": 0,
+            "hppractice": 0,
+            "mppractice": 0,
+        }
+        attributes = get_final_attributes(
+            "u",
+            base_provider=lambda _user_id: base,
+            buff_info_provider=lambda _user_id: {},
+            item_provider=lambda _item_id: {},
+            impart_provider=lambda _user_id: {
+                "impart_atk_per": self.bonuses()[0]
+            },
+            accessory_provider=lambda _user_id: {"equipped": {}},
+            tianti_provider=lambda _user_id: {},
+        )
+
+        self.assertEqual(attributes["final_atk"], 115)
+
+    def test_new_and_legacy_calculators_keep_the_25_card_cap(self):
+        definition = {"攻击卡": {"type": "impart_atk_per", "vale": 0.1}}
+        for quantity in (25, 26):
+            with self.subTest(quantity=quantity):
+                cards = {"攻击卡": quantity}
+                new_value = calculate_card_bonuses(cards, definition)["impart_atk_per"]
+                legacy_value = calculate_legacy_card_bonuses(cards, definition)[
+                    "impart_atk_per"
+                ]
+                self.assertAlmostEqual(new_value, 1.3)
+                self.assertAlmostEqual(legacy_value, 1.3)
+
+    def test_legacy_recalculation_uses_half_weight_for_duplicate_cards(self):
+        data_manager = Mock()
+        data_manager.data_person_list.return_value = {"攻击卡": 2}
+        data_manager.data_all_.return_value = self.defs
+        manager = Mock()
+        with (
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.impart_uitls._impart_data_manager",
+                return_value=data_manager,
+            ),
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart.impart_uitls._impart_manager",
+                return_value=manager,
+            ),
+        ):
+            self.assertTrue(asyncio.run(re_impart_data("u")))
+        self.assertAlmostEqual(
+            manager.update_impart_atk_per.call_args.args[0], 0.15
+        )
+        self.assertEqual(manager.update_impart_atk_per.call_args.args[1], "u")
+
+    def test_half_card_bonus_is_visible_in_percentage_and_card_description(self):
+        self.assertEqual(format_impart_percent(0.025), "2.5%")
+        self.assertEqual(format_impart_percent(0.1), "10%")
+        self.assertEqual(
+            get_impart_card_description("连翘"),
+            "闭关经验提升：首张+5%，重复卡每张+2.5%",
+        )
 
     def test_legacy_duplicate_player_rows_refresh_only_effective_row(self):
         bonus_columns = ",".join(f'"{field}" REAL' for field in BONUS_FIELDS)
@@ -70,7 +183,7 @@ class CardBonusRefreshTests(unittest.TestCase):
             ).fetchall()
 
         self.assertEqual(
-            [tuple(map(float, row)) for row in rows], [(0.2, 0.2), (0.7, 0.9)]
+            [tuple(map(float, row)) for row in rows], [(0.5, 0.5), (0.7, 0.9)]
         )
 
     def test_bonus_failure_rolls_back_card_change(self):

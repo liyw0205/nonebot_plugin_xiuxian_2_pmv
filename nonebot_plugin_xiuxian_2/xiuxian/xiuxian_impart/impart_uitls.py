@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy
 from ...paths import get_paths
 from .impart_all import impart_all
+from .card_bonus import BONUS_FIELDS, calculate_card_bonuses
 
 img_path = get_paths().data / "卡图"
 
@@ -60,66 +61,25 @@ async def re_impart_data(user_id):
     card_dict = data_manager.data_person_list(user_id)
     if card_dict is None:
         return False
-    
+
     all_data = data_manager.data_all_()
-    impart_two_exp = 0
-    impart_exp_up = 0
-    impart_atk_per = 0
-    impart_hp_per = 0
-    impart_mp_per = 0
-    boss_atk = 0
-    impart_know_per = 0
-    impart_burst_per = 0
-    impart_mix_per = 0
-    impart_reap_per = 0
-    
-    # 计算加成
-    for card_name, count in card_dict.items():
-        card_data = all_data.get(card_name)
-        if not card_data:
-            continue
-            
-        card_type = card_data["type"]
-        base_value = card_data["vale"]
-        
-        # 计算加成，最多5倍（25张）
-        effective_count = min(count, 25)
-        bonus = base_value * (1 + (effective_count // 5))
-        
-        if card_type == "impart_two_exp":
-            impart_two_exp += bonus
-        elif card_type == "impart_exp_up":
-            impart_exp_up += bonus
-        elif card_type == "impart_atk_per":
-            impart_atk_per += bonus
-        elif card_type == "impart_hp_per":
-            impart_hp_per += bonus
-        elif card_type == "impart_mp_per":
-            impart_mp_per += bonus
-        elif card_type == "boss_atk":
-            boss_atk += bonus
-        elif card_type == "impart_know_per":
-            impart_know_per += bonus
-        elif card_type == "impart_burst_per":
-            impart_burst_per += bonus
-        elif card_type == "impart_mix_per":
-            impart_mix_per += bonus
-        elif card_type == "impart_reap_per":
-            impart_reap_per += bonus
-    
-    # 更新属性
+    bonuses = calculate_card_bonuses(card_dict, all_data)
     manager = _impart_manager()
-    manager.update_impart_two_exp(impart_two_exp, user_id)
-    manager.update_impart_exp_up(impart_exp_up, user_id)
-    manager.update_impart_atk_per(impart_atk_per, user_id)
-    manager.update_impart_hp_per(impart_hp_per, user_id)
-    manager.update_impart_mp_per(impart_mp_per, user_id)
-    manager.update_boss_atk(boss_atk, user_id)
-    manager.update_impart_know_per(impart_know_per, user_id)
-    manager.update_impart_burst_per(impart_burst_per, user_id)
-    manager.update_impart_mix_per(impart_mix_per, user_id)
-    manager.update_impart_reap_per(impart_reap_per, user_id)
-    
+    updates = {
+        "impart_two_exp": "update_impart_two_exp",
+        "impart_exp_up": "update_impart_exp_up",
+        "impart_atk_per": "update_impart_atk_per",
+        "impart_hp_per": "update_impart_hp_per",
+        "impart_mp_per": "update_impart_mp_per",
+        "boss_atk": "update_boss_atk",
+        "impart_know_per": "update_impart_know_per",
+        "impart_burst_per": "update_impart_burst_per",
+        "impart_mix_per": "update_impart_mix_per",
+        "impart_reap_per": "update_impart_reap_per",
+    }
+    for field in BONUS_FIELDS:
+        getattr(manager, updates[field])(bonuses[field], user_id)
+
     return True
 
 async def update_user_impart_data(user_id, time: int):
@@ -141,7 +101,7 @@ def get_image_representation(image_name: str):
     return img_path / f"{image_name}.webp"
 
 def get_impart_card_description(card_name: str) -> str:
-    """根据卡图名称返回其属性加成描述文本，例如：会心提升：5.0%"""
+    """根据卡图名称描述首张与重复卡的属性加成。"""
     card_info = impart_all.get(card_name)
     if not card_info:
         return f"未找到卡图「{card_name}」的属性信息。"
@@ -166,7 +126,29 @@ def get_impart_card_description(card_name: str) -> str:
     if not type_text:
         return f"卡图「{card_name}」的属性类型暂不支持显示。"
     
+    duplicate_value = float(value) / 2
     if card_type in ["impart_two_exp", "impart_reap_per", "impart_mix_per"]:
-        return f"{type_text}：{value}"
-    percent_value = value * 100
-    return f"{type_text}：{percent_value:.1f}%"
+        unit = {
+            "impart_two_exp": "次",
+            "impart_reap_per": "颗",
+            "impart_mix_per": "颗",
+        }[card_type]
+        first_text = _format_number(value)
+        duplicate_text = _format_number(duplicate_value)
+        return (
+            f"{type_text}：首张+{first_text}{unit}，"
+            f"重复卡每张+{duplicate_text}{unit}"
+        )
+    return (
+        f"{type_text}：首张+{format_impart_percent(value)}，"
+        f"重复卡每张+{format_impart_percent(duplicate_value)}"
+    )
+
+
+def _format_number(value) -> str:
+    return f"{float(value):.3f}".rstrip("0").rstrip(".") or "0"
+
+
+def format_impart_percent(value) -> str:
+    """格式化传承属性百分比，保留重复卡产生的小数百分比。"""
+    return f"{_format_number(float(value) * 100)}%"

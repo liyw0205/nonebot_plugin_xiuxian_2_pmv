@@ -67,7 +67,7 @@ class CardBonusMissingUserTests(unittest.TestCase):
         with db_backend.transaction(database) as conn:
             bonuses = refresh_card_bonuses(conn, "u", DEFINITIONS, schema="main")
 
-        self.assertEqual(bonuses["impart_atk_per"], 5 * (1 + 5 // 5))
+        self.assertEqual(bonuses["impart_atk_per"], 15)
         self.assertEqual(bonuses["impart_two_exp"], 0)
         self.assertEqual(set(bonuses), set(BONUS_FIELDS))
 
@@ -80,12 +80,42 @@ class CardBonusMissingUserTests(unittest.TestCase):
                 'SELECT "impart_atk_per","impart_two_exp" FROM xiuxian_impart WHERE user_id=%s',
                 ("u",),
             ).fetchone()
-        self.assertEqual((10, 0), (row[0], row[1]))
+        self.assertEqual((15, 0), (row[0], row[1]))
 
-    def test_pure_calculation_is_unchanged(self) -> None:
-        """玩法上限保留：单卡有效张数封顶 25，加成按每 5 张 +1 档。"""
-        bonuses = calculate_card_bonuses({"攻击卡": 999}, DEFINITIONS)
-        self.assertEqual(5 * (1 + 25 // 5), bonuses["impart_atk_per"])
+    def test_fractional_bonus_survives_legacy_integer_column_affinity(self) -> None:
+        database = _prepare(self.root, with_user=True)
+        with db_backend.transaction(database) as conn:
+            conn.execute(
+                "UPDATE impart_cards SET quantity=%s WHERE user_id=%s AND card_name=%s",
+                (2, "u", "攻击卡"),
+            )
+            refresh_card_bonuses(conn, "u", DEFINITIONS, schema="main")
+        with db_backend.connection(database) as conn:
+            row = conn.execute(
+                'SELECT impart_atk_per FROM xiuxian_impart WHERE user_id=%s',
+                ("u",),
+            ).fetchone()
+        self.assertAlmostEqual(row[0], 7.5)
+
+    def test_first_copy_and_duplicate_copy_weights(self) -> None:
+        self.assertEqual(
+            calculate_card_bonuses({"攻击卡": 1}, DEFINITIONS)["impart_atk_per"],
+            5,
+        )
+        self.assertEqual(
+            calculate_card_bonuses({"攻击卡": 2}, DEFINITIONS)["impart_atk_per"],
+            7.5,
+        )
+
+    def test_zero_copies_give_no_bonus(self) -> None:
+        bonuses = calculate_card_bonuses({"攻击卡": 0}, DEFINITIONS)
+        self.assertEqual(bonuses["impart_atk_per"], 0)
+
+    def test_25_and_26_copies_share_the_preserved_cap(self) -> None:
+        for quantity in (25, 26):
+            with self.subTest(quantity=quantity):
+                bonuses = calculate_card_bonuses({"攻击卡": quantity}, DEFINITIONS)
+                self.assertEqual(bonuses["impart_atk_per"], 65)
 
 
 class EmptyMessageGuardTests(unittest.TestCase):

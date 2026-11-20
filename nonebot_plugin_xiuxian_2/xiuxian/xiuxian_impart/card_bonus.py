@@ -9,6 +9,7 @@ BONUS_FIELDS = (
     "impart_mp_per", "boss_atk", "impart_know_per", "impart_burst_per",
     "impart_mix_per", "impart_reap_per",
 )
+MAX_EFFECTIVE_CARD_QUANTITY = 25
 
 # 虚神界修为乘区成长（非结算硬限速）：卡堆叠收益递减；lv 线性系数低于旧 0.1
 # 目标：closing_exp 抬高后，满卡+活跃 lv 相对普通闭关仍有优势，但不至理论数天破境
@@ -24,8 +25,11 @@ def calculate_card_bonuses(cards, definitions):
         card = definitions.get(card_name)
         if not card or card.get("type") not in bonuses:
             continue
-        effective_count = min(max(int(count), 0), 25)
-        bonuses[card["type"]] += card["vale"] * (1 + effective_count // 5)
+        effective_count = min(max(int(count), 0), MAX_EFFECTIVE_CARD_QUANTITY)
+        if effective_count:
+            bonuses[card["type"]] += card["vale"] * (
+                1 + (effective_count - 1) * 0.5
+            )
     return bonuses
 
 
@@ -77,6 +81,7 @@ def xu_impart_lv_bonus(impart_lv: Any) -> float:
 
 __all__ = [
     "BONUS_FIELDS",
+    "MAX_EFFECTIVE_CARD_QUANTITY",
     "calculate_card_bonuses",
     "refresh_card_bonuses",
     "effective_xu_impart_exp_up",
