@@ -491,6 +491,10 @@ from tests.parameter_cases_title_help import register as register_title_help
 
 register_title_help(case)
 
+from tests.parameter_cases_help_search import register as register_help_search
+
+register_help_search(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
