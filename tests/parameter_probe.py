@@ -436,6 +436,10 @@ from tests.parameter_cases_dungeon_exit import register as register_dungeon_exit
 
 register_dungeon_exit(case)
 
+from tests.parameter_cases_dungeon_status import register as register_dungeon_status
+
+register_dungeon_status(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)

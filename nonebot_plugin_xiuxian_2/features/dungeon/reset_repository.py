@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from ...core.errors import DomainError
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork
 
@@ -219,13 +220,18 @@ class DungeonResetSqlRepository:
             columns = ("dungeon_id","dungeon_name","dungeon_status","current_layer","total_layers","last_reset_date","reset_generation","reset_operation_id")
             row = uow.query_one("SELECT " + ",".join(columns) + " FROM player_dungeon_status WHERE user_id=?", (user_id,))
             values = (str(global_state["dungeon_id"] or ""), str(global_state["dungeon_name"] or ""), "not_started", 0, int(global_state["total_layers"] or 0), str(global_state["date"] or ""), int(global_state["reset_generation"] or 0), str(global_state["reset_operation_id"] or ""))
+            cursor = None
             if row is None:
-                uow.execute("INSERT INTO player_dungeon_status(user_id," + ",".join(columns) + ") VALUES(?" + ",?" * len(columns) + ")", (user_id, *values))
-                row = dict(zip(columns, values))
+                cursor = uow.execute("INSERT INTO player_dungeon_status(user_id," + ",".join(columns) + ") VALUES(?" + ",?" * len(columns) + ")", (user_id, *values))
             elif (str(row["dungeon_id"] or "") != values[0]
                   or str(row["last_reset_date"] or "") != values[5]
                   or int(row["reset_generation"] or 0) != values[6]
                   or str(row["reset_operation_id"] or "") != values[7]):
-                uow.execute("UPDATE player_dungeon_status SET " + ",".join(f"{key}=?" for key in columns) + " WHERE user_id=?", (*values, user_id))
-                row = dict(zip(columns, values))
+                cursor = uow.execute("UPDATE player_dungeon_status SET " + ",".join(f"{key}=?" for key in columns) + " WHERE user_id=?", (*values, user_id))
+            if cursor is not None:
+                if cursor.rowcount != 1:
+                    raise DomainError("dungeon_status_initialization_write_rejected", "dungeon status initialization write rejected", {"subject": user_id})
+                row = uow.query_one("SELECT " + ",".join(columns) + " FROM player_dungeon_status WHERE user_id=?", (user_id,))
+                if row != dict(zip(columns, values)):
+                    raise DomainError("dungeon_status_initialization_projection_mismatch", "dungeon status initialization projection mismatch", {"subject": user_id})
             return {**row, "current_layer": int(row["current_layer"] or 0), "total_layers": int(row["total_layers"] or 0), "reset_generation": int(row["reset_generation"] or 0)}

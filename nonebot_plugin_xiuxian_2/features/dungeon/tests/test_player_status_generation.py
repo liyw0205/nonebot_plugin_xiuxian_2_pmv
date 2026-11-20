@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....core.errors import DomainError
 from ..migrations import apply_dungeon_explore_player_schema
 from ..reset_repository import DungeonResetSqlRepository
 
@@ -50,6 +52,57 @@ class DungeonPlayerStatusGenerationTests(unittest.TestCase):
                 with DatabaseUnitOfWork(repository.database, read_only=True) as uow:
                     self.assertEqual(uow.query_one("SELECT * FROM player_dungeon_status WHERE user_id='player'"),
                                      {"user_id": "player", **actual})
+
+    def test_initialization_write_failures_roll_back_and_recover(self):
+        for missing, timing, body, reason in (
+            (True, "BEFORE INSERT", "SELECT RAISE(IGNORE)", "write_rejected"),
+            (True, "AFTER INSERT", "UPDATE player_dungeon_status SET dungeon_name='changed' WHERE user_id=NEW.user_id", "projection_mismatch"),
+            (False, "BEFORE UPDATE", "SELECT RAISE(IGNORE)", "write_rejected"),
+            (False, "AFTER UPDATE", "UPDATE player_dungeon_status SET current_layer=99 WHERE user_id=NEW.user_id", "projection_mismatch"),
+        ):
+            with self.subTest(missing=missing, reason=reason), tempfile.TemporaryDirectory() as directory:
+                repository = self.prepare(directory)
+                initial = repository.ensure_player_status("player")
+                repository.ensure_player_status("other")
+                with DatabaseUnitOfWork(repository.database) as uow:
+                    if missing:
+                        uow.execute("DELETE FROM player_dungeon_status WHERE user_id='player'")
+                    else:
+                        uow.execute("UPDATE player_dungeon_status SET dungeon_status='exploring',current_layer=2,reset_generation=0 WHERE user_id='player'")
+                    before = uow.query_all("SELECT * FROM player_dungeon_status ORDER BY user_id")
+                    uow.execute(f"CREATE TRIGGER status_fault {timing} ON player_dungeon_status WHEN NEW.user_id='player' BEGIN "
+                                f"UPDATE player_dungeon_status SET current_layer=99 WHERE user_id='other'; {body}; END")
+                with self.assertRaises(DomainError) as caught:
+                    repository.ensure_player_status("player")
+                self.assertEqual(caught.exception.code, "dungeon_status_initialization_" + reason)
+                self.assertEqual(caught.exception.details["subject"], "player")
+                with DatabaseUnitOfWork(repository.database) as uow:
+                    self.assertEqual(uow.query_all("SELECT * FROM player_dungeon_status ORDER BY user_id"), before)
+                    uow.execute("DROP TRIGGER status_fault")
+                self.assertEqual(repository.ensure_player_status("player"), initial)
+                self.assertEqual(repository.ensure_player_status("player"), initial)
+
+    def test_initialization_abort_keeps_exception_and_rolls_back(self):
+        for missing, timing in ((True, "BEFORE INSERT"), (False, "BEFORE UPDATE")):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                repository = self.prepare(directory)
+                initial = repository.ensure_player_status("player")
+                repository.ensure_player_status("other")
+                with DatabaseUnitOfWork(repository.database) as uow:
+                    if missing:
+                        uow.execute("DELETE FROM player_dungeon_status WHERE user_id='player'")
+                    else:
+                        uow.execute("UPDATE player_dungeon_status SET reset_generation=0 WHERE user_id='player'")
+                    before = uow.query_all("SELECT * FROM player_dungeon_status ORDER BY user_id")
+                    uow.execute(f"CREATE TRIGGER status_abort {timing} ON player_dungeon_status WHEN NEW.user_id='player' BEGIN "
+                                "UPDATE player_dungeon_status SET current_layer=99 WHERE user_id='other'; "
+                                "SELECT RAISE(ABORT,'isolated status initialization abort'); END")
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "isolated status initialization abort"):
+                    repository.ensure_player_status("player")
+                with DatabaseUnitOfWork(repository.database) as uow:
+                    self.assertEqual(uow.query_all("SELECT * FROM player_dungeon_status ORDER BY user_id"), before)
+                    uow.execute("DROP TRIGGER status_abort")
+                self.assertEqual(repository.ensure_player_status("player"), initial)
 
 
 if __name__ == "__main__":

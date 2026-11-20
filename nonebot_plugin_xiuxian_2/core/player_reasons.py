@@ -615,6 +615,8 @@ REASONS = {
     "bound_count_changed": "道具绑定数量与选择时不一致，请查看背包后重新操作。",
     "activity_type_changed": "角色当前进行的活动与发起时不一致，请查看当前活动。",
     "dungeon_record_missing": "角色副本记录缺失，请重新打开副本信息完成初始化。",
+    "dungeon_status_initialization_write_rejected": "副本状态初始化保存失败，本次初始化已撤销，请联系管理员核对角色副本记录后重试。",
+    "dungeon_status_initialization_projection_mismatch": "副本状态初始化结果与当前副本不一致，本次初始化已撤销，请联系管理员核对角色副本记录后重试。",
     "dungeon_exit_state_write_rejected": "退出副本状态保存失败，本次退出已撤销，原进度保留，请联系管理员核对。",
     "dungeon_exit_state_projection_mismatch": "退出副本后的状态与原进度不一致，本次退出已撤销，请联系管理员核对。",
     "dungeon_exit_receipt_write_rejected": "退出副本回执保存失败，本次退出已撤销，原进度保留，请联系管理员核对。",

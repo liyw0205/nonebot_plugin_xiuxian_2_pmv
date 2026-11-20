@@ -1890,6 +1890,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 # 我的副本状态
 # =========================
 @dungeon_status.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的副本状态", known_rejections=("dungeon_status_initialization_write_rejected", "dungeon_status_initialization_projection_mismatch"))
 async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
