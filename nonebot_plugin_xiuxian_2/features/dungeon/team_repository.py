@@ -1419,10 +1419,15 @@ class DungeonTeamRepository:
             if not self._table_ready(
                 uow,
                 "dungeon_team_invites",
-                {"invite_id", "team_id", "inviter_id", "invitee_id", "group_id", "created_at", "expires_at", "status"},
+                {"invite_id", "team_id", "inviter_id", "invitee_id", "group_id", "created_at", "expires_at", "status", "consumed_at"},
             ):
                 return None
-            row = uow.query_one("SELECT invite_id,team_id,inviter_id,invitee_id,group_id,created_at,expires_at,status FROM dungeon_team_invites WHERE invitee_id=? AND status='pending' AND expires_at>? ORDER BY created_at DESC LIMIT 1", (str(user_id), float(now_timestamp)))
+            row = uow.query_one(
+                "SELECT invite_id,team_id,inviter_id,invitee_id,group_id,created_at,expires_at,status "
+                "FROM dungeon_team_invites WHERE invitee_id=? AND status='pending' "
+                "AND consumed_at IS NULL AND expires_at>? ORDER BY created_at DESC LIMIT 1",
+                (str(user_id), float(now_timestamp)),
+            )
         return None if row is None else self._invite_snapshot(row)
 
 

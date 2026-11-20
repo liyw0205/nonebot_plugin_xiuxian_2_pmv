@@ -80,7 +80,18 @@ class DungeonPendingInviteViewTests(unittest.TestCase):
         self.insert(invite_id="consumed", consumed_at="2026-10-29 00:00:00")
         self.insert(invite_id="other", invitee="someone-else")
 
-        self.assertIsNone(self.repository.pending_invite("member", 200.0))
+        self.assertIsNone(self.repository.pending_invite("member", 150.0))
+
+    def test_newer_consumed_invite_does_not_hide_older_live_invite(self) -> None:
+        self.insert(invite_id="live")
+        self.insert(invite_id="consumed", consumed_at="2026-10-29 00:00:00")
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute("UPDATE dungeon_team_invites SET created_at=110 WHERE invite_id='consumed'")
+
+        invite = self.repository.pending_invite("member", 150.0)
+
+        self.assertIsNotNone(invite)
+        self.assertEqual(invite.invite_id, "live")
 
     def test_missing_table_and_missing_database_return_none_without_ddl(self) -> None:
         missing_table = Path(self.temp.name) / "empty.db"
@@ -98,6 +109,18 @@ class DungeonPendingInviteViewTests(unittest.TestCase):
                     "AND name='dungeon_team_invites'"
                 )
             )
+
+    def test_schema_without_consumption_column_fails_closed_without_ddl(self) -> None:
+        database = Path(self.temp.name) / "partial.db"
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute("CREATE TABLE dungeon_team_invites(invite_id TEXT,team_id TEXT,inviter_id TEXT,"
+                        "invitee_id TEXT,group_id TEXT,created_at REAL,expires_at REAL,status TEXT)")
+            uow.execute("INSERT INTO dungeon_team_invites VALUES('i','t','leader','member','g',100,200,'pending')")
+
+        self.assertIsNone(DungeonTeamRepository(database).pending_invite("member", 150.0))
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            self.assertNotIn("consumed_at", [row["name"] for row in uow.query_all("PRAGMA table_info(dungeon_team_invites)")])
+            self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM dungeon_team_invites"), {"n": 1})
 
     def test_application_delegates_pending_invite(self) -> None:
         calls = []
