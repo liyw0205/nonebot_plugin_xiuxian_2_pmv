@@ -146,6 +146,65 @@ def _fmt_dt(dt: datetime):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _harvest_snapshot_from_receipt(user_id: str, operation_id: str, receipt: dict):
+    try:
+        payload = json.loads(str(receipt.get("payload") or ""))
+        rewards = json.loads(str(receipt.get("rewards") or "[]"))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, list) or not payload or str(payload[0]) != str(user_id):
+        return None
+    if len(payload) == 2 and isinstance(payload[1], list):
+        expected_slots, slot_numbers, reward_rows, failed_slots = [], payload[1], [], []
+    elif len(payload) in {4, 5}:
+        _, expected_slots, slot_numbers, reward_rows, *failed = payload
+        failed_slots = failed[0] if failed else []
+    else:
+        return None
+    if not all(isinstance(value, list) for value in (expected_slots, slot_numbers, reward_rows)):
+        return None
+    if not isinstance(failed_slots, list) or not isinstance(rewards, list):
+        return None
+    names = {}
+    reward_items = []
+    try:
+        slot_numbers = [int(number) for number in slot_numbers]
+        for row in reward_rows:
+            if not isinstance(row, list) or len(row) != 4:
+                return None
+            names[int(row[0])] = (str(row[1]), str(row[2]))
+        for row in rewards:
+            if not isinstance(row, list) or len(row) != 2:
+                return None
+            item_id, amount = int(row[0]), int(row[1])
+            definition = items.get_data_by_item_id(item_id) if item_id not in names else {}
+            name, item_type = names.get(item_id, (
+                (definition or {}).get("name", f"物品{item_id}"),
+                (definition or {}).get("type", "物品"),
+            ))
+            reward_items.append({"id": item_id, "name": name, "type": item_type, "amount": amount})
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return {
+        "expected_slots": expected_slots,
+        "slot_numbers": slot_numbers,
+        "items": reward_items,
+        "failed_slots": failed_slots,
+        "operation_id": operation_id,
+    }
+
+
+def _harvest_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"plant_slots": "灵田状态", "harvest_snapshot": "收获方案",
+             "receipt": "收获回执", "outbox": "收获补偿事件"}.get(subject, "")
+    if subject.startswith("item:"):
+        item_id = subject.removeprefix("item:")
+        definition = items.get_data_by_item_id(item_id) or {}
+        label = definition.get("name", f"物品{item_id}")
+    return {subject: label}
+
+
 def _parse_dt(s: str):
     if not s:
         return None
@@ -647,7 +706,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_harvest.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:harvest")])
-@guard_command("洞府收获")
+@guard_command("洞府收获", known_rejections=(
+    "harvest_snapshot_write_rejected", "harvest_snapshot_projection_mismatch",
+    "dongfu_harvest_state_write_rejected", "dongfu_harvest_state_projection_mismatch",
+    "dongfu_harvest_inventory_write_rejected", "dongfu_harvest_inventory_projection_mismatch",
+    "dongfu_harvest_receipt_write_rejected", "dongfu_harvest_receipt_projection_mismatch",
+    "dongfu_harvest_outbox_write_rejected", "dongfu_harvest_outbox_projection_mismatch",
+), subjects=_harvest_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -656,6 +721,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id:
+        receipt = dongfu_application.operation_receipt("harvest", operation_id)
+        if receipt is not None:
+            snapshot = _harvest_snapshot_from_receipt(uid, operation_id, receipt)
+            if snapshot is None:
+                await handle_send(bot, event, "洞府收获回执数据异常，请联系管理员核查收获记录。")
+                return
+            result = dongfu_application.harvest(
+                operation_id=operation_id,
+                user_id=uid,
+                expected_slots=snapshot["expected_slots"],
+                slot_numbers=snapshot["slot_numbers"],
+                rewards=snapshot["items"],
+                max_goods_num=XiuConfig().max_goods_num,
+                settled_at=_fmt_dt(_now()),
+                failed_slots=snapshot["failed_slots"],
+            )
+            if result.status == "duplicate":
+                lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
+                lines.extend(
+                    f"- {item['name']} x{item['amount']}" for item in snapshot["items"]
+                )
+                lines.append("该收获请求已经处理，无需重复提交。")
+                if result.effects_pending:
+                    lines.append("统计与任务进度正在补偿。")
+                await handle_send(bot, event, "\n".join(lines))
+            elif not result.succeeded:
+                await handle_send(bot, event, result_failure("灵田收获", result))
+            return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -693,8 +792,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         else:
             wait_lines.append(f"{slot.get('slot')}号灵田状态异常，无法收获。")
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
     snapshot = None
     raw_snapshot = d.get("harvest_settlement", "")
     if raw_snapshot:

@@ -86,6 +86,53 @@ class DongfuHarvestSqlRepository:
         }
         return expected.issubset(columns)
 
+    @staticmethod
+    def _reject(reason, subject):
+        raise DomainError(reason, reason, {"reason": reason, "subject": subject})
+
+    @classmethod
+    def _verify_state(cls, uow, user_id, expected, reason, subject):
+        row = uow.query_one(
+            "SELECT " + ",".join(expected) + " FROM player_data.dongfu_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None or any(row[key] != value for key, value in expected.items()):
+            cls._reject(reason, subject)
+
+    @classmethod
+    def _verify_inventory(cls, uow, user_id, expected):
+        for item_id, values in expected.items():
+            row = uow.query_one(
+                "SELECT goods_name,goods_type,goods_num,bind_num,create_time,update_time "
+                "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id),
+            )
+            if row is None or tuple(row.values()) != values:
+                cls._reject("dongfu_harvest_inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id, payload, compact):
+        row = uow.query_one(
+            "SELECT payload,rewards FROM dongfu_harvest_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None or row["payload"] != payload or row["rewards"] != json.dumps(compact):
+            cls._reject("dongfu_harvest_receipt_projection_mismatch", "receipt")
+
+    def _verify_outbox(self, uow, event_id, user_id, payload):
+        row = self.outbox.get(uow, event_id)
+        try:
+            valid = (
+                row is not None and row["aggregate_type"] == "player"
+                and row["aggregate_id"] == user_id and row["event_type"] == "game_event.projection"
+                and row["status"] == "pending" and row["attempts"] == 0
+                and row["next_attempt_at"] is None
+                and json.loads(row["payload_json"]) == payload
+            )
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            self._reject("dongfu_harvest_outbox_projection_mismatch", "outbox")
+
     def prepare_snapshot(
         self,
         operation_id,
@@ -159,7 +206,12 @@ class DongfuHarvestSqlRepository:
                 ),
             )
             if changed.rowcount != 1:
-                raise DomainError("harvest_snapshot_write_rejected", "harvest snapshot write count mismatch")
+                self._reject("harvest_snapshot_write_rejected", "harvest_snapshot")
+            self._verify_state(uow, user_id, {
+                "built": 1, "plot_count": state["plot_count"], "plant_slots": slot_json,
+                "planting": legacy[0], "plant_seed_id": legacy[1], "plant_start": legacy[2],
+                "plant_finish": legacy[3], "harvest_settlement": self._canonical(snapshot),
+            }, "harvest_snapshot_projection_mismatch", "harvest_snapshot")
             return DongfuHarvestSnapshotResult("prepared", snapshot)
 
     def harvest(self, operation_id, user_id, expected_slots, slot_numbers, rewards, max_goods_num, settled_at, failed_slots=()):
@@ -232,7 +284,7 @@ class DongfuHarvestSqlRepository:
                 if slot_no < 1 or slot_no > len(actual):
                     return DongfuHarvestResult("state_changed", reason="plot_invalid")
                 finish = str(actual[slot_no - 1].get("plant_finish") or "")
-                if not finish or finish > str(settled_at):
+                if not finish or datetime.fromisoformat(finish) > datetime.fromisoformat(str(settled_at)):
                     return DongfuHarvestResult("not_mature")
 
             totals: dict[int, int] = {}
@@ -240,11 +292,14 @@ class DongfuHarvestSqlRepository:
             for item_id, name, item_type, amount in reward_rows:
                 totals[item_id] = totals.get(item_id, 0) + amount
                 metadata[item_id] = (name, item_type)
+            inventory_before = {}
             for item_id, amount in totals.items():
                 item = uow.query_one(
-                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                    "SELECT COALESCE(goods_num,0) AS goods_num,COALESCE(bind_num,0) AS bind_num,create_time "
+                    "FROM back WHERE user_id=? AND goods_id=?",
                     (user_id, item_id),
                 )
+                inventory_before[item_id] = item
                 if (0 if item is None else int(item["goods_num"])) + amount > max_goods_num:
                     return DongfuHarvestResult("inventory_full")
 
@@ -263,12 +318,26 @@ class DongfuHarvestSqlRepository:
                 "UPDATE player_data.dongfu_status SET plant_slots=?,planting=?,plant_seed_id=?,plant_start=?,plant_finish=?,harvest_settlement=? WHERE user_id=?",
                 (self._canonical(actual), *legacy, "", user_id),
             ).rowcount != 1:
-                raise DomainError("plant_write_rejected", "harvest write count mismatch")
+                self._reject("dongfu_harvest_state_write_rejected", "plant_slots")
+            expected_state = {
+                "built": 1, "plant_slots": self._canonical(actual), "planting": legacy[0],
+                "plant_seed_id": legacy[1], "plant_start": legacy[2], "plant_finish": legacy[3],
+                "harvest_settlement": "",
+            }
+            self._verify_state(uow, user_id, expected_state,
+                               "dongfu_harvest_state_projection_mismatch", "plant_slots")
 
             now = self.clock.now().isoformat()
+            expected_inventory = {}
             for item_id, amount in totals.items():
                 name, item_type = metadata[item_id]
-                uow.execute(
+                before = inventory_before[item_id]
+                expected_inventory[item_id] = (
+                    name, item_type, (int(before["goods_num"]) if before else 0) + amount,
+                    (int(before["bind_num"]) if before else 0) + amount,
+                    before["create_time"] if before else now, now,
+                )
+                changed = uow.execute(
                     "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
                     "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
                     "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
@@ -276,39 +345,49 @@ class DongfuHarvestSqlRepository:
                     "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
                     (user_id, item_id, name, item_type, amount, now, now, amount),
                 )
+                if changed.rowcount != 1:
+                    self._reject("dongfu_harvest_inventory_write_rejected", f"item:{item_id}")
+                self._verify_inventory(uow, user_id, expected_inventory)
 
             compact = tuple(sorted(totals.items()))
-            uow.execute(
+            receipt = uow.execute(
                 "INSERT INTO dongfu_harvest_operations(operation_id,payload,rewards) VALUES(?,?,?)",
                 (operation_id, payload, json.dumps(compact)),
             )
+            if receipt.rowcount != 1:
+                self._reject("dongfu_harvest_receipt_write_rejected", "receipt")
+            self._verify_receipt(uow, operation_id, payload, compact)
+            event_payload = {
+                "operation_id": operation_id,
+                "user_id": user_id,
+                "event_key": "dongfu_harvest",
+                "amount": len(slot_numbers),
+                "occurred_at": datetime.fromisoformat(str(settled_at)).isoformat(),
+                "meta": {
+                    "source": "dongfu", "action": "harvest", "trace_id": operation_id,
+                    "item_delta": [
+                        {"id": item_id, "name": name, "type": item_type, "amount": amount}
+                        for item_id, name, item_type, amount in reward_rows
+                    ],
+                    "detail": {"slots": list(slot_numbers), "failed_slots": list(failed_slots)},
+                },
+            }
             self.outbox.append(
                 uow,
                 event_id=effects_event_id,
                 aggregate_type="player",
                 aggregate_id=user_id,
                 event_type="game_event.projection",
-                payload={
-                    "operation_id": operation_id,
-                    "user_id": user_id,
-                    "event_key": "dongfu_harvest",
-                    "amount": len(slot_numbers),
-                    "occurred_at": datetime.fromisoformat(str(settled_at)).isoformat(),
-                    "meta": {
-                        "source": "dongfu",
-                        "action": "harvest",
-                        "trace_id": operation_id,
-                        "item_delta": [
-                            {"id": item_id, "name": name, "type": item_type, "amount": amount}
-                            for item_id, name, item_type, amount in reward_rows
-                        ],
-                        "detail": {
-                            "slots": list(slot_numbers),
-                            "failed_slots": list(failed_slots),
-                        },
-                    },
-                },
+                payload=event_payload,
             )
+            if uow.query_one("SELECT changes() AS count")["count"] != 1:
+                self._reject("dongfu_harvest_outbox_write_rejected", "outbox")
+            self._verify_outbox(uow, effects_event_id, user_id, event_payload)
+            # Receipt/outbox triggers can alter earlier writes in the same transaction.
+            self._verify_state(uow, user_id, expected_state,
+                               "dongfu_harvest_state_projection_mismatch", "plant_slots")
+            self._verify_inventory(uow, user_id, expected_inventory)
+            self._verify_receipt(uow, operation_id, payload, compact)
             return DongfuHarvestResult("harvested", compact, effects_event_id)
 
 

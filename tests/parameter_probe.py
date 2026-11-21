@@ -552,6 +552,10 @@ from tests.parameter_cases_training_purchase import register as register_trainin
 
 register_training_purchase(case)
 
+from tests.parameter_cases_dongfu_harvest import register as register_dongfu_harvest
+
+register_dongfu_harvest(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

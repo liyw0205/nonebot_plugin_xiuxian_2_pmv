@@ -7,9 +7,14 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from ....compatibility.game_event_effects import LegacyGameEventEffects
-from ....infrastructure.database import DatabaseUnitOfWork, OutboxStore
+from ....infrastructure.database import DatabaseUnitOfWork, Migration, MigrationRunner, OutboxStore
 from ....plugin import build_migrations, migrations_for_database
-from ..migrations import apply_game_event_statistics_player
+from ..migrations import (
+    DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION,
+    MIGRATION_VERSION,
+    apply_dongfu_harvest_statistics_player,
+    apply_game_event_statistics_player,
+)
 from ..statistics import GameEventStatisticsRepository
 
 
@@ -55,8 +60,68 @@ class GameEventProjectionTests(unittest.TestCase):
         player = {item.version for item in migrations_for_database(migrations, "player_db")}
         self.assertIn("game_events.001", player)
         self.assertNotIn("game_events.001", game)
+        self.assertIn(DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION, player)
+        self.assertNotIn(DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION, game)
         self.assertIn("pet.004", game)
         self.assertNotIn("pet.004", player)
+
+    def test_harvest_statistic_migration_upgrades_existing_projection(self) -> None:
+        initial = Migration(
+            MIGRATION_VERSION,
+            "game_event_statistics_projection",
+            apply_game_event_statistics_player,
+        )
+        upgrade = Migration(
+            DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION,
+            "dongfu_harvest_statistics_projection",
+            apply_dongfu_harvest_statistics_player,
+        )
+        initial_runner = MigrationRunner((initial,))
+        complete_runner = MigrationRunner((initial, upgrade))
+        with DatabaseUnitOfWork(self.player, immediate=True) as uow:
+            self.assertEqual(initial_runner.apply(uow), [MIGRATION_VERSION])
+            uow.execute(
+                'INSERT INTO statistics(user_id,"宠物游历次数") VALUES(?,?)',
+                ("existing", 4),
+            )
+        with DatabaseUnitOfWork(self.player, immediate=True) as uow:
+            self.assertEqual(
+                complete_runner.apply(uow),
+                [DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION],
+            )
+        with DatabaseUnitOfWork(self.player, immediate=True) as uow:
+            self.assertEqual(complete_runner.apply(uow), [])
+        repository = GameEventStatisticsRepository(self.player)
+        self.assertTrue(
+            repository.record(
+                event_id="dongfu.harvest.effects:op",
+                user_id="existing",
+                increments={"洞府收获": 2},
+                occurred_at="2026-11-21T12:00:00+00:00",
+            )
+        )
+        self.assertFalse(
+            repository.record(
+                event_id="dongfu.harvest.effects:op",
+                user_id="existing",
+                increments={"洞府收获": 2},
+                occurred_at="2026-11-21T12:00:00+00:00",
+            )
+        )
+        with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+            row = uow.query_one(
+                'SELECT "宠物游历次数","洞府收获" FROM statistics WHERE user_id=?',
+                ("existing",),
+            )
+            self.assertEqual((4, 2), tuple(row.values()))
+            self.assertEqual(
+                1,
+                uow.query_one(
+                    "SELECT COUNT(*) AS count FROM game_event_statistics_events "
+                    "WHERE event_id=?",
+                    ("dongfu.harvest.effects:op",),
+                )["count"],
+            )
 
     def test_dispatch_acknowledges_once_and_retries_failed_projection(self) -> None:
         outbox = OutboxStore()

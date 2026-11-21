@@ -19,6 +19,13 @@ No new HTTP route is exposed in this migration slice. Existing URLs remain serve
 ## 事务与失败回滚
 Feature repositories retain per-action operation replay and transactional rollback. Historical service classes are isolated in `compatibility/legacy_dongfu_transactions.py`; `xiuxian/xiuxian_dongfu/transaction_service.py` only re-exports their old names. The default command facade no longer imports or constructs those services. Reverting the code can restore the prior facade wiring; schema rollback is not required for this slice.
 
+`洞府收获 [灵田编号]` 先持久化随机奖励方案，再在同一双库事务内保存清田状态、背包数量/绑定数、永久收获回执和效果 outbox。
+每步核影响行数与实际投影，事务末再次核验；已知拒写/改写保留具体原因和对象并整笔回滚，冻结方案保留供恢复重试。
+成熟判定按解析后的业务时间比较，兼容历史微秒格式。原消息重放先读永久回执，支持旧两字段回执，不受当前灵田已清空或未成熟影响。
+业务提交后的统计/任务失败显示补偿中，并保持 outbox pending；同消息恢复只补效果，不重新随机或发物。
+`game_events.002` 仅向 player DB 增补“洞府收获”统计列，保留已发布 `.001` 与既有统计。
+洞府自身的产出池、施肥、阵法和地脉收益规则不变；传承的灵田加成仍由原有灵田/傀儡消费路径使用，不新增洞府加成或种子奖励。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

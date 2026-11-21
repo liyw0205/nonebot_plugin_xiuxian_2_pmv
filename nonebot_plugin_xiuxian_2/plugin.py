@@ -77,7 +77,10 @@ from .features.pet.migrations import (
     apply_pet_skill_replace,
     apply_pet_travel_claim,
 )
-from .features.game_events.migrations import apply_game_event_statistics_player
+from .features.game_events.migrations import (
+    apply_dongfu_harvest_statistics_player,
+    apply_game_event_statistics_player,
+)
 from .features.sect.manifest import FEATURE as SECT_FEATURE
 from .features.sect.migrations import apply_sect, apply_sect_rename, apply_sect_join, apply_sect_removal, apply_sect_position, apply_sect_donation, apply_sect_shop, apply_sect_mainbuff, apply_sect_secbuff, apply_sect_elixir, apply_sect_weekly, apply_sect_weekly_player, apply_sect_manual_disband
 from .features.sect.migrations import apply_sect_fairyland_upgrade
@@ -468,6 +471,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("economy_ledger.003", "economy_operations", apply_economy_operations),
         Migration("fusion.002", "fusion_operation_tables", apply_fusion_operations),
         Migration("game_events.001", "game_event_statistics_projection", apply_game_event_statistics_player),
+        Migration("game_events.002", "dongfu_harvest_statistics_projection", apply_dongfu_harvest_statistics_player),
         Migration("illusion.001", "illusion_feature_migrations", apply_illusion),
         Migration("illusion.002", "illusion_feature_state_projection", apply_illusion_state),
         Migration("impart.002", "impart_prayer_operations", apply_impart_prayer_operations),
@@ -717,6 +721,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "buff.011",
         "buff.013",
         "game_events.001",
+        "game_events.002",
     }
 )
 _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
@@ -737,6 +742,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "buff.013",
         "buff.017",
         "game_events.001",
+        "game_events.002",
         "platform.001",
         "past_life.002",
         "pet.005",
