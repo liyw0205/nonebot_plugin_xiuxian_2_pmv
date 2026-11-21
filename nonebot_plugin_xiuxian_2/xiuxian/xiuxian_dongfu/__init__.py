@@ -223,6 +223,19 @@ def _accelerate_failure_subjects(exc):
     return {subject: label}
 
 
+def _plant_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = ""
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    elif subject.startswith("item:"):
+        config = SEED_CONFIG.get(_to_int(subject.removeprefix("item:")), {})
+        label = config.get("name", "种子")
+    elif subject == "receipt":
+        label = "种植回执"
+    return {subject: label}
+
+
 def _parse_dt(s: str):
     if not s:
         return None
@@ -647,7 +660,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:plant")])
-@guard_command("洞府种植")
+@guard_command("洞府种植", known_rejections=(
+    "dongfu_plant_inventory_write_rejected", "dongfu_plant_inventory_projection_mismatch",
+    "dongfu_plant_state_write_rejected", "dongfu_plant_state_projection_mismatch",
+    "dongfu_plant_receipt_write_rejected", "dongfu_plant_receipt_projection_mismatch",
+), subjects=_plant_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -656,12 +673,43 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("plant", operation_id) if event_message_id else None
+    if receipt is not None:
+        slot_no, seed_name = _parse_plant_args(args.extract_plain_text())
+        if not seed_name:
+            await handle_send(bot, event, "请指定种子名，例如：洞府种植 青灵草种；也可指定灵田：洞府种植 2 青灵草种")
+            return
+        seed_id = _find_seed_id(seed_name)
+        if seed_id is None:
+            await handle_send(bot, event, f"未识别种子【{seed_name}】。")
+            return
+        parts = str(receipt.get("payload") or "").split("|")
+        recorded_slot = _to_int(parts[1], 0) if len(parts) == 3 else 0
+        if len(parts) != 3 or parts[0] != uid or recorded_slot < 1:
+            await handle_send(bot, event, result_failure("洞府种植", {
+                "reason": "dongfu_plant_receipt_invalid", "subject": "receipt",
+            }, subjects={"receipt": "种植回执"}))
+            return
+        result = dongfu_application.plant(
+            operation_id=operation_id, user_id=uid, expected_slots="[]",
+            slot_no=recorded_slot if slot_no is None else slot_no, seed_id=seed_id,
+            seed_name=seed_name, plant_start="", plant_finish="",
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该种植请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府种植", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
         return
 
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     slot_no, seed_name = _parse_plant_args(args.extract_plain_text())
     if not seed_name:
         await handle_send(bot, event, "请指定种子名，例如：洞府种植 青灵草种；也可指定灵田：洞府种植 2 青灵草种")
@@ -672,8 +720,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"未识别种子【{seed_name}】。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
     slots = _normalize_plant_slots(d)
     if slot_no is None:
         slot = next((s for s in slots if _to_int(s.get("seed_id")) not in SEED_CONFIG), None)
