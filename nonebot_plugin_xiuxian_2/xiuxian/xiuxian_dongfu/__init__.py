@@ -1306,7 +1306,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_expand.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@guard_command("洞府扩建")
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1314,14 +1315,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    raw_levels = args.extract_plain_text().strip()
+    levels = 1
+    if raw_levels:
+        if not raw_levels.isascii() or not raw_levels.isdigit():
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+        try:
+            levels = int(raw_levels)
+        except ValueError:
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+        if levels < 1:
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
-        return
-
-    plot_count = _to_int(d.get("plot_count"), DONGFU_PLOT_COUNT)
-    if plot_count >= DONGFU_PLOT_MAX:
-        await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
 
     operation_id = _dongfu_expansion_operation_id(event, uid)
@@ -1333,21 +1344,34 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         max_plot_count=DONGFU_PLOT_MAX,
         stone_cost_per_level=20000000,
         seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
+        levels=levels,
     )
     if result.status == "deed_insufficient":
-        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
+        await handle_send(bot, event, f"扩建至{result.current_count}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
         return
     if result.status == "stone_insufficient":
-        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要{number_to(result.stone_cost)}灵石。")
+        await handle_send(bot, event, f"扩建至{result.current_count}块灵田需要{number_to(result.stone_cost)}灵石。")
         return
     if result.status == "max_plots":
         await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
+    if result.status == "duplicate":
+        d = _get_dongfu(uid)
+        await handle_send(bot, event, f"该扩建请求已经处理，当前灵田数量为{result.current_count}块。\n{_format_plant_slots(d)}")
+        return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("洞府巡山", result))
+        await handle_send(bot, event, result_failure(
+            "洞府扩建", result,
+            subjects={
+                "stone_wallet": "灵石钱包",
+                "dongfu_status": "洞府状态",
+                "receipt": "扩建回执",
+                f"item:{DONGFU_ITEM_DEED}": "洞府地契",
+            },
+        ))
         return
     d = _get_dongfu(uid)
-    await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
+    await handle_send(bot, event, f"洞府扩建成功，灵田数量从{result.previous_count}块提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
 @visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA, stamina_operation_prefix="dongfu:visit")])
