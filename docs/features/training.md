@@ -67,6 +67,11 @@ The default event path now persists a resolved plan before settlement and uses a
 （`历练商店 灵草 2`），解析与续查走 `docs/features/base.md` 的「列表检索与翻页续查
 （共享合同）」；筛选沿用既有编号排序，不改成就点扣减、周限购或兑换回执。
 
+商店列表只读取历练状态：冷态按零积分和当前周空限购快照展示；旧周或非法限购 JSON
+仅在内存归一化，不创建状态行、不重置持久周数据，也不写初始化/周变更回执。开始历练、
+历练状态和兑换仍使用各自原状态路径。积分放在消息正文中，兼容 OneBot 合并转发不显示
+单独 `title` 参数的行为。
+
 ## Manifest 清单
 - `command: 我的历练记录`
 - `alias: 历练记录`

@@ -270,7 +270,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_shop.finish()
     
     user_id = user_info["user_id"]
-    training_info = training_application.get_state(user_id)
+    training_info = training_application.read_state(user_id)
     weekly_purchases = training_info["weekly_purchases"]
     
     if not shop_items:
@@ -306,7 +306,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     current_page_items = sorted_items[start_idx:end_idx]
     
     title = f"道友目前拥有的历练成就点：{training_info['points']}点"
-    msg_list = []
+    msg_list = [title]
     msg_list.append(f"【历练商店】第{page}/{total_pages}页")
     
     for item_id, item_data in current_page_items:
@@ -328,7 +328,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     page_label = f"{page}/{total_pages}"
     msg_list.append(f"提示：发送 {next_cmd} 查看其他页（共{total_pages}页）")
     page = ["翻页", next_cmd, "状态", "历练状态", "兑换", "历练兑换", page_label]
-    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, title=title, page=page)
+    await send_msg_handler(bot, event, "历练商店", bot.self_id, msg_list, page=page)
     await training_shop.finish()
 
 @training_buy.handle(parameterless=[Cooldown(cd_time=0)])

@@ -251,7 +251,7 @@ class TrainingShopSearchTests(unittest.TestCase):
             patch.object(module.training_data, "config", {"商店商品": shop}),
             patch.object(
                 module.training_application,
-                "get_state",
+                "read_state",
                 lambda uid: {"weekly_purchases": {}, "points": 0},
             ),
             patch.object(module, "_items", lambda: FakeItems(rows)),

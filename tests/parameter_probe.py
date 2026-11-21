@@ -515,6 +515,10 @@ from tests.parameter_cases_tower_shop import register as register_tower_shop
 
 register_tower_shop(case)
 
+from tests.parameter_cases_training_shop import register as register_training_shop
+
+register_training_shop(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

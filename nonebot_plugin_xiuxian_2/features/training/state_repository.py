@@ -69,6 +69,36 @@ class TrainingStateRepository:
                 changed = True
         return weekly, changed
 
+    @classmethod
+    def _state_from_row(cls, row, today: date) -> tuple[dict[str, Any], bool]:
+        result = dict(row)
+        for key in ("progress", "points", "completed", "max_progress"):
+            result[key] = as_int_like(result[key])
+        if result["last_time"]:
+            result["last_time"] = datetime.fromisoformat(str(result["last_time"]))
+        else:
+            result["last_time"] = None
+        weekly, weekly_changed = cls._weekly(result["weekly_purchases"], today)
+        result["weekly_purchases"] = weekly
+        result["last_event"] = str(result["last_event"] or "")
+        return result, weekly_changed
+
+    def read(self, user_id: str, today: date) -> dict[str, Any]:
+        """Return a normalized view without creating rows or advancing weekly state."""
+        user_id = str(user_id).strip()
+        if not user_id:
+            raise ValueError("user_id is required")
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT progress,last_time,points,completed,max_progress,last_event,weekly_purchases "
+                "FROM training WHERE user_id=?",
+                (user_id,),
+            )
+        if row is None:
+            return self._default(today)
+        result, _ = self._state_from_row(row, today)
+        return result
+
     def initialize(self, user_id: str, today: date) -> dict[str, Any]:
         user_id = str(user_id).strip()
         if not user_id:
@@ -80,21 +110,19 @@ class TrainingStateRepository:
                 (user_id,),
             )
             if row is not None:
-                result = dict(row)
-                for key in ("progress", "points", "completed", "max_progress"):
-                    result[key] = as_int_like(result[key])
-                if result["last_time"]:
-                    result["last_time"] = datetime.fromisoformat(str(result["last_time"]))
-                else:
-                    result["last_time"] = None
-                weekly, weekly_changed = self._weekly(result["weekly_purchases"], today)
-                result["weekly_purchases"] = weekly
-                result["last_event"] = str(result["last_event"] or "")
+                result, weekly_changed = self._state_from_row(row, today)
                 if weekly_changed:
                     period_key = self._period_key(today)
                     uow.execute(
                         "UPDATE training SET weekly_purchases=? WHERE user_id=?",
-                        (json.dumps(weekly, ensure_ascii=True, sort_keys=True), user_id),
+                        (
+                            json.dumps(
+                                result["weekly_purchases"],
+                                ensure_ascii=True,
+                                sort_keys=True,
+                            ),
+                            user_id,
+                        ),
                     )
                     uow.execute(
                         "INSERT INTO training_state_operations(operation_id,user_id,kind,period_key,snapshot,created_at) "
