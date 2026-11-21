@@ -33,6 +33,12 @@ Feature repositories retain per-action operation replay and transactional rollba
 发送失败可能发生在业务提交之后，恢复消息投递不得再次扣材料。作物展示将 aware 业务时钟换算到存量 UTC 文本口径，
 不改时间持久化格式或成熟、产出规则。
 
+`洞府催熟 <灵田编号>` 每次仍消耗一份灵息露，基础缩短60分钟，水域额外20分钟，最多提前到当前时刻。
+业务时钟统一为存量 UTC 文本口径，成熟判断按解析后的时间比较，保留已有微秒精度，避免时区混用和同秒误判。
+同一双库事务核验库存数量/绑定数、完整洞府状态（含旧首田字段）与永久回执，并在末步复核前序写入；
+绑定材料优先消耗，保留旧无绑定列 schema 兼容。库存、田地与回执的拒写或改写各自保留具体原因/对象，整笔回滚后原消息可恢复。
+成功回执优先于成熟/清田前置，同消息换田仍冲突；提交后发送失败可重放，不重复扣物或缩短时间，没有新增独立 pending 表。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

@@ -214,6 +214,15 @@ def _fertilize_failure_subjects(exc):
     return {subject: label}
 
 
+def _accelerate_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    else:
+        label = {"item:21005": "灵息露", "receipt": "催熟回执"}.get(subject, "")
+    return {subject: label}
+
+
 def _parse_dt(s: str):
     if not s:
         return None
@@ -1106,7 +1115,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_accelerate.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:accelerate")])
-@guard_command("洞府催熟")
+@guard_command("洞府催熟", known_rejections=(
+    "dongfu_accelerate_inventory_write_rejected", "dongfu_accelerate_inventory_projection_mismatch",
+    "dongfu_accelerate_state_write_rejected", "dongfu_accelerate_state_projection_mismatch",
+    "dongfu_accelerate_receipt_write_rejected", "dongfu_accelerate_receipt_projection_mismatch",
+), subjects=_accelerate_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1115,6 +1128,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id and dongfu_application.operation_receipt("accelerate", operation_id) is not None:
+        slot_no = _parse_slot_no(args.extract_plain_text())
+        if slot_no is None:
+            await handle_send(bot, event, "请指定灵田编号，例如：洞府催熟 1")
+            return
+        result = dongfu_application.accelerate(
+            operation_id=operation_id, user_id=uid, expected_slots="[]", slot_no=slot_no,
+            item_id=DONGFU_ITEM_ACCELERATE, now="", new_finish="",
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该催熟请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府催熟", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1135,10 +1164,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田当前空闲，无法催熟。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
     finish = _parse_dt(slot.get("plant_finish", ""))
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     if not finish:
         await handle_send(bot, event, f"{slot_no}号灵田状态异常，无法催熟。")
         return
@@ -1156,8 +1185,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         expected_slots=expected_slots,
         slot_no=slot_no,
         item_id=DONGFU_ITEM_ACCELERATE,
-        now=_fmt_dt(now),
-        new_finish=_fmt_dt(new_finish),
+        now=now.isoformat(sep=" "),
+        new_finish=new_finish.isoformat(sep=" "),
     )
 
     if result.status == "duplicate":
