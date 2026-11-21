@@ -395,6 +395,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @tianti_medicine_bath.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体药浴",
+    known_rejections=(
+        "tianti_bath_item_write_rejected",
+        "tianti_bath_item_projection_mismatch",
+        "tianti_bath_profile_write_rejected",
+        "tianti_bath_profile_projection_mismatch",
+        "tianti_bath_receipt_write_rejected",
+        "tianti_bath_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -539,7 +550,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     pre_result = result.get("settlement", {})
 
     pre_msg = ""
-    if pre_result["status"] == "ok" and pre_result.get("real_gain", 0) > 0:
+    if pre_result["status"] in {"ok", "settle"} and pre_result.get("real_gain", 0) > 0:
         pre_msg = f"\n药浴前已自动结算炼体气血：{number_to(pre_result['real_gain'])}"
         pre_msg += _format_sect_fairyland_msg(pre_result)
 

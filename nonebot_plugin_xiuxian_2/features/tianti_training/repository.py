@@ -292,6 +292,36 @@ def _sect_bonus(level: int) -> float:
     return _get_sect_fairyland_bonus(level)
 
 
+def _json_document(raw: Any) -> Any:
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _profile_projection_matches(row: Mapping[str, Any], fields: Sequence[str], expected: Mapping[str, Any]) -> bool:
+    for field in fields:
+        actual = row[field]
+        value = expected[field]
+        if isinstance(value, (list, dict)):
+            actual = _json_document(actual)
+        elif isinstance(value, bool):
+            actual = bool(actual)
+        elif isinstance(value, int) and actual is not None:
+            try:
+                actual = int(actual)
+            except (TypeError, ValueError, OverflowError):
+                return False
+        elif isinstance(value, float) and actual is not None:
+            try:
+                actual = float(actual)
+            except (TypeError, ValueError, OverflowError):
+                return False
+        if actual != value:
+            return False
+    return True
+
+
 class TiantiTrainingRepository(Protocol):
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any: ...
 
@@ -405,9 +435,20 @@ class TiantiMedicineBathSqlRepository:
             if current_bath is not None:
                 return MedicineBathPersistenceResult("bath_active", user_id)
             insufficient = []
+            stock_states: dict[int, tuple[int, int]] = {}
             for item in plan:
-                stock = uow.query_one("SELECT COALESCE(goods_num, 0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item["item_id"]))
+                stock = uow.query_one(
+                    "SELECT COALESCE(goods_num, 0) AS goods_num, "
+                    "COALESCE(bind_num, 0) AS bind_num FROM back "
+                    "WHERE user_id=? AND goods_id=?",
+                    (user_id, item["item_id"]),
+                )
                 have = int(stock["goods_num"]) if stock else 0
+                if stock is not None:
+                    stock_states[item["item_id"]] = (
+                        have,
+                        int(stock["bind_num"] or 0),
+                    )
                 if have < item["amount"]:
                     insufficient.append({**item, "have": have})
             if insufficient:
@@ -431,10 +472,98 @@ class TiantiMedicineBathSqlRepository:
             for item in plan:
                 changed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (item["amount"], item["amount"], user_id, item["item_id"], item["amount"]))
                 if changed.rowcount != 1:
-                    raise DomainError("item_write_rejected", "medicine bath material debit was not saved")
+                    raise DomainError(
+                        "tianti_bath_item_write_rejected",
+                        "medicine bath material debit was not saved",
+                        {"reason": "tianti_bath_item_write_rejected", "subject": "source"},
+                    )
+                old_goods, old_bind = stock_states[item["item_id"]]
+                expected_goods = old_goods - item["amount"]
+                expected_bind = min(old_bind, expected_goods)
+                saved_stock = uow.query_one(
+                    "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item["item_id"]),
+                )
+                if saved_stock is None or (
+                    int(saved_stock["goods_num"] or 0),
+                    int(saved_stock["bind_num"] or 0),
+                ) != (expected_goods, expected_bind):
+                    raise DomainError(
+                        "tianti_bath_item_projection_mismatch",
+                        "medicine bath material projection did not match",
+                        {"reason": "tianti_bath_item_projection_mismatch", "subject": "source"},
+                    )
+                stock_states[item["item_id"]] = (expected_goods, expected_bind)
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
+            saved_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_bath_profile_write_rejected",
+                    "medicine bath profile row was not saved",
+                    {"reason": "tianti_bath_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_bath_profile_projection_mismatch",
+                    "medicine bath profile projection did not match",
+                    {"reason": "tianti_bath_profile_projection_mismatch", "subject": "player_profile"},
+                )
             payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
-            uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
+            request_json = json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False)
+            result_json = json.dumps(payload, ensure_ascii=False, default=str)
+            receipt = uow.execute(
+                "INSERT INTO tianti_medicine_bath_operations"
+                "(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)",
+                (operation_id, user_id, request_json, result_json),
+            )
+            if receipt.rowcount != 1:
+                raise DomainError(
+                    "tianti_bath_receipt_write_rejected",
+                    "medicine bath receipt was not saved",
+                    {"reason": "tianti_bath_receipt_write_rejected", "subject": "receipt"},
+                )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,request_json,result_json "
+                "FROM tianti_medicine_bath_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if saved_receipt is None or (
+                str(saved_receipt["user_id"]) != user_id
+                or _json_document(saved_receipt["request_json"]) != _json_document(request_json)
+                or _json_document(saved_receipt["result_json"]) != _json_document(result_json)
+            ):
+                raise DomainError(
+                    "tianti_bath_receipt_projection_mismatch",
+                    "medicine bath receipt projection did not match",
+                    {"reason": "tianti_bath_receipt_projection_mismatch", "subject": "receipt"},
+                )
+            for item_id, expected_stock in stock_states.items():
+                saved_stock = uow.query_one(
+                    "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )
+                if saved_stock is None or (
+                    int(saved_stock["goods_num"] or 0),
+                    int(saved_stock["bind_num"] or 0),
+                ) != expected_stock:
+                    raise DomainError(
+                        "tianti_bath_item_projection_mismatch",
+                        "medicine bath final inventory projection did not match",
+                        {"reason": "tianti_bath_item_projection_mismatch", "subject": "source"},
+                    )
+            saved_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None or not _profile_projection_matches(
+                saved_profile, fields, data
+            ):
+                raise DomainError(
+                    "tianti_bath_profile_projection_mismatch",
+                    "medicine bath final profile projection did not match",
+                    {"reason": "tianti_bath_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return MedicineBathPersistenceResult("applied", user_id, tuple(plan), float(effect), bath_name, data["medicine_end_time"], settlement)
 
 

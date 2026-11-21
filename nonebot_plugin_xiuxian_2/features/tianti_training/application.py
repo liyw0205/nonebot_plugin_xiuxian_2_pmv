@@ -82,6 +82,7 @@ class TiantiTrainingApplication:
         consumed: Mapping[str, Any] | None = None,
         granted: Mapping[str, Any] | None = None,
         result_summary: Callable[[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]] | None = None,
+        retry_domain_errors: bool = False,
     ) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
@@ -119,7 +120,17 @@ class TiantiTrainingApplication:
                 with DatabaseUnitOfWork(ledger_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except DomainError as exc:
+                if retry_domain_errors:
+                    reason = str(exc.details.get("reason") or exc.code)
+                    self.ledger.record_failure(
+                        ledger_database,
+                        operation_id,
+                        action,
+                        payload,
+                        f"{exc.code}:{reason}",
+                        code=exc.code,
+                    )
                 raise
             except Exception as exc:
                 self.ledger.record_failure(ledger_database, operation_id, action, payload, str(exc))
@@ -282,6 +293,7 @@ class TiantiTrainingApplication:
                 "item_changed": "药材库存已更新，请重新查看后再炼体。",
                 "user_missing": "未找到修仙数据。",
             },
+            retry_domain_errors=True,
         )
 
     def breakthrough(

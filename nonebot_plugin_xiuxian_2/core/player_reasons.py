@@ -2,6 +2,12 @@
 
 REASONS = {
     "profile_read_failed": "玩家档案读取失败，请稍后重试或联系管理员核查数据源。",
+    "tianti_bath_item_write_rejected": "药浴药材扣除保存失败，本次药浴已撤销，故障解除后可重试原指令。",
+    "tianti_bath_item_projection_mismatch": "药浴药材库存与预期不一致，本次药浴已撤销，请联系管理员核对背包。",
+    "tianti_bath_profile_write_rejected": "药浴档案保存失败，本次药浴已撤销，故障解除后可重试原指令。",
+    "tianti_bath_profile_projection_mismatch": "药浴档案与结算结果不一致，本次药浴已撤销，请联系管理员核对炼体记录。",
+    "tianti_bath_receipt_write_rejected": "药浴操作回执保存失败，本次药浴已撤销，故障解除后可重试原指令。",
+    "tianti_bath_receipt_projection_mismatch": "药浴操作回执与结算结果不一致，本次药浴已撤销，请联系管理员核对请求记录。",
     "profile_impart_read_failed": "玩家传承属性读取失败，请稍后重试或联系管理员核查传承数据源。",
     "natal_treasure_read_failed": "本命法宝档案读取失败，请稍后重试或联系管理员核查数据源。",
     "statistics_read_failed": "统计数据读取失败，请稍后重试或联系管理员核查数据源。",
