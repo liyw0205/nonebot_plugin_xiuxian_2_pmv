@@ -588,6 +588,10 @@ from tests.parameter_cases_dongfu_expansion import register as register_dongfu_e
 
 register_dongfu_expansion(case)
 
+from tests.parameter_cases_dongfu_build import register as register_dongfu_build
+
+register_dongfu_build(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

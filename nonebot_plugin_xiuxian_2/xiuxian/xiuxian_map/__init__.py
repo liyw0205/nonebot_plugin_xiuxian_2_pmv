@@ -39,7 +39,7 @@ from ...features.map.rewards import MapRewardResolver
 from ...features.map.static_data import MapStaticDataProvider
 from ...compatibility.legacy_map_battle import build_legacy_map_battle_runner
 from ...features._legacy_application import result_data
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.json_document import JsonDocumentReader
@@ -815,6 +815,7 @@ def _merge_reward_text(rewards: list[str]) -> str:
 # 洞府
 # =========================================
 @build_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("建设洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -874,7 +875,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         dongfu=save_data,
     )
     data = result_data(outcome.data)
-    result = MapDongfuBuildResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0))
+    result = MapDongfuBuildResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stone", 0) or 0),
+        str(data.get("reason", "") or ""),
+        str(data.get("subject", "") or ""),
+    )
     if result.status == "already_built":
         await handle_send(bot, event, "你已建立洞府，无需重复建设。")
         return
@@ -882,6 +888,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"建设洞府需要{number_to(DONGFU_COST)}灵石，你当前灵石不足。")
         return
     if not result.succeeded:
+        if result.reason:
+            await handle_send(bot, event, result_failure(
+                "建设洞府",
+                result,
+                subjects={
+                    "stone_wallet": "灵石钱包",
+                    "dongfu_status": "洞府状态",
+                    "map_position": "地图位置",
+                    "receipt": "建设回执",
+                },
+            ))
+            return
         await handle_send(bot, event, "建设洞府未完成：洞府状态已更新，请重新建设。")
         return
 

@@ -347,7 +347,26 @@ class MapApplication(LegacyApplication):
         return self._action("purchase_seed",operation_id=operation_id,user_id=user_id,**kwargs)
     def build_dongfu(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id,user_id=user_id,action="map.build_dongfu",payload={"user_id":user_id,**kwargs},call=lambda:MapDongfuBuildSqlRepository(self.game_database,self.player_database).build(operation_id,user_id,**kwargs))
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.build_dongfu",
+                payload={"user_id": user_id, **kwargs},
+                call=lambda: MapDongfuBuildSqlRepository(
+                    self.game_database, self.player_database
+                ).build(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_dongfu_build_stone_changed",
+                    "map_dongfu_build_position_changed",
+                    "map_dongfu_build_stone_write_rejected",
+                    "map_dongfu_build_stone_projection_mismatch",
+                    "map_dongfu_build_state_write_rejected",
+                    "map_dongfu_build_state_projection_mismatch",
+                    "map_dongfu_build_receipt_write_rejected",
+                    "map_dongfu_build_receipt_projection_mismatch",
+                    "map_dongfu_build_receipt_invalid",
+                ),
+            )
         return self._action("build_dongfu",operation_id=operation_id,user_id=user_id,**kwargs)
 
 

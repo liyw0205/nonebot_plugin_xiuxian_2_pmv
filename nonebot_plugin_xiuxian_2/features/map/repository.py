@@ -995,25 +995,166 @@ class MapSeedPurchaseSqlRepository:
             stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,xiuxian_int_store(?,\'stone\',\'actor\'),xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
 
 
+class _MapDongfuBuildConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
+
+
 class MapDongfuBuildSqlRepository:
-    def __init__(self,game_database:str|Path,player_database:str|Path)->None:self.game_database,self.player_database=str(game_database),str(player_database)
-    def build(self,operation_id:str,user_id:str,expected_stone:int,cost:int,expected_position:dict[str,Any],dongfu:dict[str,Any])->dict[str,Any]:
-        operation_id,user_id=str(operation_id).strip(),str(user_id);expected_stone,cost=int(expected_stone),int(cost);position={k:str(v) for k,v in dict(expected_position).items()};dongfu={k:str(v) for k,v in dict(dongfu).items()}
-        if not operation_id or min(expected_stone,cost)<0 or not {'realm','heaven','node_id'}.issubset(position) or dongfu.get('built')!='1':raise ValueError('valid dongfu build required')
-        payload=json.dumps([user_id,expected_stone,cost,position,dongfu],ensure_ascii=True,sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?',(operation_id,))
-            if old:return {'status':'duplicate','stone':as_int_like(old['stone'])} if str(old['payload'])==payload else {'status':'state_changed','stone':expected_stone}
-            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
-            if user is None:return {'status':'user_missing','stone':expected_stone}
-            stone=as_int_like(user['stone'] or 0)
-            if stone!=expected_stone:return {'status':'state_changed','stone':stone}
-            if stone<cost:return {'status':'stone_insufficient','stone':stone}
-            pos=uow.query_one('SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?',(user_id,))
-            if pos is None or tuple(str(pos[k]) for k in position)!=tuple(position.values()):return {'status':'state_changed','stone':stone}
-            existing=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
-            if existing is not None and int(existing['built'] or 0)==1:return {'status':'already_built','stone':stone}
-            remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'))',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapDongfuBuildConflict(f"map_dongfu_build_{suffix}", subject)
+
+    @classmethod
+    def _verify_stone(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        if row is None or as_int_like(row["stone"] or 0) != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_dongfu(cls, uow, user_id: str, expected: dict[str, str]) -> None:
+        row = uow.query_one(
+            "SELECT built,realm,heaven,node_id,node_name,node_type "
+            "FROM player_data.dongfu_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("state_projection_mismatch", "dongfu_status")
+        actual = {key: str(row[key] or "") for key in expected}
+        actual["built"] = str(as_int_like(row["built"] or 0))
+        if actual != expected:
+            cls._reject("state_projection_mismatch", "dongfu_status")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stone: int) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None or str(row["payload"]) != payload or as_int_like(row["stone"] or 0) != stone:
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    def build(
+        self,
+        operation_id: str,
+        user_id: str,
+        expected_stone: int,
+        cost: int,
+        expected_position: dict[str, Any],
+        dongfu: dict[str, Any],
+    ) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_stone, cost = int(expected_stone), int(cost)
+        position = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
+        dongfu = {key: str(value) for key, value in dict(dongfu).items()}
+        if not operation_id or min(expected_stone, cost) < 0 or dongfu.get("built") != "1":
+            raise ValueError("valid dongfu build required")
+        payload = json.dumps(
+            [user_id, expected_stone, cost, position, dongfu],
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        expected_state = {key: dongfu.get(key, "") for key in (
+            "built", "realm", "heaven", "node_id", "node_name", "node_type"
+        )}
+
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            old = uow.query_one(
+                "SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if old is not None:
+                try:
+                    old_payload = json.loads(str(old["payload"]))
+                    old_stone = int(old["stone"])
+                except (TypeError, ValueError, OverflowError):
+                    return {
+                        "status": "state_changed", "stone": expected_stone,
+                        "reason": "map_dongfu_build_receipt_invalid", "subject": "receipt",
+                    }
+                if old_payload != json.loads(payload):
+                    return {
+                        "status": "state_changed", "stone": expected_stone,
+                        "reason": "operation_conflict", "subject": "receipt",
+                    }
+                return {"status": "duplicate", "stone": old_stone}
+
+            user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None:
+                return {"status": "user_missing", "stone": expected_stone}
+            stone = as_int_like(user["stone"] or 0)
+            if stone != expected_stone:
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": "map_dongfu_build_stone_changed", "subject": "stone_wallet",
+                }
+            if stone < cost:
+                return {"status": "stone_insufficient", "stone": stone}
+
+            current_position = uow.query_one(
+                "SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?",
+                (user_id,),
+            )
+            if current_position is None or any(
+                str(current_position[key]) != position[key] for key in position
+            ):
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": "map_dongfu_build_position_changed", "subject": "map_position",
+                }
+            existing = uow.query_one(
+                "SELECT built FROM player_data.dongfu_status WHERE user_id=?", (user_id,)
+            )
+            if existing is not None and as_int_like(existing["built"] or 0) == 1:
+                return {"status": "already_built", "stone": stone}
+
+            remaining = stone - cost
+            try:
+                with uow.savepoint("map_dongfu_build"):
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                        (remaining, user_id, expected_stone),
+                    ).rowcount != 1:
+                        self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_stone(uow, user_id, remaining)
+
+                    fields = ("built", "realm", "heaven", "node_id", "node_name", "node_type")
+                    if uow.execute(
+                        "INSERT INTO player_data.dongfu_status "
+                        "(user_id,built,realm,heaven,node_id,node_name,node_type) "
+                        "VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET "
+                        "built=excluded.built,realm=excluded.realm,heaven=excluded.heaven,"
+                        "node_id=excluded.node_id,node_name=excluded.node_name,node_type=excluded.node_type "
+                        "WHERE COALESCE(dongfu_status.built,0)<>1",
+                        (user_id, *(expected_state[key] for key in fields)),
+                    ).rowcount != 1:
+                        self._reject("state_write_rejected", "dongfu_status")
+                    self._verify_dongfu(uow, user_id, expected_state)
+
+                    if uow.execute(
+                        "INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) "
+                        "VALUES(?,?,xiuxian_int_store(?,'stone','actor'))",
+                        (operation_id, payload, remaining),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, remaining)
+
+                    self._verify_stone(uow, user_id, remaining)
+                    self._verify_dongfu(uow, user_id, expected_state)
+            except _MapDongfuBuildConflict as conflict:
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": conflict.reason, "subject": conflict.subject,
+                }
+
+            return {"status": "applied", "stone": remaining}
 
 
 class MapCombatLifecycleQueryRepository:
