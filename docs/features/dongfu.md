@@ -26,6 +26,13 @@ Feature repositories retain per-action operation replay and transactional rollba
 `game_events.002` 仅向 player DB 增补“洞府收获”统计列，保留已发布 `.001` 与既有统计。
 洞府自身的产出池、施肥、阵法和地脉收益规则不变；传承的灵田加成仍由原有灵田/傀儡消费路径使用，不新增洞府加成或种子奖励。
 
+`洞府施肥 <灵田编号>` 每次消耗一份五色灵壤，优先消耗绑定材料，肥力上限仍为3。
+同一双库事务逐步核验库存数量/绑定数、完整洞府状态和永久回执，并在最后写入后复核前序状态；
+已知拒写或投影不一致分别保留库存、灵田或回执的具体原因与对象，整笔回滚后可重试原消息。
+原消息重放先核永久回执，不受当前满肥或已清田影响，同消息换田仍拒绝；没有新增独立 pending 表。
+发送失败可能发生在业务提交之后，恢复消息投递不得再次扣材料。作物展示将 aware 业务时钟换算到存量 UTC 文本口径，
+不改时间持久化格式或成熟、产出规则。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 

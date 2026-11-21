@@ -556,6 +556,10 @@ from tests.parameter_cases_dongfu_harvest import register as register_dongfu_har
 
 register_dongfu_harvest(case)
 
+from tests.parameter_cases_dongfu_fertilize import register as register_dongfu_fertilize
+
+register_dongfu_fertilize(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

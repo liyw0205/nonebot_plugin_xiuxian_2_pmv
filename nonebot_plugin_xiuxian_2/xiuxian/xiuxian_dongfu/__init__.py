@@ -5,7 +5,7 @@ except ImportError:
 
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
@@ -205,6 +205,15 @@ def _harvest_failure_subjects(exc):
     return {subject: label}
 
 
+def _fertilize_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    else:
+        label = {"item:21006": "五色灵壤", "receipt": "施肥回执"}.get(subject, "")
+    return {subject: label}
+
+
 def _parse_dt(s: str):
     if not s:
         return None
@@ -362,6 +371,9 @@ def _format_minutes_left(finish: datetime, now: datetime):
 
 def _format_plant_slot(slot: dict, now: datetime | None = None):
     now = now or _now()
+    if now.tzinfo is not None:
+        # Plant timestamps written by _fmt_dt use the SystemClock UTC wall time.
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     seed_id = _to_int(slot.get("seed_id"))
     if seed_id not in SEED_CONFIG:
         return f"{slot.get('slot')}号灵田：空闲"
@@ -1016,7 +1028,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_fertilize.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:fertilize")])
-@guard_command("洞府施肥")
+@guard_command("洞府施肥", known_rejections=(
+    "dongfu_fertilize_inventory_write_rejected", "dongfu_fertilize_inventory_projection_mismatch",
+    "dongfu_fertilize_state_write_rejected", "dongfu_fertilize_state_projection_mismatch",
+    "dongfu_fertilize_receipt_write_rejected", "dongfu_fertilize_receipt_projection_mismatch",
+), subjects=_fertilize_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1025,6 +1041,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id and dongfu_application.operation_receipt("fertilize", operation_id) is not None:
+        slot_no = _parse_slot_no(args.extract_plain_text())
+        if slot_no is None:
+            await handle_send(bot, event, "请指定灵田编号，例如：洞府施肥 1")
+            return
+        result = dongfu_application.fertilize(
+            operation_id=operation_id, user_id=uid, expected_slots="[]", slot_no=slot_no,
+            item_id=DONGFU_ITEM_FERTILIZER, fertilizer_max=DONGFU_FERTILIZER_MAX,
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该施肥请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府施肥", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1045,8 +1077,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田当前空闲，无法施肥。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
     fertilizer = _to_int(slot.get("fertilizer"))
     if fertilizer >= DONGFU_FERTILIZER_MAX:
         await handle_send(bot, event, f"{slot_no}号灵田肥力已满。")
