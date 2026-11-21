@@ -580,6 +580,10 @@ from tests.parameter_cases_dongfu_array import register as register_dongfu_array
 
 register_dongfu_array(case)
 
+from tests.parameter_cases_dongfu_visit import register as register_dongfu_visit
+
+register_dongfu_visit(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

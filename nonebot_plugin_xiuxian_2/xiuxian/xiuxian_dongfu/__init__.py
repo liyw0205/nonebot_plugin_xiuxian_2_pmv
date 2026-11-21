@@ -245,6 +245,13 @@ def _patrol_failure_subjects(exc):
     return {subject: label}
 
 
+def _visit_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"visitor": "来访方", "target": "目标方", "stone_wallet": "灵石钱包",
+             "receipt": "拜访奖励回执"}.get(subject, "")
+    return {subject: label}
+
+
 def _patrol_receipt_day(receipt, user_id):
     try:
         payload = json.loads(str(receipt.get("payload") or ""))
@@ -1344,7 +1351,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA, stamina_operation_prefix="dongfu:visit")])
-@guard_command("拜访洞府")
+@guard_command("拜访洞府", known_rejections=(
+    "dongfu_visit_stone_write_rejected", "dongfu_visit_stone_projection_mismatch",
+    "dongfu_visit_receipt_write_rejected", "dongfu_visit_receipt_projection_mismatch",
+), subjects=_visit_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1383,7 +1393,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         gain=requested_gain,
     )
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("拜访洞府", result))
+        await handle_send(bot, event, result_failure(
+            "拜访洞府", result, subjects={"receipt": "拜访奖励回执"}
+        ))
         return
     replay = "（该请求已处理）" if result.status == "duplicate" else ""
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(result.gain)}。{replay}")
