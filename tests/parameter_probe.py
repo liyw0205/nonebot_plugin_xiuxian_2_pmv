@@ -568,6 +568,10 @@ from tests.parameter_cases_dongfu_plant import register as register_dongfu_plant
 
 register_dongfu_plant(case)
 
+from tests.parameter_cases_dongfu_patrol import register as register_dongfu_patrol
+
+register_dongfu_patrol(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

@@ -236,6 +236,30 @@ def _plant_failure_subjects(exc):
     return {subject: label}
 
 
+def _patrol_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"actor": "玩家体力与灵石", "patrol": "巡山记录", "receipt": "巡山回执"}.get(subject, "")
+    if subject.startswith("item:"):
+        definition = items.get_data_by_item_id(subject.removeprefix("item:")) or {}
+        label = definition.get("name", "巡山材料")
+    return {subject: label}
+
+
+def _patrol_receipt_day(receipt, user_id):
+    try:
+        payload = json.loads(str(receipt.get("payload") or ""))
+        if not isinstance(payload, list) or len(payload) != 2 or payload[0] != user_id:
+            return None
+        day = str(payload[1])
+        if datetime.strptime(day, "%Y-%m-%d").strftime("%Y-%m-%d") != day:
+            return None
+        if not 1 <= int(receipt["patrol_count"]) <= DONGFU_PATROL_DAILY_LIMIT or not 1 <= int(receipt["patrol_guard"]) <= 3:
+            return None
+        return day
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+
+
 def _parse_dt(s: str):
     if not s:
         return None
@@ -1000,7 +1024,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_patrol.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("洞府巡山")
+@guard_command("洞府巡山", known_rejections=(
+    "dongfu_patrol_player_write_rejected", "dongfu_patrol_player_projection_mismatch",
+    "dongfu_patrol_state_write_rejected", "dongfu_patrol_state_projection_mismatch",
+    "dongfu_patrol_inventory_write_rejected", "dongfu_patrol_inventory_projection_mismatch",
+    "dongfu_patrol_receipt_write_rejected", "dongfu_patrol_receipt_projection_mismatch",
+), subjects=_patrol_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1009,6 +1038,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("patrol", operation_id) if event_message_id else None
+    if receipt is not None:
+        day = _patrol_receipt_day(receipt, uid)
+        if day is None:
+            await handle_send(bot, event, result_failure("洞府巡山", {
+                "reason": "dongfu_patrol_receipt_invalid", "subject": "receipt",
+            }, subjects={"receipt": "巡山回执"}))
+            return
+        result = dongfu_application.patrol(
+            operation_id=operation_id, user_id=uid, day=day,
+            stamina_cost=DONGFU_PATROL_STAMINA, daily_limit=DONGFU_PATROL_DAILY_LIMIT, stone_gain=0,
+        )
+        if result.status == "duplicate":
+            day_label = "今日巡山" if day == _today_str() else f"{day}巡山"
+            await handle_send(bot, event, f"洞府巡山完成。\n巡山护府：{result.patrol_guard}层\n"
+                              f"{day_label}：{result.patrol_count}/{DONGFU_PATROL_DAILY_LIMIT}\n"
+                              "该巡山请求已经处理，无需重复提交。")
+        else:
+            await handle_send(bot, event, result_failure("洞府巡山", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1028,8 +1079,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         item_id, item_name, chance = material_plan[node_type]
         if runtime_random.random() < chance:
             reward = (item_id, item_name, 1)
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
     stone_gain = runtime_random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
