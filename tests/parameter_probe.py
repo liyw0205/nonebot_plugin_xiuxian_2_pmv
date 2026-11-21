@@ -512,6 +512,10 @@ from tests.parameter_cases_tianti_profile import register as register_tianti_pro
 
 register_tianti_profile(case)
 
+from tests.parameter_cases_tianti_bath_history import register as register_tianti_bath_history
+
+register_tianti_bath_history(case)
+
 from tests.parameter_cases_ranking import register as register_ranking
 
 register_ranking(case)

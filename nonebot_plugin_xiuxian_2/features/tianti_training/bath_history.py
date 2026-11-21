@@ -7,7 +7,7 @@
 没有任何玩家面读取它——药浴结束（或被后续结算清理）后玩家无法回看自己开过什么药浴、
 消耗了哪些药材。本模块补齐这段个人历史。
 
-只读；缺库、缺表、缺列、坏 JSON 或读失败返回空态，不建表、不补列。
+只读；缺数据库文件、缺表、缺列或坏 JSON 返回空态，不建表、不补列。已有数据源的读取故障透传，避免把错误伪装成无历史。
 时间窗只用下界（`created_at` 由写入方提供，UTC 与本地混用，加上界会丢弃「刚刚发生」的行）。
 """
 
@@ -25,7 +25,9 @@ RECENT = 10
 EMPTY_TEXT = "近7天没有药浴记录。"
 MISSING_TEXT = "缺少玩家身份，无法查询药浴记录。"
 
-_RECEIPT_COLUMNS = frozenset({"operation_id", "user_id", "result_json", "created_at"})
+_RECEIPT_COLUMNS = frozenset(
+    {"operation_id", "user_id", "request_json", "result_json", "created_at"}
+)
 
 
 def _int(value: Any) -> int:
@@ -127,22 +129,21 @@ class TiantiBathHistoryApplication:
         user_id = str(user_id or "").strip()
         if not user_id:
             return self._empty(MISSING_TEXT)
-        since = (self._now() - timedelta(days=DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if not _columns(uow, "tianti_medicine_bath_operations").issuperset(
-                    _RECEIPT_COLUMNS
-                ):
-                    return self._empty()
-                rows = uow.query_all(
-                    "SELECT operation_id, user_id, request_json, result_json, created_at "
-                    "FROM tianti_medicine_bath_operations "
-                    "WHERE user_id = ? AND created_at >= ? "
-                    "ORDER BY created_at DESC, rowid DESC",
-                    (user_id, since),
-                )
-        except Exception:
+        if not Path(self.database).exists():
             return self._empty()
+        since = (self._now() - timedelta(days=DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not _columns(uow, "tianti_medicine_bath_operations").issuperset(
+                _RECEIPT_COLUMNS
+            ):
+                return self._empty()
+            rows = uow.query_all(
+                "SELECT operation_id, user_id, request_json, result_json, created_at "
+                "FROM tianti_medicine_bath_operations "
+                "WHERE user_id = ? AND created_at >= ? "
+                "ORDER BY created_at DESC, rowid DESC",
+                (user_id, since),
+            )
 
         runs: list[dict[str, Any]] = []
         for row in rows:

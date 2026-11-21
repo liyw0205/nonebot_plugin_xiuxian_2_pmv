@@ -905,6 +905,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_bath_history.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("我的药浴记录")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
