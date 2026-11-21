@@ -532,6 +532,10 @@ from tests.parameter_cases_tianti_qiaoxue import register as register_tianti_qia
 
 register_tianti_qiaoxue(case)
 
+from tests.parameter_cases_tianti_settlement import register as register_tianti_settlement
+
+register_tianti_settlement(case)
+
 from tests.parameter_cases_ranking import register as register_ranking
 
 register_ranking(case)

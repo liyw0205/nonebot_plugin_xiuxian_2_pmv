@@ -2,6 +2,10 @@
 
 REASONS = {
     "profile_read_failed": "玩家档案读取失败，请稍后重试或联系管理员核查数据源。",
+    "tianti_settlement_profile_write_rejected": "炼体结算档案保存失败，本次结算已撤销，故障解除后可重试原指令。",
+    "tianti_settlement_profile_projection_mismatch": "炼体结算档案与预期结果不一致，本次结算已撤销，请联系管理员核对炼体记录。",
+    "tianti_settlement_receipt_write_rejected": "炼体结算回执保存失败，本次结算已撤销，故障解除后可重试原指令。",
+    "tianti_settlement_receipt_projection_mismatch": "炼体结算回执与结果不一致，本次结算已撤销，请联系管理员核对请求记录。",
     "tianti_bath_item_write_rejected": "药浴药材扣除保存失败，本次药浴已撤销，故障解除后可重试原指令。",
     "tianti_bath_item_projection_mismatch": "药浴药材库存与预期不一致，本次药浴已撤销，请联系管理员核对背包。",
     "tianti_bath_profile_write_rejected": "药浴档案保存失败，本次药浴已撤销，故障解除后可重试原指令。",

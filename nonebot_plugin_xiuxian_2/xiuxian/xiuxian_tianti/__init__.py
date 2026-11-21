@@ -266,6 +266,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_settle.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体结算",
+    known_rejections=(
+        "tianti_settlement_profile_write_rejected",
+        "tianti_settlement_profile_projection_mismatch",
+        "tianti_settlement_receipt_write_rejected",
+        "tianti_settlement_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
