@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from ...paths import get_paths
 
@@ -21,6 +22,12 @@ def _player_data_manager():
 
 _TIANTI_LEVEL_CACHE = None
 _TIANTI_QIAOXUE_CACHE = None
+
+
+class QiaoxueConfigurationError(ValueError):
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
 
 
 def _read_json(path: Path):
@@ -73,6 +80,55 @@ def get_qiaoxue_all():
 
 def get_qiaoxue_pool():
     return get_qiaoxue_all().get("窍穴", [])
+
+
+def read_qiaoxue_pool_strict():
+    """Read the complete display catalog without creating or rewriting it."""
+    try:
+        with TIANTI_QIAOXUE_FILE.open("r", encoding="utf-8") as stream:
+            loaded = json.load(stream)
+    except FileNotFoundError as exc:
+        raise QiaoxueConfigurationError("qiaoxue_config_missing") from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise QiaoxueConfigurationError("qiaoxue_config_invalid") from exc
+    except OSError as exc:
+        raise QiaoxueConfigurationError("qiaoxue_config_unreadable") from exc
+
+    if not isinstance(loaded, dict) or not isinstance(loaded.get("窍穴"), list):
+        raise QiaoxueConfigurationError("qiaoxue_config_invalid")
+
+    pool = loaded["窍穴"]
+    counts = {"天罡": 0, "地煞": 0}
+    names = set()
+    for item in pool:
+        if not isinstance(item, dict):
+            raise QiaoxueConfigurationError("qiaoxue_config_invalid")
+        name = item.get("name")
+        group = item.get("group")
+        effect_type = item.get("effect_type")
+        if (
+            not isinstance(name, str)
+            or not name
+            or name in names
+            or not isinstance(group, str)
+            or group not in counts
+            or not isinstance(effect_type, str)
+            or not effect_type
+            or isinstance(item.get("effect_value"), bool)
+        ):
+            raise QiaoxueConfigurationError("qiaoxue_config_invalid")
+        try:
+            effect_value = float(item["effect_value"])
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise QiaoxueConfigurationError("qiaoxue_config_invalid") from exc
+        if not math.isfinite(effect_value):
+            raise QiaoxueConfigurationError("qiaoxue_config_invalid")
+        names.add(name)
+        counts[group] += 1
+
+    if len(pool) != 108 or counts != {"天罡": 36, "地煞": 72}:
+        raise QiaoxueConfigurationError("qiaoxue_config_invalid")
+    return [dict(item) for item in pool]
 
 
 def get_qiaoxue_map():

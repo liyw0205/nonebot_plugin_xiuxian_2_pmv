@@ -2,6 +2,7 @@ import random
 import re
 import time
 from datetime import datetime
+from nonebot.log import logger
 from ..on_compat import on_command
 from ..command_guard import result_failure
 from nonebot.params import CommandArg
@@ -18,7 +19,8 @@ from .tianti_data import (
     get_tianti_level_index,
     get_opened_qiaoxue_count,
     get_qiaoxue_pool,
-    get_qiaoxue_map,
+    QiaoxueConfigurationError,
+    read_qiaoxue_pool_strict,
 )
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
@@ -804,10 +806,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
+    try:
+        qpool = read_qiaoxue_pool_strict()
+    except QiaoxueConfigurationError as exc:
+        logger.warning(
+            f"我的体窍查询失败 reason={exc.reason} subject=炼体窍穴.json"
+        )
+        messages = {
+            "qiaoxue_config_missing": "体窍配置缺失",
+            "qiaoxue_config_invalid": "体窍配置无效",
+            "qiaoxue_config_unreadable": "体窍配置不可读",
+        }
+        label = messages.get(exc.reason, "体窍配置无效")
+        await handle_send(
+            bot,
+            event,
+            f"{label}（reason={exc.reason}，subject=炼体窍穴.json），未执行查询。",
+        )
+        return
+
     data = tianti_training_application.read_profile(user_id)
     opened = set(data.get("opened_qiaoxue", []))
-    qpool = get_qiaoxue_pool()
-    qmap = get_qiaoxue_map()
+    qmap = {item["name"]: item for item in qpool}
     arg = args.extract_plain_text().strip()
 
     base_ratio, gain_pct = calc_qiaoxue_bonus(data)

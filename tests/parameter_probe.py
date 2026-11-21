@@ -58,14 +58,15 @@ class Probe:
 
     async def command(
         self, name, text=None, *, actor="900001", number=None,
-        allow_exception=False, timeout=8,
+        allow_exception=False, timeout=8, event_type="group",
     ):
         from tests.parameter_exception_watch import watch_handler_catches
         candidates = [entry for entry in self.entries if entry["command"] == name or name in entry["aliases"]]
         assert len(candidates) == 1, (name, [entry["module"] for entry in candidates])
         with watch_handler_catches(candidates[0]) as caught:
             result = await run_case(candidates[0], "parameter", number or 910000 + len(self.calls),
-                                    input_text=text or name, actor=actor, timeout=timeout)
+                                    input_text=text or name, actor=actor, timeout=timeout,
+                                    event_type=event_type)
         if caught:
             result.update(status="exception", caught_exceptions=caught)
         self.calls.append({"command": name, **result})
