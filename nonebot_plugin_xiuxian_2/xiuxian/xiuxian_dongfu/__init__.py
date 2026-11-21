@@ -1630,6 +1630,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     array_lv = _to_int(td.get("array_level"))
     geomancy = _get_geomancy(td)
     guarded = _to_int(td.get("patrol_guard")) > 0

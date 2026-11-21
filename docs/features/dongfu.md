@@ -51,6 +51,12 @@ Feature repositories retain per-action operation replay and transactional rollba
 重放先读取成功回执并按回执业务日期恢复原操作，优先于当日次数、体力、洞府状态和随机掉落判断；跨日重放不重新结算或改写数据。
 达到材料堆叠上限时整次巡山不扣体力/灵石、不增加次数或护府、不写回执。发送失败发生在提交后，原消息重放不重复奖励。
 
+`潜入洞府 <道号>`使用同地点的指定目标；空目标及别名`随机潜入`/`随机潜入洞府`走随机目标。主动与随机发起各每日最多3次，每个目标每日最多被潜入3次。
+每次尝试先按既有冷却规则消耗8点体力，再把输入身份、已选目标和随机结算方案写入`dongfu_infiltration_operations`；方案拒写时不进入结算，但已消耗的尝试体力不回退。
+成功/失败结算分别在game/player双库事务内逐步校验玩家灵石、双方计数、目标护府/灵田、来访方奖励背包与永久回执；写入后核rowcount和实际投影，末步再次复核。
+已知拒写/改写按具体reason与subject整笔回滚，冻结方案保留供同消息恢复；成功/失败回执先于当日次数和当前灵田状态用于重放，已提交后重放不重复结算。
+`SQLite ABORT`保持原异常进入命令守卫日志，并以定位号回复；业务时钟先换算到UTC，再与存量naive UTC时间文本比较，恰好到成熟时刻按成熟处理。
+
 ## 定时任务
 No new scheduled jobs. Legacy jobs stay registered through the compatibility scheduler.
 
