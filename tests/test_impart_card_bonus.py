@@ -288,6 +288,111 @@ class CardBonusRefreshTests(unittest.TestCase):
                 self.assertAlmostEqual(bonuses["impart_atk_per"], 1.3)
                 self.assertAlmostEqual(self.bonuses()[0], 1.3)
 
+    def test_all_bonus_fields_keep_half_values_in_the_actual_integer_affinity_schema(self):
+        from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+            apply_impart_base_schema,
+        )
+
+        database = Path(self.temp.name) / "all-bonuses.db"
+        definitions = {
+            field: {"type": field, "vale": 1 if field in (
+                "impart_two_exp", "impart_mix_per", "impart_reap_per"
+            ) else 0.1}
+            for field in BONUS_FIELDS
+        }
+        with DatabaseUnitOfWork(database) as uow:
+            apply_impart_base_schema(uow)
+            uow.execute("INSERT INTO xiuxian_impart(user_id) VALUES(?)", ("u",))
+            for card_name in definitions:
+                uow.execute(
+                    "INSERT INTO impart_cards(user_id,card_name,quantity) VALUES(?,?,?)",
+                    ("u", card_name, 1),
+                )
+
+        for quantity in (1, 2):
+            with self.subTest(quantity=quantity):
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("UPDATE impart_cards SET quantity=?", (quantity,))
+                    refresh_card_bonuses(uow.connection, "u", definitions, schema="main")
+                with DatabaseUnitOfWork(database, read_only=True) as uow:
+                    state = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", ("u",))
+                for field in BONUS_FIELDS:
+                    with self.subTest(field=field):
+                        if field in ("impart_two_exp", "impart_mix_per", "impart_reap_per"):
+                            expected = 1 if quantity == 1 else 1.5
+                        else:
+                            expected = 0.1 if quantity == 1 else 0.15
+                        self.assertAlmostEqual(float(state[field]), expected)
+
+        # A different card sharing the same attribute still has its own full first copy.
+        definitions["second-attack-card"] = {"type": "impart_atk_per", "vale": 0.1}
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute(
+                "INSERT INTO impart_cards(user_id,card_name,quantity) VALUES(?,?,?)",
+                ("u", "second-attack-card", 1),
+            )
+            refresh_card_bonuses(uow.connection, "u", definitions, schema="main")
+        with DatabaseUnitOfWork(database, read_only=True) as uow:
+            state = uow.query_one("SELECT * FROM xiuxian_impart WHERE user_id=?", ("u",))
+            self.assertAlmostEqual(float(state["impart_atk_per"]), 0.25)
+            self.assertEqual(uow.query_one("PRAGMA integrity_check")["integrity_check"], "ok")
+
+    def test_crystal_prayer_retains_the_26th_card_without_increasing_capped_bonus(self):
+        from nonebot_plugin_xiuxian_2.features.impart.application import ImpartApplication
+        from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+            apply_impart_base_schema,
+            apply_impart_crystal_draw_operations,
+            apply_impart_draw_player_statistics,
+        )
+
+        database = Path(self.temp.name) / "crystal-cap.db"
+        player = Path(self.temp.name) / "crystal-cap-player.db"
+        with DatabaseUnitOfWork(database) as uow:
+            apply_impart_base_schema(uow)
+            apply_impart_crystal_draw_operations(uow)
+            uow.execute(
+                "INSERT INTO xiuxian_impart(user_id,stone_num) VALUES(?,?)",
+                ("u", 30),
+            )
+            uow.execute(
+                "INSERT INTO impart_cards(user_id,card_name,quantity) VALUES(?,?,?)",
+                ("u", "攻击卡", 24),
+            )
+            apply_impart_exact_crystal_balances(uow)
+            refresh_card_bonuses(uow.connection, "u", self.defs, schema="main")
+        with DatabaseUnitOfWork(player) as uow:
+            apply_impart_draw_player_statistics(uow)
+        app = ImpartApplication(database, impart_database=database, player_database=player)
+        self.assertAlmostEqual(float(app.state("u")["impart_atk_per"]), 1.25)
+
+        for quantity, balance in ((25, 30), (26, 20)):
+            with self.subTest(quantity=quantity):
+                request = dict(
+                    operation_id=f"crystal-cap-{quantity}",
+                    user_id="u",
+                    expected_stone=balance,
+                    expected_wish=0,
+                    cost=10,
+                    new_wish=0,
+                    exp_minutes=120,
+                    cards=("攻击卡",),
+                    card_definitions=self.defs,
+                    requested_pulls=1,
+                )
+                self.assertEqual(app.crystal_draw(**request).status, "applied")
+                self.assertEqual(app.cards("u"), {"攻击卡": quantity})
+                state = app.state("u")
+                self.assertAlmostEqual(float(state["impart_atk_per"]), 1.3)
+                self.assertEqual(state["stone_num"], balance - 10)
+                self.assertEqual(int(state["exp_day"]), (quantity - 24) * 120)
+                self.assertEqual(app.crystal_draw(**request).status, "duplicate")
+                self.assertEqual(app.cards("u"), {"攻击卡": quantity})
+                self.assertEqual(app.state("u"), state)
+
+        for path in (database, player):
+            with DatabaseUnitOfWork(path, read_only=True) as uow:
+                self.assertEqual(uow.query_one("PRAGMA integrity_check")["integrity_check"], "ok")
+
     def test_legacy_recalculation_uses_half_weight_for_duplicate_cards(self):
         data_manager = Mock()
         data_manager.data_person_list.return_value = {"攻击卡": 2}
