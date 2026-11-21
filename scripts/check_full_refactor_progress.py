@@ -4221,8 +4221,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "my_qiaoxue_display_uses_feature_reader_and_static_catalog": (
                 "tianti_training_application.read_profile(user_id)" in tianti_qiaoxue_profile_handler
-                and "get_qiaoxue_pool()" in tianti_qiaoxue_profile_handler
-                and "get_qiaoxue_map()" in tianti_qiaoxue_profile_handler
+                and "qpool = read_qiaoxue_pool_strict()" in tianti_qiaoxue_profile_handler
+                and 'qmap = {item["name"]: item for item in qpool}' in tianti_qiaoxue_profile_handler
+                and "except QiaoxueConfigurationError as exc:" in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_pool()" not in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_map()" not in tianti_qiaoxue_profile_handler
                 and "TiantiDataManager" not in tianti_qiaoxue_profile_handler
                 and "get_user_tianti_info" not in tianti_qiaoxue_profile_handler
             ),

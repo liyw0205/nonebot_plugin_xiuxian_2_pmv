@@ -59,7 +59,7 @@ class ImpartCardBonusMigrationTests(unittest.TestCase):
                 self.assertEqual(runner.apply(uow), [])
 
     def test_migration_is_routed_only_to_impart_database(self) -> None:
-        from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+        from ....plugin import build_migrations, migrations_for_database
 
         migrations = build_migrations()
         for database_key in ("game_db", "player_db", "trade_db", "impart_db"):

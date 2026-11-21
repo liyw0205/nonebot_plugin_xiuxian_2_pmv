@@ -340,7 +340,10 @@ async def run_case(
     uid = actor or uid
     argument = " 1" if scenario == "argument" else ""
     text = input_text if input_text is not None else entry["command"] + argument
-    event = make_event(text, uid, number, event_type=event_type)
+    if event_type == "group":
+        event = make_event(text, uid, number)
+    else:
+        event = make_event(text, uid, number, event_type=event_type)
     bot = Bot(Adapter(nonebot.get_driver()), "900000")
     replies, errors, logs, blocked = [], [], [], []
 

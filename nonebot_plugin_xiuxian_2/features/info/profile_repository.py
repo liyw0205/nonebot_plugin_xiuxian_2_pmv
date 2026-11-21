@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from nonebot.log import logger
+from loguru import logger
 
 from ...core.errors import DomainError
 from ...core.numeric import normalize_user_row
