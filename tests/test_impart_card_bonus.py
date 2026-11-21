@@ -132,6 +132,123 @@ class CardBonusRefreshTests(unittest.TestCase):
                 )
                 self.assertEqual(attributes["final_atk"], expected_attack)
 
+    def test_duplicate_bonus_accumulates_across_paid_draw_and_prayer(self):
+        from nonebot_plugin_xiuxian_2.features.impart.application import ImpartApplication
+        from nonebot_plugin_xiuxian_2.features.impart.migrations import (
+            apply_impart_base_schema,
+            apply_impart_draw_operations,
+            apply_impart_draw_player_statistics,
+            apply_impart_prayer_operations,
+            apply_impart_prayer_player_statistics,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
+            get_final_attributes,
+        )
+
+        root = Path(self.temp.name) / "cross-activity"
+        root.mkdir()
+        game, impart, player = (root / name for name in ("game.db", "impart.db", "player.db"))
+        with DatabaseUnitOfWork(game) as uow:
+            uow.execute("CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,stone INTEGER)")
+            uow.execute("INSERT INTO user_xiuxian VALUES(?,?)", ("u", 20_000_000))
+            uow.execute(
+                "CREATE TABLE back(user_id TEXT,goods_id INTEGER,goods_num INTEGER,"
+                "bind_num INTEGER,PRIMARY KEY(user_id,goods_id))"
+            )
+            uow.execute("INSERT INTO back VALUES(?,?,?,?)", ("u", 20005, 1, 1))
+            apply_impart_draw_operations(uow)
+            apply_impart_prayer_operations(uow)
+        with DatabaseUnitOfWork(impart) as uow:
+            apply_impart_base_schema(uow)
+            uow.execute(
+                "INSERT INTO xiuxian_impart(user_id,stone_num,impart_num,wish) "
+                "VALUES(?,?,?,?)",
+                ("u", 0, 0, 0),
+            )
+        with DatabaseUnitOfWork(player) as uow:
+            apply_impart_draw_player_statistics(uow)
+            apply_impart_prayer_player_statistics(uow)
+
+        definitions = {"攻击卡": {"type": "impart_atk_per", "vale": 0.1}}
+        app = ImpartApplication(game, impart_database=impart, player_database=player)
+        paid_draw = app.draw(
+            operation_id="paid-draw",
+            user_id="u",
+            expected_stone=20_000_000,
+            expected_wish=0,
+            expected_count=0,
+            cost=10_000_000,
+            new_wish=10,
+            pulls=1,
+            cards=("攻击卡",),
+            card_definitions=definitions,
+            requested_pulls=1,
+        )
+        self.assertEqual(paid_draw.status, "applied")
+        with DatabaseUnitOfWork(impart, read_only=True) as uow:
+            first = uow.query_one(
+                "SELECT c.quantity,i.impart_atk_per FROM impart_cards c "
+                "JOIN xiuxian_impart i ON i.user_id=c.user_id "
+                "WHERE c.user_id=? AND c.card_name=?",
+                ("u", "攻击卡"),
+            )
+        self.assertEqual(int(first["quantity"]), 1)
+        self.assertAlmostEqual(float(first["impart_atk_per"]), 0.1)
+
+        prayer = app.prayer_settle(
+            operation_id="prayer-draw",
+            user_id="u",
+            game_database=game,
+            player_database=player,
+            item_id=20005,
+            quantity=1,
+            cards=("攻击卡",),
+            card_definitions=definitions,
+        )
+        self.assertEqual(prayer.status, "applied")
+        with DatabaseUnitOfWork(impart, read_only=True) as uow:
+            second = uow.query_one(
+                "SELECT c.quantity,i.impart_atk_per FROM impart_cards c "
+                "JOIN xiuxian_impart i ON i.user_id=c.user_id "
+                "WHERE c.user_id=? AND c.card_name=?",
+                ("u", "攻击卡"),
+            )
+        self.assertEqual(int(second["quantity"]), 2)
+        self.assertAlmostEqual(float(second["impart_atk_per"]), 0.15)
+
+        base = {
+            "user_id": "u",
+            "nickname": "测试玩家",
+            "level": "江湖好手",
+            "exp": 1000,
+            "base_hp": 500,
+            "base_mp": 500,
+            "base_atk": 100,
+            "atkpractice": 0,
+            "hppractice": 0,
+            "mppractice": 0,
+        }
+
+        def read_impart(_user_id):
+            with DatabaseUnitOfWork(impart, read_only=True) as uow:
+                return uow.query_one(
+                    "SELECT * FROM xiuxian_impart WHERE user_id=?", ("u",)
+                )
+
+        attributes = get_final_attributes(
+            "u",
+            base_provider=lambda _user_id: base,
+            buff_info_provider=lambda _user_id: {},
+            item_provider=lambda _item_id: {},
+            impart_provider=read_impart,
+            accessory_provider=lambda _user_id: {"equipped": {}},
+            tianti_provider=lambda _user_id: {},
+        )
+        self.assertEqual(attributes["final_atk"], 115)
+        for database in (game, impart, player):
+            with DatabaseUnitOfWork(database, read_only=True) as uow:
+                self.assertEqual(uow.query_one("PRAGMA integrity_check")["integrity_check"], "ok")
+
     def test_new_and_legacy_calculators_keep_the_25_card_cap(self):
         definition = {"攻击卡": {"type": "impart_atk_per", "vale": 0.1}}
         for quantity, expected in (
