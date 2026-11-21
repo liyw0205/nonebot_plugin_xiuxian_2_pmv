@@ -762,6 +762,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_chongqiao.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "冲窍",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_qiaoxue_profile_write_rejected",
+        "tianti_qiaoxue_profile_projection_mismatch",
+        "tianti_qiaoxue_receipt_write_rejected",
+        "tianti_qiaoxue_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
     冲窍

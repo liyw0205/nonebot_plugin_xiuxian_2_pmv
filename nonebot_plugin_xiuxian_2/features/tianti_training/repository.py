@@ -910,9 +910,92 @@ class TiantiQiaoxueSqlRepository:
             data["tianti_hp"] = old_hp - hp_cost
             data["opened_qiaoxue"] = opened + [chosen["name"]]
             data["opened_qiaoxue_detail"] = detail
-            upsert_tianti_profile(uow, user_id, fields, data)
+            profile_write = upsert_tianti_profile(uow, user_id, fields, data)
+            if profile_write != 1:
+                raise DomainError(
+                    "tianti_qiaoxue_profile_write_rejected",
+                    "tianti qiaoxue profile write was rejected",
+                    {"reason": "tianti_qiaoxue_profile_write_rejected", "subject": "player_profile"},
+                )
+            saved_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_qiaoxue_profile_write_rejected",
+                    "tianti qiaoxue profile row was not saved",
+                    {"reason": "tianti_qiaoxue_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_qiaoxue_profile_projection_mismatch",
+                    "tianti qiaoxue profile projection did not match",
+                    {"reason": "tianti_qiaoxue_profile_projection_mismatch", "subject": "player_profile"},
+                )
+
             new_count = opened_count + 1
-            uow.execute("INSERT INTO tianti_qiaoxue_operations(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) VALUES(?,?,?,?,?,?,?,?)", (operation_id, user_id, roll, json.dumps(chosen, ensure_ascii=False), hp_cost, data["tianti_hp"], new_count, unlock_limit))
+            receipt_insert = uow.execute(
+                "INSERT INTO tianti_qiaoxue_operations "
+                "(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    operation_id,
+                    user_id,
+                    roll,
+                    json.dumps(chosen, ensure_ascii=False),
+                    hp_cost,
+                    data["tianti_hp"],
+                    new_count,
+                    unlock_limit,
+                ),
+            )
+            if receipt_insert.rowcount != 1:
+                raise DomainError(
+                    "tianti_qiaoxue_receipt_write_rejected",
+                    "tianti qiaoxue receipt was not saved",
+                    {"reason": "tianti_qiaoxue_receipt_write_rejected", "subject": "receipt"},
+                )
+            expected_receipt = (
+                user_id,
+                roll,
+                chosen,
+                hp_cost,
+                data["tianti_hp"],
+                new_count,
+                unlock_limit,
+            )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit "
+                "FROM tianti_qiaoxue_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            try:
+                actual_receipt = (
+                    str(saved_receipt["user_id"]),
+                    int(saved_receipt["roll"]),
+                    _json_document(saved_receipt["qiaoxue_json"]),
+                    int(saved_receipt["hp_cost"]),
+                    int(saved_receipt["new_hp"]),
+                    int(saved_receipt["opened_count"]),
+                    int(saved_receipt["unlock_limit"]),
+                ) if saved_receipt is not None else None
+            except (TypeError, ValueError, OverflowError):
+                actual_receipt = None
+            if actual_receipt != expected_receipt:
+                raise DomainError(
+                    "tianti_qiaoxue_receipt_projection_mismatch",
+                    "tianti qiaoxue receipt projection did not match",
+                    {"reason": "tianti_qiaoxue_receipt_projection_mismatch", "subject": "receipt"},
+                )
+            final_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+                raise DomainError(
+                    "tianti_qiaoxue_profile_projection_mismatch",
+                    "tianti qiaoxue profile projection did not match",
+                    {"reason": "tianti_qiaoxue_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return QiaoxuePersistenceResult("opened", user_id, chosen, hp_cost, int(data["tianti_hp"]), new_count, unlock_limit)
 
     def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any:

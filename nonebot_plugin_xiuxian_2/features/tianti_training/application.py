@@ -366,6 +366,7 @@ class TiantiTrainingApplication:
                 "state_changed": "炼体状态已变化，请重新执行。",
                 "user_missing": "未找到炼体档案，暂时无法冲窍。",
             },
+            retry_domain_errors=True,
         )
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
