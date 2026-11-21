@@ -774,8 +774,96 @@ class TiantiBreakthroughSqlRepository:
             if decision.status != "completed":
                 return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
             data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
-            upsert_tianti_profile(uow, user_id, fields, data)
-            uow.execute("INSERT INTO tianti_breakthrough_operations(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, user_id, int(cultivation_rank), int(bool(roll_success)), decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, int(decision.new_level != decision.old_level)))
+            profile_write = upsert_tianti_profile(uow, user_id, fields, data)
+            if profile_write != 1:
+                raise DomainError(
+                    "tianti_breakthrough_profile_write_rejected",
+                    "tianti breakthrough profile write was rejected",
+                    {"reason": "tianti_breakthrough_profile_write_rejected", "subject": "player_profile"},
+                )
+            saved_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_breakthrough_profile_write_rejected",
+                    "tianti breakthrough profile row was not saved",
+                    {"reason": "tianti_breakthrough_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_breakthrough_profile_projection_mismatch",
+                    "tianti breakthrough profile projection did not match",
+                    {"reason": "tianti_breakthrough_profile_projection_mismatch", "subject": "player_profile"},
+                )
+
+            success = decision.new_level != decision.old_level
+            receipt_insert = uow.execute(
+                "INSERT INTO tianti_breakthrough_operations "
+                "(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (
+                    operation_id,
+                    user_id,
+                    int(cultivation_rank),
+                    int(bool(roll_success)),
+                    decision.old_level,
+                    decision.new_level,
+                    decision.hp_cost,
+                    decision.new_hp,
+                    int(success),
+                ),
+            )
+            if receipt_insert.rowcount != 1:
+                raise DomainError(
+                    "tianti_breakthrough_receipt_write_rejected",
+                    "tianti breakthrough receipt was not saved",
+                    {"reason": "tianti_breakthrough_receipt_write_rejected", "subject": "receipt"},
+                )
+            expected_receipt = (
+                user_id,
+                int(cultivation_rank),
+                int(bool(roll_success)),
+                decision.old_level,
+                decision.new_level,
+                decision.hp_cost,
+                decision.new_hp,
+                int(success),
+            )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success "
+                "FROM tianti_breakthrough_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            try:
+                actual_receipt = (
+                    str(saved_receipt["user_id"]),
+                    int(saved_receipt["cultivation_rank"]),
+                    int(saved_receipt["roll_success"]),
+                    str(saved_receipt["old_level"]),
+                    str(saved_receipt["new_level"]),
+                    int(saved_receipt["hp_cost"]),
+                    int(saved_receipt["new_hp"]),
+                    int(saved_receipt["success"]),
+                ) if saved_receipt is not None else None
+            except (TypeError, ValueError, OverflowError):
+                actual_receipt = None
+            if actual_receipt != expected_receipt:
+                raise DomainError(
+                    "tianti_breakthrough_receipt_projection_mismatch",
+                    "tianti breakthrough receipt projection did not match",
+                    {"reason": "tianti_breakthrough_receipt_projection_mismatch", "subject": "receipt"},
+                )
+
+            final_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+                raise DomainError(
+                    "tianti_breakthrough_profile_projection_mismatch",
+                    "tianti breakthrough profile projection did not match",
+                    {"reason": "tianti_breakthrough_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
 
 

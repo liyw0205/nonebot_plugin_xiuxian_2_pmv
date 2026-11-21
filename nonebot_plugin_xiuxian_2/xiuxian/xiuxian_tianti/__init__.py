@@ -604,6 +604,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @tianti_break.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体突破",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_breakthrough_profile_write_rejected",
+        "tianti_breakthrough_profile_projection_mismatch",
+        "tianti_breakthrough_receipt_write_rejected",
+        "tianti_breakthrough_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)

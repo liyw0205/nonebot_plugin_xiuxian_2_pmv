@@ -17,7 +17,7 @@ def upsert_tianti_profile(
     data: Mapping[str, Any],
     *,
     database_alias: str = "main",
-) -> None:
+) -> int:
     if database_alias not in {"main", "player_data"}:
         raise ValueError("unsupported Tianti profile database alias")
 
@@ -37,11 +37,12 @@ def upsert_tianti_profile(
         f"{_quote_identifier(field)}=excluded.{_quote_identifier(field)}"
         for field in columns
     )
-    uow.execute(
+    saved = uow.execute(
         f"INSERT INTO {table} ({column_sql}) VALUES ({placeholders}) "
         f"ON CONFLICT(user_id) DO UPDATE SET {updates}",
         (str(user_id), *values),
     )
+    return int(saved.rowcount)
 
 
 __all__ = ["upsert_tianti_profile"]

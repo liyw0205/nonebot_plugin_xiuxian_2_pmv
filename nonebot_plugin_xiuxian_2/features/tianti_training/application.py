@@ -343,6 +343,7 @@ class TiantiTrainingApplication:
                 "state_changed": "炼体状态已变化，请重新执行。",
                 "user_missing": "炼体档案已变化，请重新执行。",
             },
+            retry_domain_errors=True,
         )
 
     def open_qiaoxue(self, *, operation_id: str, user_id: str, roll: int) -> OperationOutcome[dict[str, Any]]:
