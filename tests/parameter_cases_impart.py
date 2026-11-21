@@ -34,6 +34,43 @@ def register(case):
         assert after == cards(probe)
         probe.evidence.update(cards=after, spent=20_000_000, replay_unchanged=True)
 
+    @case("impart-draw-daily-cap", "传承抽卡", "第99次时请求2次，随后再抽1次",
+          "真实传承状态为今日99次，灵石充足", "只结算到第100次；重放零副作用，达到100次后拒绝",
+          group="impart-parameters")
+    async def draw_daily_cap(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_impart as module
+
+        probe.impart(impart_num=99, wish=0)
+        probe.player(stone=100_000_000)
+        with patch.object(module, "_rank_success", return_value=True):
+            first = await probe.command(
+                "传承抽卡", "传承抽卡 2", number=930012
+            )
+        state_sql = "SELECT impart_num FROM xiuxian_impart WHERE user_id='900001'"
+        wallet_sql = "SELECT stone FROM user_xiuxian WHERE user_id='900001'"
+        assert probe.rows(probe.context.paths.impart_db, state_sql) == [(100,)], first
+        assert sum(quantity for _, quantity in cards(probe)) == 1, (first, cards(probe))
+        assert probe.rows(probe.context.paths.game_db, wallet_sql) == [(90_000_000,)]
+        after_cards = cards(probe)
+        after_state = probe.rows(probe.context.paths.impart_db, "SELECT * FROM xiuxian_impart WHERE user_id='900001'")
+        after_wallet = probe.rows(probe.context.paths.game_db, wallet_sql)
+
+        replay = await probe.command("传承抽卡", "传承抽卡 2", number=930012)
+        assert "已经处理" in replay, replay
+        assert cards(probe) == after_cards
+        assert probe.rows(probe.context.paths.impart_db, "SELECT * FROM xiuxian_impart WHERE user_id='900001'") == after_state
+        assert probe.rows(probe.context.paths.game_db, wallet_sql) == after_wallet
+
+        rejected = await probe.command("传承抽卡", "传承抽卡 1", number=930013)
+        assert "今日抽卡已达上限" in rejected, rejected
+        assert cards(probe) == after_cards
+        assert probe.rows(probe.context.paths.impart_db, "SELECT * FROM xiuxian_impart WHERE user_id='900001'") == after_state
+        assert probe.rows(probe.context.paths.game_db, wallet_sql) == after_wallet
+        probe.evidence.update(
+            requested=2, effective=1, daily_count=100, stone_spent=10_000_000,
+            replay_unchanged=True, over_limit_rejected=True,
+        )
+
     for command in ("传承祈愿", "传承抽卡"):
         def build(command):
             async def run(probe):
