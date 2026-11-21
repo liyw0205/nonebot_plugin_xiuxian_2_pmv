@@ -86,4 +86,3 @@ def test_plant_display_uses_the_stored_utc_frame_for_all_clock_offsets(now):
 
     slot = {"slot": 1, "seed_id": 21001, "fertilizer": 1, "plant_finish": "2026-11-22 13:00:00"}
     assert module._format_plant_slot(slot, now) == "1号灵田：青灵草种（剩余60分钟，肥力+1）"
-

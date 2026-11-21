@@ -98,4 +98,3 @@ def test_binding_is_consumed_before_unbound_inventory(fertilize, quantity, bound
     assert repo.fertilize("binding", "u", json.dumps(slots), 1, 21006, 3).succeeded
     with DatabaseUnitOfWork(game, read_only=True) as uow:
         assert tuple(uow.query_one("SELECT goods_num,bind_num FROM back").values()) == (quantity - 1, remaining_bound)
-
