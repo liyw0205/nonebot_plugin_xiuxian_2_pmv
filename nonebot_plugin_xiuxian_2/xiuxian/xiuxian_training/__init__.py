@@ -1,6 +1,5 @@
 import time
 import json
-import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from ..on_compat import on_command, on_regex
@@ -73,14 +72,25 @@ def _items():
     return _items_instance
 
 
-def _run_training_action(action: str, operation_id: str, user_id: str, **payload):
+def _run_training_action(
+    action: str,
+    operation_id: str,
+    user_id: str,
+    *,
+    ledger_payload=None,
+    **payload,
+):
     outcome = training_application.execute(
         operation_id=operation_id,
         user_id=str(user_id),
         payload={"action": action, **payload},
+        ledger_payload=ledger_payload,
     )
     data = dict(outcome.data or {})
     data.setdefault("status", outcome.status)
+    if outcome.replayed:
+        data["status"] = "duplicate"
+        data["replayed"] = True
     data["succeeded"] = outcome.ok
     from types import SimpleNamespace
     return SimpleNamespace(**data)
@@ -332,7 +342,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     await training_shop.finish()
 
 @training_buy.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("历练兑换", known_rejections=("currency_precision_unavailable",))
+@guard_command(
+    "历练兑换",
+    known_rejections=(
+        "currency_precision_unavailable",
+        "training_purchase_state_write_rejected",
+        "training_points_projection_mismatch",
+        "training_weekly_purchases_projection_mismatch",
+        "training_inventory_write_rejected",
+        "training_inventory_projection_mismatch",
+        "training_purchase_receipt_write_rejected",
+        "training_purchase_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """兑换历练商店物品"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -343,15 +365,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     
     user_id = user_info["user_id"]
     msg = args.extract_plain_text().strip()
-    shop_info = re.findall(r"(\d+)\s*(\d*)", msg)
-    
-    if not shop_info:
+    parts = msg.split()
+    if (
+        len(parts) not in (1, 2)
+        or not parts[0].isascii()
+        or not parts[0].isdigit()
+        or (len(parts) == 2 and (not parts[1].isascii() or not parts[1].isdigit() or int(parts[1]) <= 0))
+    ):
         msg = "请输入正确的商品编号！"
         await handle_send(bot, event, msg, md_type="历练", k1="兑换", v1="历练兑换", k2="商店", v2="历练商店", k3="历练状态", v3="历练状态")
         await training_buy.finish()
-    
-    shop_id = shop_info[0][0]
-    quantity = int(shop_info[0][1]) if shop_info[0][1] else 1
+
+    shop_id = parts[0]
+    quantity = int(parts[1]) if len(parts) == 2 else 1
     
     shop_items = training_data.config["商店商品"]
     if shop_id not in shop_items:
@@ -394,6 +420,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             expected_weekly_purchases=training_info["weekly_purchases"],
             max_goods_num=XiuConfig().max_goods_num,
             bind_flag=1,
+            ledger_payload={
+                "item_id": shop_id,
+                "item_name": item_info["name"],
+                "item_type": item_info["type"],
+                "quantity": quantity,
+                "unit_cost": item_data["cost"],
+                "weekly_limit": item_data["weekly_limit"],
+                "max_goods_num": XiuConfig().max_goods_num,
+                "bind_flag": 1,
+            },
         )
     except (MatcherException, ProcessException):
         raise
@@ -411,6 +447,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await training_buy.finish()
     if purchase_result.status in {"state_changed", "user_missing"}:
         await handle_send(bot, event, result_failure("历练兑换", purchase_result), md_type="历练")
+        await training_buy.finish()
+    if purchase_result.status == "duplicate":
+        await handle_send(bot, event, "该历练兑换请求已处理，无需重复提交。", md_type="历练")
         await training_buy.finish()
     
     msg = f"成功兑换{item_info['name']}×{quantity}，消耗{total_cost}成就点！"

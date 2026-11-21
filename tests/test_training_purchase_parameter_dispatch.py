@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from nonebot_plugin_xiuxian_2.core.result import OperationOutcome
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import result_failure
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+
+def test_real_training_purchase_parameter_group() -> None:
+    with tempfile.TemporaryDirectory(prefix="xiuxian-training-purchase-") as directory:
+        report = str(Path(directory) / "report.json")
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tests.parameter_probe",
+                "--group",
+                "training-purchase-parameters",
+                "--report",
+                report,
+            ],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
+            capture_output=True,
+            timeout=180,
+        )
+        payload = json.loads(Path(report).read_text(encoding="utf-8"))
+        failures = [row for row in payload.get("results", []) if row["status"] != "pass"]
+        assert result.returncode == 0, result.stdout + result.stderr + json.dumps(
+            failures, ensure_ascii=False
+        )
+        assert payload["summary"] == {"pass": 7}, result.stdout
+
+
+def test_training_purchase_reasons_survive_onebot_qq_and_fallback() -> None:
+    event = SimpleNamespace(get_user_id=lambda: "buyer")
+
+    async def send_contract(reply: str, onebot: bool, markdown: bool, send_fails: bool) -> None:
+        bot = SimpleNamespace(
+            adapter=SimpleNamespace(get_name=lambda: "OneBot V11" if onebot else "QQ")
+        )
+        config = SimpleNamespace(
+            markdown_status=markdown,
+            markdown_id="",
+            markdown_id2="",
+            markdown_button_status=False,
+            at_sender=False,
+            message_optimization=False,
+            img=False,
+        )
+        plain = AsyncMock()
+        markdown_send = AsyncMock(
+            side_effect=RuntimeError("isolated training purchase delivery failure")
+            if send_fails
+            else None
+        )
+        with (
+            patch.object(utils, "XiuConfig", return_value=config),
+            patch.object(utils, "get_chat_scene", return_value="group"),
+            patch.object(utils, "is_group_event", return_value=True),
+            patch.object(utils, "get_real_id_async", new=AsyncMock(return_value="")),
+            patch.object(utils, "_send_event_message", plain),
+            patch.object(utils, "_send_markdown_or_keyboard", markdown_send),
+        ):
+            await utils.handle_send(
+                bot,
+                event,
+                reply,
+                md_type="历练",
+                k1="兑换",
+                v1="历练兑换",
+                k2="商店",
+                v2="历练商店",
+                k3="状态",
+                v3="历练状态",
+            )
+        if onebot or not markdown or send_fails:
+            plain.assert_awaited_once()
+            assert plain.call_args.kwargs["message"] == reply
+        else:
+            markdown_send.assert_awaited_once()
+
+    cases = (
+        ("training_purchase_state_write_rejected", "状态保存失败"),
+        ("training_points_projection_mismatch", "积分与兑换结果不一致"),
+        ("training_weekly_purchases_projection_mismatch", "限购与兑换结果不一致"),
+        ("training_inventory_write_rejected", "物品入库失败"),
+        ("training_inventory_projection_mismatch", "背包结果与请求不一致"),
+        ("training_purchase_receipt_write_rejected", "回执保存失败"),
+        ("training_purchase_receipt_projection_mismatch", "回执与请求不一致"),
+    )
+    for reason, phrase in cases:
+        outcome = OperationOutcome.failed(
+            "training-purchase-message",
+            "training.purchase",
+            f"{phrase}（原因：{reason}；主体：actor）",
+            code=reason,
+            data={"status": "state_changed", "reason": reason, "subject": "actor"},
+            audit_category="training",
+        )
+        reply = result_failure("历练兑换", outcome)
+        assert phrase in reply
+        asyncio.run(send_contract(reply, True, True, False))
+        asyncio.run(send_contract(reply, False, False, False))
+        asyncio.run(send_contract(reply, False, True, False))
+        asyncio.run(send_contract(reply, False, True, True))

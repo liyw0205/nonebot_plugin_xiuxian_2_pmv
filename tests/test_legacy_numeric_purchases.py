@@ -116,7 +116,7 @@ class LegacyNumericPurchaseTests(unittest.TestCase):
                         else:
                             with self.assertRaises(DomainError) as caught:
                                 self.purchase(group, expected)
-                            self.assertEqual({'training': 'training_points_write_rejected', 'boss': 'boss_integral_write_rejected', 'tower': 'tower_purchase_write_rejected'}[kind], caught.exception.code)
+                            self.assertEqual({'training': 'training_purchase_state_write_rejected', 'boss': 'boss_integral_write_rejected', 'tower': 'tower_purchase_write_rejected'}[kind], caught.exception.code)
                     else:
                         self.assertEqual('state_changed', self.status(self.purchase(group, expected)))
                         # Some repositories persist a rejection receipt; assets stay unchanged.
