@@ -5,8 +5,9 @@ import json
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
-from ....core.errors import DomainError
+from ....core.errors import DomainError, OperationConflictError
 from ....infrastructure.database import DatabaseUnitOfWork
 from ....plugin import apply_platform_schema
 from ..application import TiantiTrainingApplication
@@ -90,6 +91,31 @@ class TiantiTrainingApplicationTests(unittest.TestCase):
             self.assertFalse(first.ok)
             self.assertEqual(second.code, "stone_insufficient")
             self.assertEqual(repository.calls, [("train", "reject-1")])
+
+    def test_changed_request_conflict_does_not_record_failure_or_replace_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = _Repository()
+            app = self._application(root, repository)
+            first = app.train(
+                operation_id="train-conflict", user_id="u", requested_stone=100
+            )
+            self.assertTrue(first.ok)
+
+            with patch.object(
+                app.ledger, "record_failure", wraps=app.ledger.record_failure
+            ) as record_failure:
+                with self.assertRaises(OperationConflictError):
+                    app.train(operation_id="train-conflict", user_id="u", requested_stone=101)
+
+            record_failure.assert_not_called()
+            self.assertEqual(repository.calls, [("train", "train-conflict")])
+            with DatabaseUnitOfWork(root / "game.db", read_only=True) as uow:
+                ledger = uow.query_one(
+                    "SELECT status,result_json FROM operation_ledger "
+                    "WHERE operation_id='train-conflict' AND action='tianti.train'"
+                )
+            self.assertEqual(ledger["status"], "applied")
 
     def test_breakthrough_initializes_profile_before_starting_operation(self):
         with tempfile.TemporaryDirectory() as directory:

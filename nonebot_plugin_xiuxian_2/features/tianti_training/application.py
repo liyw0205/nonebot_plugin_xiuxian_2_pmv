@@ -120,9 +120,15 @@ class TiantiTrainingApplication:
                 with DatabaseUnitOfWork(ledger_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
+            except ConflictError:
+                raise
             except DomainError as exc:
                 if retry_domain_errors:
                     reason = str(exc.details.get("reason") or exc.code)
+                    failure_data = {"reason": reason}
+                    subject = str(exc.details.get("subject") or "")
+                    if subject:
+                        failure_data["subject"] = subject
                     self.ledger.record_failure(
                         ledger_database,
                         operation_id,
@@ -130,6 +136,7 @@ class TiantiTrainingApplication:
                         payload,
                         f"{exc.code}:{reason}",
                         code=exc.code,
+                        data=failure_data,
                     )
                 raise
             except Exception as exc:
@@ -240,6 +247,7 @@ class TiantiTrainingApplication:
                 "consumed": {"stone": int(data.get("stone_cost", 0) or 0)},
                 "granted": {"tianti_hp": as_int_like(data.get("hp_gain", 0) or 0)},
             },
+            retry_domain_errors=True,
         )
 
     def apply_bath(

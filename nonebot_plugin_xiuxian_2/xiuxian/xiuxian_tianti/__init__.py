@@ -343,6 +343,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_stone.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "灵石炼体",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_stone_wallet_write_rejected",
+        "tianti_stone_wallet_projection_mismatch",
+        "tianti_stone_profile_write_rejected",
+        "tianti_stone_profile_projection_mismatch",
+        "tianti_stone_receipt_write_rejected",
+        "tianti_stone_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -352,13 +364,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     txt = args.extract_plain_text().strip()
-    if not txt.isdigit():
+    normalized = txt.lstrip("0") or "0"
+    max_integer = "9223372036854775807"
+    if (
+        not txt.isascii()
+        or not txt.isdigit()
+        or len(normalized) > len(max_integer)
+        or (len(normalized) == len(max_integer) and normalized > max_integer)
+    ):
         await handle_send(bot, event, "用法：灵石炼体 灵石数量")
         return
 
-    stone_cost = int(txt)
+    stone_cost = int(normalized)
     if stone_cost <= 9:
-        await handle_send(bot, event, "请输入大于10的灵石数量。")
+        await handle_send(bot, event, "灵石数量必须至少为10。")
         return
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
@@ -382,8 +401,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if status == "at_cap":
         await handle_send(bot, event, "已达当前炼体境界上限，无法继续灵石炼体。")
         return
-    if status in {"stone_insufficient", "stone_changed"}:
-        await handle_send(bot, event, "灵石不足或余额已更新，请重新查看后再炼体。")
+    if status == "stone_insufficient":
+        await handle_send(bot, event, "灵石余额不足，本次未扣费。")
+        return
+    if status == "stone_changed":
+        await handle_send(bot, event, "灵石余额已变化，本次未扣费，请重新查看后再炼体。")
+        return
+    if status == "user_missing":
+        await handle_send(bot, event, "未找到修仙数据，本次未扣费。")
         return
     if not outcome.ok:
         raise RuntimeError(f"unexpected tianti stone training status: {status}")

@@ -117,7 +117,7 @@ def result_failure(action: str, result, *, messages: dict[str, str] | None = Non
 
 
 def _subject_label(subject) -> str:
-    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "buyer": "购买方", "seller": "出售方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟", "receipt": "操作回执", "player_profile": "玩家档案", "player_impart": "玩家传承属性", "player_natal_treasure": "本命法宝"}.get(str(subject), "")
+    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "buyer": "购买方", "seller": "出售方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟", "receipt": "操作回执", "player_profile": "玩家档案", "stone_wallet": "灵石钱包", "player_impart": "玩家传承属性", "player_natal_treasure": "本命法宝"}.get(str(subject), "")
 
 
 def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复", event=None) -> str:
