@@ -508,6 +508,10 @@ from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
 
+from tests.parameter_cases_tianti_profile import register as register_tianti_profile
+
+register_tianti_profile(case)
+
 from tests.parameter_cases_ranking import register as register_ranking
 
 register_ranking(case)

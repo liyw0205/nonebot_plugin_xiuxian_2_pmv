@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from nonebot.log import logger
 from ..on_compat import on_command
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -642,6 +642,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_info.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("我的炼体")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
