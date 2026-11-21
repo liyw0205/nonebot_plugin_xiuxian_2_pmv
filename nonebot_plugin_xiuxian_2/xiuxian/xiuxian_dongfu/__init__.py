@@ -1399,6 +1399,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("array", operation_id) if event_message_id else None
+    if receipt is not None:
+        parts = str(receipt.get("payload") or "").split("|")
+        try:
+            receipt_level = int(receipt["level"])
+            valid_receipt = (
+                len(parts) == 6
+                and parts[0] == uid
+                and int(parts[2]) == receipt_level
+                and int(parts[4]) == DONGFU_ITEM_ARRAY_STONE
+            )
+        except (KeyError, TypeError, ValueError):
+            valid_receipt, receipt_level = False, 0
+        if not valid_receipt:
+            await handle_send(bot, event, result_failure("洞府布阵", {
+                "reason": "dongfu_array_receipt_invalid", "subject": "receipt",
+            }))
+            return
+        await handle_send(bot, event, f"该阵法升级请求已经处理，当前阵法等级：{receipt_level}。")
+        return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1413,8 +1436,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     geomancy = _get_geomancy(d)
     cost = int(3000000 * (lv + 1) * (1 - float(geomancy.get("array_discount", 0))))
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = dongfu_application.array_upgrade(
         operation_id=operation_id,
         user_id=uid,
@@ -1431,7 +1452,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"升级至{next_lv}级阵法需要【玄铁阵石】x{array_stone_need}。可通过地图挖矿/战斗获得。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("洞府巡山", result))
+        await handle_send(bot, event, result_failure("洞府布阵", result))
         return
     item_msg = f"，玄铁阵石x{array_stone_need}" if array_stone_need > 0 else ""
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")

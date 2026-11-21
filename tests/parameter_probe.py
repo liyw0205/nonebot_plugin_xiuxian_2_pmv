@@ -576,6 +576,10 @@ from tests.parameter_cases_dongfu_infiltrate import register as register_dongfu_
 
 register_dongfu_infiltrate(case)
 
+from tests.parameter_cases_dongfu_array import register as register_dongfu_array
+
+register_dongfu_array(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
