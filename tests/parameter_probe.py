@@ -616,6 +616,10 @@ from tests.parameter_cases_map_help import register as register_map_help
 
 register_map_help(case)
 
+from tests.parameter_cases_map_movement import register as register_map_movement
+
+register_map_movement(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

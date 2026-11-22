@@ -145,6 +145,22 @@ def _map_operation_id(event, action: str, *identifiers) -> str:
     suffix = ":".join(str(value) for value in identifiers)
     return f"map-{action}:{event_id or runtime_ids.new_id()}:{suffix}"
 
+
+def _map_movement_failure(result) -> str:
+    result_info = result_data(result.data)
+    if result_info.get("reason"):
+        return result_failure(
+            "地图移动",
+            result_info,
+            subjects={"map_status": "地图位置", "stamina": "移动体力", "receipt": "移动回执"},
+        )
+    if result.code == "stamina_insufficient":
+        return "体力不足，无法移动。"
+    if result.code == "state_changed":
+        return "移动未完成：所在节点已更新，请重新移动。"
+    return f"无法移动（{result.code}）。"
+
+
 # =========================================
 # 每日限制配置
 # =========================================
@@ -1097,6 +1113,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @map_go.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("地图移动")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1166,12 +1183,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"🚀 跨界成功！\n已抵达 {tar_realm}·{first_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
@@ -1205,12 +1217,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"☁️ 跨天成功！\n已抵达 {tar_realm}·{tar_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
@@ -1248,12 +1255,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"👣 移动成功！\n已前往【{tar_node['name']}】\n跨越 {steps} 个节点，消耗体力：{cost}")
         return

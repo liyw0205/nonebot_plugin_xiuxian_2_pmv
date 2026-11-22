@@ -64,6 +64,15 @@ class MapApplication(LegacyApplication):
                 action="map.move",
                 payload={"user_id": user_id, **kwargs},
                 call=lambda: MapMovementSqlRepository(self.game_database, self.player_database).move(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_move_position_write_rejected",
+                    "map_move_position_projection_mismatch",
+                    "map_move_stamina_write_rejected",
+                    "map_move_stamina_projection_mismatch",
+                    "map_move_receipt_write_rejected",
+                    "map_move_receipt_projection_mismatch",
+                    "map_move_receipt_invalid",
+                ),
             )
         return self._action("move", operation_id=operation_id, user_id=user_id, **kwargs)
     def return_home(self, *, operation_id: str, user_id: str, **kwargs: Any):

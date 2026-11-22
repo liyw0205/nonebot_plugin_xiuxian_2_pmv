@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, require_exact_integer
+from ...core.numeric import as_int_like, exact_crystal_integer, require_exact_integer
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import RLock
@@ -28,6 +28,44 @@ class MapMovementSqlRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
 
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapMovementWriteConflict(f"map_move_{suffix}", subject)
+
+    @classmethod
+    def _verify_position(cls, uow, user_id: str, expected: dict[str, Any]) -> None:
+        row = uow.query_one(
+            "SELECT realm,heaven,node_id,visited_nodes FROM player_data.map_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("position_projection_mismatch", "map_status")
+        actual = {key: str(row[key] or "") for key in ("realm", "heaven", "node_id")}
+        try:
+            visited = json.loads(row["visited_nodes"]) if isinstance(row["visited_nodes"], str) else row["visited_nodes"]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            visited = []
+        actual["visited_nodes"] = [str(item) for item in visited] if isinstance(visited, list) else []
+        if actual != expected:
+            cls._reject("position_projection_mismatch", "map_status")
+
+    @classmethod
+    def _verify_stamina(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["user_stamina"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stamina_projection_mismatch", "stamina")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stamina: int) -> None:
+        row = uow.query_one(
+            "SELECT payload,stamina FROM map_movement_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        actual_stamina = exact_crystal_integer(row["stamina"]) if row is not None else None
+        if row is None or str(row["payload"]) != payload or actual_stamina != stamina:
+            cls._reject("receipt_projection_mismatch", "receipt")
+
     def move(self, operation_id: str, user_id: str, expected_position: dict[str, Any], target_position: dict[str, Any], expected_stamina: int, cost: int) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
         expected = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
@@ -40,7 +78,19 @@ class MapMovementSqlRepository:
             uow.attach_database(self.player_database, "player_data")
             old = uow.query_one("SELECT payload,stamina FROM map_movement_operations WHERE operation_id=?", (operation_id,))
             if old:
-                return {"status": "duplicate" if str(old["payload"]) == payload else "state_changed", "stamina": int(old["stamina"]) if str(old["payload"]) == payload else expected_stamina}
+                try:
+                    old_payload = json.loads(str(old["payload"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "map_move_receipt_invalid", "subject": "receipt"}
+                old_stamina = exact_crystal_integer(old["stamina"])
+                if old_stamina is None:
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "map_move_receipt_invalid", "subject": "receipt"}
+                if old_payload != json.loads(payload):
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "operation_conflict", "subject": "receipt"}
+                return {"status": "duplicate", "stamina": old_stamina}
             user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return {"status": "user_missing", "stamina": expected_stamina}
@@ -55,16 +105,52 @@ class MapMovementSqlRepository:
             visited = row["visited_nodes"]
             try:
                 visited = json.loads(visited) if isinstance(visited, str) else visited
-            except json.JSONDecodeError:
+            except (TypeError, ValueError, json.JSONDecodeError):
                 visited = []
             visited = [str(item) for item in visited] if isinstance(visited, list) else []
             if target["node_id"] not in visited:
                 visited.append(target["node_id"])
+            expected_position = dict(target, visited_nodes=visited)
             remaining = stamina - cost
-            uow.execute("UPDATE player_data.map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? WHERE user_id=?", (*target.values(), json.dumps(visited, ensure_ascii=False), user_id))
-            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
-            uow.execute("INSERT INTO map_movement_operations(operation_id,payload,stamina) VALUES(?,?,?)", (operation_id, payload, remaining))
+            try:
+                with uow.savepoint("map_movement"):
+                    if uow.execute(
+                        "UPDATE player_data.map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? "
+                        "WHERE user_id=? AND realm=? AND heaven=? AND node_id=?",
+                        (*target.values(), json.dumps(visited, ensure_ascii=False), user_id, *expected.values()),
+                    ).rowcount != 1:
+                        self._reject("position_write_rejected", "map_status")
+                    self._verify_position(uow, user_id, expected_position)
+
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=? AND user_stamina=?",
+                        (remaining, user_id, stamina),
+                    ).rowcount != 1:
+                        self._reject("stamina_write_rejected", "stamina")
+                    self._verify_stamina(uow, user_id, remaining)
+
+                    if uow.execute(
+                        "INSERT INTO map_movement_operations(operation_id,payload,stamina) VALUES(?,?,?)",
+                        (operation_id, payload, remaining),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, remaining)
+                    self._verify_position(uow, user_id, expected_position)
+                    self._verify_stamina(uow, user_id, remaining)
+            except _MapMovementWriteConflict as conflict:
+                return {
+                    "status": "state_changed",
+                    "stamina": stamina,
+                    "reason": conflict.reason,
+                    "subject": conflict.subject,
+                }
             return {"status": "applied", "stamina": remaining}
+
+
+class _MapMovementWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class _MapHomeReturnWriteConflict(Exception):
