@@ -276,7 +276,29 @@ class MapApplication(LegacyApplication):
         return self._action("combat_settle", operation_id=operation_id, user_id=user_id, **kwargs)
     def explore_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="map.explore_start", payload={"user_id": user_id, **kwargs}, call=lambda: MapExploreStartSqlRepository(self.game_database, self.player_database).start(operation_id, user_id, **kwargs))
+            request_payload = {"user_id": user_id, **kwargs}
+            request_status = dict(kwargs.get("new_status") or {})
+            request_status.pop("start_time", None)
+            request_payload["new_status"] = request_status
+            request_payload.pop("cooldown_until", None)
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.explore_start",
+                payload=request_payload,
+                call=lambda: MapExploreStartSqlRepository(self.game_database, self.player_database).start(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_explore_start_stamina_write_rejected",
+                    "map_explore_start_stamina_projection_mismatch",
+                    "map_explore_start_status_write_rejected",
+                    "map_explore_start_status_projection_mismatch",
+                    "map_explore_start_cooldown_write_rejected",
+                    "map_explore_start_cooldown_projection_mismatch",
+                    "map_explore_start_receipt_write_rejected",
+                    "map_explore_start_receipt_projection_mismatch",
+                    "map_explore_start_receipt_invalid",
+                ),
+            )
         return self._action("explore_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def explore_settle(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
         if self._explicit_repository is None:

@@ -17,6 +17,13 @@
 - 资源：`钓鱼`、`挖矿`、`采集`，触发交互时分别使用 `收杆`、`落镐`、`采收`；`种子商店`、`购买种子 种子名 数量`。
 - 战斗与探索：`节点战斗`（别名 `试炼挑战`、`险地挑战`）、`开始探索 [分钟]`（别名 `节点探索`）、`探索结算`。
 - 委托：`地图委托`、`接取委托`、`委托完成`。洞府内操作见 `洞府帮助`。
+
+## 探索发起
+`开始探索 [分钟]` 在遗迹、情报、宫殿节点使用；省略分钟或输入非整数时取节点配置时长，低于 5 分钟的输入按 5 分钟处理。大于节点结算上限的计划时长仍保留在状态中，实际结算时由 `max_duration_min` 限制。发起前检查角色、探索节点、体力、每日探索结算额度、30 秒发起冷却和已有进行中状态；`explore_count` 在探索结算时递增，不在发起时递增。
+
+默认写链经 `MapApplication.explore_start -> MapExploreStartSqlRepository`，在同一 game/player SQLite 工作单元内扣体力、保存探索状态和冷却，并写 game 库永久回执。四个写点均核 rowcount 与实际投影，任何已知拒写或写后改写都回滚整笔并返回具体 reason/subject；故障解除后可用原消息重试。账本请求身份忽略由服务端时钟生成的开始时间和冷却截止值，避免跨秒重试变成不同请求；永久回执仍保留实际时间。意外 SQLite 异常由命令 guard 记录 traceback 并回复定位号。
+
+真实 OneBot matcher 覆盖开始/拒绝/恢复路径；QQ plain、Markdown 与 Markdown 发送失败回退用 adapter mock 验证，不代表 QQ 客户端真机联调。
 ## Web API
 `POST /api/v1/map/{move,return_home,interactive_start,interactive_finish,combat_start,combat_settle,explore_start,explore_settle,resource_reward,mission_claim,purchase_seed,build_dongfu}`，权限 `user`。
 ## 数据模型与迁移

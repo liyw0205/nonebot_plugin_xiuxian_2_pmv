@@ -2186,6 +2186,28 @@ def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: 
     return text, rewards, stone, reward_items
 
 
+@guard_command(
+    "发起探索",
+    known_rejections=(
+        "map_explore_start_stamina_write_rejected",
+        "map_explore_start_stamina_projection_mismatch",
+        "map_explore_start_status_write_rejected",
+        "map_explore_start_status_projection_mismatch",
+        "map_explore_start_cooldown_write_rejected",
+        "map_explore_start_cooldown_projection_mismatch",
+        "map_explore_start_receipt_write_rejected",
+        "map_explore_start_receipt_projection_mismatch",
+        "map_explore_start_receipt_invalid",
+    ),
+    subjects=lambda _exc: {
+        "stamina": "探索体力",
+        "map_status": "地图位置",
+        "map_daily_limit": "探索次数",
+        "map_explore_status": "探索状态",
+        "map_cooldown": "探索冷却",
+        "receipt": "探索永久回执",
+    },
+)
 async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, duration_arg: int | None):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -2264,31 +2286,26 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     expected_cooldown = map_application.cooldown_until(uid, "explore_start_cd_until")
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    try:
-        outcome = map_application.explore_start(
-            operation_id=f"map-explore-start:{uid}:{event_message_id or runtime_ids.new_id()}",
-            user_id=uid,
-            expected_stamina=stamina,
-            stamina_cost=need_stamina,
-            expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
-            expected_status=expected_status,
-            expected_daily=expected_daily,
-            daily_limit=DAILY_LIMIT_CONFIG["explore"],
-            expected_cooldown=expected_cooldown,
-            cooldown_until=cooldown_until,
-            new_status=new_st,
-        )
-        data = result_data(outcome.data)
-        result = MapExploreStartResult(
-            str(data.get("status", outcome.code)),
-            int(data.get("stamina", stamina) or 0),
-            reason=str(data.get("reason", "")),
-            subject=str(data.get("subject", "actor")),
-        )
-    except Exception:
-        logger.exception("地图探索发起事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索发起失败：处理过程异常。")
-        return
+    outcome = map_application.explore_start(
+        operation_id=f"map-explore-start:{uid}:{event_message_id or runtime_ids.new_id()}",
+        user_id=uid,
+        expected_stamina=stamina,
+        stamina_cost=need_stamina,
+        expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
+        expected_status=expected_status,
+        expected_daily=expected_daily,
+        daily_limit=DAILY_LIMIT_CONFIG["explore"],
+        expected_cooldown=expected_cooldown,
+        cooldown_until=cooldown_until,
+        new_status=new_st,
+    )
+    data = result_data(outcome.data)
+    result = MapExploreStartResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stamina", stamina) or 0),
+        reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "actor")),
+    )
     if result.status == "already_running":
         await handle_send(bot, event, "你已有进行中的探索，请先【探索结算】。")
         return
@@ -2299,7 +2316,12 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, f"今日探索发起次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），请明日再来。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("发起探索", result))
+        await handle_send(bot, event, result_failure(
+            "发起探索", result,
+            subjects={"stamina": "探索体力", "map_status": "地图位置",
+                      "map_daily_limit": "探索次数", "map_explore_status": "探索状态",
+                      "map_cooldown": "探索冷却", "receipt": "探索永久回执"},
+        ))
         return
 
     await handle_send(
@@ -2488,7 +2510,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if txt:
         try:
             duration_arg = int(txt)
-        except Exception:
+        except ValueError:
             duration_arg = None
     await _start_explore(bot, event, duration_arg)
 

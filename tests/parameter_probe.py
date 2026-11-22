@@ -628,6 +628,10 @@ from tests.parameter_cases_map_info import register as register_map_info
 
 register_map_info(case)
 
+from tests.parameter_cases_map_explore_start import register as register_map_explore_start
+
+register_map_explore_start(case)
+
 
 async def execute(args, checkpoint, *, minimal_map=False):
     context, managers = await prepare(minimal_map=minimal_map)
