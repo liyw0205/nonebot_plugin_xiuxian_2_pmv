@@ -51,15 +51,24 @@ def register(case):
         group="map-help",
     )
     async def help_catalog(probe):
+        from nonebot_plugin_xiuxian_2.features.map.manifest import FEATURE
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map
 
-        expected = {
+        runtime_commands = {
             name
             for entry in probe.entries
             if entry["module"] == xiuxian_map.__name__
             for name in (entry["command"], *entry["aliases"])
         }
-        assert {"地图帮助", "建设洞府", "回府", "险地挑战", "节点探索"} <= expected
+        manifest_commands = {
+            name
+            for command in FEATURE.commands
+            for name in (command.name, *command.aliases)
+        }
+        assert runtime_commands == manifest_commands, {
+            "runtime_only": sorted(runtime_commands - manifest_commands),
+            "manifest_only": sorted(manifest_commands - runtime_commands),
+        }
 
         before = _database_projection(probe)
         replies = []
@@ -87,7 +96,7 @@ def register(case):
         expected_message_delta = {"messages": 6, "user_nicknames": 1}
         catalog = replies[0]
         missing = [
-            name for name in sorted(expected | {"洞府帮助"})
+            name for name in sorted(runtime_commands | {"洞府帮助"})
             if not re.search(rf"(?<!\w){re.escape(name)}(?!\w)", catalog)
         ]
         missing_usage = [form for form in USAGES if form not in catalog]

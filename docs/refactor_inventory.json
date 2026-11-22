@@ -587,6 +587,12 @@
     },
     {
       "aliases": [],
+      "feature": "map",
+      "name": "前往",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "dungeon",
       "name": "副本兑换",
       "permission": "user"
@@ -820,6 +826,12 @@
       "permission": "user"
     },
     {
+      "aliases": [],
+      "feature": "map",
+      "name": "回府",
+      "permission": "user"
+    },
+    {
       "aliases": [
         "取回记忆"
       ],
@@ -839,12 +851,21 @@
       "permission": "user"
     },
     {
-      "aliases": [
-        "回家",
-        "探索"
-      ],
+      "aliases": [],
       "feature": "map",
       "name": "地图",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "地图委托",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "地图帮助",
       "permission": "user"
     },
     {
@@ -856,6 +877,12 @@
       ],
       "feature": "interactive",
       "name": "天气",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "委托完成",
       "permission": "user"
     },
     {
@@ -985,6 +1012,12 @@
     },
     {
       "aliases": [],
+      "feature": "map",
+      "name": "建设洞府",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "activity",
       "name": "开启活动",
       "permission": "superuser"
@@ -1036,6 +1069,14 @@
       "aliases": [],
       "feature": "entertainment",
       "name": "开始扫雷",
+      "permission": "user"
+    },
+    {
+      "aliases": [
+        "节点探索"
+      ],
+      "feature": "map",
+      "name": "开始探索",
       "permission": "user"
     },
     {
@@ -1097,6 +1138,12 @@
       ],
       "feature": "tasks",
       "name": "我的任务",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "我的位置",
       "permission": "user"
     },
     {
@@ -1367,8 +1414,20 @@
     },
     {
       "aliases": [],
+      "feature": "map",
+      "name": "挖矿",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "dungeon",
       "name": "探索副本",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "探索结算",
       "permission": "user"
     },
     {
@@ -1377,6 +1436,12 @@
       ],
       "feature": "impart_pk",
       "name": "探索虚神界",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "接取委托",
       "permission": "user"
     },
     {
@@ -1401,6 +1466,12 @@
       ],
       "feature": "entertainment",
       "name": "摸鱼日报",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "收杆",
       "permission": "user"
     },
     {
@@ -2170,6 +2241,12 @@
     },
     {
       "aliases": [],
+      "feature": "map",
+      "name": "种子商店",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "title",
       "name": "称号帮助",
       "permission": "user"
@@ -2315,6 +2392,15 @@
     },
     {
       "aliases": [
+        "试炼挑战",
+        "险地挑战"
+      ],
+      "feature": "map",
+      "name": "节点战斗",
+      "permission": "user"
+    },
+    {
+      "aliases": [
         "战斗结算"
       ],
       "feature": "combat_settlement",
@@ -2325,6 +2411,12 @@
       "aliases": [],
       "feature": "entertainment",
       "name": "落子",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "落镐",
       "permission": "user"
     },
     {
@@ -2453,6 +2545,18 @@
       "permission": "user"
     },
     {
+      "aliases": [],
+      "feature": "map",
+      "name": "论道切磋",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "论道查看",
+      "permission": "user"
+    },
+    {
       "aliases": [
         "thx",
         "多谢",
@@ -2470,6 +2574,12 @@
       ],
       "feature": "puppet",
       "name": "购买灵田傀儡",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "购买种子",
       "permission": "user"
     },
     {
@@ -2601,6 +2711,18 @@
     },
     {
       "aliases": [],
+      "feature": "map",
+      "name": "采收",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "采集",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "admin",
       "name": "重置世界BOSS",
       "permission": "superuser"
@@ -2684,6 +2806,12 @@
       "permission": "user"
     },
     {
+      "aliases": [],
+      "feature": "map",
+      "name": "钓鱼",
+      "permission": "user"
+    },
+    {
       "aliases": [
         "流媒体解析",
         "视频解析",
@@ -2692,6 +2820,12 @@
       ],
       "feature": "entertainment",
       "name": "链接解析",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
+      "feature": "map",
+      "name": "附近道友",
       "permission": "user"
     },
     {
