@@ -359,7 +359,27 @@ class MapApplication(LegacyApplication):
     def purchase_seed(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
         if self._explicit_repository is None:
             identity = {key: kwargs[key] for key in ("item_id", "item_name", "quantity", "unit_cost")}
-            return self._execute(operation_id=operation_id,user_id=user_id,action="map.purchase_seed",payload={"user_id":user_id,**identity},call=lambda:MapSeedPurchaseSqlRepository(self.game_database,clock=clock).purchase(operation_id,user_id,**kwargs))
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.purchase_seed",
+                payload={"user_id": user_id, **identity},
+                call=lambda: MapSeedPurchaseSqlRepository(self.game_database, clock=clock).purchase(
+                    operation_id, user_id, **kwargs
+                ),
+                retryable_rejections=(
+                    "map_seed_purchase_stone_changed",
+                    "map_seed_purchase_stone_invalid",
+                    "map_seed_purchase_stone_write_rejected",
+                    "map_seed_purchase_stone_projection_mismatch",
+                    "map_seed_purchase_inventory_invalid",
+                    "map_seed_purchase_inventory_write_rejected",
+                    "map_seed_purchase_inventory_projection_mismatch",
+                    "map_seed_purchase_receipt_write_rejected",
+                    "map_seed_purchase_receipt_projection_mismatch",
+                    "map_seed_purchase_receipt_invalid",
+                ),
+            )
         return self._action("purchase_seed",operation_id=operation_id,user_id=user_id,**kwargs)
     def build_dongfu(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

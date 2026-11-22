@@ -1,5 +1,8 @@
 """Real map, seed, fusion and alchemy parameter paths."""
 
+import json
+import re
+
 from tests.parameter_cases_assets import balances, backpack
 
 
@@ -35,8 +38,11 @@ def register(case):
         probe.evidence.update(target=target["name"], before=status, after=moved, replay_unchanged=True)
 
     @case("map-seed-purchase-valid", "购买种子", "真实种子名 数量2", "真实种子商店节点、100000000灵石、空库存",
-          "精确购买2份种子，扣真实价格并写库存，重放不重复", group="map-fusion-parameters")
+          "精确购买2份种子，扣真实价格并写库存，重放不重复", group="map-seed-purchase")
     async def seed_buy(probe):
+        from nonebot_plugin_xiuxian_2.features.map.migrations import apply_map_seed_purchase
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.infrastructure.database.ledger import OperationLedger
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map as module
         data = module._load_map_data()
         for realm in data["meta"]["realms"]:
@@ -49,6 +55,9 @@ def register(case):
                 break
         module.map_application.save_status("900001", node["realm"], node["heaven"], node["id"], [node["id"]])
         probe.player(stone=100_000_000)
+        with DatabaseUnitOfWork(probe.context.paths.game_db) as uow:
+            apply_map_seed_purchase(uow)
+            OperationLedger().ensure_schema(uow)
         seed = module.SEED_CONFIG[21001]
         before = balances(probe)
         text = await probe.command("购买种子", f"购买种子 {seed['name']} 2", number=970002)
@@ -58,10 +67,87 @@ def register(case):
         saved = backpack(probe)
         await probe.command("购买种子", f"购买种子 {seed['name']} 2", number=970002)
         assert backpack(probe) == saved and balances(probe) == after
-        probe.evidence.update(seed_id=21001, quantity=2, replay_unchanged=True)
+        changed = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 3", number=970002, allow_exception=True
+        )
+        assert "不同内容" in changed and backpack(probe) == saved and balances(probe) == after, changed
+        database = probe.context.paths.game_db
+        legacy_operation = "map-seed-purchase:900001:970004"
+        probe.seed(
+            database,
+            "INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) "
+            "VALUES(?,?,?,?,?,?)",
+            (legacy_operation, json.dumps(["900001", 21001, seed["name"], 2, seed["price"], 100_000_000, 1000]),
+             2, 2 * seed["price"], 99_000_000, 2),
+        )
+        legacy_replay = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 2", number=970004, timeout=30
+        )
+        assert "购买成功" in legacy_replay and backpack(probe) == saved and balances(probe) == after
+        for index, (item_id, configured) in enumerate(module.SEED_CONFIG.items()):
+            if item_id == 21001:
+                continue
+            purchase_number = 970010 + index
+            before_stone = probe.rows(
+                probe.context.paths.game_db,
+                "SELECT stone FROM user_xiuxian WHERE user_id='900001'",
+            )[0][0]
+            text = await probe.command(
+                "购买种子",
+                f"购买种子 {configured['name']} 1",
+                number=purchase_number,
+                timeout=30,
+            )
+            assert f"购买成功：{configured['name']} x1" in text
+            assert module.number_to(configured["price"]) in text
+            saved_stone = probe.rows(
+                probe.context.paths.game_db,
+                "SELECT stone FROM user_xiuxian WHERE user_id='900001'",
+            )
+            saved_item = probe.rows(
+                probe.context.paths.game_db,
+                "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?",
+                (item_id,),
+            )
+            assert saved_stone == [(before_stone - configured["price"],)]
+            assert saved_item == [(1, 1)]
+            replay = await probe.command(
+                "购买种子",
+                f"购买种子 {configured['name']} 1",
+                number=purchase_number,
+                timeout=30,
+            )
+            assert f"购买成功：{configured['name']} x1" in replay
+            assert probe.rows(
+                probe.context.paths.game_db,
+                "SELECT stone FROM user_xiuxian WHERE user_id='900001'",
+            ) == saved_stone
+            assert probe.rows(
+                probe.context.paths.game_db,
+                "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?",
+                (item_id,),
+            ) == saved_item
+        module.map_application.save_status("900002", node["realm"], node["heaven"], node["id"], [node["id"]])
+        probe.player(uid="900002", stone=10_000_000)
+        other_reply = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 1", actor="900002", number=970003, event_type="private"
+        )
+        assert "购买成功" in other_reply
+        assert probe.rows(probe.context.paths.game_db, "SELECT stone FROM user_xiuxian WHERE user_id='900002'") == [(9_500_000,)]
+        assert probe.rows(probe.context.paths.game_db, "SELECT goods_num,bind_num FROM back WHERE user_id='900002' AND goods_id=21001") == [(1, 1)]
+        assert probe.rows(probe.context.paths.game_db, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001") == [(2, 2)]
+        probe.seed(database, "UPDATE back SET bind_num=NULL WHERE user_id='900002' AND goods_id=21001")
+        old_backpack_reply = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 1", actor="900002", number=970005, event_type="private"
+        )
+        assert "购买成功" in old_backpack_reply, old_backpack_reply
+        assert probe.rows(database, "SELECT goods_num,bind_num FROM back WHERE user_id='900002' AND goods_id=21001") == [(2, 1)]
+        assert probe.rows(database, "SELECT stone FROM user_xiuxian WHERE user_id='900002'") == [(9_000_000,)]
+        probe.evidence.update(seed_id=21001, quantity=2, replay_unchanged=True,
+                              other_player_isolated=True, legacy_null_binding=True)
 
     @case("map-seed-extra-reject", "购买种子", "真实种子名 数量 多余参数", "真实种子商店节点和充足灵石",
-          "格式拒绝，资产与库存不变", group="map-fusion-parameters", outcome="rejection")
+          "格式拒绝，资产与库存不变", group="map-seed-purchase", outcome="rejection")
     async def seed_extra(probe):
         from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map as module
         data = module._load_map_data()
@@ -79,6 +165,264 @@ def register(case):
         assert before == balances(probe) and stock == backpack(probe), text
         assert "格式" in text, text
         probe.evidence.update(assets_unchanged=True, inventory_unchanged=True)
+
+    @case("map-seed-purchase-input-and-business-boundaries", "购买种子", "非法/未知/非商店/余额/背包上限",
+          "隔离真实节点、钱包、背包和迁移表",
+          "拒绝路径返回具体状态且不改钱包、库存或购买回执",
+          group="map-seed-purchase", outcome="rejection")
+    async def seed_purchase_boundaries(probe):
+        from nonebot_plugin_xiuxian_2.features.map.migrations import apply_map_seed_purchase
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.infrastructure.database.ledger import OperationLedger
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map as module
+
+        game = probe.context.paths.game_db
+        data = module._load_map_data()
+        nodes = [
+            {**candidate, "realm": realm, "heaven": heaven}
+            for realm in data["meta"]["realms"]
+            for heaven in module._heaven_names(data, realm)
+            for candidate in module._nodes(data, realm, heaven)
+        ]
+        shop = next(node for node in nodes if module._is_seed_shop_node(node["type"]))
+        other = next(node for node in nodes if not module._is_seed_shop_node(node["type"]))
+        seed = module.SEED_CONFIG[21001]
+        with DatabaseUnitOfWork(game) as uow:
+            apply_map_seed_purchase(uow)
+            OperationLedger().ensure_schema(uow)
+        module.map_application.save_status("900001", shop["realm"], shop["heaven"], shop["id"], [shop["id"]])
+
+        checks = (
+            ("购买种子 青灵草种 0", "数量需大于0"),
+            ("购买种子 青灵草种 -1", "数量需大于0"),
+            ("购买种子 青灵草种 nope", "数量必须是整数"),
+            ("购买种子 青灵草种 1 extra", "购买格式"),
+            ("购买种子 不存在的种子 1", "未找到种子"),
+        )
+        for index, (command, expected) in enumerate(checks):
+            before = (
+                probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+                probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+                probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id"),
+            )
+            reply = await probe.command("购买种子", command, number=970050 + index, timeout=30)
+            assert expected in reply, (command, reply)
+            after = (
+                probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+                probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+                probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id"),
+            )
+            assert after == before, (command, reply, before, after)
+
+        conflict_operation = "map-seed-purchase:900001:970059"
+        probe.seed(
+            game,
+            "INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) "
+            "VALUES(?,?,?,?,?,?)",
+            (conflict_operation, json.dumps(["900001", 21001, seed["name"], 1, seed["price"]]),
+             1, seed["price"], 500_000, 1),
+        )
+        before_conflict = (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+        )
+        conflict_reply = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 2", number=970059, timeout=30
+        )
+        assert "不同内容" in conflict_reply, conflict_reply
+        assert before_conflict == (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+        )
+
+        corrupt_operation = "map-seed-purchase:900001:970060"
+        probe.seed(
+            game,
+            "INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) "
+            "VALUES(?,?,?,?,?,?)",
+            (corrupt_operation, "{broken", 1, seed["price"], 500_000, 1),
+        )
+        before_corrupt = (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+        )
+        from nonebot_plugin_xiuxian_2.core.player_reasons import reason_text
+        corrupt_reply = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 1", number=970060, timeout=30
+        )
+        assert reason_text("map_seed_purchase_receipt_invalid") in corrupt_reply, corrupt_reply
+        assert before_corrupt == (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' ORDER BY goods_id"),
+        )
+
+        module.map_application.save_status("900001", other["realm"], other["heaven"], other["id"], [other["id"]])
+        reply = await probe.command("购买种子", f"购买种子 {seed['name']} 1", number=970061, timeout=30)
+        assert "无种子商店" in reply
+        module.map_application.save_status("900001", shop["realm"], shop["heaven"], shop["id"], [shop["id"]])
+
+        probe.player(stone=1)
+        before_stone = probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'")
+        before_receipts = probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id")
+        reply = await probe.command("购买种子", f"购买种子 {seed['name']} 1", number=970062, timeout=30)
+        assert "灵石不足" in reply
+        assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == before_stone
+        assert probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id") == before_receipts
+
+        probe.player(stone=100_000_000)
+        definition = module.Items().get_data_by_item_id(21001)
+        probe.managers[0].send_back("900001", 21001, definition["name"], definition["type"], 1000)
+        before_full = (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001"),
+            probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id"),
+        )
+        reply = await probe.command("购买种子", f"购买种子 {seed['name']} 1", number=970063, timeout=30)
+        assert "背包物品已达上限" in reply
+        after_full = (
+            probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'"),
+            probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001"),
+            probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id"),
+        )
+        assert after_full == before_full
+
+        probe.seed(game, "UPDATE back SET goods_num=1,bind_num=-1 WHERE user_id='900001' AND goods_id=21001")
+        reply = await probe.command(
+            "购买种子", f"购买种子 {seed['name']} 1", number=970064, timeout=30, allow_exception=True
+        )
+        assert reason_text("map_seed_purchase_inventory_invalid") in reply, reply
+        assert "背包物品（ID 21001）" in reply, reply
+        assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == before_full[0]
+        assert probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001") == [(1, -1)]
+        assert probe.rows(game, "SELECT * FROM map_seed_purchase_operations ORDER BY operation_id") == before_full[2]
+        probe.evidence["boundary_branches"] = len(checks) + 6
+
+    @case("map-seed-shop-readonly", "种子商店", "群聊/私聊重复只读展示",
+          "真实种子配置、商店节点及有效地图状态",
+          "展示每个配置种子的实际价格，业务数据库投影不变",
+          group="map-seed-purchase")
+    async def seed_shop_readonly(probe):
+        from tests.parameter_cases_map_help import _database_projection
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map as module
+
+        data = module._load_map_data()
+        node = next(
+            {**candidate, "realm": realm, "heaven": heaven}
+            for realm in data["meta"]["realms"]
+            for heaven in module._heaven_names(data, realm)
+            for candidate in module._nodes(data, realm, heaven)
+            if module._is_seed_shop_node(candidate["type"])
+        )
+        module.map_application.save_status("900001", node["realm"], node["heaven"], node["id"], [node["id"]])
+        before = _database_projection(probe)
+        replies = [
+            await probe.command("种子商店", "种子商店", number=970060 + index,
+                                event_type=event_type, timeout=30)
+            for index, event_type in enumerate(("group", "private", "group"))
+        ]
+        replies = [re.sub(r"^\[CQ:at,qq=\d+\]", "", reply).replace("\r", "") for reply in replies]
+        after = _database_projection(probe)
+        for key in ("game_db", "player_db", "trade_db", "impart_db"):
+            assert after[key] == before[key], key
+        for item_id, seed in module.SEED_CONFIG.items():
+            assert seed["name"] in replies[0] and module.number_to(seed["price"]) in replies[0], (item_id, seed, replies[0])
+        assert replies[0] == replies[1] == replies[2]
+        probe.evidence.update(seed_count=len(module.SEED_CONFIG), business_databases_readonly=True)
+
+    @case("map-seed-purchase-write-recovery", "购买种子", "真实种子名 数量2",
+          "种子商店、隔离迁移库和逐写点IGNORE/AFTER改写/ABORT触发器",
+          "每个写点拒绝均不伪成功或留下半结算；同消息解除故障后成功一次",
+          group="map-seed-purchase", outcome="recovery")
+    async def seed_purchase_write_recovery(probe):
+        from nonebot_plugin_xiuxian_2.core.player_reasons import reason_text
+        from nonebot_plugin_xiuxian_2.features.map.migrations import apply_map_seed_purchase
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.infrastructure.database.ledger import OperationLedger
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map as module
+
+        game = probe.context.paths.game_db
+        data = module._load_map_data()
+        node = next(
+            {**candidate, "realm": realm, "heaven": heaven}
+            for realm in data["meta"]["realms"]
+            for heaven in module._heaven_names(data, realm)
+            for candidate in module._nodes(data, realm, heaven)
+            if module._is_seed_shop_node(candidate["type"])
+        )
+        seed = module.SEED_CONFIG[21001]
+        module.map_application.save_status("900001", node["realm"], node["heaven"], node["id"], [node["id"]])
+        probe.player(stone=100_000_000)
+        with DatabaseUnitOfWork(game) as uow:
+            apply_map_seed_purchase(uow)
+            OperationLedger().ensure_schema(uow)
+
+        faults = (
+            ("stone", "BEFORE UPDATE OF stone ON user_xiuxian WHEN NEW.user_id='900001' "
+             "BEGIN SELECT RAISE(IGNORE); END", "map_seed_purchase_stone_write_rejected"),
+            ("stone", "AFTER UPDATE OF stone ON user_xiuxian WHEN NEW.user_id='900001' "
+             "BEGIN UPDATE user_xiuxian SET stone=NEW.stone+1 WHERE user_id=NEW.user_id; END",
+             "map_seed_purchase_stone_projection_mismatch"),
+            ("stone", "BEFORE UPDATE OF stone ON user_xiuxian WHEN NEW.user_id='900001' "
+             "BEGIN SELECT RAISE(ABORT,'seed stone blocked'); END", None),
+            ("inventory", "BEFORE UPDATE OF goods_num ON back WHEN NEW.user_id='900001' AND NEW.goods_id=21001 "
+             "BEGIN SELECT RAISE(IGNORE); END", "map_seed_purchase_inventory_write_rejected"),
+            ("inventory", "AFTER UPDATE OF goods_num ON back WHEN NEW.user_id='900001' AND NEW.goods_id=21001 "
+             "BEGIN UPDATE back SET goods_num=NEW.goods_num+1 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id; END",
+             "map_seed_purchase_inventory_projection_mismatch"),
+            ("inventory", "BEFORE UPDATE OF goods_num ON back WHEN NEW.user_id='900001' AND NEW.goods_id=21001 "
+             "BEGIN SELECT RAISE(ABORT,'seed inventory blocked'); END", None),
+            ("receipt", "BEFORE INSERT ON map_seed_purchase_operations BEGIN SELECT RAISE(IGNORE); END",
+             "map_seed_purchase_receipt_write_rejected"),
+            ("receipt", "AFTER INSERT ON map_seed_purchase_operations BEGIN UPDATE map_seed_purchase_operations "
+             "SET cost=NEW.cost+1 WHERE operation_id=NEW.operation_id; END",
+             "map_seed_purchase_receipt_projection_mismatch"),
+            ("receipt", "BEFORE INSERT ON map_seed_purchase_operations "
+             "BEGIN SELECT RAISE(ABORT,'seed receipt blocked'); END", None),
+        )
+        evidence = []
+        for index, (subject, trigger, reason) in enumerate(faults):
+            number = 970030 + index
+            before_stone = probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'")
+            before_inventory = probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001")
+            before_inventory_values = before_inventory[0] if before_inventory else (0, 0)
+            before_receipt = probe.rows(game, "SELECT operation_id,payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations ORDER BY operation_id")
+            trigger_name = f"map_seed_fault_{index}"
+            probe.seed(game, f"CREATE TRIGGER {trigger_name} {trigger}")
+            reply = await probe.command(
+                "购买种子", f"购买种子 {seed['name']} 2", number=number,
+                timeout=30, allow_exception=reason is None,
+            )
+            assert "购买成功" not in reply, (subject, trigger, reply)
+            assert probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'") == before_stone
+            assert probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001") == before_inventory
+            assert probe.rows(game, "SELECT operation_id,payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations ORDER BY operation_id") == before_receipt
+            if reason:
+                assert reason_text(reason) in reply, (reason, reply)
+                if subject == "stone":
+                    assert "灵石钱包" in reply, reply
+                elif subject == "inventory":
+                    assert "背包物品" in reply, reply
+                else:
+                    assert "购买回执" in reply, reply
+                assert probe.rows(game, "SELECT status FROM operation_ledger WHERE operation_id=? AND action='map.purchase_seed'", (f"map-seed-purchase:900001:{number}",)) == []
+            else:
+                assert "定位号" in reply and "blocked" not in reply, reply
+                assert probe.rows(game, "SELECT status FROM operation_ledger WHERE operation_id=? AND action='map.purchase_seed'", (f"map-seed-purchase:900001:{number}",)) == [("failed",)]
+
+            probe.seed(game, f"DROP TRIGGER {trigger_name}")
+            recovered = await probe.command("购买种子", f"购买种子 {seed['name']} 2", number=number, timeout=30)
+            assert "购买成功" in recovered, (subject, recovered)
+            current = probe.rows(game, "SELECT stone FROM user_xiuxian WHERE user_id='900001'")
+            assert current == [(before_stone[0][0] - 2 * seed["price"],)]
+            inventory = probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=21001")
+            assert inventory == [(before_inventory_values[0] + 2, before_inventory_values[1] + 2)]
+            receipt = probe.rows(game, "SELECT quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?", (f"map-seed-purchase:900001:{number}",))
+            assert receipt == [(2, 2 * seed["price"], current[0][0], inventory[0][0])]
+            evidence.append({"subject": subject, "expected_reason": reason, "recovered": True})
+            with DatabaseUnitOfWork(game, read_only=True) as uow:
+                assert uow.query_one("PRAGMA integrity_check")["integrity_check"] == "ok"
+
+        probe.evidence["write_failures"] = evidence
 
     @case("fusion-real-item-count", "强行合成", "真实可合成物品名 数量", "真实融合配置、合法境界与材料库存",
           "走真实融合应用，材料/灵石按数量结算并持久化，重放不重复", group="map-fusion-parameters")

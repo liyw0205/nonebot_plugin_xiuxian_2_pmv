@@ -1442,6 +1442,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @buy_seed.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("购买种子")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1459,7 +1460,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     seed_name = parts[0]
     try:
         num = int(parts[1])
-    except Exception:
+    except ValueError:
         await handle_send(bot, event, "数量必须是整数。")
         return
     if num <= 0:
@@ -1503,7 +1504,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，购买未完成。")
         return
     if result.status in {"state_changed", "user_missing"}:
+        if data.get("reason"):
+            await handle_send(bot, event, result_failure(
+                "购买种子",
+                data,
+                subjects={"stone_wallet": "灵石钱包", "receipt": "购买回执"},
+            ))
+            return
+        if result.status == "user_missing":
+            await handle_send(bot, event, "角色资料不存在，请重新加入修仙后再购买种子。")
+            return
         await handle_send(bot, event, "操作未完成：灵石数额已更新，请重新发起。")
+        return
+    if result.status not in {"applied", "duplicate"}:
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "购买种子",
+                {"status": result.status, "reason": data.get("reason", ""),
+                 "subject": data.get("subject", "")},
+                subjects={"stone_wallet": "灵石钱包", "receipt": "购买回执"},
+            ),
+        )
         return
     await handle_send(bot, event, f"购买成功：{seed['name']} x{result.quantity}，花费{number_to(result.cost)}灵石。")
 

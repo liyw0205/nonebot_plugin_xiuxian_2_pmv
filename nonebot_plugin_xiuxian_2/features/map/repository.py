@@ -1243,27 +1243,254 @@ class MapMissionClaimSqlRepository:
 class MapSeedPurchaseSqlRepository:
     def __init__(self, game_database: str | Path, *, clock: Any) -> None:
         self.game_database,self.clock=str(game_database),clock
-    def purchase(self,operation_id:str,user_id:str,item_id:int,item_name:str,quantity:int,unit_cost:int,expected_stone:int,max_goods_num:int)->dict[str,Any]:
-        operation_id,user_id,item_name=str(operation_id).strip(),str(user_id),str(item_name);item_id,quantity,unit_cost,expected_stone,max_goods_num=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods_num))
-        if not operation_id or quantity<=0 or min(item_id,unit_cost,expected_stone,max_goods_num)<0:raise ValueError('valid seed purchase required')
-        payload=json.dumps([user_id,item_id,item_name,quantity,unit_cost],ensure_ascii=True,sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            old=uow.query_one('SELECT payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?',(operation_id,))
-            if old:
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapSeedPurchaseConflict(f"map_seed_purchase_{suffix}", subject)
+
+    @staticmethod
+    def _exact(value: Any, storage_type: Any, *, suffix: str, subject: str) -> int:
+        number = exact_crystal_integer(value, storage_type)
+        if number is None:
+            MapSeedPurchaseSqlRepository._reject(suffix, subject)
+        return number
+
+    @classmethod
+    def _verify_stone(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one(
+            "SELECT stone,typeof(stone) AS storage_type FROM user_xiuxian WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None or cls._exact(
+            row["stone"], row["storage_type"], suffix="stone_projection_mismatch", subject="stone_wallet"
+        ) != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, item_name: str,
+        expected_goods: int, expected_bound: int,
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_num,typeof(goods_num) AS goods_storage_type,bind_num,typeof(bind_num) AS bind_type,"
+            "goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        if row is None:
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+        goods = cls._exact(
+            row["goods_num"], row["goods_storage_type"],
+            suffix="inventory_projection_mismatch", subject=f"item:{item_id}",
+        )
+        bound = cls._exact(
+            row["bind_num"], row["bind_type"],
+            suffix="inventory_projection_mismatch", subject=f"item:{item_id}",
+        )
+        if (goods, bound, str(row["goods_name"]), str(row["goods_type"])) != (
+            expected_goods, expected_bound, item_name, "特殊物品"
+        ):
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(
+        cls, uow, operation_id: str, payload: str, quantity: int, cost: int,
+        stone: int, inventory: int,
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,quantity,typeof(quantity) AS quantity_type,cost,typeof(cost) AS cost_type,"
+            "stone,typeof(stone) AS stone_type,inventory,typeof(inventory) AS inventory_type "
+            "FROM map_seed_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None:
+            cls._reject("receipt_projection_mismatch", "receipt")
+        actual_stone = cls._exact(
+            row["stone"], row["stone_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_quantity = cls._exact(
+            row["quantity"], row["quantity_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_cost = cls._exact(
+            row["cost"], row["cost_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_inventory = cls._exact(
+            row["inventory"], row["inventory_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual = (str(row["payload"]), actual_quantity, actual_cost, actual_stone, actual_inventory)
+        if actual != (payload, quantity, cost, stone, inventory):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    def purchase(
+        self,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        item_name: str,
+        quantity: int,
+        unit_cost: int,
+        expected_stone: int,
+        max_goods_num: int,
+    ) -> dict[str, Any]:
+        operation_id, user_id, item_name = str(operation_id).strip(), str(user_id), str(item_name)
+        item_id, quantity, unit_cost, expected_stone, max_goods_num = map(
+            int, (item_id, quantity, unit_cost, expected_stone, max_goods_num)
+        )
+        if not operation_id or quantity <= 0 or min(item_id, unit_cost, expected_stone, max_goods_num) < 0:
+            raise ValueError("valid seed purchase required")
+        payload = json.dumps([user_id, item_id, item_name, quantity, unit_cost], ensure_ascii=True, sort_keys=True)
+
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            old = uow.query_one(
+                "SELECT payload,quantity,typeof(quantity) AS quantity_type,cost,typeof(cost) AS cost_type,"
+                "stone,typeof(stone) AS stone_type,inventory,typeof(inventory) AS inventory_type "
+                "FROM map_seed_purchase_operations WHERE operation_id=?", (operation_id,)
+            )
+            if old is not None:
                 try:
-                    old_identity = json.loads(str(old['payload']))[:5]
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    old_identity = None
-                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':as_int_like(old['stone']),'inventory':int(old['inventory'])} if old_identity == [user_id,item_id,item_name,quantity,unit_cost] else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
-            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
-            if user is None:return {'status':'user_missing','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
-            stone=as_int_like(user['stone'] or 0)
-            if stone!=expected_stone:return {'status':'state_changed','quantity':0,'cost':0,'stone':stone,'inventory':0}
-            cost=quantity*unit_cost
-            if stone<cost:return {'status':'stone_insufficient','quantity':0,'cost':0,'stone':stone,'inventory':0}
-            row=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id));inventory=int(row['goods_num']) if row else 0
-            if inventory+quantity>max_goods_num:return {'status':'inventory_full','quantity':0,'cost':0,'stone':stone,'inventory':inventory}
-            stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,xiuxian_int_store(?,\'stone\',\'actor\'),xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
+                    old_payload = json.loads(str(old["payload"]))
+                    old_identity = old_payload[:5] if isinstance(old_payload, list) and len(old_payload) >= 5 else None
+                    old_quantity = self._exact(
+                        old["quantity"], old["quantity_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_cost = self._exact(
+                        old["cost"], old["cost_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_stone = self._exact(
+                        old["stone"], old["stone_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_inventory = self._exact(
+                        old["inventory"], old["inventory_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                except (TypeError, ValueError, OverflowError, json.JSONDecodeError, _MapSeedPurchaseConflict):
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "map_seed_purchase_receipt_invalid", "subject": "receipt"}
+                if (
+                    old_identity is None
+                    or not isinstance(old_identity[0], str)
+                    or type(old_identity[1]) is not int
+                    or not isinstance(old_identity[2], str)
+                    or type(old_identity[3]) is not int
+                    or type(old_identity[4]) is not int
+                    or old_quantity != old_identity[3]
+                    or old_quantity <= 0
+                    or old_cost != old_quantity * old_identity[4]
+                    or old_inventory < old_quantity
+                ):
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "map_seed_purchase_receipt_invalid", "subject": "receipt"}
+                if old_identity != [user_id, item_id, item_name, quantity, unit_cost]:
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "operation_conflict", "subject": "receipt"}
+                return {"status": "duplicate", "quantity": old_quantity, "cost": old_cost,
+                        "stone": old_stone, "inventory": old_inventory}
+
+            user = uow.query_one(
+                "SELECT stone,typeof(stone) AS storage_type FROM user_xiuxian WHERE user_id=?",
+                (user_id,),
+            )
+            if user is None:
+                return {"status": "user_missing", "quantity": 0, "cost": 0,
+                        "stone": expected_stone, "inventory": 0}
+            try:
+                stone = self._exact(user["stone"], user["storage_type"],
+                                    suffix="stone_invalid", subject="stone_wallet")
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": expected_stone, "inventory": 0,
+                        "reason": conflict.reason, "subject": conflict.subject}
+            if stone != expected_stone:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0,
+                        "reason": "map_seed_purchase_stone_changed", "subject": "stone_wallet"}
+            cost = quantity * unit_cost
+            if stone < cost:
+                return {"status": "stone_insufficient", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0}
+
+            row = uow.query_one(
+                "SELECT goods_num,typeof(goods_num) AS goods_storage_type,bind_num,typeof(bind_num) AS bind_type "
+                "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)
+            )
+            try:
+                inventory = self._exact(row["goods_num"], row["goods_storage_type"],
+                                        suffix="inventory_invalid", subject=f"item:{item_id}") if row else 0
+                bound = self._exact(row["bind_num"], row["bind_type"],
+                                    suffix="inventory_invalid", subject=f"item:{item_id}") if row else 0
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0,
+                        "reason": conflict.reason, "subject": conflict.subject}
+            if inventory < 0 or bound < 0:
+                return {
+                    "status": "state_changed",
+                    "quantity": 0,
+                    "cost": 0,
+                    "stone": stone,
+                    "inventory": inventory,
+                    "reason": "map_seed_purchase_inventory_invalid",
+                    "subject": f"item:{item_id}",
+                }
+            if inventory + quantity > max_goods_num:
+                return {"status": "inventory_full", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": inventory}
+
+            remaining_stone = stone - cost
+            remaining_inventory = inventory + quantity
+            remaining_bound = bound + quantity
+            now = self.clock.now().isoformat()
+            try:
+                with uow.savepoint("map_seed_purchase"):
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                        (remaining_stone, user_id, expected_stone),
+                    ).rowcount != 1:
+                        self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_stone(uow, user_id, remaining_stone)
+
+                    if uow.execute(
+                        "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                        "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                        "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
+                        "goods_num=back.goods_num+excluded.goods_num,"
+                        "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                        (user_id, item_id, item_name, "特殊物品", quantity, now, now, quantity),
+                    ).rowcount != 1:
+                        self._reject("inventory_write_rejected", f"item:{item_id}")
+                    self._verify_inventory(
+                        uow, user_id, item_id, item_name, remaining_inventory, remaining_bound
+                    )
+
+                    if uow.execute(
+                        "INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) "
+                        "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, quantity, cost, remaining_stone, remaining_inventory),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(
+                        uow, operation_id, payload, quantity, cost, remaining_stone, remaining_inventory
+                    )
+                    self._verify_stone(uow, user_id, remaining_stone)
+                    self._verify_inventory(
+                        uow, user_id, item_id, item_name, remaining_inventory, remaining_bound
+                    )
+                    self._verify_receipt(
+                        uow, operation_id, payload, quantity, cost, remaining_stone, remaining_inventory
+                    )
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": inventory,
+                        "reason": conflict.reason, "subject": conflict.subject}
+
+            return {"status": "applied", "quantity": quantity, "cost": cost,
+                    "stone": remaining_stone, "inventory": remaining_inventory}
+
+
+class _MapSeedPurchaseConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = reason, subject
 
 
 class _MapDongfuBuildConflict(Exception):
