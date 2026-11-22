@@ -1015,6 +1015,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_geomancy.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("洞府地脉")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)

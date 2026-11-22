@@ -600,6 +600,10 @@ from tests.parameter_cases_dongfu_status_view import register as register_dongfu
 
 register_dongfu_status_view(case)
 
+from tests.parameter_cases_dongfu_geomancy import register as register_dongfu_geomancy
+
+register_dongfu_geomancy(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
