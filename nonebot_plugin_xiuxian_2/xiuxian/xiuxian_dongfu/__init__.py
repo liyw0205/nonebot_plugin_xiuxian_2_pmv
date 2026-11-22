@@ -640,6 +640,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_harvest_history.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的洞府收获记录")
 async def dongfu_harvest_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的洞府收获记录：近7天收获物品（只读）"""
     bot, _ = await assign_bot(bot=bot, event=event)

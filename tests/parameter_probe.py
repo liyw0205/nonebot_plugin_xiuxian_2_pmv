@@ -604,6 +604,10 @@ from tests.parameter_cases_dongfu_geomancy import register as register_dongfu_ge
 
 register_dongfu_geomancy(case)
 
+from tests.parameter_cases_dongfu_harvest_history import register as register_dongfu_harvest_history
+
+register_dongfu_harvest_history(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
