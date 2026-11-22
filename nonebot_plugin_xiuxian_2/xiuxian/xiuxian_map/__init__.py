@@ -481,6 +481,22 @@ map_mission_cmd = on_command("地图委托", priority=8, block=True)
 map_mission_accept_cmd = on_command("接取委托", priority=8, block=True)
 map_mission_claim_cmd = on_command("委托完成", priority=8, block=True)
 
+_MAP_MISSION_COMMAND_REJECTIONS = (
+    "map_mission_schema_missing",
+    "map_mission_state_write_rejected",
+    "map_mission_state_projection_mismatch",
+    "map_mission_claim_mission_write_rejected",
+    "map_mission_claim_mission_projection_mismatch",
+    "map_mission_claim_stone_write_rejected",
+    "map_mission_claim_stone_projection_mismatch",
+    "map_mission_claim_inventory_write_rejected",
+    "map_mission_claim_inventory_projection_mismatch",
+    "map_mission_claim_receipt_write_rejected",
+    "map_mission_claim_receipt_projection_mismatch",
+    "map_mission_claim_outbox_write_rejected",
+    "map_mission_claim_outbox_projection_mismatch",
+)
+
 # =========================================
 # 限制/冷却工具
 # =========================================
@@ -561,16 +577,20 @@ def _get_map_mission(uid: str):
     # 跨天重置
     if d.get("date") != _today_str():
         d = default.copy()
-        return map_application.save_mission(str(uid), d)
+        return _save_map_mission(uid, d)
 
     for k, v in default.items():
         if k not in d or d.get(k) is None:
             d[k] = v
-    return map_application.save_mission(str(uid), d)
+    return _save_map_mission(uid, d)
 
 
 def _save_map_mission(uid: str, d: dict):
-    return map_application.save_mission(str(uid), d)
+    result = map_application.save_mission(str(uid), d)
+    if result.get("status") == "schema_missing":
+        reason = "map_mission_schema_missing"
+        raise DomainError(reason, reason, {"reason": reason, "subject": "map_mission"})
+    return result
 
 
 def _roll_new_map_mission(uid: str, *, random_source=None, clock=None):
@@ -2619,6 +2639,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await _settle_explore(bot, event)
 
 @map_mission_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("地图委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2653,6 +2674,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
 @map_mission_accept_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("接取委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2678,6 +2700,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await handle_send(bot, event, msg)
 @map_mission_claim_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("领取地图委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2745,11 +2768,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     data = result_data(outcome.data)
     result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())), reason=str(data.get("reason", "")), subject=str(data.get("subject", "actor")))
-    if result.status == "inventory_full":
-        await handle_send(bot, event, "背包物品已达上限，委托奖励尚未领取。")
-        return
-    if result.status in {"not_completed", "already_claimed", "state_changed", "user_missing"}:
-        await handle_send(bot, event, result_failure("领取地图委托", result, messages={"not_completed": "委托目标尚未完成，请完成目标后领取。", "already_claimed": "该委托奖励已经领取，请查看背包。", "inventory_full": "背包物品已达上限，委托奖励尚未领取。"}))
+    if result.status not in {"applied", "duplicate"}:
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "领取地图委托",
+                result,
+                messages={
+                    "not_completed": "委托目标尚未完成，请完成目标后领取。",
+                    "already_claimed": "该委托奖励已经领取，请查看背包。",
+                    "inventory_full": "背包物品已达上限，委托奖励尚未领取。",
+                },
+            ),
+        )
         return
 
     completion_message = f"✅ 地图委托完成！\n任务：{_get_mission_desc(mission)}\n获得奖励：{_merge_reward_text(rewards)}"

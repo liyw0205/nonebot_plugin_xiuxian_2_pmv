@@ -757,6 +757,10 @@ class MapMissionSqlWriteRepository:
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
 
+    @staticmethod
+    def _reject(reason: str, message: str) -> None:
+        raise DomainError(reason, message, {"reason": reason, "subject": "map_mission"})
+
     def save(self, user_id: str, state: dict[str, Any]) -> dict[str, Any]:
         user_id = str(user_id).strip()
         values = {
@@ -771,12 +775,37 @@ class MapMissionSqlWriteRepository:
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
             if not table_ready(uow, "map_mission", MISSION_COLUMNS):
                 return {"status": SCHEMA_MISSING}
-            uow.execute(
+            changed = uow.execute(
                 "INSERT INTO map_mission(user_id,date,mission_type,target,claimed,settlement) VALUES(?,?,?,?,?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,mission_type=excluded.mission_type,"
                 "target=excluded.target,claimed=excluded.claimed,settlement=excluded.settlement",
                 (user_id, values["date"], values["mission_type"], values["target"], values["claimed"], values["settlement"]),
             )
+            if changed.rowcount != 1:
+                self._reject(
+                    "map_mission_state_write_rejected",
+                    "map mission state write was rejected",
+                )
+            row = uow.query_one(
+                "SELECT date,mission_type,target,claimed,settlement FROM map_mission WHERE user_id=?",
+                (user_id,),
+            )
+            actual = (
+                str(row["date"] or ""),
+                str(row["mission_type"] or ""),
+                exact_crystal_integer(row["target"]),
+                exact_crystal_integer(row["claimed"]),
+                str(row["settlement"] or ""),
+            ) if row is not None else None
+            expected = (
+                values["date"], values["mission_type"], values["target"],
+                values["claimed"], values["settlement"],
+            )
+            if actual != expected:
+                self._reject(
+                    "map_mission_state_projection_mismatch",
+                    "map mission state projection mismatch",
+                )
         return values
 
 
@@ -1820,6 +1849,79 @@ class MapMissionClaimSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
         self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
         self.outbox = OutboxStore(clock=clock)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        reason = f"map_mission_claim_{suffix}"
+        raise DomainError(reason, reason, {"reason": reason, "subject": subject})
+
+    @classmethod
+    def _verify_mission(
+        cls, uow, user_id: str, expected: tuple[str, str, int, int, str]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT date,mission_type,target,claimed,settlement "
+            "FROM player_data.map_mission WHERE user_id=?",
+            (user_id,),
+        )
+        actual = (
+            str(row["date"] or ""),
+            str(row["mission_type"] or ""),
+            exact_crystal_integer(row["target"]),
+            exact_crystal_integer(row["claimed"]),
+            str(row["settlement"] or ""),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("mission_projection_mismatch", "map_mission")
+
+    @classmethod
+    def _verify_wallet(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["stone"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, expected: tuple[str, str, int, int]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_name,goods_type,goods_num,bind_num FROM back "
+            "WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        actual = (
+            str(row["goods_name"] or ""),
+            str(row["goods_type"] or ""),
+            exact_crystal_integer(row["goods_num"]),
+            0 if row["bind_num"] is None else exact_crystal_integer(row["bind_num"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stone: int, rewards: str) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone,rewards FROM map_mission_claim_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        actual = (
+            str(row["payload"]), exact_crystal_integer(row["stone"]), str(row["rewards"])
+        ) if row is not None else None
+        if actual != (payload, stone, rewards):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    @classmethod
+    def _verify_outbox(cls, uow, event_id: str, expected: dict[str, Any]) -> None:
+        row = uow.query_one("SELECT payload_json FROM domain_outbox WHERE event_id=?", (event_id,))
+        if row is None:
+            cls._reject("outbox_write_rejected", "domain_outbox")
+        try:
+            actual = json.loads(str(row["payload_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            actual = None
+        if actual != expected:
+            cls._reject("outbox_projection_mismatch", "domain_outbox")
     def claim(self, operation_id: str, user_id: str, expected_mission: dict[str, Any], expected_daily: dict[str, Any], progress_key: str, stone: int, items: list[dict[str, Any]], max_goods_num: int, event_meta: dict[str, Any] | None = None) -> dict[str, Any]:
         mission={k:str(v) for k,v in dict(expected_mission).items()};daily={k:str(v) for k,v in dict(expected_daily).items()};progress_key=str(progress_key)
         event_meta = dict(event_meta or {})
@@ -1839,21 +1941,65 @@ class MapMissionClaimSqlRepository:
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(user_id,)) is None:return {'status':'user_missing','reason':'user_missing','subject':'actor','stone':0,'rewards':()}
             row=uow.query_one('SELECT date,mission_type,target,claimed,settlement FROM player_data.map_mission WHERE user_id=?',(user_id,))
             if row is None or any(str('' if row[k] is None else row[k])!=v for k,v in mission.items()):return {'status':'state_changed','reason':'mission_changed','subject':'actor','stone':0,'rewards':()}
+            expected_mission_after = (
+                mission.get("date", ""), mission.get("mission_type", ""),
+                int(mission.get("target", "0")), 1, mission.get("settlement", ""),
+            )
             progress=uow.query_one(f'SELECT date,"{progress_key}" AS progress FROM player_data.map_daily_limit WHERE user_id=?',(user_id,))
             if progress is None or (str(progress['date']),str(progress['progress']))!=(daily.get('date',''),daily.get(progress_key,'0')):return {'status':'state_changed','reason':'progress_changed','subject':'actor','stone':0,'rewards':()}
             if int(mission.get('claimed','0'))!=0:return {'status':'already_claimed','reason':'already_claimed','subject':'actor','stone':0,'rewards':()}
             if int(progress['progress'] or 0)<int(mission.get('target','0')):return {'status':'not_completed','reason':'not_completed','subject':'actor','stone':0,'rewards':()}
+            wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            old_stone = exact_crystal_integer(wallet["stone"]) if wallet is not None else None
+            if old_stone is None:
+                return {"status": "state_changed", "reason": "map_mission_claim_stone_invalid", "subject": "stone_wallet", "stone": 0, "rewards": ()}
+            expected_stone = old_stone + stone
             totals={};meta={}
             for item_id,name,item_type,amount in rewards:totals[item_id]=totals.get(item_id,0)+amount;meta[item_id]=(name,item_type)
+            inventory_before = {}
             for item_id,amount in totals.items():
-                item=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id))
-                if (int(item['goods_num']) if item else 0)+amount>max_goods_num:return {'status':'inventory_full','reason':'inventory_full','subject':'actor','stone':0,'rewards':()}
-            uow.execute('UPDATE player_data.map_mission SET claimed=1 WHERE user_id=?',(user_id,))
-            if stone:uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(stone,user_id))
+                item=uow.query_one('SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id))
+                if item is None:
+                    before_num = before_bind = 0
+                else:
+                    before_num = exact_crystal_integer(item["goods_num"])
+                    before_bind = 0 if item["bind_num"] is None else exact_crystal_integer(item["bind_num"])
+                    if before_num is None or before_bind is None or before_num < 0 or before_bind < 0 or before_bind > before_num:
+                        return {"status": "state_changed", "reason": "map_mission_claim_inventory_invalid", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                if before_num + amount > max_goods_num:
+                    return {'status':'inventory_full','reason':'inventory_full','subject':'actor','stone':0,'rewards':()}
+                inventory_before[item_id] = (before_num, before_bind)
+            cursor = uow.execute(
+                "UPDATE player_data.map_mission SET claimed=1 WHERE user_id=? AND date=? "
+                "AND mission_type=? AND target=? AND claimed=? AND settlement=?",
+                (user_id, mission.get("date", ""), mission.get("mission_type", ""),
+                 int(mission.get("target", "0")), int(mission.get("claimed", "0")),
+                 mission.get("settlement", "")),
+            )
+            if cursor.rowcount != 1:
+                self._reject("mission_write_rejected", "map_mission")
+            self._verify_mission(uow, user_id, expected_mission_after)
+            if stone:
+                cursor = uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(stone,user_id))
+                if cursor.rowcount != 1:
+                    self._reject("stone_write_rejected", "stone_wallet")
+            self._verify_wallet(uow, user_id, expected_stone)
             now=self.clock.now().isoformat()
             for item_id,amount in totals.items():
-                name,item_type=meta[item_id];uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
-            compact=tuple(sorted(totals.items()));uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,stone,json.dumps(compact)))
+                name,item_type=meta[item_id]
+                cursor=uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
+                if cursor.rowcount != 1:
+                    self._reject("inventory_write_rejected", f"item:{item_id}")
+                self._verify_inventory(
+                    uow, user_id, item_id,
+                    (str(name), str(item_type), inventory_before[item_id][0] + amount, inventory_before[item_id][1] + amount),
+                )
+            compact=tuple(sorted(totals.items()))
+            rewards_json=json.dumps(compact)
+            cursor=uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,stone,rewards_json))
+            if cursor.rowcount != 1:
+                self._reject("receipt_write_rejected", "receipt")
+            self._verify_receipt(uow, operation_id, payload, stone, rewards_json)
             occurred_at = self.clock.now().isoformat()
             frozen_meta = {
                 "source": "map",
@@ -1867,21 +2013,32 @@ class MapMissionClaimSqlRepository:
                     **dict(event_meta.get("detail") or {}),
                 },
             }
+            event_payload = {
+                "operation_id": operation_id,
+                "user_id": user_id,
+                "event_key": "map_mission_complete",
+                "amount": 1,
+                "occurred_at": occurred_at,
+                "meta": frozen_meta,
+            }
             self.outbox.append(
                 uow,
                 event_id=effects_event_id,
                 aggregate_type="player",
                 aggregate_id=user_id,
                 event_type="game_event.projection",
-                payload={
-                    "operation_id": operation_id,
-                    "user_id": user_id,
-                    "event_key": "map_mission_complete",
-                    "amount": 1,
-                    "occurred_at": occurred_at,
-                    "meta": frozen_meta,
-                },
+                payload=event_payload,
             )
+            self._verify_mission(uow, user_id, expected_mission_after)
+            self._verify_wallet(uow, user_id, expected_stone)
+            for item_id, amount in totals.items():
+                name, item_type = meta[item_id]
+                self._verify_inventory(
+                    uow, user_id, item_id,
+                    (str(name), str(item_type), inventory_before[item_id][0] + amount, inventory_before[item_id][1] + amount),
+                )
+            self._verify_receipt(uow, operation_id, payload, stone, rewards_json)
+            self._verify_outbox(uow, effects_event_id, event_payload)
             return {'status':'applied','stone':stone,'rewards':compact,'effects_event_id':effects_event_id,'occurred_at':occurred_at}
 
 

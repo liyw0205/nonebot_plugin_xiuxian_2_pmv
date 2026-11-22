@@ -423,6 +423,18 @@ class MapApplication(LegacyApplication):
                 call=lambda: MapMissionClaimSqlRepository(
                     self.game_database, self.player_database, clock=clock
                 ).claim(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_mission_claim_mission_write_rejected",
+                    "map_mission_claim_mission_projection_mismatch",
+                    "map_mission_claim_stone_write_rejected",
+                    "map_mission_claim_stone_projection_mismatch",
+                    "map_mission_claim_inventory_write_rejected",
+                    "map_mission_claim_inventory_projection_mismatch",
+                    "map_mission_claim_receipt_write_rejected",
+                    "map_mission_claim_receipt_projection_mismatch",
+                    "map_mission_claim_outbox_write_rejected",
+                    "map_mission_claim_outbox_projection_mismatch",
+                ),
             )
             if outcome.ok and isinstance(outcome.data, dict) and outcome.data.get("effects_event_id") and self.game_event_effects is not None:
                 if not self.game_event_effects.dispatch(str(outcome.data["effects_event_id"])):
