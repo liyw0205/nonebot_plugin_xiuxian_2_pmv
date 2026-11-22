@@ -24,6 +24,13 @@
 默认写链经 `MapApplication.explore_start -> MapExploreStartSqlRepository`，在同一 game/player SQLite 工作单元内扣体力、保存探索状态和冷却，并写 game 库永久回执。四个写点均核 rowcount 与实际投影，任何已知拒写或写后改写都回滚整笔并返回具体 reason/subject；故障解除后可用原消息重试。账本请求身份忽略由服务端时钟生成的开始时间和冷却截止值，避免跨秒重试变成不同请求；永久回执仍保留实际时间。意外 SQLite 异常由命令 guard 记录 traceback 并回复定位号。
 
 真实 OneBot matcher 覆盖开始/拒绝/恢复路径；QQ plain、Markdown 与 Markdown 发送失败回退用 adapter mock 验证，不代表 QQ 客户端真机联调。
+
+## 探索结算
+`探索结算`按活动开始时间生成稳定操作号。未达到一分钟时不写奖励；结算时长取实际经过、计划时长与节点上限的最小值，探索轮数至少一轮，`explore_count` 只在结算成功时递增。每日额度已满时保留活动且不冻结奖励；已有奖励快照跨日时只刷新每日 CAS 基线，不重新抽取奖励。
+
+新奖励快照通过活动状态 CAS 保存点冻结。随后 `MapExploreSettlementSqlRepository` 在 game/player SQLite 工作单元中写每日次数、清理活动状态、灵石、绑定背包物品和永久回执；每个写点核对 rowcount 与实际投影，任一点拒写或写后改写都会整笔回滚。明确拒绝保留 `reason` 与 `subject`，同活动恢复会沿用已冻结奖励；意外数据库异常由命令 guard 保留 traceback 和定位号。
+
+真实 OneBot matcher 覆盖无参结算、时长/额度边界、奖励快照及资产/回执故障恢复；QQ plain、Markdown 和失败降级通过 adapter mock 检查，未进行 QQ 客户端真机联调。
 ## Web API
 `POST /api/v1/map/{move,return_home,interactive_start,interactive_finish,combat_start,combat_settle,explore_start,explore_settle,resource_reward,mission_claim,purchase_seed,build_dongfu}`，权限 `user`。
 ## 数据模型与迁移

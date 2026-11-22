@@ -1192,6 +1192,176 @@ class MapExploreSettlementSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
         self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
 
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapExploreSettlementWriteConflict(
+            f"map_explore_settlement_{suffix}", subject
+        )
+
+    @classmethod
+    def _verify_daily(cls, uow, user_id: str, expected: tuple[str, int, int]) -> None:
+        row = uow.query_one(
+            "SELECT date,explore_count,resource_total_count "
+            "FROM player_data.map_daily_limit WHERE user_id=?",
+            (user_id,),
+        )
+        actual = (
+            str(row["date"] or ""),
+            exact_crystal_integer(row["explore_count"]),
+            exact_crystal_integer(row["resource_total_count"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("daily_projection_mismatch", "map_daily_limit")
+
+    @classmethod
+    def _verify_status(cls, uow, user_id: str) -> None:
+        row = uow.query_one(
+            "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+            "max_duration_min,interval_min "
+            "FROM player_data.map_explore_status WHERE user_id=?",
+            (user_id,),
+        )
+        cleared = (0, "", "", "", 0, "", 0, 0)
+        actual = (
+            exact_crystal_integer(row["running"]),
+            str(row["node_type"] or ""),
+            str(row["node_name"] or ""),
+            str(row["start_time"] or ""),
+            exact_crystal_integer(row["duration_min"]),
+            str(row["settlement"] or ""),
+            exact_crystal_integer(row["max_duration_min"]),
+            exact_crystal_integer(row["interval_min"]),
+        ) if row is not None else None
+        if actual != cleared:
+            cls._reject("status_projection_mismatch", "map_explore_status")
+
+    @classmethod
+    def _verify_wallet(cls, uow, user_id: str, expected_stone: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["stone"]) if row is not None else None
+        if actual != expected_stone:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, expected_num: int, expected_bind: int
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        actual = (
+            exact_crystal_integer(row["goods_num"]),
+            exact_crystal_integer(row["bind_num"]),
+        ) if row is not None else None
+        if actual != (expected_num, expected_bind):
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(
+        cls, uow, operation_id: str, payload: str, stone: int, rewards: tuple[tuple[int, int], ...]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone,rewards FROM map_explore_settlement_operations "
+            "WHERE operation_id=?",
+            (operation_id,),
+        )
+        try:
+            actual_rewards = tuple(
+                sorted((int(item_id), int(amount)) for item_id, amount in json.loads(row["rewards"]))
+            ) if row is not None else None
+        except (TypeError, ValueError, json.JSONDecodeError):
+            actual_rewards = None
+        actual_stone = exact_crystal_integer(row["stone"]) if row is not None else None
+        if (
+            row is None or str(row["payload"]) != payload
+            or actual_stone != stone or actual_rewards != rewards
+        ):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    @staticmethod
+    def _verify_explore_state(uow, user_id: str, expected: dict[str, str]) -> None:
+        columns = {
+            str(row["name"])
+            for row in uow.query_all("PRAGMA table_info(map_explore_status)")
+        }
+        legacy_field = ",reward_plan" if "reward_plan" in columns else ""
+        row = uow.query_one(
+            "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+            "max_duration_min,interval_min" + legacy_field
+            + " FROM map_explore_status WHERE user_id=?",
+            (user_id,),
+        )
+        fields = (
+            "running", "node_type", "node_name", "start_time", "duration_min",
+            "settlement", "max_duration_min", "interval_min",
+        )
+        if row is None or any(
+            str("" if row[key] is None else row[key]) != expected[key]
+            for key in fields
+        ):
+            MapExploreSettlementSqlRepository._reject(
+                "snapshot_projection_mismatch", "map_explore_status"
+            )
+        if "reward_plan" in columns and str(row["reward_plan"] or ""):
+            MapExploreSettlementSqlRepository._reject(
+                "snapshot_projection_mismatch", "map_explore_status"
+            )
+
+    def prepare_snapshot(
+        self, user_id: str, expected_state: dict[str, Any], settlement: str
+    ) -> dict[str, Any]:
+        state = {key: str(value) for key, value in dict(expected_state).items()}
+        if state.get("running") != "1" or not settlement:
+            raise ValueError("an active exploration and non-empty settlement are required")
+        target = dict(state, settlement=str(settlement))
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                current = uow.query_one(
+                    "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+                    "max_duration_min,interval_min FROM map_explore_status WHERE user_id=?",
+                    (str(user_id),),
+                )
+                fields = (
+                    "running", "node_type", "node_name", "start_time", "duration_min",
+                    "settlement", "max_duration_min", "interval_min",
+                )
+                if current is None or any(
+                    str("" if current[key] is None else current[key]) != state[key]
+                    for key in fields
+                ):
+                    if current is not None and all(
+                        str("" if current[key] is None else current[key]) == target[key]
+                        for key in fields
+                    ):
+                        return {"status": "applied"}
+                    return {
+                        "status": "state_changed",
+                        "reason": "explore_changed",
+                        "subject": "map_explore_status",
+                    }
+                columns = {
+                    str(row["name"])
+                    for row in uow.query_all("PRAGMA table_info(map_explore_status)")
+                }
+                legacy_update = ",reward_plan=''" if "reward_plan" in columns else ""
+                with uow.savepoint("map_explore_prepare_snapshot"):
+                    cursor = uow.execute(
+                        "UPDATE map_explore_status SET settlement=?" + legacy_update
+                        + " WHERE user_id=?",
+                        (settlement, str(user_id)),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("snapshot_write_rejected", "map_explore_status")
+                    self._verify_explore_state(uow, str(user_id), target)
+            return {"status": "applied"}
+        except _MapExploreSettlementWriteConflict as conflict:
+            return {
+                "status": "state_changed",
+                "reason": conflict.reason,
+                "subject": conflict.subject,
+            }
+
     def settle(self, operation_id: str, user_id: str, expected_state: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, stone: int, items: list[dict[str, Any]], max_goods_num: int) -> dict[str, Any]:
         state = {key: str(value) for key, value in dict(expected_state).items()}
         daily = {key: str(value) for key, value in dict(expected_daily).items()}
@@ -1201,43 +1371,117 @@ class MapExploreSettlementSqlRepository:
         if not operation_id or state.get("running") != "1" or not daily.get("date") or min(daily_limit, stone, max_goods_num) < 0:
             raise ValueError("valid explore settlement is required")
         payload = json.dumps([user_id, state, daily, daily_limit, stone, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
-            if old:
-                if str(old["payload"]) != payload:
-                    return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": as_int_like(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
-                return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
-            current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
-            if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
-                return {"status": "state_changed", "reason": "explore_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
-                return {"status": "state_changed", "reason": "daily_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            if int(daily_row["explore_count"] or 0) >= daily_limit:
-                return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stone": 0, "rewards": ()}
-            totals: dict[int, int] = {}
-            metadata: dict[int, tuple[str, str]] = {}
-            for item_id, name, item_type, amount in rewards:
-                totals[item_id] = totals.get(item_id, 0) + amount
-                metadata[item_id] = (name, item_type)
-            for item_id, amount in totals.items():
-                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
-                    return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
-            uow.execute("UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?", (int(daily_row["explore_count"] or 0) + 1, int(daily_row["resource_total_count"] or 0) + 1, user_id))
-            uow.execute("UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?", (user_id,))
-            if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
-            now = self.clock.now().isoformat()
-            for item_id, amount in totals.items():
-                name, item_type = metadata[item_id]
-                uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
-            compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
+                if old:
+                    if str(old["payload"]) != payload:
+                        return {"status": "state_changed", "reason": "operation_conflict", "subject": "receipt", "stone": 0, "rewards": ()}
+                    try:
+                        old_stone = exact_crystal_integer(old["stone"])
+                        old_rewards = tuple(sorted((int(item_id), int(amount)) for item_id, amount in json.loads(old["rewards"])))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        old_stone, old_rewards = None, ()
+                    if old_stone is None:
+                        return {"status": "state_changed", "reason": "map_explore_settlement_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                    return {"status": "duplicate", "stone": old_stone, "rewards": old_rewards}
+                if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
+                    return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
+                current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
+                if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
+                    return {"status": "state_changed", "reason": "explore_changed", "subject": "map_explore_status", "stone": 0, "rewards": ()}
+                daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
+                    return {"status": "state_changed", "reason": "daily_changed", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                old_count = exact_crystal_integer(daily_row["explore_count"])
+                old_resources = exact_crystal_integer(daily_row["resource_total_count"])
+                if old_count is None or old_resources is None:
+                    return {"status": "state_changed", "reason": "map_explore_settlement_daily_invalid", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                if old_count >= daily_limit:
+                    return {"status": "limit_reached", "reason": "limit_reached", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                totals: dict[int, int] = {}
+                metadata: dict[int, tuple[str, str]] = {}
+                for item_id, name, item_type, amount in rewards:
+                    totals[item_id] = totals.get(item_id, 0) + amount
+                    metadata[item_id] = (name, item_type)
+                existing_items = {}
+                for item_id, amount in totals.items():
+                    row = uow.query_one("SELECT goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                    old_num = exact_crystal_integer(row["goods_num"]) if row is not None else 0
+                    old_bind = exact_crystal_integer(row["bind_num"]) if row is not None else 0
+                    if old_num is None or old_bind is None or old_num < 0 or old_bind < 0:
+                        return {"status": "state_changed", "reason": "map_explore_settlement_inventory_invalid", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                    if old_num + amount > max_goods_num:
+                        return {"status": "inventory_full", "reason": "inventory_full", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                    existing_items[item_id] = (old_num, old_bind)
+                wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                old_stone = exact_crystal_integer(wallet["stone"]) if wallet is not None else None
+                if old_stone is None:
+                    return {"status": "state_changed", "reason": "map_explore_settlement_stone_invalid", "subject": "stone_wallet", "stone": 0, "rewards": ()}
+                compact = tuple(sorted(totals.items()))
+                expected_daily = (str(daily_row["date"]), old_count + 1, old_resources + 1)
+                expected_wallet = old_stone + stone
+                now = self.clock.now().isoformat()
+                with uow.savepoint("map_explore_settlement"):
+                    cursor = uow.execute(
+                        "UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?",
+                        (expected_daily[1], expected_daily[2], user_id),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("daily_write_rejected", "map_daily_limit")
+                    self._verify_daily(uow, user_id, expected_daily)
+                    cursor = uow.execute(
+                        "UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("status_write_rejected", "map_explore_status")
+                    self._verify_status(uow, user_id)
+                    if stone:
+                        cursor = uow.execute(
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
+                            (stone, user_id),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_wallet(uow, user_id, expected_wallet)
+                    for item_id, amount in totals.items():
+                        name, item_type = metadata[item_id]
+                        cursor = uow.execute(
+                            "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                            "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                            "goods_num=back.goods_num+excluded.goods_num,"
+                            "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                            (user_id, item_id, name, item_type, amount, now, now, amount),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("inventory_write_rejected", f"item:{item_id}")
+                        old_num, old_bind = existing_items[item_id]
+                        self._verify_inventory(uow, user_id, item_id, old_num + amount, old_bind + amount)
+                    cursor = uow.execute(
+                        "INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) "
+                        "VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, stone, json.dumps(compact)),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, stone, compact)
+                    self._verify_daily(uow, user_id, expected_daily)
+                    self._verify_status(uow, user_id)
+                    self._verify_wallet(uow, user_id, expected_wallet)
+                    for item_id, amount in totals.items():
+                        old_num, old_bind = existing_items[item_id]
+                        self._verify_inventory(uow, user_id, item_id, old_num + amount, old_bind + amount)
             return {"status": "applied", "stone": stone, "rewards": compact}
+        except _MapExploreSettlementWriteConflict as conflict:
+            return {"status": "state_changed", "reason": conflict.reason, "subject": conflict.subject, "stone": 0, "rewards": ()}
+
+
+class _MapExploreSettlementWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapMissionClaimSqlRepository:

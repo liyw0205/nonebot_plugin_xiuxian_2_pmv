@@ -4,6 +4,7 @@ except ImportError:
     import json
 
 import asyncio
+import hashlib
 from datetime import datetime, timedelta
 from ...core.errors import DomainError
 from ...paths import get_paths
@@ -523,8 +524,8 @@ def _check_daily_cap(uid: str, key: str, cap: int):
     return cur < cap, cur, cap
 
 
-def _get_reward_decay(uid: str):
-    d = _get_daily_limit(uid)
+def _get_reward_decay(uid: str, daily: dict | None = None):
+    d = daily if daily is not None else _get_daily_limit(uid)
     n = int(d.get("resource_total_count", 0))
     for threshold, ratio in REWARD_DECAY_STEPS:
         if n <= threshold:
@@ -1763,7 +1764,7 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
     settlement = st.get("settlement")
     if settlement is None:
         daily = _get_daily_limit(uid)
-        decay = _get_reward_decay(uid)
+        decay = _get_reward_decay(uid, daily=daily)
         reward_decision = decide_interactive_reward(runtime_random.random(), st["pool_key"])
         rewards, stone, reward_items = map_reward_resolver.roll_rewards(
             reward_decision.plan, decay, random_source=runtime_random
@@ -2332,6 +2333,30 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     )
 
 
+@guard_command(
+    "探索结算",
+    known_rejections=(
+        "map_explore_settlement_daily_write_rejected",
+        "map_explore_settlement_daily_projection_mismatch",
+        "map_explore_settlement_status_write_rejected",
+        "map_explore_settlement_status_projection_mismatch",
+        "map_explore_settlement_stone_write_rejected",
+        "map_explore_settlement_stone_projection_mismatch",
+        "map_explore_settlement_inventory_write_rejected",
+        "map_explore_settlement_inventory_projection_mismatch",
+        "map_explore_settlement_receipt_write_rejected",
+        "map_explore_settlement_receipt_projection_mismatch",
+        "map_explore_settlement_receipt_invalid",
+        "map_explore_settlement_snapshot_write_rejected",
+        "map_explore_settlement_snapshot_projection_mismatch",
+    ),
+    subjects=lambda _exc: {
+        "map_daily_limit": "探索次数",
+        "map_explore_status": "探索状态",
+        "stone_wallet": "灵石钱包",
+        "receipt": "探索结算回执",
+    },
+)
 async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -2339,7 +2364,10 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
 
     uid = str(user_info["user_id"])
-    st = _get_explore_status(uid)
+    st = map_application.explore_status(uid)
+    if not st:
+        await handle_send(bot, event, "当前没有进行中的探索。")
+        return
     if int(st.get("running", 0)) != 1:
         await handle_send(bot, event, "当前没有进行中的探索。")
         return
@@ -2379,7 +2407,45 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 snapshot = None
                 st["settlement"] = ""
                 raw_snapshot = ""
+    daily = _get_daily_limit(uid)
+
+    async def freeze_snapshot(value):
+        frozen = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        snapshot_operation_id = "map-explore-snapshot:" + hashlib.sha256(
+            (uid + start_time + frozen).encode("utf-8")
+        ).hexdigest()[:32]
+        prepared = map_application.prepare_explore_settlement_snapshot(
+            operation_id=snapshot_operation_id,
+            user_id=uid,
+            expected_state={
+                "running": 1,
+                "node_type": st.get("node_type", ""),
+                "node_name": st.get("node_name", ""),
+                "start_time": st.get("start_time", ""),
+                "duration_min": st.get("duration_min", 0),
+                "settlement": st.get("settlement", ""),
+                "max_duration_min": st.get("max_duration_min", 0),
+                "interval_min": st.get("interval_min", 0),
+            },
+            settlement=frozen,
+        )
+        if not prepared.ok:
+            await handle_send(bot, event, result_failure(
+                "探索结算",
+                prepared,
+                messages={
+                    "explore_changed": "探索状态已变化，奖励快照未保存，本次未结算。",
+                },
+                subjects={"map_explore_status": "探索状态"},
+            ))
+            return False
+        st["settlement"] = frozen
+        return True
+
     if snapshot is None:
+        if int(daily.get("explore_count", 0)) >= DAILY_LIMIT_CONFIG["explore"]:
+            await handle_send(bot, event, f"今日探索次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），探索奖励未结算，请明日再来。")
+            return
         elapsed_min = max(0, int((runtime_clock.now().replace(tzinfo=None) - start_at).total_seconds() // 60))
         duration_min = int(st.get("duration_min", 0))
         max_duration = int(st.get("max_duration_min", 0))
@@ -2391,7 +2457,6 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         rounds = max(1, settle_min // interval)
         node_type = str(st.get("node_type", ""))
         node_name = str(st.get("node_name", "未知地点"))
-        daily = _get_daily_limit(uid)
         decay = _get_reward_decay(uid)
         event_lines, rewards, reward_items, stone = [], [], [], 0
         for index in range(rounds):
@@ -2411,8 +2476,12 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "settle_min": settle_min,
             "stone": stone,
         }
-        st["settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
-        _save_explore_status(uid, st)
+        if not await freeze_snapshot(snapshot):
+            return
+    elif snapshot.get("daily") != daily:
+        snapshot["daily"] = daily
+        if not await freeze_snapshot(snapshot):
+            return
 
     expected_state = {
         "running": 1,
@@ -2425,35 +2494,46 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "settlement": st.get("settlement", ""),
     }
     operation_id = f"map-explore:{uid}:{start_time}"
-    try:
-        outcome = map_application.explore_settle(
-            operation_id=operation_id,
-            user_id=uid,
-            expected_state=expected_state,
-            expected_daily=snapshot["daily"],
-            daily_limit=DAILY_LIMIT_CONFIG["explore"],
-            stone=snapshot["stone"],
-            items=snapshot["items"],
-            max_goods_num=XiuConfig().max_goods_num,
-            clock=runtime_clock,
-        )
-        data = result_data(outcome.data)
-        result = MapExploreSettlementResult(
-            str(data.get("status", outcome.code)),
-            int(data.get("stone", 0) or 0),
-            tuple(data.get("rewards", ())),
-            reason=str(data.get("reason", "")),
-            subject=str(data.get("subject", "actor")),
-        )
-    except Exception:
-        logger.exception("地图探索结算事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索结算失败：处理过程异常。")
-        return
-    if result.status == "inventory_full":
-        await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
-        return
-    if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, result_failure("探索结算", result, messages={"limit_reached": "今日探索次数已达上限，请明日再来。", "inventory_full": "背包物品已达上限，探索奖励尚未领取。"}))
+    outcome = map_application.explore_settle(
+        operation_id=operation_id,
+        user_id=uid,
+        expected_state=expected_state,
+        expected_daily=snapshot["daily"],
+        daily_limit=DAILY_LIMIT_CONFIG["explore"],
+        stone=snapshot["stone"],
+        items=snapshot["items"],
+        max_goods_num=XiuConfig().max_goods_num,
+        clock=runtime_clock,
+    )
+    data = result_data(outcome.data)
+    result = MapExploreSettlementResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stone", 0) or 0),
+        tuple(data.get("rewards", ())),
+        reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "actor")),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure(
+            "探索结算",
+            result,
+            messages={
+                "limit_reached": "今日探索次数已达上限，探索奖励未结算。",
+                "inventory_full": "背包物品已达上限，探索奖励尚未领取。",
+                "user_missing": "角色资料不存在，探索奖励未结算。",
+                "explore_changed": "探索状态已变化，本次奖励未结算。",
+                "daily_changed": "探索次数已变化，本次奖励未结算。",
+                "map_explore_settlement_daily_invalid": "探索次数记录无效，本次奖励未结算。",
+                "map_explore_settlement_inventory_invalid": "背包记录无效，本次奖励未结算。",
+                "map_explore_settlement_stone_invalid": "灵石余额无效，本次奖励未结算。",
+            },
+            subjects={
+                "map_daily_limit": "探索次数",
+                "map_explore_status": "探索状态",
+                "stone_wallet": "灵石钱包",
+                "receipt": "探索结算回执",
+            },
+        ))
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""

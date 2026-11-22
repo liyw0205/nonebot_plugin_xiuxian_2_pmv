@@ -302,8 +302,61 @@ class MapApplication(LegacyApplication):
         return self._action("explore_start", operation_id=operation_id, user_id=user_id, **kwargs)
     def explore_settle(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id, user_id=user_id, action="map.explore_settle", payload={"user_id": user_id, **kwargs}, call=lambda: MapExploreSettlementSqlRepository(self.game_database, self.player_database, clock=clock).settle(operation_id, user_id, **kwargs))
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.explore_settle",
+                payload={"user_id": user_id, **kwargs},
+                call=lambda: MapExploreSettlementSqlRepository(
+                    self.game_database, self.player_database, clock=clock
+                ).settle(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_explore_settlement_daily_write_rejected",
+                    "map_explore_settlement_daily_projection_mismatch",
+                    "map_explore_settlement_status_write_rejected",
+                    "map_explore_settlement_status_projection_mismatch",
+                    "map_explore_settlement_stone_write_rejected",
+                    "map_explore_settlement_stone_projection_mismatch",
+                    "map_explore_settlement_inventory_write_rejected",
+                    "map_explore_settlement_inventory_projection_mismatch",
+                    "map_explore_settlement_receipt_write_rejected",
+                    "map_explore_settlement_receipt_projection_mismatch",
+                    "map_explore_settlement_receipt_invalid",
+                    "map_explore_settlement_daily_invalid",
+                    "map_explore_settlement_inventory_invalid",
+                    "map_explore_settlement_stone_invalid",
+                    "explore_changed",
+                    "daily_changed",
+                    "limit_reached",
+                    "inventory_full",
+                    "user_missing",
+                ),
+            )
         return self._action("explore_settle", operation_id=operation_id, user_id=user_id, **kwargs)
+
+    def prepare_explore_settlement_snapshot(
+        self, *, operation_id: str, user_id: str,
+        expected_state: dict[str, Any], settlement: str
+    ):
+        return self._execute(
+            operation_id=operation_id,
+            user_id=user_id,
+            action="map.explore_settlement_snapshot",
+            payload={
+                "user_id": user_id,
+                "expected_state": expected_state,
+                "settlement": settlement,
+            },
+            call=lambda: MapExploreSettlementSqlRepository(
+                self.game_database, self.player_database, clock=None
+            ).prepare_snapshot(user_id, expected_state, settlement),
+            retryable_rejections=(
+                "map_explore_settlement_snapshot_write_rejected",
+                "map_explore_settlement_snapshot_projection_mismatch",
+                "explore_changed",
+            ),
+        )
+
     def resource_reward(self, *, operation_id: str, user_id: str, clock: Any = None, **kwargs: Any):
         if self._explicit_repository is None:
             return self._execute(
