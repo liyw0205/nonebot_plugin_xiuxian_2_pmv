@@ -620,9 +620,13 @@ from tests.parameter_cases_map_movement import register as register_map_movement
 
 register_map_movement(case)
 
+from tests.parameter_cases_map_position import register as register_map_position
+
+register_map_position(case)
+
 
 async def execute(args, checkpoint):
-    context, managers = await prepare()
+    context, managers = await prepare(minimal_map=args.minimal_map)
     entries = inventory()
     matrix = parameter_inventory(entries)
     selected = [spec for spec in CASES if (not args.group or spec.group in args.group)
@@ -631,7 +635,7 @@ async def execute(args, checkpoint):
         previous = json.loads(args.retry_from.read_text(encoding="utf-8"))
         failed = {row["key"] for row in previous["results"] if row["status"] != "pass"}
         selected = [spec for spec in selected if spec.key in failed]
-    snapshot = FixtureSnapshot(tests._data_dir, managers)
+    snapshot = FixtureSnapshot(tests._data_dir, managers, minimal_map=args.minimal_map)
     rows = []
     report = {"scope": "real registered parameter dispatch/DI/handler/application/repository; isolated migrated fixture; mock transport",
               "base_sha": args.base_sha, "parameter_commands": len(matrix), "matrix": matrix, "results": rows}
@@ -666,6 +670,8 @@ def main():
     parser.add_argument("--case", action="append")
     parser.add_argument("--retry-from", type=Path)
     parser.add_argument("--inventory-only", action="store_true")
+    parser.add_argument("--minimal-map", action="store_true",
+                        help="register the real legacy map module without loading unrelated plugin matchers")
     parser.add_argument("--base-sha", default="505f4cb70f82304da5d9c56721e980abaf75f226")
     args = parser.parse_args()
     with args.report.open("w", encoding="utf-8") as report:

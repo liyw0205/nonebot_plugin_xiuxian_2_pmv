@@ -661,35 +661,27 @@ def _get_player_map_status(user_id: str, map_data: dict):
     if data is None:
         return _init_player_map_status(user_id, map_data)
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
-        if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
-            data["heaven"] = "九重天"
-            data = map_application.save_status(
-                str(user_id), data["realm"], "九重天", data["node_id"], data.get("visited_nodes", [])
-            )
         realm = data.get("realm")
         if realm not in _all_realms(map_data):
             return _init_player_map_status(user_id, map_data)
 
-        heaven = _resolve_heaven_alias(map_data, realm, data.get("heaven"))
-        if heaven != data.get("heaven"):
-            data["heaven"] = heaven
-            data = map_application.save_status(
-                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
-            )
+        heaven = data.get("heaven")
+        if realm == "仙域" and heaven == "九天天":
+            heaven = "九重天"
+        heaven = _resolve_heaven_alias(map_data, realm, heaven)
 
         if heaven not in map_data[realm]["heavens"]:
             order = _get_realm_heaven_order(map_data, realm)
             heaven = order[0]
-            data["heaven"] = heaven
-            data = map_application.save_status(
-                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
-            )
 
-        if not _find_node_by_id(map_data, realm, heaven, data.get("node_id")):
+        node_id = data.get("node_id")
+        if not _find_node_by_id(map_data, realm, heaven, node_id):
             node = _nodes(map_data, realm, heaven)[0]
-            data["node_id"] = node["id"]
+            node_id = node["id"]
+
+        if heaven != data.get("heaven") or node_id != data.get("node_id"):
             data = map_application.save_status(
-                str(user_id), data["realm"], data["heaven"], node["id"], data.get("visited_nodes", [])
+                str(user_id), realm, heaven, node_id, data.get("visited_nodes", [])
             )
 
         return data
@@ -1097,6 +1089,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @my_pos.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "我的位置",
+    known_rejections=(
+        "map_status_schema_missing",
+        "map_status_write_rejected",
+        "map_status_projection_mismatch",
+    ),
+    subjects=lambda exc: {"map_status": "地图位置"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)

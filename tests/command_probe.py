@@ -149,15 +149,19 @@ def install_boundary(root: Path) -> None:
     sys.addaudithook(audit)
 
 
-async def prepare(*, seed: bool = True):
+async def prepare(*, seed: bool = True, minimal_map: bool = False):
     import nonebot
+
+    if minimal_map:
+        # Avoid loading every historical plugin when only a real map matcher is under test.
+        import nonebot_plugin_xiuxian_2
 
     nonebot.init(command_start={"", "/"}, superusers={"900003"}, log_level="ERROR")
     import nonebot_plugin_xiuxian_2
     source_root = Path(tests._data_dir).parent / "command-source" / "nonebot_plugin_xiuxian_2"
-    _import_info_from_fixture(source_root)
+    if not minimal_map:
+        _import_info_from_fixture(source_root)
     from nonebot_plugin_xiuxian_2.bootstrap.context import build_runtime_context
-    from nonebot_plugin_xiuxian_2.plugin import startup
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
         PlayerDataManager, TradeDataManager, XIUXIAN_IMPART_BUFF, XiuxianDateManage,
     )
@@ -173,6 +177,33 @@ async def prepare(*, seed: bool = True):
         data_dir=tests._data_dir, legacy_startup=False,
         message_gateway=NoneBotMessageGateway(delivery_service),
     )
+    if minimal_map:
+        from nonebot_plugin_xiuxian_2.features.admin.migrations import apply_admin_blackhouse
+        from nonebot_plugin_xiuxian_2.features.map.migrations import apply_map_player_state_schema
+        from nonebot_plugin_xiuxian_2.infrastructure.database.message_store import apply_message_store_schema
+        from nonebot_plugin_xiuxian_2.infrastructure.database.uow import DatabaseUnitOfWork
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_map
+
+        if not Path(xiuxian_map.__file__).resolve().is_relative_to(source_root.resolve()):
+            raise RuntimeError(f"map matcher resolved outside fixture source: {xiuxian_map.__file__}")
+        for spec in context.database.specs():
+            with DatabaseUnitOfWork(spec.path):
+                pass
+        with DatabaseUnitOfWork(context.paths.game_db) as uow:
+            apply_admin_blackhouse(uow)
+        with DatabaseUnitOfWork(context.paths.player_db) as uow:
+            apply_map_player_state_schema(uow)
+        with DatabaseUnitOfWork(context.paths.message_db) as uow:
+            apply_message_store_schema(uow)
+        if seed:
+            for uid, name in (("900001", "诊断道友"), ("900002", "诊断对手"), ("900003", "诊断管理")):
+                game.create_user(uid, "金", "天灵根", 1000, "2026-11-11 00:00:00", name)
+            game.conn.execute("UPDATE user_xiuxian SET stone=1000000, exp=100000, hp=1000, mp=1000, atk=100, user_stamina=100")
+            game.conn.commit()
+        return context, (game, player, trade, impart)
+
+    from nonebot_plugin_xiuxian_2.plugin import startup
+
     state, _, context, lifecycle = await startup(context)
     if state.error:
         raise AssertionError(state.error)
@@ -252,14 +283,17 @@ def inventory():
 
 
 class FixtureSnapshot:
-    def __init__(self, root, managers):
+    def __init__(self, root, managers, *, minimal_map: bool = False):
         self.root, self.managers = root, managers
         self.databases = {}
         self.json_files = {path: path.read_bytes() for path in root.parent.rglob("*.json")}
-        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_exp_cd import mentor_exp_cd
-        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.impart_pk import impart_pk
+        if minimal_map:
+            self.json_stores = []
+        else:
+            from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.mentor_exp_cd import mentor_exp_cd
+            from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_impart_pk.impart_pk import impart_pk
 
-        self.json_stores = [(store, deepcopy(store.data)) for store in (mentor_exp_cd, impart_pk)]
+            self.json_stores = [(store, deepcopy(store.data)) for store in (mentor_exp_cd, impart_pk)]
         for path in root.rglob("*.db"):
             memory = sqlite3.connect(":memory:")
             with sqlite3.connect(path) as source:
@@ -331,7 +365,7 @@ async def run_case(
     from nonebot.matcher import matchers
     from nonebot.message import check_and_run_matcher
     from nonebot.rule import TrieRule
-    from nonebot_plugin_xiuxian_2.xiuxian.on_compat import _CURRENT_EVENT
+    from nonebot_plugin_xiuxian_2.xiuxian.on_compat import _CURRENT_EVENT, _route_event
     from nonebot_plugin_xiuxian_2.infrastructure.messaging import MessageGatewayAdapter
 
     uid = "900099" if scenario == "unregistered_player" else "900001"
@@ -403,7 +437,24 @@ async def run_case(
         TrieRule.get_value(bot, event, state)
         candidates = matchers[entry["matcher"].priority]
         if entry["matcher"] not in candidates:
-            return {"scenario": scenario, "status": "blocked", "reason": "route provider did not select matcher", "input": text}
+            provider = getattr(matchers, "provider", None)
+            raw_matchers = getattr(provider, "_matchers", {}).get(entry["matcher"].priority, [])
+            route = _route_event(event)
+            priority = entry["matcher"].priority
+            route_command = route[0] if route is not None else None
+            return {
+                "scenario": scenario, "status": "blocked",
+                "reason": "route provider did not select matcher", "input": text,
+                "route_diagnostics": {
+                    "provider": type(provider).__name__,
+                    "raw_priority_count": len(raw_matchers),
+                    "matcher_registered": entry["matcher"] in raw_matchers,
+                    "matcher_indexed": entry["matcher"] in getattr(provider, "_routed_by_priority", {}).get(priority, set()),
+                    "route": route,
+                    "route_command_match": entry["matcher"] in getattr(provider, "_command_index", {}).get(priority, {}).get(route_command, set()),
+                    "priority_modules": sorted({str(getattr(matcher, "module_name", "")) for matcher in raw_matchers}),
+                },
+            }
         async with AsyncExitStack() as stack:
             # Keep the real permission, rule, dependencies, matcher and handler path.
             with patch.object(type(bot), "call_api", transport), patch.object(MessageGatewayAdapter, "send", checked_gateway):

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ....core.errors import DomainError
 from ....infrastructure.database import DatabaseUnitOfWork
 from ..repository import MapStatusSqlQueryRepository
 from tests.test_db_backend import db_backend
@@ -57,6 +58,13 @@ class MapStatusQueryRepositoryTests(unittest.TestCase):
             conn.execute("INSERT INTO map_status VALUES ('u','凡界','一重天','n1')")
         result = self.repository.get("u")
         self.assertEqual(result["visited_nodes"], [])
+
+    def test_missing_map_status_schema_is_not_reported_as_missing_player_state(self):
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TABLE map_status")
+        with self.assertRaises(DomainError) as raised:
+            self.repository.get("u")
+        self.assertEqual(raised.exception.details["reason"], "map_status_schema_missing")
 
     def test_schema_columns_are_cached_until_schema_version_changes(self):
         statements = []

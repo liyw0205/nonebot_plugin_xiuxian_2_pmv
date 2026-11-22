@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...core.numeric import as_int_like, exact_crystal_integer, require_exact_integer
+from ...core.errors import DomainError
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import RLock
@@ -524,7 +525,15 @@ class MapStatusSqlQueryRepository:
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             columns = self._columns(uow, self.player_database)
             if not columns:
-                return None
+                raise DomainError(
+                    "schema_missing", "map status schema is not initialized",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
+            if not {"user_id", "realm", "heaven", "node_id"}.issubset(columns):
+                raise DomainError(
+                    "schema_missing", "map status schema is incomplete",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
             visited_field = ",visited_nodes" if "visited_nodes" in columns else ""
             row = uow.query_one(
                 f"SELECT realm,heaven,node_id{visited_field} FROM map_status WHERE user_id=?",
@@ -563,16 +572,50 @@ class MapStatusSqlWriteRepository:
             raise ValueError("valid map status is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
             if not table_ready(uow, "map_status", STATUS_COLUMNS):
-                return {"status": SCHEMA_MISSING}
+                raise DomainError(
+                    "schema_missing", "map status schema is not initialized",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
             current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
             merged = self._merge_visited(current["visited_nodes"] if current else [], visited_nodes)
-            uow.execute(
+            expected = {
+                "realm": str(realm),
+                "heaven": str(heaven),
+                "node_id": str(node_id),
+                "visited_nodes": merged,
+            }
+            cursor = uow.execute(
                 "INSERT INTO map_status(user_id,realm,heaven,node_id,visited_nodes) VALUES(?,?,?,?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET realm=excluded.realm,heaven=excluded.heaven,"
                 "node_id=excluded.node_id,visited_nodes=excluded.visited_nodes",
                 (user_id, str(realm), str(heaven), str(node_id), json.dumps(merged, ensure_ascii=False)),
             )
-        return {"realm": str(realm), "heaven": str(heaven), "node_id": str(node_id), "visited_nodes": merged}
+            if cursor.rowcount != 1:
+                raise DomainError(
+                    "conflict", "map status write was rejected",
+                    {"reason": "map_status_write_rejected", "subject": "map_status"},
+                )
+            row = uow.query_one(
+                "SELECT realm,heaven,node_id,visited_nodes FROM map_status WHERE user_id=?",
+                (user_id,),
+            )
+            try:
+                actual_visited = json.loads(row["visited_nodes"]) if row is not None else None
+            except (TypeError, ValueError, json.JSONDecodeError):
+                actual_visited = None
+            actual = ({
+                "realm": str(row["realm"]),
+                "heaven": str(row["heaven"]),
+                "node_id": str(row["node_id"]),
+                "visited_nodes": [str(item) for item in actual_visited]
+                if isinstance(actual_visited, list) else None,
+            } if row is not None else None)
+            if actual != expected:
+                raise DomainError(
+                    "conflict", "map status projection does not match the requested write",
+                    {"reason": "map_status_projection_mismatch", "subject": "map_status"},
+                )
+        return expected
 
     @staticmethod
     def _merge_visited(current: Any, incoming: list[str]) -> list[str]:

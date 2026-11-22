@@ -3824,7 +3824,11 @@ class SourceQualityTests(unittest.TestCase):
         start = source.index("def _get_player_map_status")
         end = source.index("def _parse_map_query", start)
         helpers = source[start:end]
-        self.assertGreaterEqual(helpers.count("map_application.save_status("), 5)
+        normalize = helpers[helpers.index("def _get_player_map_status"):]
+        normalize = normalize[:normalize.index("def _is_canonical_map_status")]
+        self.assertEqual(normalize.count("map_application.save_status("), 1)
+        self.assertIn("node_id = node[\"id\"]", normalize)
+        self.assertIn("map_application.save_status(\n                str(user_id), realm, heaven, node_id", normalize)
         self.assertNotIn("def _save_map_status", helpers)
 
     def test_map_explore_status_reads_through_feature_application(self) -> None:
