@@ -23,6 +23,8 @@ from nonebot_plugin_xiuxian_2.adapters.nonebot.gateway import (
     plain_text_fallback,
 )
 from nonebot_plugin_xiuxian_2.core.result import INTENT_MARKDOWN, ReplyPlan
+from nonebot_plugin_xiuxian_2.features.map.schemas import MapInteractiveActionResult
+from nonebot_plugin_xiuxian_2.xiuxian.command_guard import result_failure
 from nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery import MessageDeliveryService
 from nonebot_plugin_xiuxian_2.xiuxian.qq_compat.capabilities import QQCapabilityRegistry
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.utils import (
@@ -244,6 +246,30 @@ class DeliveryFallbackTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("**", sent)
                 self.assertNotIn("\n---\n", sent)
                 self.assertIn("\n----------\n", sent)
+
+    async def test_map_action_rejection_text_is_preserved_for_onebot_and_qq_plain_delivery(self) -> None:
+        text = result_failure(
+            "资源行动",
+            MapInteractiveActionResult(
+                "state_changed",
+                reason="map_resource_reward_receipt_write_rejected",
+                subject="receipt",
+            ),
+        )
+        for is_qq in (False, True):
+            with self.subTest(is_qq=is_qq):
+                delivery = _RecordingMessageDelivery(capabilities=QQCapabilityRegistry())
+                gateway = NoneBotMessageGateway(delivery)
+                with patch(
+                    "nonebot_plugin_xiuxian_2.xiuxian.messaging.delivery.is_qq_bot",
+                    return_value=is_qq,
+                ):
+                    await gateway.send(
+                        _Context(object(), _Event("group")), ReplyPlan(text)
+                    )
+                self.assertEqual(1, len(delivery.sent))
+                self.assertEqual(text, delivery.sent[0])
+                self.assertIn("本次奖励已撤销", str(delivery.sent[0]))
 
     async def test_qq_bot_with_markdown_capability_sends_markdown_segment(self) -> None:
         class _FakeSegment:

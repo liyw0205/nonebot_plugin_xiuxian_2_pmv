@@ -211,8 +211,20 @@ class MapApplication(LegacyApplication):
                 operation_id=operation_id,
                 user_id=user_id,
                 action="map.interactive_start",
-                payload={"user_id": user_id, **kwargs},
+                payload={"user_id": user_id, "action_type": kwargs.get("action_type", "")},
                 call=lambda: MapInteractiveStartSqlRepository(self.game_database, self.player_database).start(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_interactive_stamina_write_rejected",
+                    "map_interactive_stamina_projection_mismatch",
+                    "map_interactive_action_write_rejected",
+                    "map_interactive_action_projection_mismatch",
+                    "map_interactive_terminal_action_write_rejected",
+                    "map_interactive_terminal_action_projection_mismatch",
+                    "map_interactive_terminal_cooldown_write_rejected",
+                    "map_interactive_terminal_cooldown_projection_mismatch",
+                    "map_interactive_start_receipt_write_rejected",
+                    "map_interactive_start_receipt_projection_mismatch",
+                ),
             )
         return self._action("interactive_start", operation_id=operation_id, user_id=user_id, **kwargs)
 
@@ -224,6 +236,14 @@ class MapApplication(LegacyApplication):
                 action="map.interactive_failure",
                 payload={"user_id": user_id, "action_id": action_id, "outcome": outcome, "cooldown_until": cooldown_until},
                 call=lambda: MapInteractiveFailureSqlRepository(self.player_database).finish_failure(operation_id, user_id, action_id, outcome, cooldown_until),
+                retryable_rejections=(
+                    "map_interactive_terminal_action_write_rejected",
+                    "map_interactive_terminal_action_projection_mismatch",
+                    "map_interactive_terminal_cooldown_write_rejected",
+                    "map_interactive_terminal_cooldown_projection_mismatch",
+                    "map_interactive_terminal_receipt_write_rejected",
+                    "map_interactive_terminal_receipt_projection_mismatch",
+                ),
             )
         return self._action("interactive_failure", operation_id=operation_id, user_id=user_id, action_id=action_id, outcome=outcome, cooldown_until=cooldown_until)
 
@@ -235,6 +255,10 @@ class MapApplication(LegacyApplication):
                 action="map.interactive_settlement",
                 payload={"user_id": user_id, "action_id": action_id, "settlement": settlement},
                 call=lambda: MapInteractiveSettlementSqlRepository(self.player_database).save_settlement(user_id, action_id, settlement),
+                retryable_rejections=(
+                    "map_interactive_settlement_write_rejected",
+                    "map_interactive_settlement_projection_mismatch",
+                ),
             )
         return self._action("interactive_settlement", operation_id=operation_id, user_id=user_id, action_id=action_id, settlement=settlement)
 
@@ -365,6 +389,20 @@ class MapApplication(LegacyApplication):
                 action="map.resource_reward",
                 payload={"user_id": user_id, **kwargs},
                 call=lambda: MapResourceRewardSqlRepository(self.game_database, self.player_database, clock=clock).settle(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_resource_reward_daily_write_rejected",
+                    "map_resource_reward_daily_projection_mismatch",
+                    "map_resource_reward_stone_write_rejected",
+                    "map_resource_reward_stone_projection_mismatch",
+                    "map_resource_reward_inventory_write_rejected",
+                    "map_resource_reward_inventory_projection_mismatch",
+                    "map_resource_reward_action_write_rejected",
+                    "map_resource_reward_action_projection_mismatch",
+                    "map_resource_reward_cooldown_write_rejected",
+                    "map_resource_reward_cooldown_projection_mismatch",
+                    "map_resource_reward_receipt_write_rejected",
+                    "map_resource_reward_receipt_projection_mismatch",
+                ),
             )
         return self._action("resource_reward", operation_id=operation_id, user_id=user_id, **kwargs)
     def mission_claim(self, *, operation_id: str, user_id: str, clock: Any, **kwargs: Any):

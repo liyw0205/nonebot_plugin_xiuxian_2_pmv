@@ -48,6 +48,24 @@ class MapReasonContractTests(unittest.TestCase):
             self.assertNotIn("SQL", message)
             self.assertNotIn("traceback", message.lower())
 
+    def test_interactive_write_rejections_keep_specific_recovery_reasons(self):
+        cases = (
+            ("map_interactive_start_receipt_write_rejected", "资源行动回执未能保存", "故障解除后可重试原指令"),
+            ("map_interactive_terminal_cooldown_projection_mismatch", "资源行动冷却与请求不一致", "联系管理员"),
+            ("map_interactive_settlement_write_rejected", "奖励快照未能保存", "行动仍保留"),
+            ("map_resource_reward_receipt_projection_mismatch", "奖励回执与本次请求不一致", "本次奖励已撤销"),
+        )
+        for reason, specific, recovery in cases:
+            with self.subTest(reason=reason):
+                message = result_failure(
+                    "资源行动",
+                    MapInteractiveActionResult("state_changed", reason=reason, subject="receipt"),
+                )
+                self.assertIn(specific, message)
+                self.assertIn(recovery, message)
+                self.assertNotIn("unmapped result", message)
+                self.assertNotIn("SQL", message)
+
 
 if __name__ == "__main__":
     unittest.main()

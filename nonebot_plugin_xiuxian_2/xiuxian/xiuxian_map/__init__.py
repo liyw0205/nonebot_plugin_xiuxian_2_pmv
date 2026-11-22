@@ -1564,6 +1564,7 @@ def _interactive_start_message(result, action_type: str) -> str:
     )
 
 
+@guard_command("资源行动")
 async def _interactive_ready_notice(bot, event, uid: str, action: dict):
     action_id = str(action["action_id"])
     action_type = str(action["action"])
@@ -1583,7 +1584,8 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
             f"{config['trigger_msg']}（地点：{action['node_name']}）",
         )
 
-    await asyncio.sleep(max(0, (expires_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()))
+    remaining = (expires_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()
+    await asyncio.sleep(max(0, remaining) + 0.001)
     current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
@@ -1597,14 +1599,17 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
         "expired",
         cooldown_until,
     )
-    if expired.status == "applied":
+    if expired.succeeded:
         await handle_send(
             bot,
             event,
             f"❌ 时机已过，{action_type}失败（{action['node_name']}）",
         )
+    else:
+        await handle_send(bot, event, result_failure("资源行动", expired))
 
 
+@guard_command("资源行动")
 async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, action_type: str):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1683,6 +1688,7 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
 
 
+@guard_command("资源行动")
 async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, resolve_cmd: str):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1702,13 +1708,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=25)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        reset = _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
             "invalid",
             cooldown_until,
         )
+        if not reset.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", reset))
+            return
         await handle_send(bot, event, "状态异常，已重置。")
         return
     if ia["resolve_cmd"] != resolve_cmd:
@@ -1720,13 +1729,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (
             now + timedelta(seconds=int(st.get("cooldown_sec", 25) or 25))
         ).strftime("%Y-%m-%d %H:%M:%S")
-        _finish_interactive_failure(
+        reset = _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
             "invalid",
             cooldown_until,
         )
+        if not reset.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", reset))
+            return
         await handle_send(bot, event, "资源行动状态异常，已重置。")
         return
     if now < ready_ts:
@@ -1737,13 +1749,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        expired = _finish_interactive_failure(
             f"map-interactive-timeout:{st['action_id']}",
             uid,
             st["action_id"],
             "expired",
             cooldown_until,
         )
+        if not expired.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", expired))
+            return
         await handle_send(bot, event, f"❌ 时机已过，{action}失败。")
         return
 
@@ -1751,13 +1766,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        failed = _finish_interactive_failure(
             f"map-interactive-failed:{st['action_id']}",
             uid,
             st["action_id"],
             "failed",
             cooldown_until,
         )
+        if not failed.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", failed))
+            return
         await handle_send(bot, event, f"💨 你动作慢了半拍，{action}失败（目标跑了）")
         return
 
