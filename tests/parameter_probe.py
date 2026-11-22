@@ -612,6 +612,10 @@ from tests.parameter_cases_dongfu_help import register as register_dongfu_help
 
 register_dongfu_help(case)
 
+from tests.parameter_cases_map_help import register as register_map_help
+
+register_map_help(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
