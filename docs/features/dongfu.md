@@ -88,12 +88,13 @@ Run the Dongfu repository/schema tests and the full architecture gate. Verify op
   不新增表、列、迁移、索引或写入路径。
 - `DongfuHarvestHistoryApplication` 在 `read_only=True` 的 `DatabaseUnitOfWork` 中按
   `json_extract(payload, '$[0]') = 当前 user_id` 查询近 7 天（只用下界）成功收获行，
-  按 `created_at DESC, rowid DESC` 排序；缺库、缺表、缺列、坏 JSON 或读失败返回空态，
-  不建表、不补列。
+  按 `created_at DESC, rowid DESC` 排序；缺库、缺表、缺列或坏 JSON 返回空态，
+  实际数据库读取错误透传命令守卫并记录定位号，不伪装成无记录；不建表、不补列。
 - 输出：收获次数、总件数、物品种类数，以及最近 10 次明细（时间、最多 4 种物品及数量、
   未成熟灵田数）；空态显示“近7天没有洞府收获记录。”。
-- 帮助与发现性：`洞府帮助` 增补条目，`修仙帮助`「流水与总览」登记；manifest 通过
-  `commands_for("dongfu")` 自动纳入新命令，不需要新增路由或配置。
+- 帮助与发现性：`洞府帮助` 展示全部 manifest 命令、已注册别名和准确参数形式，
+  `修仙帮助`「流水与总览」登记；manifest 通过 `commands_for("dongfu")` 自动纳入新命令，
+  不需要新增路由或配置。
 - 只读展示；不改种植、收获、施肥、催熟、扩建、巡山、潜入或任何资产写路径。
 
 ## 灰度开关、回滚和已知限制

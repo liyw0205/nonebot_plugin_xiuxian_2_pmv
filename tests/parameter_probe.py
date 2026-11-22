@@ -608,6 +608,10 @@ from tests.parameter_cases_dongfu_harvest_history import register as register_do
 
 register_dongfu_harvest_history(case)
 
+from tests.parameter_cases_dongfu_help import register as register_dongfu_help
+
+register_dongfu_help(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
