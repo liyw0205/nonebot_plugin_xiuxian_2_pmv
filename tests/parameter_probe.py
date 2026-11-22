@@ -624,9 +624,13 @@ from tests.parameter_cases_map_position import register as register_map_position
 
 register_map_position(case)
 
+from tests.parameter_cases_map_info import register as register_map_info
 
-async def execute(args, checkpoint):
-    context, managers = await prepare(minimal_map=args.minimal_map)
+register_map_info(case)
+
+
+async def execute(args, checkpoint, *, minimal_map=False):
+    context, managers = await prepare(minimal_map=minimal_map)
     entries = inventory()
     matrix = parameter_inventory(entries)
     selected = [spec for spec in CASES if (not args.group or spec.group in args.group)
@@ -635,7 +639,7 @@ async def execute(args, checkpoint):
         previous = json.loads(args.retry_from.read_text(encoding="utf-8"))
         failed = {row["key"] for row in previous["results"] if row["status"] != "pass"}
         selected = [spec for spec in selected if spec.key in failed]
-    snapshot = FixtureSnapshot(tests._data_dir, managers, minimal_map=args.minimal_map)
+    snapshot = FixtureSnapshot(tests._data_dir, managers, minimal_map=minimal_map)
     rows = []
     report = {"scope": "real registered parameter dispatch/DI/handler/application/repository; isolated migrated fixture; mock transport",
               "base_sha": args.base_sha, "parameter_commands": len(matrix), "matrix": matrix, "results": rows}
@@ -685,7 +689,7 @@ def main():
             report.truncate()
             report.flush()
 
-        result = asyncio.run(execute(args, checkpoint))
+        result = asyncio.run(execute(args, checkpoint, minimal_map=args.minimal_map))
         checkpoint(result)
         print(json.dumps({key: result.get(key) for key in ("parameter_commands", "summary", "outcomes")}, ensure_ascii=False))
         return int(result.get("summary", {}).get("exception", 0) > 0)

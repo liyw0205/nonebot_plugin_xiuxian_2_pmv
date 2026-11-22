@@ -5,6 +5,7 @@ except ImportError:
 
 import asyncio
 from datetime import datetime, timedelta
+from ...core.errors import DomainError
 from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.log import logger
@@ -656,6 +657,16 @@ def _get_realm_heaven_order(map_data, realm: str):
     return _heaven_names(map_data, realm)
 
 
+def _save_player_map_status(user_id: str, realm: str, heaven: str, node_id: str, visited_nodes: list[str]):
+    result = map_application.save_status(user_id, realm, heaven, node_id, visited_nodes)
+    if result.get("status") == "schema_missing":
+        raise DomainError(
+            "schema_missing", "map status schema is not initialized",
+            {"reason": "map_status_schema_missing", "subject": "map_status"},
+        )
+    return result
+
+
 def _get_player_map_status(user_id: str, map_data: dict):
     data = map_application.map_status(str(user_id))
     if data is None:
@@ -680,7 +691,7 @@ def _get_player_map_status(user_id: str, map_data: dict):
             node_id = node["id"]
 
         if heaven != data.get("heaven") or node_id != data.get("node_id"):
-            data = map_application.save_status(
+            data = _save_player_map_status(
                 str(user_id), realm, heaven, node_id, data.get("visited_nodes", [])
             )
 
@@ -709,7 +720,7 @@ def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None)
         "node_id": node["id"],
         "visited_nodes": [node["id"]],
     }
-    return map_application.save_status(
+    return _save_player_map_status(
         str(user_id), init_data["realm"], init_data["heaven"], init_data["node_id"], init_data["visited_nodes"]
     )
 
@@ -1011,6 +1022,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @map_info.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "地图",
+    known_rejections=(
+        "map_status_schema_missing",
+        "map_status_write_rejected",
+        "map_status_projection_mismatch",
+    ),
+    subjects=lambda exc: {"map_status": "地图位置"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1020,9 +1040,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     uid = str(user_info["user_id"])
     map_data = _load_map_data()
-    st = _get_player_map_status(uid, map_data)
-
     query = args.extract_plain_text().strip()
+    kind, parsed = _parse_map_query(map_data, query) if query else (None, None)
+    if query and kind is None:
+        await handle_send(bot, event, f"未识别参数【{query}】，可输入界名或天名。")
+        return
+
+    st = _get_player_map_status(uid, map_data)
     if not query:
         cur_node = _find_node_by_id(map_data, st["realm"], st["heaven"], st["node_id"])
         lines = [
@@ -1046,11 +1070,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             native_markdown=True,
             fallback_msg="\n".join(lines),
         )
-        return
-
-    kind, parsed = _parse_map_query(map_data, query)
-    if kind is None:
-        await handle_send(bot, event, f"未识别参数【{query}】，可输入界名或天名。")
         return
 
     if kind == "realm":

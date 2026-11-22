@@ -15,6 +15,7 @@ from .schema import (
     MISSION_COLUMNS,
     SCHEMA_MISSING,
     STATUS_COLUMNS,
+    columns,
     table_ready,
 )
 from .schemas import MapNearbyTargetResult
@@ -571,9 +572,12 @@ class MapStatusSqlWriteRepository:
         if not user_id or not all(str(value).strip() for value in (realm, heaven, node_id)):
             raise ValueError("valid map status is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            if not table_ready(uow, "map_status", STATUS_COLUMNS):
+            status_columns = columns(uow, "map_status")
+            if not status_columns:
+                return {"status": SCHEMA_MISSING}
+            if not STATUS_COLUMNS.issubset(status_columns):
                 raise DomainError(
-                    "schema_missing", "map status schema is not initialized",
+                    "schema_missing", "map status schema is incomplete",
                     {"reason": "map_status_schema_missing", "subject": "map_status"},
                 )
             current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
