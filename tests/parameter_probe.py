@@ -596,6 +596,10 @@ from tests.parameter_cases_map_home_return import register as register_map_home_
 
 register_map_home_return(case)
 
+from tests.parameter_cases_dongfu_status_view import register as register_dongfu_status_view
+
+register_dongfu_status_view(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()

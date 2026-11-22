@@ -43,29 +43,24 @@ class DongfuStatusSqlQueryRepository:
         user_id = str(user_id or "").strip()
         if not user_id or not self.player_database.is_file():
             return None
-        try:
-            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
-                table = uow.query_one(
-                    "SELECT 1 AS present FROM sqlite_master "
-                    "WHERE type='table' AND name='dongfu_status'"
-                )
-                if table is None:
-                    return None
-                columns = {
-                    str(row["name"])
-                    for row in uow.query_all("PRAGMA table_info(dongfu_status)")
-                }
-                if "user_id" not in columns or "built" not in columns:
-                    return None
-                selected = [field for field in _STATUS_FIELDS if field in columns]
-                row = uow.query_one(
-                    "SELECT " + ",".join(selected) + " FROM dongfu_status WHERE user_id=?",
-                    (user_id,),
-                )
-        except OSError:
-            return None
-        except Exception:
-            return None
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            table = uow.query_one(
+                "SELECT 1 AS present FROM sqlite_master "
+                "WHERE type='table' AND name='dongfu_status'"
+            )
+            if table is None:
+                return None
+            columns = {
+                str(row["name"])
+                for row in uow.query_all("PRAGMA table_info(dongfu_status)")
+            }
+            if "user_id" not in columns or "built" not in columns:
+                return None
+            selected = [field for field in _STATUS_FIELDS if field in columns]
+            row = uow.query_one(
+                "SELECT " + ",".join(selected) + " FROM dongfu_status WHERE user_id=?",
+                (user_id,),
+            )
         if row is None:
             return None
         result = dict(row)

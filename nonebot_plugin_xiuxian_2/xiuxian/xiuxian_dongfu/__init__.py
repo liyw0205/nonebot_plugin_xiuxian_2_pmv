@@ -422,11 +422,15 @@ def _format_minutes_left(finish: datetime, now: datetime):
     return max(1, int((finish - now).total_seconds() + 59) // 60)
 
 
-def _format_plant_slot(slot: dict, now: datetime | None = None):
-    now = now or _now()
+def _plant_wall_time(now: datetime):
     if now.tzinfo is not None:
-        # Plant timestamps written by _fmt_dt use the SystemClock UTC wall time.
-        now = now.astimezone(timezone.utc).replace(tzinfo=None)
+        # Stored plant timestamps are naive UTC.
+        return now.astimezone(timezone.utc).replace(tzinfo=None)
+    return now
+
+
+def _format_plant_slot(slot: dict, now: datetime | None = None):
+    now = _plant_wall_time(now if now is not None else _now())
     seed_id = _to_int(slot.get("seed_id"))
     if seed_id not in SEED_CONFIG:
         return f"{slot.get('slot')}号灵田：空闲"
@@ -442,8 +446,8 @@ def _format_plant_slot(slot: dict, now: datetime | None = None):
     return f"{slot.get('slot')}号灵田：{seed_name}（剩余{_format_minutes_left(finish, now)}分钟{fertilizer_msg}）"
 
 
-def _format_plant_slots(d: dict):
-    now = _now()
+def _format_plant_slots(d: dict, now: datetime | None = None):
+    now = now if now is not None else _now()
     lines = ["【洞府灵田状态】"]
     lines.extend(_format_plant_slot(slot, now) for slot in _normalize_plant_slots(d))
     return "\n".join(lines)
@@ -649,6 +653,7 @@ async def dongfu_harvest_history_(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 @my_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -668,10 +673,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
     active_left = _get_infiltrate_left(d, is_random=False)
     random_left = _get_infiltrate_left(d, is_random=True)
-    active_count = len(_active_plant_slots(d))
+    active_slots = _active_plant_slots(d)
+    active_count = len(active_slots)
     ready_count = 0
-    now = _now()
-    for slot in _active_plant_slots(d):
+    now = _plant_wall_time(_now())
+    for slot in active_slots:
         finish = _parse_dt(slot.get("plant_finish", ""))
         if finish and now >= finish:
             ready_count += 1
@@ -685,7 +691,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"巡山护府：{_to_int(d.get('patrol_guard'))}层，今日巡山{_to_int(d.get('patrol_count'))}/{DONGFU_PATROL_DAILY_LIMIT}\n"
         f"今日可发起潜入：主动{active_left}/{INFILTRATE_ACTIVE_DAILY_LIMIT}，随机{random_left}/{INFILTRATE_RANDOM_DAILY_LIMIT}\n"
         f"今日剩余可被潜入次数：{intrude_left}\n"
-        f"{_format_plant_slots(d)}"
+        f"{_format_plant_slots(d, now)}"
     )
     await handle_send(bot, event, msg)
 
