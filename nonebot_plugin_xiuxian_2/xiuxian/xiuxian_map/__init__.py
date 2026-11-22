@@ -907,6 +907,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @go_home.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("回府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -918,6 +919,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     outcome = map_application.return_home(
         operation_id=_map_operation_id(event, "home", user_id), user_id=user_id
     )
+    result = result_data(outcome.data)
+    if not outcome.ok and result.get("reason"):
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "回府",
+                result,
+                subjects={"map_status": "地图位置", "receipt": "回府回执"},
+            ),
+        )
+        return
     if not outcome.ok and outcome.code == "dongfu_missing":
         await handle_send(bot, event, "你尚未建设洞府，请先使用【建设洞府】。")
         return
@@ -929,6 +942,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
     if not outcome.ok and outcome.code == "operation_conflict":
         await handle_send(bot, event, "该事件已用于其他回府操作。")
+        return
+    if not outcome.ok:
+        await handle_send(
+            bot,
+            event,
+            f"回府未完成：操作状态为{outcome.code}，地图位置未确认改变，请核对后重试。",
+        )
         return
     await handle_send(
         bot,

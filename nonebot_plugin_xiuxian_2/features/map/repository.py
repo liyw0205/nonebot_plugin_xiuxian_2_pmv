@@ -67,9 +67,67 @@ class MapMovementSqlRepository:
             return {"status": "applied", "stamina": remaining}
 
 
+class _MapHomeReturnWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
+
+
 class MapHomeReturnSqlRepository:
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapHomeReturnWriteConflict(f"map_home_return_{suffix}", subject)
+
+    @staticmethod
+    def _visited_nodes(value: Any) -> list[str]:
+        try:
+            parsed = json.loads(value) if isinstance(value, str) else value
+        except json.JSONDecodeError:
+            parsed = []
+        return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+    @classmethod
+    def _verify_position(
+        cls, uow: DatabaseUnitOfWork, user_id: str, expected: dict[str, Any]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT realm,heaven,node_id,visited_nodes "
+            "FROM map_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("position_projection_mismatch", "map_status")
+        if any(
+            str(row[key] or "") != expected[key]
+            for key in ("realm", "heaven", "node_id")
+        ) or cls._visited_nodes(row["visited_nodes"]) != expected["visited_nodes"]:
+            cls._reject("position_projection_mismatch", "map_status")
+
+    @classmethod
+    def _verify_receipt(
+        cls,
+        uow: DatabaseUnitOfWork,
+        operation_id: str,
+        payload: str,
+        status: str,
+        fields: dict[str, str],
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,result_status,realm,heaven,node_id,node_name "
+            "FROM map_home_return_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None or (
+            str(row["payload"]), str(row["result_status"]),
+            *(str(row[key] or "") for key in ("realm", "heaven", "node_id", "node_name")),
+        ) != (
+            payload, status, fields["realm"], fields["heaven"],
+            fields["node_id"], fields["node_name"],
+        ):
+            cls._reject("receipt_projection_mismatch", "receipt")
 
     def return_home(self, operation_id: str, user_id: str) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
@@ -77,46 +135,126 @@ class MapHomeReturnSqlRepository:
             raise ValueError("operation and user are required")
         payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            previous = uow.query_one("SELECT payload,result_status,realm,heaven,node_id,node_name FROM map_home_return_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                if str(previous["payload"]) != payload:
+            previous = uow.query_one(
+                "SELECT payload,result_status,realm,heaven,node_id,node_name "
+                "FROM map_home_return_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if previous is not None:
+                try:
+                    previous_payload = json.loads(str(previous["payload"]))
+                except (TypeError, ValueError):
+                    return {
+                        "status": "state_changed",
+                        "reason": "map_home_return_receipt_invalid",
+                        "subject": "receipt",
+                    }
+                if previous_payload != [user_id]:
                     return {"status": "operation_conflict"}
-                result = {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"])}
-                result.update({key: str(previous[key] or "") for key in ("realm", "heaven", "node_id", "node_name")})
+                result_status = str(previous["result_status"] or "")
+                result = {
+                    key: str(previous[key] or "")
+                    for key in ("realm", "heaven", "node_id", "node_name")
+                }
+                allowed_statuses = {
+                    "applied", "dongfu_missing", "dongfu_invalid", "position_missing"
+                }
+                if result_status not in allowed_statuses or (
+                    result_status == "applied" and not all(result.values())
+                ) or (result_status != "applied" and any(result.values())):
+                    return {
+                        "status": "state_changed",
+                        "reason": "map_home_return_receipt_invalid",
+                        "subject": "receipt",
+                    }
+                result["status"] = "duplicate" if result_status == "applied" else result_status
                 return result
+
             def record(status: str, **values: str) -> dict[str, Any]:
                 fields = {"realm": "", "heaven": "", "node_id": "", "node_name": "", **values}
-                uow.execute("INSERT INTO map_home_return_operations(operation_id,payload,result_status,realm,heaven,node_id,node_name) VALUES(?,?,?,?,?,?,?)", (operation_id, payload, status, fields["realm"], fields["heaven"], fields["node_id"], fields["node_name"]))
+                if uow.execute(
+                    "INSERT INTO map_home_return_operations"
+                    "(operation_id,payload,result_status,realm,heaven,node_id,node_name) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (
+                        operation_id, payload, status, fields["realm"], fields["heaven"],
+                        fields["node_id"], fields["node_name"],
+                    ),
+                ).rowcount != 1:
+                    self._reject("receipt_write_rejected", "receipt")
+                self._verify_receipt(uow, operation_id, payload, status, fields)
                 return {"status": status, **fields}
-            table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='dongfu_status'")
-            if table is None:
-                return record("dongfu_missing")
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(dongfu_status)")}
-            selected = "built,realm,heaven,node_id" + (",node_name" if "node_name" in columns else "")
-            dongfu = uow.query_one(f"SELECT {selected} FROM dongfu_status WHERE user_id=?", (user_id,))
-            if dongfu is None or int(dongfu["built"] or 0) != 1:
-                return record("dongfu_missing")
-            realm, heaven, node_id = str(dongfu["realm"] or ""), str(dongfu["heaven"] or ""), str(dongfu["node_id"] or "")
-            if not all((realm, heaven, node_id)):
-                return record("dongfu_invalid")
-            position = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='map_status'")
-            if position is None:
-                return record("position_missing")
-            current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
-            if current is None:
-                return record("position_missing")
-            visited = current["visited_nodes"]
             try:
-                visited = json.loads(visited) if isinstance(visited, str) else visited
-            except json.JSONDecodeError:
-                visited = []
-            visited = [str(item) for item in visited] if isinstance(visited, list) else []
-            if node_id not in visited:
-                visited.append(node_id)
-            uow.execute("UPDATE map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? WHERE user_id=?", (realm, heaven, node_id, json.dumps(visited, ensure_ascii=False), user_id))
-            return record("applied", realm=realm, heaven=heaven, node_id=node_id, node_name=str(dongfu.get("node_name") or node_id))
-
-
+                with uow.savepoint("map_home_return"):
+                    table = uow.query_one(
+                        "SELECT 1 AS present FROM sqlite_master "
+                        "WHERE type='table' AND name='dongfu_status'"
+                    )
+                    if table is None:
+                        return record("dongfu_missing")
+                    columns = {
+                        str(row["name"])
+                        for row in uow.query_all("PRAGMA table_info(dongfu_status)")
+                    }
+                    selected = "built,realm,heaven,node_id" + (
+                        ",node_name" if "node_name" in columns else ""
+                    )
+                    dongfu = uow.query_one(
+                        f"SELECT {selected} FROM dongfu_status WHERE user_id=?", (user_id,)
+                    )
+                    if dongfu is None or int(dongfu["built"] or 0) != 1:
+                        return record("dongfu_missing")
+                    realm = str(dongfu["realm"] or "")
+                    heaven = str(dongfu["heaven"] or "")
+                    node_id = str(dongfu["node_id"] or "")
+                    if not all((realm, heaven, node_id)):
+                        return record("dongfu_invalid")
+                    position_table = uow.query_one(
+                        "SELECT 1 AS present FROM sqlite_master "
+                        "WHERE type='table' AND name='map_status'"
+                    )
+                    if position_table is None:
+                        return record("position_missing")
+                    current = uow.query_one(
+                        "SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,)
+                    )
+                    if current is None:
+                        return record("position_missing")
+                    visited = self._visited_nodes(current["visited_nodes"])
+                    if node_id not in visited:
+                        visited.append(node_id)
+                    expected = {
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node_id,
+                        "visited_nodes": visited,
+                    }
+                    if uow.execute(
+                        "UPDATE map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? "
+                        "WHERE user_id=?",
+                        (
+                            realm, heaven, node_id,
+                            json.dumps(visited, ensure_ascii=False), user_id,
+                        ),
+                    ).rowcount != 1:
+                        self._reject("position_write_rejected", "map_status")
+                    self._verify_position(uow, user_id, expected)
+                    fields = {
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node_id,
+                        "node_name": str(dongfu["node_name"] or node_id)
+                        if "node_name" in columns else node_id,
+                    }
+                    result = record("applied", **fields)
+                    self._verify_position(uow, user_id, expected)
+                    return result
+            except _MapHomeReturnWriteConflict as conflict:
+                return {
+                    "status": "state_changed",
+                    "reason": conflict.reason,
+                    "subject": conflict.subject,
+                }
 class MapInteractiveSqlQueryRepository:
     def __init__(self, player_database: str | Path, game_database: str | Path | None = None) -> None:
         self.player_database = str(player_database)

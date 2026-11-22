@@ -74,6 +74,13 @@ class MapApplication(LegacyApplication):
                 action="map.return_home",
                 payload={"user_id": user_id, **kwargs},
                 call=lambda: MapHomeReturnSqlRepository(self.player_database).return_home(operation_id, user_id),
+                retryable_rejections=(
+                    "map_home_return_position_write_rejected",
+                    "map_home_return_position_projection_mismatch",
+                    "map_home_return_receipt_write_rejected",
+                    "map_home_return_receipt_projection_mismatch",
+                    "map_home_return_receipt_invalid",
+                ),
             )
         return self._action("return_home", operation_id=operation_id, user_id=user_id, **kwargs)
 

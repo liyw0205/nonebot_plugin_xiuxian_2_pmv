@@ -592,6 +592,10 @@ from tests.parameter_cases_dongfu_build import register as register_dongfu_build
 
 register_dongfu_build(case)
 
+from tests.parameter_cases_map_home_return import register as register_map_home_return
+
+register_map_home_return(case)
+
 
 async def execute(args, checkpoint):
     context, managers = await prepare()
