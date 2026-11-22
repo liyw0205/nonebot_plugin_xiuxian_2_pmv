@@ -52,6 +52,7 @@ class CombatSettlementApplication:
             raise ValidationError(str(exc)) from exc
         payload = request.payload()
         with trace_context(operation_id=request.operation_id, user_scope=request.user_id):
+            reservation = None
             try:
                 with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
                     existing = self.ledger.begin(uow, request.operation_id, self.action, payload)
@@ -60,6 +61,7 @@ class CombatSettlementApplication:
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中")
+                    reservation = self.ledger.get(uow, request.operation_id, self.action)
                 repository = self.repository or CombatSettlementSqlRepository(self.game_database, self.player_database)
                 raw = repository.settle(
                     request.operation_id,
@@ -82,6 +84,35 @@ class CombatSettlementApplication:
                 data = CombatSettlementResult(status, request.operation_id, request.user_id, int(raw_stone or 0), rewards).to_dict()
                 diagnostics = raw if isinstance(raw, dict) else vars(raw)
                 data.update({key: diagnostics[key] for key in ("reason", "subject") if diagnostics.get(key)})
+                retryable_reasons = {
+                    "map_combat_settlement_daily_write_rejected",
+                    "map_combat_settlement_daily_projection_mismatch",
+                    "map_combat_settlement_snapshot_write_rejected",
+                    "map_combat_settlement_snapshot_projection_mismatch",
+                    "map_combat_settlement_stone_write_rejected",
+                    "map_combat_settlement_stone_projection_mismatch",
+                    "map_combat_settlement_inventory_write_rejected",
+                    "map_combat_settlement_inventory_projection_mismatch",
+                    "map_combat_settlement_receipt_write_rejected",
+                    "map_combat_settlement_receipt_projection_mismatch",
+                }
+                if data.get("reason") in retryable_reasons or status == "inventory_full":
+                    messages = {
+                        "inventory_full": "背包物品已达上限，节点战斗结算尚未领取。",
+                    }
+                    message = reason_text(data.get("reason")) or messages.get(status, "节点战斗未结算。")
+                    outcome = OperationOutcome.rejected(
+                        request.operation_id,
+                        self.action,
+                        message,
+                        code=str(data.get("reason") or status),
+                        data=data,
+                        audit_category="combat_settlement",
+                    )
+                    if reservation is not None:
+                        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                            self.ledger.release_unsettled(uow, reservation)
+                    return outcome
                 if status in {"applied", "duplicate"}:
                     outcome = OperationOutcome.applied(
                         request.operation_id,

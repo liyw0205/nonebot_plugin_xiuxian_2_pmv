@@ -96,14 +96,13 @@ class LegacyApplication:
             reservation = None
             try:
                 with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-                    prior = self.ledger.get(uow, operation_id, action) if (zero_write_rejections or retryable_rejections) else None
                     existing = self.ledger.begin(uow, operation_id, action, dict(payload))
                     if existing is not None:
                         previous = existing.outcome()
                         if previous is not None:
                             return previous.replay()
                         raise ConflictError("操作正在处理中", reason="operation_pending")
-                    if (zero_write_rejections or retryable_rejections) and prior is None:
+                    if zero_write_rejections or retryable_rejections:
                         reservation = self.ledger.get(uow, operation_id, action)
                 execute_callback = getattr(self.repository, "execute_callback", None)
                 if callable(execute_callback):

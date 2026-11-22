@@ -284,11 +284,48 @@ class MapApplication(LegacyApplication):
         return await self._combat_runner(user_id, enemy, bot_id=bot_id)
     def combat_save_plan(self, *, operation_id: str, user_id: str, task_id: str, plan: dict[str, Any]):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id,user_id=user_id,action="map.combat_save_plan",payload={"user_id":user_id,"task_id":task_id,"plan":plan},call=lambda:MapCombatLifecyclePlanSqlRepository(self.player_database).save_plan(operation_id,user_id,task_id,plan))
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.combat_save_plan",
+                payload={"user_id": user_id, "task_id": task_id, "plan": plan},
+                call=lambda: MapCombatLifecyclePlanSqlRepository(self.player_database).save_plan(
+                    operation_id, user_id, task_id, plan
+                ),
+                retryable_rejections=(
+                    "map_combat_plan_snapshot_write_rejected",
+                    "map_combat_plan_snapshot_projection_mismatch",
+                    "map_combat_plan_receipt_write_rejected",
+                    "map_combat_plan_receipt_projection_mismatch",
+                ),
+            )
         return self._action("combat_save_plan",operation_id=operation_id,user_id=user_id,task_id=task_id,plan=plan)
     def combat_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
-            return self._execute(operation_id=operation_id,user_id=user_id,action="map.combat_start",payload={"user_id":user_id,**kwargs},call=lambda:MapCombatLifecycleStartSqlRepository(self.game_database,self.player_database).start(operation_id,user_id,**kwargs))
+            request_payload = {"user_id": user_id, **kwargs}
+            task_identity = dict(request_payload.get("task") or {})
+            for generated in ("started_at", "cooldown_until", "enemy", "decay"):
+                task_identity.pop(generated, None)
+            request_payload["task"] = task_identity
+            return self._execute(
+                operation_id=operation_id,
+                user_id=user_id,
+                action="map.combat_start",
+                payload=request_payload,
+                call=lambda: MapCombatLifecycleStartSqlRepository(
+                    self.game_database, self.player_database
+                ).start(operation_id, user_id, **kwargs),
+                retryable_rejections=(
+                    "map_combat_start_stamina_write_rejected",
+                    "map_combat_start_stamina_projection_mismatch",
+                    "map_combat_start_cooldown_write_rejected",
+                    "map_combat_start_cooldown_projection_mismatch",
+                    "map_combat_start_snapshot_write_rejected",
+                    "map_combat_start_snapshot_projection_mismatch",
+                    "map_combat_start_receipt_write_rejected",
+                    "map_combat_start_receipt_projection_mismatch",
+                ),
+            )
         return self._action("combat_start",operation_id=operation_id,user_id=user_id,**kwargs)
     def combat_settle(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:
