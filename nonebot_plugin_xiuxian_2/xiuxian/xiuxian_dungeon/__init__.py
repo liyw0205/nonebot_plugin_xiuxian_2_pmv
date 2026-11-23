@@ -1,10 +1,7 @@
 import copy
-import hashlib
-import json
 import random
 import time
 from datetime import datetime, timedelta
-from fractions import Fraction
 from typing import Union, Any
 
 from nonebot import get_bot, require
@@ -49,8 +46,25 @@ from ...features.dungeon.team_presentation import (
     build_transfer_team_success_message,
     build_team_invite_private_message,
 )
+from ...features.dungeon.application import (
+    DungeonApplication,
+    DungeonExploreExecutionApplication,
+)
+from ...features.dungeon.explore_resolution import (
+    DUNGEON_EXPLORE_RNG_VERSION,
+    DungeonExplorePlanApplication,
+    base_member_plan as _base_member_plan,
+    dungeon_explore_random_source as _dungeon_explore_random_source,
+    explore_response as _explore_response,
+    progress_message as _progress_message,
+)
+from ...features.dungeon.explore_rewards import (
+    build_battle_rewards as _build_battle_rewards,
+    calc_team_distribution as _calc_team_distribution,
+    level_initial_exp as _level_initial_exp,
+    reward_caps as _reward_caps,
+)
 from ...paths import get_paths
-from ...features.dungeon.application import DungeonApplication
 from ...features.dungeon.explore_history import (
     DungeonExploreHistoryApplication,
     format_dungeon_explore_history,
@@ -134,35 +148,6 @@ def _team_operation_id(event, action: str, user_id: str) -> str:
     return f"dungeon-team-{action}:{dungeon_ids.new_id()}:{user_id}"
 
 
-DUNGEON_EXPLORE_RNG_VERSION = "dungeon-explore-rng-v1"
-
-
-def _dungeon_explore_random_source(
-    operation_id: str, purpose: str, *, seed: str | None = None
-):
-    """Build the operation RNG; callers may only replay a persisted seed."""
-    return random.Random(
-        str(seed)
-        if seed is not None
-        else f"{DUNGEON_EXPLORE_RNG_VERSION}:{purpose}:{operation_id}"
-    )
-
-
-def _frozen_explore_seed(intent: dict[str, Any], purpose: str) -> str:
-    if intent.get("seed_version") != DUNGEON_EXPLORE_RNG_VERSION:
-        raise ValueError("unsupported dungeon explore seed version")
-    seeds = intent.get("seeds")
-    seed = seeds.get(purpose) if isinstance(seeds, dict) else None
-    if not isinstance(seed, str) or not seed:
-        raise ValueError("missing dungeon explore seed")
-    return seed
-
-
-def _dungeon_explore_rng(intent: dict[str, Any], operation_id: str, purpose: str):
-    seed = _frozen_explore_seed(intent, purpose)
-    return _dungeon_explore_random_source(operation_id, purpose, seed=seed)
-
-
 def _freeze_json(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _freeze_json(value[key]) for key in sorted(value, key=str)}
@@ -171,13 +156,6 @@ def _freeze_json(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     return str(value)
-
-
-def _snapshot_digest(value: Any) -> str:
-    encoded = json.dumps(
-        _freeze_json(value), ensure_ascii=True, sort_keys=True, separators=(",", ":")
-    )
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _battle_input_snapshot(
@@ -191,28 +169,6 @@ def _battle_input_snapshot(
             "attack_multiplier": float((attack_buffs or {}).get(user_id, 1)),
         }
     return {"players": players}
-
-
-def _frozen_member_info(member_plan: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
-    """Rebuild reward inputs from the durable member plan, never live assets."""
-    expected = member_plan.get("expected")
-    if not isinstance(expected, dict):
-        raise ValueError("frozen member resources are missing")
-    result = dict(live)
-    result.update(
-        {
-            "user_id": str(member_plan.get("user_id", "")),
-            "user_name": str(member_plan.get("user_name", live.get("user_name", ""))),
-            "level": str(member_plan.get("level", live.get("level", ""))),
-            "hp": int(expected["hp"]),
-            "mp": int(expected["mp"]),
-            "stone": int(expected["stone"]),
-            "exp": int(expected["exp"]),
-        }
-    )
-    if not result["user_id"] or not result["level"]:
-        raise ValueError("frozen member profile is missing")
-    return result
 
 
 def format_seconds(sec: int):
@@ -816,193 +772,34 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
     await transfer_team_cmd.finish()
 
 
-# =========================
-# 奖励结算
-# =========================
+# Reward calculation lives in the dungeon feature. Keep this facade for callers
+# that still import the legacy command module.
 def _get_level_initial_exp(user_level: str) -> int:
-    if user_level == "江湖好手":
-        return int(jsondata.level_data().get("江湖好手", {}).get("power", 100))
-    if user_level == "至高":
-        return int(jsondata.level_data().get("至高", {}).get("power", 100))
-
-    if user_level.endswith("初期") or user_level.endswith("中期") or user_level.endswith("圆满"):
-        main = user_level[:-2]
-    else:
-        main = user_level
-
-    key = f"{main}初期"
-    return int(jsondata.level_data().get(key, {}).get("power", 100))
-
-
-def _calc_team_distribution(team_member_ids: list, leader_id: int, dmg_map: dict):
-    member_ids = [str(x) for x in team_member_ids]
-    n = len(member_ids)
-    if n <= 0:
-        return {}
-
-    if n == 1:
-        return {member_ids[0]: Fraction(1, 2)}
-
-    fixed = {}
-    fixed_pool = Fraction(0)
-    for uid in member_ids:
-        if uid == str(leader_id):
-            fixed[uid] = Fraction(1, 5)
-        else:
-            fixed[uid] = Fraction(1, 10)
-        fixed_pool += fixed[uid]
-
-    remain_pool = max(Fraction(0), Fraction(1) - fixed_pool)
-
-    contrib = {}
-    contrib_sum = 0
-    for uid in member_ids:
-        d = max(0, int(dmg_map.get(uid, 0)))
-        contrib[uid] = d
-        contrib_sum += d
-
-    dist = dict(fixed)
-
-    if remain_pool > 0:
-        if contrib_sum <= 0:
-            avg = remain_pool / n
-            for uid in member_ids:
-                dist[uid] += avg
-        else:
-            for uid in member_ids:
-                dist[uid] += remain_pool * Fraction(contrib[uid], contrib_sum)
-
-    cap = Fraction(1, 2)
-    for uid in member_ids:
-        if dist[uid] > cap:
-            dist[uid] = cap
-
-    return dist
+    return _level_initial_exp(user_level, jsondata.level_data())
 
 
 def _get_reward_caps(user_level: str, is_boss: bool):
-    level_initial_exp = _get_level_initial_exp(user_level)
-    stone_cap = 10_000_000 if is_boss else 5_000_000
-    exp_cap_ratio = 0.03 if is_boss else 0.01
-    exp_cap = int(level_initial_exp * exp_cap_ratio)
-    return stone_cap, exp_cap
+    return _reward_caps(user_level, is_boss, jsondata.level_data())
 
 
 def build_battle_rewards(
     user_info, members_info, monsters_list, status_list, operation_id,
     inventory_snapshot=None, random_source=None,
 ):
-    is_boss = any(m.get("monster_type") == "boss" for m in monsters_list)
-
-    total_stone_pool = sum(int(monster.get("stone", 0)) for monster in monsters_list)
-    total_exp_pool = sum(int(monster.get("experience", 0)) for monster in monsters_list)
-
-    dmg_map = {}
-    for d in status_list:
-        for _, stats in d.items():
-            if stats.get('team_id') == 0 and str(stats.get('user_id', 0)) != 0:
-                uid = str(stats['user_id'])
-                dmg_map[uid] = max(0, int(stats.get("total_dmg", 0)))
-
-    real_members = []
-    member_info_map = {}
-    for m in members_info:
-        uid = str(m["user_id"])
-        if uid in dmg_map:
-            real_members.append(uid)
-            member_info_map[uid] = m
-
-    if not real_members:
-        return "\n副本奖励：无，本次战斗无人获得奖励。", []
-
-    leader_id = str(user_info["user_id"])
-    dist = _calc_team_distribution(real_members, leader_id, dmg_map)
-
-    item_ids = [m["item_id"] for m in monsters_list if int(m.get("item_id", 0)) != 0]
-
-    msg = "\n副本奖励："
-    rewards = []
-    reward_rng = random_source or random.Random(operation_id)
-
-    for uid in real_members:
-        m_info = member_info_map.get(uid)
-        if not m_info:
-            continue
-
-        ratio = dist.get(uid, 0.0)
-
-        stone_raw = int(total_stone_pool * ratio)
-        exp_raw = int(total_exp_pool * ratio)
-
-        stone_cap, exp_cap = _get_reward_caps(m_info["level"], is_boss)
-        stone_final = min(stone_raw, stone_cap)
-        exp_final = min(exp_raw, exp_cap)
-
-        rewards_msg = []
-
-        if stone_final > 0:
-            rewards_msg.append(f"灵石{number_to(stone_final)}")
-
-        if exp_final > 0:
-            rewards_msg.append(f"修为{number_to(exp_final)}")
-
-        reward_items = []
-        if uid == leader_id and item_ids:
-            item_id = reward_rng.choice(item_ids)
-            item_info = items.get_data_by_item_id(item_id)
-            if item_info:
-                reward_items.append(
-                    {
-                        "id": item_id,
-                        "name": item_info["name"],
-                        "type": item_info["type"],
-                        "amount": 1,
-                    }
-                )
-                rewards_msg.append(f"{item_info['name']}")
-
-        for item in reward_items:
-            if inventory_snapshot is not None:
-                frozen_user = inventory_snapshot.get(uid)
-                if not isinstance(frozen_user, dict):
-                    raise ValueError("frozen inventory snapshot is missing")
-                # An absent row is a valid zero-count inventory entry.
-                frozen = frozen_user.get(
-                    str(item["id"]), {"goods_num": 0, "bind_num": 0}
-                )
-            else:
-                frozen = {
-                    "goods_num": int(_sql_message().goods_num(uid, item["id"])),
-                    "bind_num": int(_sql_message().goods_num(uid, item["id"], "bind")),
-                }
-            if not isinstance(frozen, dict):
-                raise ValueError("frozen inventory entry is invalid")
-            item["expected_num"] = int(frozen.get("goods_num", 0) or 0)
-            item["expected_bind_num"] = int(frozen.get("bind_num", 0) or 0)
-        rewards.append({
-            "user_id": uid,
-            "expected_stone": int(m_info["stone"]),
-            "expected_exp": int(m_info["exp"]),
-            "stone": stone_final,
-            "exp": exp_final,
-            "items": reward_items,
-        })
-
-        total_dmg = sum(dmg_map.values()) if sum(dmg_map.values()) > 0 else 1
-        contrib_percent = dmg_map.get(uid, 0) / total_dmg * 100
-        alloc_percent = float(ratio * 100)
-
-        rewards_msg_str = "无" if not rewards_msg else "、".join(rewards_msg)
-        msg += f"\n{m_info['user_name']}（贡献{contrib_percent:.2f}% / 分配{alloc_percent:.2f}%）获得：{rewards_msg_str}"
-
-    return msg, rewards
-
-
-def _explore_response(message: str, battle_messages=None) -> dict:
-    return {
-        "battle_messages": list(battle_messages or []),
-        "message": str(message),
-    }
+    if inventory_snapshot is None:
+        raise ValueError("副本奖励结算必须使用已冻结的背包快照")
+    return _build_battle_rewards(
+        user_info,
+        members_info,
+        monsters_list,
+        status_list,
+        operation_id,
+        inventory_snapshot=inventory_snapshot,
+        random_source=random_source or random.Random(operation_id),
+        levels=jsondata.level_data(),
+        item_lookup=items.get_data_by_item_id,
+        format_number=number_to,
+    )
 
 
 async def _send_explore_response(bot: Bot, event, response: dict) -> None:
@@ -1028,36 +825,48 @@ async def _send_explore_response(bot: Bot, event, response: dict) -> None:
     )
 
 
-def _progress_message(current_layer: int, total_layers: int, *, advance: bool, complete: bool) -> str:
-    if complete:
-        final_layer = int(total_layers)
-    elif advance:
-        final_layer = min(int(current_layer) + 1, int(total_layers))
-    else:
-        final_layer = int(current_layer)
-    if final_layer >= int(total_layers):
-        return "恭喜你已完成今日副本！"
-    return f"当前：第{final_layer + 1}层\n使用「探索副本」进入下一层！"
+def _dungeon_explore_execution_application(bot: Bot) -> DungeonExploreExecutionApplication:
+    def encounter_factory(snapshot):
+        manager = copy.copy(_dungeon_manager())
+        manager.current_dungeon = DungeonManager._template_from_snapshot(dict(snapshot))
+        manager.sync_current_dungeon = lambda: None
+        return manager
 
+    async def battle(user_ids, monsters, *, level_ratios, attack_buffs, random_source, player_data_by_id):
+        return await pve_fight(
+            user_ids,
+            monsters,
+            type_in=0,
+            bot_id=bot.self_id,
+            level_ratios=level_ratios,
+            attack_buffs=attack_buffs,
+            random_source=random_source,
+            player_data_by_id=player_data_by_id,
+        )
 
-def _base_member_plan(user_info: dict, cd_type: int) -> dict:
-    return {
-        "user_id": str(user_info["user_id"]),
-        "user_name": str(user_info.get("user_name", user_info["user_id"])),
-        "level": str(user_info.get("level", "")),
-        "expected": {
-            "hp": int(user_info["hp"]),
-            "mp": int(user_info["mp"]),
-            "stone": int(user_info["stone"]),
-            "exp": int(user_info["exp"]),
-            "cd_type": int(cd_type),
-        },
-        "final_hp": int(user_info["hp"]),
-        "final_mp": int(user_info["mp"]),
-        "stone_delta": 0,
-        "exp_delta": 0,
-        "items": [],
-    }
+    def final_statuses(statuses, level_ratios):
+        return resolve_final_user_statuses(statuses, bot.self_id, level_ratios)
+
+    def reward_builder(user_info, members, monsters, statuses, operation_id, *, inventory_snapshot, random_source):
+        return build_battle_rewards(
+            user_info,
+            members,
+            monsters,
+            statuses,
+            operation_id,
+            inventory_snapshot=inventory_snapshot,
+            random_source=random_source,
+        )
+
+    planner = DungeonExplorePlanApplication(
+        encounter_factory=encounter_factory,
+        battle=battle,
+        final_statuses=final_statuses,
+        reward_builder=reward_builder,
+        item_lookup=items.get_data_by_item_id,
+        format_number=number_to,
+    )
+    return DungeonExploreExecutionApplication(dungeon_application, planner)
 
 
 def check_user_state(user_info):
@@ -1341,7 +1150,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await _send_explore_response(bot, event, replay.get("response") or {})
         await explore_dungeon.finish()
     if replay.get("phase") == "prepared":
-        resumed = dungeon_application.settle(
+        resumed = _dungeon_explore_execution_application(bot).resume_prepared(
             operation_id=operation_id,
             user_id=user_id,
             max_goods_num=XiuConfig().max_goods_num,
@@ -1367,6 +1176,26 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
             dungeon_status=str(status.get("dungeon_status", "")),
         )
         await _send_explore_response(bot, event, stored_data.get("response") or response)
+
+    async def complete_intent(intent: dict[str, Any]) -> None:
+        result = await _dungeon_explore_execution_application(bot).resolve(
+            operation_id=operation_id,
+            user_id=user_id,
+            intent=intent,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
+        if result.get("status") == "operation_conflict":
+            await handle_send(bot, event, "该探索事件身份冲突，无法结算。")
+        elif result.get("status") in {"schema_missing", "unsupported"}:
+            await handle_send(bot, event, "副本探索结算失败：结算 schema 尚未就绪，请稍后重试。")
+        elif result.get("phase") == "completed":
+            await _send_explore_response(bot, event, result.get("response") or {})
+        else:
+            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
+
+    if isinstance(frozen_intent, dict) and frozen_intent:
+        await complete_intent(frozen_intent)
+        await explore_dungeon.finish()
 
     player_status = dungeon_manager.get_player_status(user_id)
     if player_status["dungeon_status"] == "completed":
@@ -1539,341 +1368,20 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         "inventory": live_inventory,
         "members": _freeze_json(member_plans),
     }
-    if frozen_intent:
-        intent = frozen_intent
-    if not frozen_intent:
-        intent_result = dungeon_application.prepare_intent(
-            operation_id=operation_id, user_id=user_id, intent=intent
-        )
-        if intent_result.get("phase") == "intent" and isinstance(intent_result.get("intent"), dict):
-            if _snapshot_digest(intent_result["intent"]) != _snapshot_digest(intent):
-                await reject(
-                    "state_changed",
-                    "副本操作未结算：该操作已由其他请求冻结，请重新发起。",
-                    player_status,
-                )
-                await explore_dungeon.finish()
-            intent = intent_result["intent"]
-        if intent_result.get("status") in {"schema_missing", "unsupported"}:
-            await handle_send(bot, event, "副本探索结算失败：结算 schema 尚未就绪，请稍后重试。")
-            await explore_dungeon.finish()
-        if intent_result.get("status") == "operation_conflict":
-            await reject(
-                "state_changed",
-                "副本操作未结算：结算输入无法持久化，请稍后重试。",
-                player_status,
-            )
-            await explore_dungeon.finish()
-
-    try:
-        if not isinstance(intent, dict) or not intent:
-            raise ValueError("frozen intent is missing")
-        if (
-            _snapshot_digest(intent.get("expected_status"))
-            != _snapshot_digest(player_status)
-            or _snapshot_digest(intent.get("team"))
-            != _snapshot_digest(team_snapshot)
-            or _snapshot_digest(intent.get("dungeon"))
-            != _snapshot_digest(dungeon_snapshot)
-            or _snapshot_digest(intent.get("battle_inputs"))
-            != _snapshot_digest(live_battle_inputs)
-            or _snapshot_digest(intent.get("level_ratios"))
-            != _snapshot_digest(exp_ratios or {})
-            or _snapshot_digest(intent.get("attack_buffs"))
-            != _snapshot_digest(attack_buffs)
-            or _snapshot_digest(intent.get("members"))
-            != _snapshot_digest(member_plans)
-            or _snapshot_digest(intent.get("inventory"))
-            != _snapshot_digest(live_inventory)
-        ):
-            raise ValueError("live dungeon input differs from frozen intent")
-        member_plans = copy.deepcopy(intent.get("members"))
-        if not isinstance(member_plans, list) or not member_plans:
-            raise ValueError("frozen members are missing")
-        member_plan_map = {
-            str(member.get("user_id", "")): member
-            for member in member_plans
-            if isinstance(member, dict)
-        }
-        user_ids_in_battle = [str(member.get("user_id", "")) for member in member_plans]
-        if not user_ids_in_battle or "" in user_ids_in_battle or len(set(user_ids_in_battle)) != len(user_ids_in_battle):
-            raise ValueError("frozen member ids are invalid")
-        live_members = {str(member["user_id"]): member for member in members_info}
-        members_info = [
-            _frozen_member_info(member_plan_map[member_id], live_members[member_id])
-            for member_id in user_ids_in_battle
-        ]
-        user_info = members_info[0]
-        user_exp = int(user_info["exp"])
-
-        raw_ratios = intent.get("level_ratios")
-        if not isinstance(raw_ratios, dict):
-            raise ValueError("frozen level ratios are missing")
-        exp_ratios = {str(key): float(value) for key, value in raw_ratios.items()} or None
-        raw_attack_buffs = intent.get("attack_buffs")
-        if not isinstance(raw_attack_buffs, dict):
-            raise ValueError("frozen attack buffs are missing")
-        attack_buffs = {str(key): float(value) for key, value in raw_attack_buffs.items()}
-        mentor_buff_msg = str(intent.get("mentor_buff_message", ""))
-
-        battle_inputs = intent.get("battle_inputs")
-        players = battle_inputs.get("players") if isinstance(battle_inputs, dict) else None
-        if not isinstance(players, dict):
-            raise ValueError("frozen battle inputs are missing")
-        frozen_battle_data = {}
-        for member_id in user_ids_in_battle:
-            entry = players.get(member_id)
-            attributes = entry.get("attributes") if isinstance(entry, dict) else None
-            if not isinstance(attributes, dict) or not isinstance(attributes.get("属性"), dict) or not attributes.get("属性"):
-                raise ValueError("frozen player battle input is invalid")
-            frozen_battle_data[member_id] = attributes
-
-        frozen_inventory = intent.get("inventory")
-        if not isinstance(frozen_inventory, dict):
-            raise ValueError("frozen inventory is missing")
-        for member_id in user_ids_in_battle:
-            member_inventory = frozen_inventory.get(member_id)
-            if not isinstance(member_inventory, dict):
-                raise ValueError("frozen inventory member is missing")
-            for inventory_entry in member_inventory.values():
-                if not isinstance(inventory_entry, dict):
-                    raise ValueError("frozen inventory entry is invalid")
-                goods_num = int(inventory_entry.get("goods_num", 0) or 0)
-                bind_num = int(inventory_entry.get("bind_num", 0) or 0)
-                if goods_num < 0 or bind_num < 0 or bind_num > goods_num:
-                    raise ValueError("frozen inventory counts are invalid")
-
-        frozen_status = intent.get("expected_status")
-        if not isinstance(frozen_status, dict):
-            raise ValueError("frozen dungeon status is missing")
-        player_status = copy.deepcopy(frozen_status)
-        current_layer = int(player_status["current_layer"])
-        total_layers = int(player_status["total_layers"])
-    except (KeyError, TypeError, ValueError, OverflowError):
-        await reject(
-            "state_changed",
-            "副本操作未结算：冻结的战斗输入已损坏或发生变化，请重新发起。",
-            player_status,
-        )
-        await explore_dungeon.finish()
-    advance = True
-    complete = False
-    resolved = {}
-    try:
-        encounter_rng = _dungeon_explore_rng(intent, operation_id, "encounter")
-        battle_rng = _dungeon_explore_rng(intent, operation_id, "battle")
-        reward_rng = _dungeon_explore_rng(intent, operation_id, "reward")
-    except ValueError:
-        await reject(
-            "invalid_intent",
-            "副本操作未结算：冻结的随机计划无效，请重新发起。",
-            player_status,
-        )
-        await explore_dungeon.finish()
-
-    # Copy the concrete manager, not the lazy proxy, so frozen template reads
-    # cannot fall through to the mutable process-wide singleton.
-    resolution_manager = copy.copy(_dungeon_manager())
-    resolution_manager.current_dungeon = DungeonManager._template_from_snapshot(
-        intent.get("dungeon") or dungeon_snapshot
+    intent_result = dungeon_application.prepare_intent(
+        operation_id=operation_id, user_id=user_id, intent=intent
     )
-    resolution_manager.sync_current_dungeon = lambda: None
-
-    if current_layer == total_layers - 1:
-        boss_info = resolution_manager.get_boss_data(
-            user_info["level"], user_exp, random_source=encounter_rng
-        )
-        battle_messages, winner, status = await pve_fight(
-            user_ids_in_battle,
-            boss_info,
-            type_in=0,
-            bot_id=bot.self_id,
-            level_ratios=exp_ratios,
-            attack_buffs=attack_buffs,
-            random_source=battle_rng,
-            player_data_by_id=frozen_battle_data,
-        )
-        final_statuses = resolve_final_user_statuses(
-            status, bot.self_id, exp_ratios
-        )
-        for member_id, final in final_statuses.items():
-            if member_id in member_plan_map:
-                member_plan_map[member_id]["final_hp"] = int(final["hp"])
-                member_plan_map[member_id]["final_mp"] = int(final["mp"])
-        if winner == 0:
-            reward_message, rewards = build_battle_rewards(
-                user_info,
-                members_info,
-                boss_info,
-                status,
-                operation_id,
-                inventory_snapshot=frozen_inventory,
-                random_source=reward_rng,
-            )
-            for reward in rewards:
-                plan_member = member_plan_map.get(str(reward["user_id"]))
-                if plan_member:
-                    plan_member["stone_delta"] = int(reward["stone"])
-                    plan_member["exp_delta"] = int(reward["exp"])
-                    plan_member["items"] = list(reward.get("items", []))
-            complete = True
-            summary = (
-                f"恭喜道友击败【{boss_info[0]['name']}】！"
-                f"{mentor_buff_msg}{reward_message}\n"
-                f"{_progress_message(current_layer, total_layers, advance=True, complete=True)}"
-            )
-        else:
-            advance = False
-            summary = (
-                f"道友不敌【{boss_info[0]['name']}】，重伤逃遁。\n"
-                f"{_progress_message(current_layer, total_layers, advance=False, complete=False)}"
-            )
-        response = _explore_response(summary, battle_messages)
-        resolved = {"kind": "boss", "winner": int(winner), "monsters": boss_info}
-    else:
-        event_result = resolution_manager.trigger_event(
-            user_info["level"], user_exp, random_source=encounter_rng
-        )
-        event_type = str(event_result.get("type", "nothing"))
-        battle_messages = []
-        if event_type == "trap":
-            message_parts = [str(event_result.get("description", ""))]
-            damage = float(event_result.get("damage", 0.1))
-            for member in members_info:
-                member_id = str(member["user_id"])
-                cost_hp = int((int(member["exp"]) / 2) * damage)
-                member_plan_map[member_id]["final_hp"] = max(
-                    1, int(member["hp"]) - cost_hp
-                )
-                message_parts.append(
-                    f"{member['user_name']}气血减少：{number_to(cost_hp)}"
-                )
-            summary = "，".join(message_parts)
-        elif event_type == "monster":
-            battle_messages, winner, status = await pve_fight(
-                user_ids_in_battle,
-                event_result["monster_data"],
-                type_in=0,
-                bot_id=bot.self_id,
-                level_ratios=exp_ratios,
-                attack_buffs=attack_buffs,
-                random_source=battle_rng,
-                player_data_by_id=frozen_battle_data,
-            )
-            final_statuses = resolve_final_user_statuses(
-                status, bot.self_id, exp_ratios
-            )
-            for member_id, final in final_statuses.items():
-                if member_id in member_plan_map:
-                    member_plan_map[member_id]["final_hp"] = int(final["hp"])
-                    member_plan_map[member_id]["final_mp"] = int(final["mp"])
-            summary = f"{event_result.get('description', '')}！"
-            if winner == 0:
-                reward_message, rewards = build_battle_rewards(
-                    user_info,
-                    members_info,
-                    event_result["monster_data"],
-                    status,
-                    operation_id,
-                    inventory_snapshot=frozen_inventory,
-                    random_source=reward_rng,
-                )
-                for reward in rewards:
-                    plan_member = member_plan_map.get(str(reward["user_id"]))
-                    if plan_member:
-                        plan_member["stone_delta"] = int(reward["stone"])
-                        plan_member["exp_delta"] = int(reward["exp"])
-                        plan_member["items"] = list(reward.get("items", []))
-                summary += f"\n恭喜道友击败敌人。{mentor_buff_msg}{reward_message}"
-            else:
-                summary += "\n道友不敌，重伤逃遁。"
-            resolved = {
-                "kind": "monster",
-                "winner": int(winner),
-                "monsters": event_result["monster_data"],
-            }
-        elif event_type == "treasure":
-            item_id = int(event_result.get("drop_items", 0) or 0)
-            item_info = items.get_data_by_item_id(item_id) if item_id else None
-            if item_info:
-                inventory_entry = frozen_inventory.get(user_id)
-                if not isinstance(inventory_entry, dict):
-                    raise ValueError("frozen inventory member is missing")
-                item_inventory = inventory_entry.get(
-                    str(item_id), {"goods_num": 0, "bind_num": 0}
-                )
-                if not isinstance(item_inventory, dict):
-                    raise ValueError("frozen inventory entry is invalid")
-                member_plan_map[user_id]["items"] = [
-                    {
-                        "id": item_id,
-                        "name": item_info["name"],
-                        "type": item_info["type"],
-                        "amount": 1,
-                        "expected_num": int(item_inventory.get("goods_num", 0) or 0),
-                        "expected_bind_num": int(item_inventory.get("bind_num", 0) or 0),
-                    }
-                ]
-                summary = (
-                    f"{event_result.get('description', '')}，凑近一看居然是{item_info['name']}"
-                )
-            else:
-                summary = f"{event_result.get('description', '')}，宝箱中空空如也"
-        elif event_type == "spirit_stone":
-            stones = int(event_result.get("stones", 0))
-            member_plan_map[user_id]["stone_delta"] = stones
-            summary = (
-                f"{event_result.get('description', '')}，获得{number_to(stones)}灵石"
-            )
-        else:
-            event_type = "nothing"
-            summary = str(event_result.get("description", "无事发生"))
-
-        summary += (
-            "！\n"
-            + _progress_message(
-                current_layer, total_layers, advance=advance, complete=complete
-            )
-        )
-        response = _explore_response(summary, battle_messages)
-        if not resolved:
-            resolved = {"kind": event_type, "event": event_result}
-
-    plan = {
-        "expected_status": dict(player_status),
-        "team": team_snapshot,
-        "members": member_plans,
-        "advance": bool(advance),
-        "complete": bool(complete),
-        "resolved": resolved,
-        "response": response,
-    }
-    prepared = dungeon_application.prepare_resolution(
-        operation_id=operation_id, user_id=user_id, plan=plan
-    )
-    settled = None
-    if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
-        settled = dungeon_application.settle(
-            operation_id=operation_id,
-            user_id=user_id,
-            max_goods_num=XiuConfig().max_goods_num,
-        )
-
-    if prepared.get("status") == "operation_conflict":
-        await handle_send(bot, event, "该探索事件身份冲突，无法结算。")
-        await explore_dungeon.finish()
-    if prepared.get("status") in {"schema_missing", "unsupported"}:
+    if intent_result.get("phase") == "intent" and isinstance(intent_result.get("intent"), dict):
+        intent = intent_result["intent"]
+    if intent_result.get("status") in {"schema_missing", "unsupported"}:
         await handle_send(bot, event, "副本探索结算失败：结算 schema 尚未就绪，请稍后重试。")
         await explore_dungeon.finish()
-    if prepared.get("phase") == "completed":
-        await _send_explore_response(bot, event, prepared.get("response") or {})
+    if intent_result.get("status") == "operation_conflict":
+        await handle_send(bot, event, "该探索事件身份冲突，无法冻结结算输入。")
         await explore_dungeon.finish()
-    if settled is None or settled.get("phase") != "completed":
-        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-        await explore_dungeon.finish()
-    await _send_explore_response(bot, event, settled.get("response") or response)
-    await explore_dungeon.finish()
 
+    await complete_intent(intent)
+    await explore_dungeon.finish()
 
 # =========================
 # 我的副本状态

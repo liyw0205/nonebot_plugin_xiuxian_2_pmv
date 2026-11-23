@@ -12,6 +12,11 @@ from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.observability import trace_context
 from .domain import DungeonPurchaseRequest
+from .explore_resolution import (
+    DungeonExplorePlanApplication,
+    InvalidDungeonExploreIntent,
+    explore_response,
+)
 from .repository import DungeonRepository, DungeonSessionSqlRepository
 from .reset_repository import DungeonResetSqlRepository
 
@@ -154,4 +159,65 @@ class DungeonApplication:
         return ReplyPlan(result.data if isinstance(result, OperationOutcome) else _data(result), reference=True)
 
 
-__all__ = ["DungeonApplication"]
+class DungeonExploreExecutionApplication:
+    """Resolve a frozen exploration intent and hand its plan to durable settlement."""
+
+    def __init__(self, storage: DungeonApplication, planner: DungeonExplorePlanApplication) -> None:
+        self.storage = storage
+        self.planner = planner
+
+    def resume_prepared(
+        self, *, operation_id: str, user_id: str, max_goods_num: int
+    ) -> dict[str, Any]:
+        return self.storage.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=max_goods_num,
+        )
+
+    async def resolve(
+        self,
+        *,
+        operation_id: str,
+        user_id: str,
+        intent: Mapping[str, Any],
+        max_goods_num: int,
+    ) -> dict[str, Any]:
+        try:
+            plan = await self.planner.build(operation_id, user_id, intent)
+        except InvalidDungeonExploreIntent:
+            expected = intent.get("expected_status") if isinstance(intent, Mapping) else {}
+            expected = expected if isinstance(expected, Mapping) else {}
+            response = explore_response(
+                "副本操作未结算：冻结的战斗输入已损坏或发生变化，请重新发起。"
+            )
+            response.update(reason="dungeon_explore_invalid_intent", subject=str(user_id))
+            return self.storage.resolve_rejection(
+                operation_id=operation_id,
+                user_id=user_id,
+                result_status="state_changed",
+                response=response,
+                max_goods_num=max_goods_num,
+                current_layer=int(expected.get("current_layer", 0) or 0),
+                dungeon_status=str(expected.get("dungeon_status", "")),
+            )
+
+        prepared = self.storage.prepare_resolution(
+            operation_id=operation_id, user_id=user_id, plan=plan
+        )
+        if prepared.get("status") in {"operation_conflict", "schema_missing", "unsupported"}:
+            return prepared
+        if prepared.get("phase") == "completed":
+            return prepared
+
+        settled = self.storage.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=max_goods_num,
+        )
+        return settled if settled.get("phase") == "completed" else {
+            **settled,
+            "status": "processing_failure",
+        }
+
+__all__ = ["DungeonApplication", "DungeonExploreExecutionApplication"]

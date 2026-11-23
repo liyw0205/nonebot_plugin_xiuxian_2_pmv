@@ -47,7 +47,8 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
         self.assertIn("def _sql_message(", source)
         self.assertIn("_sql_message().get_user_info_with_id(", source)
         self.assertIn("_sql_message().get_user_info_with_name(", source)
-        self.assertIn("_sql_message().goods_num(", source)
+        self.assertIn("inventory_snapshot is None", source)
+        self.assertNotIn("_sql_message().goods_num(", source)
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
 
     def setUp(self):
@@ -493,16 +494,19 @@ class DungeonExploreOperationServiceTests(unittest.TestCase):
         ]
         self.assertLess(
             handler.index("dungeon_application.replay"),
-            handler.index("resolution_manager.trigger_event"),
+            handler.index("_dungeon_explore_execution_application(bot).resolve"),
         )
         self.assertIn("dungeon_application.prepare_intent", handler)
-        self.assertIn("dungeon_application.prepare_resolution", handler)
-        self.assertIn("dungeon_application.settle", handler)
         self.assertIn("dungeon_application.resolve_rejection", handler)
-        self.assertIn("random_source=encounter_rng", handler)
-        self.assertIn("random_source=battle_rng", handler)
+        self.assertIn("_dungeon_explore_execution_application(bot).resume_prepared", handler)
+        self.assertNotIn("prepare_resolution", handler)
+        self.assertNotIn(".settle(", handler)
+        self.assertNotIn("pve_fight", handler)
+        self.assertNotIn("trigger_event", handler)
+        self.assertNotIn("build_battle_rewards", handler)
+        self.assertIn("type_in=0", source)
+        self.assertIn("random_source=random_source", source)
         self.assertNotIn("DungeonExploreOperationResult", handler)
-        self.assertIn("type_in=0", handler)
         self.assertNotIn("dungeon_session_service.enter", handler)
         self.assertNotIn("dungeon_battle_progress_service.settle", handler)
         self.assertNotIn("dungeon_explore_event_service.settle", handler)
