@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -13,33 +8,17 @@ import nonebot
 nonebot.init()
 
 
-def test_registered_map_dao_view_parameters_and_sqlite_read_recovery():
-    with tempfile.TemporaryDirectory(prefix="xiuxian-map-dao-view-") as directory:
-        report = Path(directory) / "report.json"
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "tests.parameter_probe",
-                "--minimal-map",
-                "--group",
-                "map-dao-view",
-                "--report",
-                str(report),
-            ],
-            cwd=Path(__file__).resolve().parents[1],
-            text=True,
-            capture_output=True,
-            timeout=180,
-        )
-        payload = json.loads(report.read_text(encoding="utf-8")) if report.exists() else {}
-        failures = [row for row in payload.get("results", []) if row["status"] != "pass"]
-        assert result.returncode == 0, (
-            result.stdout + result.stderr
-            + json.dumps(failures, ensure_ascii=False, indent=2)
-        )
-        assert payload.get("summary") == {"pass": 3}, result.stdout
-        assert payload["outcomes"] == {"success": 1, "recovery": 2}
+def test_registered_map_dao_view_parameters_and_sqlite_read_recovery(map_parameter_probe_results):
+    rows = [
+        row for row in map_parameter_probe_results["results"]
+        if row["group"] == "map-dao-view"
+    ]
+    assert {row["key"] for row in rows} == {
+        "map-dao-view-records",
+        "map-dao-view-target-read-recovery",
+        "map-dao-view-record-read-recovery",
+    }
+    assert sorted(row["outcome"] for row in rows) == ["recovery", "recovery", "success"]
 
 
 def test_dao_view_read_failure_reason_survives_onebot_qq_plain_markdown_and_fallback():

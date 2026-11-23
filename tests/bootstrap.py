@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -22,11 +23,9 @@ _RUNTIME_FILES = {
 _DATABASE_SUFFIXES = (".db", ".db-shm", ".db-wal", ".sqlite", ".sqlite3")
 
 
-def copy_static_data(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> Path:
-    """Overlay immutable repository assets onto an isolated data directory."""
-    source_path = Path(source).resolve()
-    target_path = Path(target).resolve()
-    target_path.mkdir(parents=True, exist_ok=True)
+@lru_cache(maxsize=4)
+def _static_data_files(source_path: Path) -> tuple[tuple[Path, Path], ...]:
+    files = []
     for path in source_path.rglob("*"):
         relative = path.relative_to(source_path)
         if any(part in _RUNTIME_DIRS for part in relative.parts):
@@ -37,6 +36,16 @@ def copy_static_data(source: str | os.PathLike[str], target: str | os.PathLike[s
             continue
         if any(path.name.endswith(suffix) for suffix in _DATABASE_SUFFIXES):
             continue
+        files.append((path, relative))
+    return tuple(files)
+
+
+def copy_static_data(source: str | os.PathLike[str], target: str | os.PathLike[str]) -> Path:
+    """Overlay immutable repository assets onto an isolated data directory."""
+    source_path = Path(source).resolve()
+    target_path = Path(target).resolve()
+    target_path.mkdir(parents=True, exist_ok=True)
+    for path, relative in _static_data_files(source_path):
         destination = target_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, destination)
