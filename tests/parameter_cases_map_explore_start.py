@@ -88,8 +88,9 @@ def register(case):
                 (974101, "开始探索", "开始探索", conf["duration_min"]),
                 (974102, "开始探索", "开始探索 1", 5),
                 (974103, "节点探索", "节点探索 45", 45),
-                (974104, "开始探索", "开始探索 999999999999", 999999999999),
-                (974108, "开始探索", "开始探索 " + "9" * 5000, conf["duration_min"]),
+                (974104, "开始探索", "开始探索 " + str(conf["max_duration_min"]), conf["max_duration_min"]),
+                (974109, "开始探索", "开始探索 999999999999", conf["max_duration_min"]),
+                (974108, "开始探索", "开始探索 " + "9" * 5000, conf["max_duration_min"]),
                 (974105, "开始探索", "开始探索 abc", conf["duration_min"]),
             ):
                 module.map_application.save_explore_status("900001", _idle_status())
@@ -99,6 +100,8 @@ def register(case):
                 after = _projection(probe, number)
                 probe.evidence.setdefault("parameters", []).append({"input": text, "reply": reply, "before": number_before, "after": after})
                 assert "已开始" in reply and f"计划时长：{expected}分钟" in reply, reply
+                if number in {974109, 974108}:
+                    assert text.split()[-1] not in reply, reply
                 assert after["stamina"] == [(number_before["stamina"][0][0] - conf["stamina_cost"],)], after
                 state = after["status"][0]
                 assert state[:3] == (1, node["type"], node["name"]), after
@@ -243,7 +246,6 @@ def register(case):
               group="map-explore-start", outcome="recovery")
         async def abort_recover(probe, label=label, database=database, trigger=trigger,
                                 number=974140 + index):
-            from datetime import datetime, timedelta
             from types import SimpleNamespace
             from unittest.mock import patch
 
@@ -252,14 +254,13 @@ def register(case):
             path = probe.context.paths.player_db if database == "player" else probe.context.paths.game_db
             probe.seed(path, "CREATE TRIGGER explore_abort " + trigger)
             before = _projection(probe, number)
-            class AdvancingClock:
-                current = datetime(2026, 11, 22, 12, 0, 0)
+            class FrozenClock:
+                current = module.runtime_clock.now().replace(tzinfo=None)
 
                 def now(self):
-                    self.current += timedelta(seconds=1)
                     return self.current
 
-            with patch.object(module, "runtime_clock", AdvancingClock()):
+            with patch.object(module, "runtime_clock", FrozenClock()):
                 reply = await _command(probe, "开始探索", "开始探索 20", number=number, allow_exception=True)
                 failed = _projection(probe, number)
                 logs = probe.calls[-1].get("logs", [])

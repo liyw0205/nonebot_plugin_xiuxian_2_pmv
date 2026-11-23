@@ -226,7 +226,14 @@ def save_unseal_data(user_id, data):
     )
 
 # 鉴石命令
-unseal = on_command("鉴石", priority=9, block=True)
+def _is_valid_unseal_input(args: Message = CommandArg()) -> bool:
+    if any(not segment.is_text() for segment in args):
+        return False
+    raw = args.extract_plain_text().strip()
+    return raw.isascii() and raw.isdigit() and bool(raw.lstrip("0"))
+
+
+unseal = on_command("鉴石", priority=9, block=True, rule=_is_valid_unseal_input)
 unseal_share_on = on_command("鉴石共享开启", priority=10, block=True)
 unseal_share_off = on_command("鉴石共享关闭", priority=10, block=True)
 unseal_help = on_command("鉴石帮助", priority=10, block=True)
@@ -550,14 +557,17 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
             return
 
         arg = args.extract_plain_text().strip()
-        if arg.isdigit():
-            input_stone = int(arg)
-            max_stone = min(current_stone // 10, 1000000000)
-            cost = min(input_stone, max_stone) if max_stone > 0 else 0
-            if cost <= 0:
-                cost = 1000000
+        max_stone = min(current_stone // 10, 1000000000)
+        normalized_input = arg.lstrip("0") or "0"
+        max_stone_text = str(max_stone)
+        if len(normalized_input) > len(max_stone_text) or (
+            len(normalized_input) == len(max_stone_text)
+            and normalized_input > max_stone_text
+        ):
+            input_stone = max_stone
         else:
-            cost = 1000000
+            input_stone = int(normalized_input)
+        cost = min(input_stone, max_stone)
         if current_stone < cost:
             msg = f"解封需要{cost}枚灵石作为法力消耗，当前仅有{current_stone}枚！"
             await handle_send(bot, event, msg, md_type="鉴石", k1="鉴石", v1="鉴石", k2="信息", v2="鉴石信息", k3="灵石", v3="灵石")

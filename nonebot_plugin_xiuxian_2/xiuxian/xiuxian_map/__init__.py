@@ -2316,7 +2316,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if duration_arg is None:
         duration_min = conf["duration_min"]
     else:
-        duration_min = max(5, duration_arg)
+        duration_min = min(max(5, duration_arg), conf["max_duration_min"])
 
     start_at = runtime_clock.now().replace(tzinfo=None)
     new_st = {
@@ -2391,7 +2391,7 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     await handle_send(
         bot, event,
         f"🧭 已开始【{node['name']}】探索\n"
-        f"计划时长：{duration_min}分钟（上限按{conf['max_duration_min']}分钟结算）\n"
+        f"计划时长：{duration_min}分钟（节点上限{conf['max_duration_min']}分钟）\n"
         f"探索期间将以事件流形式结算，稍后发送【探索结算】领取收益。"
     )
 
@@ -2651,10 +2651,23 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     txt = args.extract_plain_text().strip()
     duration_arg = None
     if txt:
-        try:
-            duration_arg = int(txt)
-        except ValueError:
-            duration_arg = None
+        if txt.isascii() and txt.isdigit():
+            normalized = txt.lstrip("0") or "0"
+            input_cap = max(
+                config["max_duration_min"] for config in EXPLORE_CONFIG.values()
+            )
+            cap_text = str(input_cap)
+            if len(normalized) > len(cap_text) or (
+                len(normalized) == len(cap_text) and normalized > cap_text
+            ):
+                duration_arg = input_cap
+            else:
+                duration_arg = int(normalized)
+        else:
+            try:
+                duration_arg = int(txt)
+            except ValueError:
+                duration_arg = None
     await _start_explore(bot, event, duration_arg)
 
 
