@@ -3854,12 +3854,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_player_data_manager().get_fields(self.GLOBAL_USER_ID" not in dungeon_manager
             ),
             "explore_random_sources_operation_scoped": (
-                "def _dungeon_explore_random_source(" in dungeon_facade
-                and "DUNGEON_EXPLORE_RNG_VERSION" in dungeon_facade
-                and 'random_source=encounter_rng' in dungeon_facade
-                and 'random_source=battle_rng' in dungeon_facade
+                "def dungeon_explore_random_source(" in dungeon_explore_resolution
+                and "DUNGEON_EXPLORE_RNG_VERSION" in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "encounter")' in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "battle")' in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "reward")' in dungeon_explore_resolution
+                and 'random_source=encounter_rng' in dungeon_explore_resolution
+                and 'random_source=battle_rng' in dungeon_explore_resolution
+                and 'random_source=reward_rng' in dungeon_explore_resolution
                 and "def trigger_event(self, user_level, user_exp, *, random_source=None)" in dungeon_manager
-                and "rng.choices(candidates, weights=weights, k=1)[0]" in dungeon_manager
+                and "random_source.choices(candidates, weights=candidate_weights, k=1)[0]" in dungeon_explore_encounters
                 and "async def pve_fight(" in dungeon_player_fight
                 and "_battle_random_source = ContextVar" in dungeon_player_fight
                 and "generate_boss_buff(m, random_source=random_source)" in dungeon_player_fight
@@ -3871,10 +3875,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def prepare_resolution(" in dungeon_repository
                 and '== "intent"' in dungeon_repository
                 and '"intent_json"' in dungeon_repository
-                and "player_data_by_id=frozen_battle_data" in dungeon_facade
-                and "resolution_manager.current_dungeon" in dungeon_facade
-                and "_frozen_explore_seed" in dungeon_facade
-                and "inventory_snapshot=frozen_inventory" in dungeon_facade
+                and "player_data_by_id=battle_data" in dungeon_explore_resolution
+                and "self.encounter_factory(dungeon)" in dungeon_explore_resolution
+                and "dungeon_explore_rng(intent" in dungeon_explore_resolution
+                and "inventory_snapshot=frozen_inventory" in dungeon_explore_resolution
             ),
             "session_schema_missing_fails_closed": (
                 "def _columns(" in dungeon_repository
