@@ -27,6 +27,11 @@ class _CombatSettlementWriteRejected(Exception):
         super().__init__(reason)
 
 
+class DaoBattleWriteRejected(_CombatSettlementWriteRejected):
+    def result(self) -> dict[str, Any]:
+        return {"status": "state_changed", "reason": self.reason, "subject": self.subject}
+
+
 def totals_from_rewards(rewards: Sequence[tuple[int, str, str, int]]) -> dict[int, int]:
     totals: dict[int, int] = {}
     for item_id, _name, _item_type, amount in rewards:
@@ -43,13 +48,14 @@ def _verify_settlement_write(
     expected: tuple[Any, ...],
     reason_prefix: str,
     subject: str,
+    rejection_type: type[_CombatSettlementWriteRejected] = _CombatSettlementWriteRejected,
 ) -> None:
     if uow.execute(statement, params).rowcount != 1:
-        raise _CombatSettlementWriteRejected(f"{reason_prefix}_write_rejected", subject)
+        raise rejection_type(f"{reason_prefix}_write_rejected", subject)
     row = uow.query_one(projection, projection_params)
     actual = tuple(row.values()) if row is not None else None
     if actual != expected:
-        raise _CombatSettlementWriteRejected(f"{reason_prefix}_projection_mismatch", subject)
+        raise rejection_type(f"{reason_prefix}_projection_mismatch", subject)
 
 
 class CombatSettlementSqlRepository:
@@ -175,42 +181,66 @@ class DaoBattleSqlRepository:
         self.game_database = str(game_database)
 
     def settle(self, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> dict[str, Any]:
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                return self.settle_in(uow, operation_id, challenger_id, target_id, expected_position, challenger_won)
+        except DaoBattleWriteRejected as exc:
+            return exc.result()
+
+    def settle_in(self, uow: DatabaseUnitOfWork, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> dict[str, Any]:
         operation_id = str(operation_id).strip()
         challenger_id, target_id = str(challenger_id), str(target_id)
         position = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
         if not operation_id or not challenger_id or challenger_id == target_id:
             raise ValueError("valid operation and distinct players are required")
         payload = json.dumps([challenger_id, target_id, position, bool(challenger_won)], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            uow.attach_database(self.game_database, "game_data")
-            previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                return (
-                    {"status": "duplicate"}
-                    if str(previous["payload"]) == payload
-                    else {
-                        "status": "state_changed",
-                        "reason": "operation_conflict",
-                        "subject": "actor",
-                    }
-                )
-            users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
-            present = {str(row["user_id"]) for row in users}
-            if present != {challenger_id, target_id}:
-                return {
-                    "status": "user_missing",
-                    "reason": "user_missing",
-                    "subject": "challenger" if challenger_id not in present else "target",
-                }
-            rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
-            current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
-            expected = (position["realm"], position["heaven"], position["node_id"])
-            if current.get(challenger_id) != expected or current.get(target_id) != expected:
-                return {"status": "position_changed", "reason": "position_changed", "subject": "challenger" if current.get(challenger_id) != expected else "target"}
-            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (challenger_id, 1, int(bool(challenger_won)), int(not challenger_won)))
-            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (target_id, 1, int(not challenger_won), int(bool(challenger_won))))
-            uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
-            return {"status": "applied"}
+        previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
+        if previous:
+            return (
+                {"status": "duplicate"}
+                if str(previous["payload"]) == payload
+                else {"status": "state_changed", "reason": "operation_conflict", "subject": "actor"}
+            )
+        uow.attach_database(self.game_database, "game_data")
+        users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
+        present = {str(row["user_id"]) for row in users}
+        if present != {challenger_id, target_id}:
+            return {
+                "status": "user_missing",
+                "reason": "user_missing",
+                "subject": "challenger" if challenger_id not in present else "target",
+            }
+        rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
+        current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
+        expected = (position["realm"], position["heaven"], position["node_id"])
+        if current.get(challenger_id) != expected or current.get(target_id) != expected:
+            return {"status": "position_changed", "reason": "position_changed", "subject": "challenger" if current.get(challenger_id) != expected else "target"}
+        record_sql = "SELECT total,win,lose FROM dao_record WHERE user_id=?"
+        projections = {}
+        for subject, uid, won in (("challenger", challenger_id, challenger_won), ("target", target_id, not challenger_won)):
+            row = uow.query_one(record_sql, (uid,))
+            before = tuple(row.values()) if row is not None else (0, 0, 0)
+            if any(type(value) is not int or value < 0 for value in before):
+                raise DaoBattleWriteRejected("map_dao_battle_record_invalid", subject)
+            projections[subject] = (uid, won, (before[0] + 1, before[1] + int(won), before[2] + int(not won)))
+        for subject, (uid, won, next_record) in projections.items():
+            _verify_settlement_write(
+                uow,
+                "INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose",
+                (uid, 1, int(won), int(not won)), record_sql, (uid,), next_record,
+                "map_dao_battle_record", subject, DaoBattleWriteRejected,
+            )
+        _verify_settlement_write(
+            uow, "INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)",
+            (operation_id, payload), "SELECT payload FROM map_dao_battle_operations WHERE operation_id=?",
+            (operation_id,), (payload,), "map_dao_battle_receipt", "receipt", DaoBattleWriteRejected,
+        )
+        for subject, (uid, _, next_record) in projections.items():
+            row = uow.query_one(record_sql, (uid,))
+            if row is None or tuple(row.values()) != next_record:
+                raise DaoBattleWriteRejected("map_dao_battle_record_projection_mismatch", subject)
+        return {"status": "applied"}
 
     def get_record(self, user_id: str) -> dict[str, int]:
         with DatabaseUnitOfWork(self.player_database) as uow:

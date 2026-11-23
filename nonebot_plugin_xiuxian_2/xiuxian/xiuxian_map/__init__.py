@@ -1341,7 +1341,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(lines))
 
 
-@dao_qc.handle(parameterless=[Cooldown(cd_time=20, stamina_cost=1)])
+async def _send_dao_battle_outcome(bot, event, outcome):
+    message = outcome.message
+    if not outcome.ok and (outcome.data or {}).get("reason") != "position_changed":
+        message = result_failure(
+            "论道切磋", outcome, subjects={"challenger": "发起方战绩", "target": "对方", "receipt": "论道回执"},
+        )
+    await handle_send(bot, event, message)
+
+
+@dao_qc.handle(parameterless=[Cooldown(cd_time=20, stamina_cost=1, stamina_operation_prefix="map-dao-stamina")])
+@guard_command("论道切磋")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1351,6 +1361,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     uid = str(user_info["user_id"])
     target_name = args.extract_plain_text().strip()
+    operation_id = _map_operation_id(event, "dao", uid)
+    previous = dao_battle_application.replay_dao_battle(
+        operation_id=operation_id, challenger_id=uid, requested_target=target_name,
+    )
+    if previous is not None:
+        await _send_dao_battle_outcome(bot, event, previous)
+        return
 
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
@@ -1381,20 +1398,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_win_rate = 0.5 if (my_power + ta_power) == 0 else my_power / (my_power + ta_power)
     my_win = runtime_random.random() < my_win_rate
 
+    winner = user_info["user_name"] if my_win else target["user_name"]
     outcome = dao_battle_application.settle_dao_battle(
-        operation_id=_map_operation_id(event, "dao", uid, target["user_id"]),
+        operation_id=operation_id,
         challenger_id=uid,
         target_id=target["user_id"],
         expected_position=st,
         challenger_won=my_win,
+        requested_target=target_name,
+        success_message=f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}",
     )
-    if not outcome.ok:
-        message = outcome.message or "论道未完成：双方位置或体力已更新，请重新发起。"
-        await handle_send(bot, event, message)
-        return
-
-    winner = user_info["user_name"] if my_win else target["user_name"]
-    await handle_send(bot, event, f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}")
+    await _send_dao_battle_outcome(bot, event, outcome)
 
 
 @dao_view.handle(parameterless=[Cooldown(cd_time=0)])

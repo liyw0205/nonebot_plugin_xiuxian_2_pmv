@@ -198,6 +198,11 @@ def register(case):
         module, realm, heaven, node = _setup(probe)
         actor = "900001"
         operation_id = "map-combat-start:974901:900001"
+        fixed = datetime(2026, 11, 22, 21, 0, 0)
+        module.map_application.save_daily_limit(actor, {
+            "date": fixed.date().isoformat(), "gather_count": 0, "combat_count": 0,
+            "explore_count": 0, "resource_total_count": 0,
+        })
         probe.player(user_stamina=100, stone=1000000, hp=1000, exp=100000)
         database = probe.context.paths.game_db
         with sqlite3.connect(database) as connection:
@@ -208,7 +213,6 @@ def register(case):
             )
 
         before = _projection(probe, operation_id=operation_id)
-        fixed = datetime(2026, 11, 22, 21, 0, 0)
         battle = AsyncMock(
             return_value=([{"data": {"content": "隔离战斗结果", "name": "系统", "uin": 900000}}],
                           "群友赢了", {"群友": {"剩余气血": 1}})

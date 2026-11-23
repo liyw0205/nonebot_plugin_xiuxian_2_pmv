@@ -648,6 +648,10 @@ from tests.parameter_cases_map_combat import register as register_map_combat
 
 register_map_combat(case)
 
+from tests.parameter_cases_map_dao_battle import register as register_map_dao_battle
+
+register_map_dao_battle(case)
+
 
 async def execute(args, checkpoint, *, minimal_map=False):
     context, managers = await prepare(minimal_map=minimal_map)
