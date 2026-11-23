@@ -85,6 +85,57 @@ class ArenaSeasonRewardServiceTests(unittest.TestCase):
         self.assertEqual(settled, ({"user_id": "user", "total": 800, "base": 300, "bonus": 500, "status": "applied"},))
         self.assertEqual(self.state(), ((810, 820, 0, 0, 0, "2026-07-13", "2026-07-13"), None))
 
+    def test_daily_reset_matches_legacy_text_counter_columns(self):
+        with DatabaseUnitOfWork(self.player) as uow:
+            uow.execute("DROP TABLE arena")
+            uow.execute(
+                "CREATE TABLE arena (user_id TEXT PRIMARY KEY,score NUMERIC,rank TEXT,"
+                "honor_points NUMERIC,total_honor_earned NUMERIC,daily_challenges_used NUMERIC,"
+                "daily_extra_challenges TEXT,daily_challenge_buys TEXT,last_reset_date TEXT,last_buy_date TEXT)"
+            )
+            uow.execute(
+                "INSERT INTO arena VALUES('user',2000,'黄金',10,20,8,'0','0','2026-11-19','2026-11-23')"
+            )
+
+        class FixedClock:
+            def now(self):
+                return datetime(2026, 11, 24, 0, 1, tzinfo=timezone.utc)
+
+        application = ArenaSeasonRewardApplication(self.game, self.player, clock=FixedClock())
+        settled = application.reset_daily()
+
+        self.assertEqual(
+            settled,
+            ({"user_id": "user", "total": 800, "base": 300, "bonus": 500, "status": "applied"},),
+        )
+        replayed = application.reset_daily()
+        self.assertEqual(replayed[0]["status"], "duplicate")
+        with DatabaseUnitOfWork(self.player, read_only=True) as uow:
+            arena = uow.query_one(
+                "SELECT honor_points,total_honor_earned,daily_challenges_used,daily_extra_challenges,"
+                "daily_challenge_buys,last_reset_date,last_buy_date FROM arena WHERE user_id='user'"
+            )
+            self.assertEqual(
+                arena,
+                {
+                    "honor_points": 810,
+                    "total_honor_earned": 820,
+                    "daily_challenges_used": 0,
+                    "daily_extra_challenges": "0",
+                    "daily_challenge_buys": "0",
+                    "last_reset_date": "2026-11-24",
+                    "last_buy_date": "2026-11-24",
+                },
+            )
+        with DatabaseUnitOfWork(self.game, read_only=True) as uow:
+            receipt = uow.query_one(
+                "SELECT season_key,user_id,honor FROM arena_season_reward_operations"
+            )
+            self.assertEqual(
+                receipt,
+                {"season_key": "2026-11-24", "user_id": "user", "honor": 800},
+            )
+
     def test_same_business_day_scheduler_replay_is_duplicate(self):
         class FixedClock:
             def now(self):
