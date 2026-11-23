@@ -51,9 +51,10 @@ jobs:
 
       - name: Run focused pytest regressions
         run: >-
-          flock -w 600 /tmp/nonebot-project-validation.lock timeout 240
+          flock -w 600 /tmp/nonebot-project-validation.lock timeout 300
           python -m pytest -q --durations=20 tests/test_map_dao_view_parameter_dispatch.py
           tests/test_map_nearby_display_parameter_dispatch.py
+          tests/test_dungeon_explore_parameter_dispatch.py
           nonebot_plugin_xiuxian_2/features/map/tests/test_map_named_target_query.py
           nonebot_plugin_xiuxian_2/features/map/tests/test_map_nearby_display_query.py
           tests/test_demon_scheduler.py
