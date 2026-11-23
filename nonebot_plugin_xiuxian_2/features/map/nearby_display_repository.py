@@ -12,6 +12,12 @@ from .random_target_repository import MapCandidateReadError, MapRandomTargetSqlQ
 DISPLAY_PAGE_SIZE = 1
 
 
+class MapNearbyDisplayReadError(MapCandidateReadError):
+    def __init__(self, message: str, *, subject: str) -> None:
+        super().__init__(message)
+        self.subject = subject
+
+
 class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
     """One canonical pair per string ID, unlike the battle's weighted pairs."""
 
@@ -68,9 +74,11 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
 
                 yield rows()
         except Exception as exc:
-            if isinstance(exc, MapCandidateReadError):
+            if isinstance(exc, MapNearbyDisplayReadError):
                 raise
-            raise MapCandidateReadError("display stream unavailable") from exc
+            raise MapNearbyDisplayReadError(
+                "display stream unavailable", subject="nearby_candidates",
+            ) from exc
 
     @contextmanager
     def candidates_for_user(
@@ -80,6 +88,7 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
         status_validator: Callable[[dict[str, str]], bool],
     ) -> Iterator[tuple[dict[str, str], Iterator[dict[str, Any]]] | None]:
         """Read a canonical actor position and candidates in one read transaction."""
+        subject = "map_status"
         try:
             with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 row = uow.query_one(
@@ -112,6 +121,7 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
                 uow.attach_database(
                     f"{self.game_database.resolve().as_uri()}?mode=ro", "game_data"
                 )
+                subject = "nearby_candidates"
                 cursor = uow.execute(sql, params)
 
                 def rows() -> Iterator[dict[str, Any]]:
@@ -133,9 +143,9 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
 
                 yield status, rows()
         except Exception as exc:
-            if isinstance(exc, MapCandidateReadError):
+            if isinstance(exc, MapNearbyDisplayReadError):
                 raise
-            raise MapCandidateReadError("display actor stream unavailable") from exc
+            raise MapNearbyDisplayReadError("display actor stream unavailable", subject=subject) from exc
 
     @staticmethod
     def _scope(upper_rowids, position, exclude_user_id):
@@ -176,7 +186,9 @@ class MapNearbyDisplaySqlQueryRepository(MapRandomTargetSqlQueryRepository):
                 )
             return rows
         except Exception as exc:
-            raise MapCandidateReadError("display page unavailable") from exc
+            raise MapNearbyDisplayReadError(
+                "display page unavailable", subject="nearby_candidates",
+            ) from exc
 
 
 __all__ = ["MapNearbyDisplaySqlQueryRepository"]

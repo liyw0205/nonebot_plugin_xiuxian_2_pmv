@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -131,11 +132,24 @@ class DaoBattleRepositoryTests(unittest.TestCase):
         with ThreadPoolExecutor(max_workers=2) as executor:
             outcomes = [future.result() for future in (executor.submit(settle, True), executor.submit(settle, False))]
         self.assertTrue(all(outcome.ok for outcome in outcomes))
-        self.assertEqual({outcome.message for outcome in outcomes}, {"winner=True"})
+        self.assertEqual(sorted(outcome.status for outcome in outcomes), ["applied", "replayed"])
+        self.assertEqual(len({outcome.message for outcome in outcomes}), 1)
+        committed = next(outcome for outcome in outcomes if outcome.status == "applied")
+        self.assertIn(committed.message, {"winner=True", "winner=False"})
+        challenger_won = committed.message == "winner=True"
         with sqlite3.connect(self.player) as conn:
+            saved = conn.execute(
+                "SELECT status,result_json FROM operation_ledger WHERE operation_id=? AND action=?",
+                ("same-message", "combat.dao_battle"),
+            ).fetchone()
+            self.assertEqual(saved[0], "applied")
+            self.assertEqual(json.loads(saved[1])["message"], committed.message)
             self.assertEqual(
                 conn.execute("SELECT user_id,total,win,lose FROM dao_record ORDER BY user_id").fetchall(),
-                [("a", 1, 1, 0), ("b", 1, 0, 1)],
+                [
+                    ("a", 1, int(challenger_won), int(not challenger_won)),
+                    ("b", 1, int(not challenger_won), int(challenger_won)),
+                ],
             )
 
 

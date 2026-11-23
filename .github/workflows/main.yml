@@ -53,7 +53,9 @@ jobs:
         run: >-
           flock -w 600 /tmp/nonebot-project-validation.lock timeout 180
           python -m pytest -q tests/test_map_dao_view_parameter_dispatch.py
+          tests/test_map_nearby_display_parameter_dispatch.py
           nonebot_plugin_xiuxian_2/features/map/tests/test_map_named_target_query.py
+          nonebot_plugin_xiuxian_2/features/map/tests/test_map_nearby_display_query.py
 
       - name: Run scheduler regression tests
         run: >-

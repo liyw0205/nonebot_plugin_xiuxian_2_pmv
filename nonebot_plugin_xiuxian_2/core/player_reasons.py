@@ -177,6 +177,8 @@ REASONS = {
     "map_combat_settlement_receipt_invalid": "节点战斗历史结算回执损坏，无法确认原奖励，请联系管理员核对操作记录。",
     "map_dao_battle_record_invalid": "论道战绩数据无效，本次未结算，请联系管理员核对。",
     "map_nearby_target_read_failed": "附近道友资料读取失败，本次查询未完成，请联系管理员检查地图与角色数据源。",
+    "map_nearby_position_read_failed": "本人地图位置读取失败，本次查询未完成，请联系管理员检查地图位置数据源。",
+    "map_nearby_display_read_failed": "附近道友数据读取失败，本次查询未完成，请联系管理员检查地图与角色数据源。",
     "map_dao_record_read_failed": "论道战绩读取失败，本次查询未完成，请联系管理员检查战绩数据源。",
     "map_dao_battle_record_write_rejected": "论道战绩未能保存，双方战绩均未变更。",
     "map_dao_battle_record_projection_mismatch": "论道战绩与结算结果不一致，双方战绩均已回滚。",

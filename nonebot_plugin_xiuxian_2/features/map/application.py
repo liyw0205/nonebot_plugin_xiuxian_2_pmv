@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from ...core.numeric import as_int_like
 from collections.abc import Awaitable
 from dataclasses import replace
@@ -10,13 +11,32 @@ from typing import Any, Protocol
 from .._legacy_application import LegacyApplication
 from ..combat_settlement.application import CombatSettlementApplication
 from ...core.result import OperationOutcome
+from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
 from .schemas import MapNearbyTargetResult
 from .nearby_display_query import select_nearby_display, select_nearby_display_for_user
-from .nearby_display_repository import MapNearbyDisplaySqlQueryRepository
+from .nearby_display_repository import MapNearbyDisplayReadError, MapNearbyDisplaySqlQueryRepository
 from .random_target_query import select_random_nearby_target
 from .random_target_repository import MapRandomTargetSqlQueryRepository
 from .repository import LegacyMapRepository, MapCombatLifecyclePlanSqlRepository, MapCombatLifecycleQueryRepository, MapCombatLifecycleStartSqlRepository, MapDongfuBuildSqlRepository, MapDongfuSqlQueryRepository, MapExploreSettlementSqlRepository, MapExploreStartSqlRepository, MapExploreStatusSqlQueryRepository, MapExploreStatusSqlWriteRepository, MapMissionClaimSqlRepository, MapMissionSqlQueryRepository, MapMissionSqlWriteRepository, MapNearbyPlayersSqlQueryRepository, MapProjectionSqlRepository, MapProjectionSqlWriteRepository, MapSeedPurchaseSqlRepository, MapHomeReturnSqlRepository, MapInteractiveFailureSqlRepository, MapInteractiveSettlementSqlRepository, MapInteractiveSqlQueryRepository, MapInteractiveStartSqlRepository, MapMovementSqlRepository, MapResourceRewardSqlRepository, MapStatusSqlQueryRepository, MapStatusSqlWriteRepository, MapRepository
+
+logger = logging.getLogger(__name__)
+
+
+def _nearby_display_read_failure(exc: MapNearbyDisplayReadError) -> DomainError:
+    is_status_read = exc.subject == "map_status"
+    reason = "map_nearby_position_read_failed" if is_status_read else "map_nearby_display_read_failed"
+    subject = "map_status" if is_status_read else "nearby_candidates"
+    logger.error(
+        "[map] nearby display read failed subject=%s",
+        subject,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return DomainError(
+        reason,
+        "nearby player data could not be read",
+        {"reason": reason, "subject": subject},
+    )
 
 class MapCombatRunner(Protocol):
     def __call__(
@@ -176,16 +196,23 @@ class MapApplication(LegacyApplication):
         *,
         exclude_user_id: str,
         random_source,
+        raise_on_error: bool = False,
     ) -> list[dict[str, Any]]:
-        return await select_nearby_display(
-            MapNearbyDisplaySqlQueryRepository(
-                self.player_database,
-                self.game_database,
-                optimized=True,
-            ),
-            realm=realm, heaven=heaven, node_id=node_id,
-            exclude_user_id=exclude_user_id, random_source=random_source,
-        )
+        try:
+            return await select_nearby_display(
+                MapNearbyDisplaySqlQueryRepository(
+                    self.player_database,
+                    self.game_database,
+                    optimized=True,
+                ),
+                realm=realm, heaven=heaven, node_id=node_id,
+                exclude_user_id=exclude_user_id, random_source=random_source,
+                raise_on_error=raise_on_error,
+            )
+        except MapNearbyDisplayReadError as exc:
+            if not raise_on_error:
+                raise
+            raise _nearby_display_read_failure(exc) from exc
 
     async def nearby_display_for_user(
         self,
@@ -194,18 +221,25 @@ class MapApplication(LegacyApplication):
         exclude_user_id: str,
         status_validator,
         random_source,
+        raise_on_error: bool = False,
     ):
-        return await select_nearby_display_for_user(
-            MapNearbyDisplaySqlQueryRepository(
-                self.player_database,
-                self.game_database,
-                optimized=True,
-            ),
-            user_id=user_id,
-            exclude_user_id=exclude_user_id,
-            status_validator=status_validator,
-            random_source=random_source,
-        )
+        try:
+            return await select_nearby_display_for_user(
+                MapNearbyDisplaySqlQueryRepository(
+                    self.player_database,
+                    self.game_database,
+                    optimized=True,
+                ),
+                user_id=user_id,
+                exclude_user_id=exclude_user_id,
+                status_validator=status_validator,
+                random_source=random_source,
+                raise_on_error=raise_on_error,
+            )
+        except MapNearbyDisplayReadError as exc:
+            if not raise_on_error:
+                raise
+            raise _nearby_display_read_failure(exc) from exc
 
     def interactive_start(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is None:

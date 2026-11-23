@@ -1306,6 +1306,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 # 社交
 # =========================================
 @nearby_users_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "附近道友",
+    known_rejections=("map_nearby_position_read_failed", "map_nearby_display_read_failed"),
+    subjects=lambda exc: {"map_status": "本人地图位置", "nearby_candidates": "附近道友列表"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1324,12 +1329,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             exclude_user_id=uid,
             status_validator=lambda status: _is_canonical_map_status(status, map_data),
             random_source=runtime_random,
+            raise_on_error=True,
         )
     if combined is None:
         st = _get_player_map_status(uid, map_data)
         users = await map_application.nearby_display(
             realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
-            exclude_user_id=uid, random_source=runtime_random,
+            exclude_user_id=uid, random_source=runtime_random, raise_on_error=True,
         )
     else:
         st, users = combined

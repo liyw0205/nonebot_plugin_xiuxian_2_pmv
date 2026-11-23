@@ -18,6 +18,7 @@ async def select_nearby_display(
     node_id: str,
     exclude_user_id: str,
     random_source,
+    raise_on_error: bool = False,
 ) -> list[dict[str, Any]]:
     position = tuple(str(value or "") for value in (realm, heaven, node_id))
     if not all(position):
@@ -88,6 +89,8 @@ async def select_nearby_display(
             del rows
             await asyncio.sleep(0)
     except MapCandidateReadError:
+        if raise_on_error:
+            raise
         return []
     return finish()
 
@@ -99,6 +102,7 @@ async def select_nearby_display_for_user(
     exclude_user_id: str,
     status_validator,
     random_source,
+    raise_on_error: bool = False,
 ) -> tuple[dict[str, str], list[dict[str, Any]]] | None:
     """Combine the actor-position and nearby read transaction for the hot command."""
     try:
@@ -130,6 +134,8 @@ async def select_nearby_display_for_user(
                 users = [user for _, user in selected]
             return status, users
     except MapCandidateReadError:
+        if raise_on_error:
+            raise
         return None
 
 
