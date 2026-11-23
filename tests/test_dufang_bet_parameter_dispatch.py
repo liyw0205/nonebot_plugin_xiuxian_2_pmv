@@ -7,7 +7,7 @@ import unittest
 
 
 class DufangBetParameterDispatchTests(unittest.TestCase):
-    def test_new_plan_preserves_parsed_cost_through_real_matcher_and_repository(self):
+    def test_amount_rejection_and_valid_bets_through_real_matcher_and_repository(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / "parameters.json"
             result = subprocess.run(
@@ -32,9 +32,8 @@ class DufangBetParameterDispatchTests(unittest.TestCase):
                 0,
                 result.stdout + result.stderr + json.dumps(failures, ensure_ascii=False),
             )
-            self.assertEqual(evidence.get("summary"), {"pass": 1}, evidence.get("results"))
-            self.assertEqual(evidence.get("outcomes"), {"success": 1})
-            self.assertTrue(evidence["results"][0]["evidence"])
+            self.assertEqual(evidence.get("summary"), {"pass": 2}, evidence.get("results"))
+            self.assertEqual(evidence.get("outcomes"), {"rejection": 1, "success": 1})
 
 
 if __name__ == "__main__":

@@ -36,6 +36,10 @@ def test_explore_start_known_write_reason_survives_onebot_and_qq_formatters():
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
     from tests.command_probe import make_event
 
+    from nonebot_plugin_xiuxian_2.paths import get_paths
+
+    module.MAP_FILE = get_paths().data / "地图.json"
+    module.map_data_provider.path = module.MAP_FILE
     data = module._load_map_data()
     node = next(
         {**candidate, "realm": realm, "heaven": heaven}
