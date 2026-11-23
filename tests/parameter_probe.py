@@ -664,6 +664,10 @@ from tests.parameter_cases_mixelixir import register as register_mixelixir
 
 register_mixelixir(case)
 
+from tests.parameter_cases_dufang_bet import register as register_dufang_bet
+
+register_dufang_bet(case)
+
 
 async def execute(args, checkpoint, *, minimal_map=False):
     context, managers = await prepare(minimal_map=minimal_map)

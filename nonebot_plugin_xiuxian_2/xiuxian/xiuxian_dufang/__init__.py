@@ -576,7 +576,7 @@ async def unseal_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args
         if planned.status == "resolution_missing":
             await handle_send(bot, event, "本次鉴石记录缺少已保存结果，已停止自动结算以避免重抽。", md_type="鉴石")
             return
-        if planned.status == "not_found":
+        if planned.status == "new":
             resolution = planned.resolution
         else:
             cost = planned.cost
