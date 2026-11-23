@@ -336,8 +336,10 @@ class ArenaSeasonRewardRepository:
                         changed = uow.execute(
                             "UPDATE player_data.arena SET daily_challenges_used=0,daily_extra_challenges=0,"
                             "daily_challenge_buys=0,last_reset_date=?,last_buy_date=? WHERE user_id=? "
-                            "AND COALESCE(daily_challenges_used,0)=? AND COALESCE(daily_extra_challenges,0)=? "
-                            "AND COALESCE(daily_challenge_buys,0)=? AND COALESCE(last_reset_date,'')=? "
+                            "AND xiuxian_int_cmp(COALESCE(daily_challenges_used,0),?)=0 "
+                            "AND xiuxian_int_cmp(COALESCE(daily_extra_challenges,0),?)=0 "
+                            "AND xiuxian_int_cmp(COALESCE(daily_challenge_buys,0),?)=0 "
+                            "AND COALESCE(last_reset_date,'')=? "
                             "AND COALESCE(last_buy_date,'')=?",
                             (season_key, season_key, user_id, reset["daily_challenges_used"], reset["daily_extra_challenges"], reset["daily_challenge_buys"], reset["last_reset_date"], reset["last_buy_date"]),
                         )
