@@ -198,6 +198,19 @@ def test_missing_databases_are_not_created(tmp_path, missing):
     assert set(tmp_path.iterdir()) == before
 
 
+def test_strict_named_query_reports_missing_database_without_creating_it(tmp_path):
+    from ....core.errors import DomainError
+
+    repository = MapNearbyPlayersSqlQueryRepository(tmp_path / "player.db", tmp_path / "game.db")
+    with pytest.raises(DomainError) as failure:
+        repository.find(**POSITION, user_name="target", raise_on_error=True)
+    assert failure.value.details == {
+        "reason": "map_nearby_target_read_failed",
+        "subject": "nearby_target",
+    }
+    assert not list(tmp_path.iterdir())
+
+
 @pytest.mark.parametrize("broken", ("map_table", "map_column", "profile_table", "profile_column"))
 def test_missing_schema_fails_closed_without_repairs(nearby, broken):
     repository, player, game = nearby
@@ -280,7 +293,7 @@ def test_application_delegates_to_bounded_find(nearby, monkeypatch):
     monkeypatch.setattr(MapNearbyPlayersSqlQueryRepository, "find", query)
     application = MapApplication(game, player)
     assert application.nearby_target(**POSITION, user_name="name", exclude_user_id="me") is value
-    query.assert_called_once_with(**POSITION, user_name="name", exclude_user_id="me")
+    query.assert_called_once_with(**POSITION, user_name="name", exclude_user_id="me", raise_on_error=False)
 
 
 def load_handler(command, result):
@@ -297,15 +310,27 @@ def load_handler(command, result):
     application = SimpleNamespace(nearby_target=Mock(return_value=result))
     battle = SimpleNamespace(
         settle_dao_battle=Mock(return_value=SimpleNamespace(ok=True)),
+        replay_dao_battle=Mock(return_value=None),
         get_dao_record=Mock(return_value={"total": 1, "win": 1, "lose": 0}),
     )
     user = {"user_id": "me", "user_name": "my-name", "power": 10}
+    handle_send = AsyncMock()
+
+    async def send_dao_battle_outcome(bot, event, outcome):
+        message = getattr(outcome, "message", "")
+        if not outcome.ok and (outcome.data or {}).get("reason") != "position_changed":
+            from ....xiuxian.command_guard import result_failure
+
+            message = result_failure("论道切磋", outcome)
+        await handle_send(bot, event, message)
+
     environment = dict(
         asyncio=asyncio, CommandArg=lambda: None, assign_bot=AsyncMock(return_value=("bot", None)),
         check_user=Mock(return_value=(True, user, "")), _load_map_data=Mock(return_value={}),
         _get_player_map_status=Mock(return_value=POSITION), map_application=application,
         _get_all_in_same_node=Mock(side_effect=AssertionError("named command must not read a list")),
-        handle_send=AsyncMock(), dao_battle_application=battle,
+        handle_send=handle_send, _send_dao_battle_outcome=send_dao_battle_outcome,
+        dao_battle_application=battle,
         _map_operation_id=Mock(return_value="operation"), runtime_random=SimpleNamespace(random=Mock(return_value=0)),
     )
     exec(compile(ast.Module(body=[function], type_ignores=[]), "map-handler", "exec", flags=__future__.annotations.compiler_flag), environment)
@@ -317,7 +342,10 @@ def test_named_handlers_call_query_not_list_and_keep_settlement_boundary(command
     target = {"user_id": "first", "user_name": "target", "power": 20}
     env = load_handler(command, SimpleNamespace(target=target, has_candidates=True))
     asyncio.run(env["_"]("bot", object(), SimpleNamespace(extract_plain_text=lambda: "target")))
-    env["map_application"].nearby_target.assert_called_once_with(**POSITION, user_name="target", exclude_user_id=exclude)
+    query_args = {"raise_on_error": True} if command == "dao_view" else {}
+    env["map_application"].nearby_target.assert_called_once_with(
+        **POSITION, user_name="target", exclude_user_id=exclude, **query_args
+    )
     env["_get_all_in_same_node"].assert_not_called()
     battle = env["dao_battle_application"]
     if command == "dao_qc":

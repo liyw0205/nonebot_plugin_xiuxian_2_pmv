@@ -1412,6 +1412,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dao_view.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "论道查看",
+    known_rejections=("map_nearby_target_read_failed", "map_dao_record_read_failed"),
+    subjects=lambda exc: {"nearby_target": "附近道友资料", "dao_record": "论道战绩"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1430,7 +1435,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         st = _get_player_map_status(uid, map_data)
         target = map_application.nearby_target(
             realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
-            user_name=target_name, exclude_user_id=None,
+            user_name=target_name, exclude_user_id=None, raise_on_error=True,
         ).target
         if not target:
             await handle_send(bot, event, f"附近未找到道友【{target_name}】")

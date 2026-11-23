@@ -2,7 +2,7 @@
 ## 用户流程
 历史命令包继续作为 transport adapter；移动、回城、交互、战斗、探索、地图委托、种子购买和建设洞府的默认路径均进入 `MapApplication`、feature repositories 或 `CombatSettlementApplication`。
 
-指定道号论道与战绩查询经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find` 只读查询单目标，不加载完整同节点列表。论道排除本人，指定战绩允许本人；无参数战绩直接查询本人。目标缺失时以同一短只读事务内的 `LIMIT 1` 存在性查询区分“无其他候选”和“有候选但无该道号”，缺文件/schema 或读取错误返回空结果，不创建数据库或执行修复。
+指定道号论道与战绩查询经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find` 只读查询单目标，不加载完整同节点列表。论道排除本人，指定战绩允许本人；无参数战绩直接查询本人。目标缺失时以同一短只读事务内的 `LIMIT 1` 存在性查询区分“无其他候选”和“有候选但无该道号”，不创建数据库或执行修复。`论道查看` 对目标资料和战绩读取启用严格失败模式：缺文件/SQL 读取错误返回各自具体原因并记录异常，不能伪装成目标不存在、零战绩或无回复；其他既有调用仍保留原 fail-closed 兼容行为。
 
 保留三维位置、双侧 CAST 字符串 ID 等值、地图侧输出 ID 与道号 BINARY 精确匹配。地图旧 JOIN 包含同一用户的全部 profile，因此先匹配名字，再按 map rowid 与 profile rowid 选首个命中；后一个 profile 同名仍可选中。旧顺序只保证 map rowid，新增 profile rowid 是并列顺序确定化，不清洗历史重复数据。战力继续用 Python `int(value or 0)`，不经 SQLite 整数截断；结算仍由原 application 检查当前位置和幂等回执。
 

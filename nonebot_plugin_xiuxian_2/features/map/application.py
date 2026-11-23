@@ -145,10 +145,12 @@ class MapApplication(LegacyApplication):
         user_name: str,
         *,
         exclude_user_id: str | None = None,
+        raise_on_error: bool = False,
     ) -> MapNearbyTargetResult:
         return MapNearbyPlayersSqlQueryRepository(self.player_database, self.game_database).find(
             realm=realm, heaven=heaven, node_id=node_id,
             user_name=user_name, exclude_user_id=exclude_user_id,
+            raise_on_error=raise_on_error,
         )
 
     async def random_nearby_target(

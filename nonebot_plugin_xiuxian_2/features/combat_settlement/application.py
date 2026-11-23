@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from ...core.player_reasons import reason_text
 
 from pathlib import Path
@@ -13,6 +15,8 @@ from ...infrastructure.observability import trace_context
 from .domain import CombatSettlementRequest
 from .repository import CombatSettlementRepository, CombatSettlementSqlRepository, DaoBattleSqlRepository, DaoBattleWriteRejected
 from .schemas import CombatSettlementResult
+
+logger = logging.getLogger(__name__)
 
 
 class CombatSettlementApplication:
@@ -254,7 +258,17 @@ class CombatSettlementApplication:
 
     def get_dao_record(self, user_id: str) -> dict[str, int]:
         repository: Any = self.repository if self.repository is not None and hasattr(self.repository, "get_record") else DaoBattleSqlRepository(self.player_database, self.game_database)
-        return dict(repository.get_record(str(user_id)))
+        try:
+            return dict(repository.get_record(str(user_id)))
+        except DomainError:
+            raise
+        except Exception as exc:
+            logger.exception("[combat] dao record read failed subject=dao_record")
+            raise DomainError(
+                "map_dao_record_read_failed",
+                "dao battle record could not be read",
+                {"reason": "map_dao_record_read_failed", "subject": "dao_record"},
+            ) from exc
 
     def reply(self, **kwargs: Any) -> ReplyPlan:
         outcome = self.settle(**kwargs)

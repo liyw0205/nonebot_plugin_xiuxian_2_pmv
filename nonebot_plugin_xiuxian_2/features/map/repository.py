@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, exact_crystal_integer, require_exact_integer
-from ...core.errors import DomainError
 from datetime import datetime, timedelta
+import logging
 from pathlib import Path
 from threading import RLock
 from typing import Any, ClassVar, Protocol
 import json
+
+from ...core.errors import DomainError
+from ...core.numeric import as_int_like, exact_crystal_integer, require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 from .schema import (
     COOLDOWN_COLUMNS,
@@ -19,6 +21,8 @@ from .schema import (
     table_ready,
 )
 from .schemas import MapNearbyTargetResult
+
+logger = logging.getLogger(__name__)
 
 
 class MapRepository(Protocol):
@@ -847,12 +851,22 @@ class MapNearbyPlayersSqlQueryRepository:
         user_name: str,
         *,
         exclude_user_id: str | None = None,
+        raise_on_error: bool = False,
     ) -> MapNearbyTargetResult:
         realm, heaven, node_id = str(realm or ""), str(heaven or ""), str(node_id or "")
         user_name = str(user_name or "")
         player, game = Path(self.player_database), Path(self.game_database)
-        if not all((realm, heaven, node_id, user_name)) or not player.is_file() or not game.is_file():
+        if not all((realm, heaven, node_id, user_name)):
             return MapNearbyTargetResult()
+        if not player.is_file() or not game.is_file():
+            if not raise_on_error:
+                return MapNearbyTargetResult()
+            logger.error("[map-query] nearby target read failed: database missing subject=nearby_target")
+            raise DomainError(
+                "map_nearby_target_read_failed",
+                "nearby target data could not be read",
+                {"reason": "map_nearby_target_read_failed", "subject": "nearby_target"},
+            )
         scope = (
             "FROM map_status JOIN game_data.user_xiuxian AS profile "
             "ON CAST(profile.user_id AS TEXT)=CAST(map_status.user_id AS TEXT) "
@@ -883,7 +897,14 @@ class MapNearbyPlayersSqlQueryRepository:
                     "level": str(row["level"] or ""),
                     "power": require_exact_integer(row["power"] if row["power"] is not None else 0, field="power", subject="target"),
                 }
-        except Exception:
+        except Exception as exc:
+            if raise_on_error:
+                logger.exception("[map-query] nearby target read failed subject=nearby_target")
+                raise DomainError(
+                    "map_nearby_target_read_failed",
+                    "nearby target data could not be read",
+                    {"reason": "map_nearby_target_read_failed", "subject": "nearby_target"},
+                ) from exc
             return MapNearbyTargetResult()
         return MapNearbyTargetResult(target=target, has_candidates=True)
 
