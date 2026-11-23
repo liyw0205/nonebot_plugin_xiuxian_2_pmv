@@ -144,6 +144,8 @@ def _subject_label(subject) -> str:
         "stone_wallet": "灵石钱包",
         "player_impart": "玩家传承属性",
         "player_natal_treasure": "本命法宝",
+        "player_mixelixir": "玩家炼丹记录",
+        "player_statistics": "玩家统计记录",
     }.get(subject, "")
 
 

@@ -142,6 +142,142 @@ class MixelixirRefineRewardRepositoryTests(unittest.TestCase):
                 row = conn.execute("SELECT 丹药控火,炼丹记录,炼丹经验 FROM mix_elixir_info WHERE user_id='u'").fetchone()
                 self.assertEqual((row[0], json.loads(row[1]), row[2]), ("1", {"19": {"num": 2, "name": "旧丹"}}, "10"))
 
+    def test_each_reward_write_point_rolls_back_and_recovers_for_ignore_rewrite_abort(self):
+        write_points = {
+            "inventory": (
+                "main",
+                "INSERT ON back WHEN NEW.user_id='u' AND NEW.goods_id=20",
+                "UPDATE back SET goods_num=NEW.goods_num+1 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+                "mixelixir_refine_reward_inventory",
+                "item:20",
+                False,
+                False,
+            ),
+            "inventory_update": (
+                "main",
+                "UPDATE OF goods_num ON back WHEN OLD.user_id='u' AND OLD.goods_id=20",
+                "UPDATE back SET goods_num=NEW.goods_num+1 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+                "mixelixir_refine_reward_inventory",
+                "item:20",
+                True,
+                False,
+            ),
+            "player": (
+                "player_data",
+                "UPDATE ON mix_elixir_info WHEN OLD.user_id='u'",
+                "UPDATE mix_elixir_info SET 炼丹经验='99' WHERE user_id=NEW.user_id",
+                "mixelixir_refine_reward_player",
+                "player_mixelixir",
+                False,
+                False,
+            ),
+            "statistics": (
+                "player_data",
+                "INSERT ON statistics WHEN NEW.user_id='u'",
+                'UPDATE statistics SET "炼丹次数"=COALESCE(NEW."炼丹次数",0)+1 WHERE user_id=NEW.user_id',
+                "mixelixir_refine_reward_statistics",
+                "player_statistics",
+                False,
+                False,
+            ),
+            "statistics_update": (
+                "player_data",
+                'UPDATE OF "炼丹次数" ON statistics WHEN OLD.user_id=\'u\'',
+                'UPDATE statistics SET "炼丹次数"=NEW."炼丹次数"+1 WHERE user_id=NEW.user_id',
+                "mixelixir_refine_reward_statistics",
+                "player_statistics",
+                False,
+                True,
+            ),
+            "task": (
+                "main",
+                "UPDATE OF status ON mixelixir_refine_tasks WHEN OLD.task_id='t1'",
+                "UPDATE mixelixir_refine_tasks SET status='ready' WHERE task_id=NEW.task_id",
+                "mixelixir_refine_reward_task",
+                "task",
+                False,
+                False,
+            ),
+            "receipt": (
+                "main",
+                "INSERT ON mixelixir_refine_reward_operations WHEN NEW.operation_id='claim-1'",
+                "UPDATE mixelixir_refine_reward_operations SET reward_quantity=NEW.reward_quantity+1 WHERE operation_id=NEW.operation_id",
+                "mixelixir_refine_reward_receipt",
+                "receipt",
+                False,
+                False,
+            ),
+        }
+        for point, (schema, event, rewrite, reason_prefix, subject, existing_inventory, existing_stats) in write_points.items():
+            for fault in ("ignore", "rewrite", "abort"):
+                with self.subTest(point=point, fault=fault), tempfile.TemporaryDirectory() as temp:
+                    game, player = self._databases(temp)
+                    self._task(game)
+                    if existing_inventory:
+                        with db_backend.transaction(game) as conn:
+                            conn.execute("INSERT INTO back VALUES('u',20,'旧丹','丹药',5,0)")
+                    if existing_stats:
+                        with db_backend.transaction(player) as conn:
+                            conn.execute('INSERT INTO statistics(user_id,"炼丹次数") VALUES(\'u\',5)')
+                    trigger = f"inject_{point}_{fault}"
+                    timing = "AFTER" if fault == "rewrite" else "BEFORE"
+                    body = rewrite if fault == "rewrite" else (
+                        "SELECT RAISE(IGNORE)" if fault == "ignore"
+                        else "SELECT RAISE(ABORT,'isolated reward write failure')"
+                    )
+                    with DatabaseUnitOfWork(game) as uow:
+                        if schema == "player_data":
+                            uow.attach_database(player, "player_data")
+                            uow.execute(f"CREATE TRIGGER player_data.{trigger} {timing} {event} BEGIN {body}; END")
+                        else:
+                            uow.execute(f"CREATE TRIGGER {trigger} {timing} {event} BEGIN {body}; END")
+                    repo = MixelixirRefineRewardSqlRepository(game, player)
+                    if fault == "abort":
+                        with self.assertRaises(sqlite3.IntegrityError):
+                            repo.claim("claim-1", "u", "t1", 99)
+                    else:
+                        result = repo.claim("claim-1", "u", "t1", 99)
+                        self.assertEqual(result.status, "write_rejected")
+                        self.assertEqual(result.reason, f"{reason_prefix}_{'projection_mismatch' if fault == 'rewrite' else 'write_rejected'}")
+                        self.assertEqual(result.subject, subject)
+                    with db_backend.transaction(game) as conn:
+                        inventory = conn.execute("SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id='u' AND goods_id=20").fetchone()
+                        self.assertEqual(
+                            None if inventory is None else tuple(inventory),
+                            ("旧丹", "丹药", 5, 0) if existing_inventory else None,
+                        )
+                        self.assertEqual(conn.execute("SELECT status FROM mixelixir_refine_tasks WHERE task_id='t1'").fetchone()[0], "ready")
+                        self.assertEqual(conn.execute("SELECT COUNT(*) FROM mixelixir_refine_reward_operations").fetchone()[0], 0)
+                        self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                    with db_backend.transaction(player) as conn:
+                        row = conn.execute("SELECT 丹药控火,炼丹记录,炼丹经验 FROM mix_elixir_info WHERE user_id='u'").fetchone()
+                        self.assertEqual(row[0], "1")
+                        self.assertEqual(
+                            MixelixirRefineRewardSqlRepository._state_tuple(
+                                ("1", row[1], row[2])
+                            ),
+                            MixelixirRefineRewardSqlRepository._state_tuple(
+                                ("1", json.dumps(self.expected["炼丹记录"], ensure_ascii=False), "10")
+                            ),
+                        )
+                        stats = conn.execute('SELECT "炼丹次数" FROM statistics WHERE user_id="u"').fetchone()
+                        self.assertEqual(None if stats is None else int(stats[0] or 0), 5 if existing_stats else None)
+                        self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                    with DatabaseUnitOfWork(game) as uow:
+                        if schema == "player_data":
+                            uow.attach_database(player, "player_data")
+                            uow.execute(f"DROP TRIGGER player_data.{trigger}")
+                        else:
+                            uow.execute(f"DROP TRIGGER {trigger}")
+                    recovered = repo.claim("claim-1", "u", "t1", 99)
+                    self.assertEqual(recovered.status, "applied")
+                    with db_backend.transaction(game) as conn:
+                        inventory = conn.execute("SELECT goods_num FROM back WHERE user_id='u' AND goods_id=20").fetchone()
+                        self.assertEqual(int(inventory[0]), 7 if existing_inventory else 2)
+                    with db_backend.transaction(player) as conn:
+                        stats = conn.execute('SELECT "炼丹次数" FROM statistics WHERE user_id="u"').fetchone()
+                        self.assertEqual(int(stats[0]), 6 if existing_stats else 1)
+
     def test_request_does_not_create_missing_operation_table(self):
         with tempfile.TemporaryDirectory() as temp:
             game, player = self._databases(temp)

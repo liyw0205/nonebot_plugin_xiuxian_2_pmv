@@ -8,9 +8,18 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class MixelixirRefineCostResult:
-    def __init__(self, status: str, task_id: str = "") -> None:
+    def __init__(self, status: str, task_id: str = "", *, reason: str = "", subject: str = "") -> None:
         self.status = status
         self.task_id = task_id
+        self.reason = reason
+        self.subject = subject
+
+
+class _KnownWriteRejection(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.subject = subject
 
 
 class MixelixirRefineCostSqlRepository:
@@ -109,44 +118,113 @@ class MixelixirRefineCostSqlRepository:
             if furnace is None or int(furnace["goods_num"]) < 1 or str(furnace["goods_type"]) != "炼丹炉":
                 return MixelixirRefineCostResult("state_changed")
 
-            for item_id, quantity in normalized_materials.items():
-                changed = uow.execute(
-                    "UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=?",
-                    (quantity, user_id, item_id, quantity),
+            before_materials = {
+                item_id: int(uow.query_one(
+                    "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )["goods_num"])
+                for item_id in normalized_materials
+            }
+            task_materials = json.dumps(sorted(normalized_materials.items()), separators=(",", ":"))
+            expected_json = json.dumps(expected_snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            updated_json = json.dumps(updated_mix_state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            try:
+                with uow.savepoint("mixelixir_refine_cost"):
+                    for item_id, quantity in normalized_materials.items():
+                        changed = uow.execute(
+                            "UPDATE back SET goods_num=goods_num-? WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)>=?",
+                            (quantity, user_id, item_id, quantity),
+                        )
+                        if changed.rowcount != 1:
+                            raise _KnownWriteRejection("mixelixir_refine_cost_material_write_rejected", f"item:{item_id}")
+                        current = uow.query_one(
+                            "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id),
+                        )
+                        if current is None or int(current["goods_num"]) != before_materials[item_id] - quantity:
+                            raise _KnownWriteRejection("mixelixir_refine_cost_material_projection_mismatch", f"item:{item_id}")
+
+                    changed = uow.execute(
+                        "UPDATE user_xiuxian SET mixelixir_num=COALESCE(mixelixir_num,0)+1 "
+                        "WHERE user_id=? AND COALESCE(mixelixir_num,0)=?",
+                        (user_id, daily_count),
+                    )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection("mixelixir_refine_cost_daily_write_rejected", "daily_count")
+                    current_daily = uow.query_one(
+                        "SELECT COALESCE(mixelixir_num,0) AS mixelixir_num FROM user_xiuxian WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if current_daily is None or int(current_daily["mixelixir_num"]) != daily_count + 1:
+                        raise _KnownWriteRejection("mixelixir_refine_cost_daily_projection_mismatch", "daily_count")
+
+                    task_insert = uow.execute(
+                        "INSERT INTO mixelixir_refine_tasks "
+                        "(task_id,user_id,recipe_set_id,recipe_key,status,materials_json,reward_id,reward_name,"
+                        "reward_quantity,expected_mix_state,updated_mix_state) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        (
+                            task_id, user_id, recipe_set_id, recipe_key, "ready", task_materials,
+                            reward_id, str(reward_name), reward_quantity, expected_json, updated_json,
+                        ),
+                    )
+                    if task_insert.rowcount != 1:
+                        raise _KnownWriteRejection("mixelixir_refine_cost_task_write_rejected", "task")
+                    saved_task = uow.query_one(
+                        "SELECT user_id,recipe_set_id,recipe_key,status,materials_json,reward_id,reward_name,"
+                        "reward_quantity,expected_mix_state,updated_mix_state FROM mixelixir_refine_tasks WHERE task_id=?",
+                        (task_id,),
+                    )
+                    expected_task = (
+                        user_id, recipe_set_id, recipe_key, "ready", task_materials,
+                        reward_id, str(reward_name), reward_quantity, expected_json, updated_json,
+                    )
+                    if saved_task is None or tuple(saved_task.values()) != expected_task:
+                        raise _KnownWriteRejection("mixelixir_refine_cost_task_projection_mismatch", "task")
+
+                    receipt_insert = uow.execute(
+                        "INSERT INTO mixelixir_refine_cost_operations(operation_id,payload,task_id) VALUES(?,?,?)",
+                        (operation_id, payload, task_id),
+                    )
+                    if receipt_insert.rowcount != 1:
+                        raise _KnownWriteRejection("mixelixir_refine_cost_receipt_write_rejected", "receipt")
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,task_id FROM mixelixir_refine_cost_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if saved_receipt is None or tuple(saved_receipt.values()) != (payload, task_id):
+                        raise _KnownWriteRejection("mixelixir_refine_cost_receipt_projection_mismatch", "receipt")
+
+                    for item_id, quantity in normalized_materials.items():
+                        final_material = uow.query_one(
+                            "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id),
+                        )
+                        if final_material is None or int(final_material["goods_num"]) != before_materials[item_id] - quantity:
+                            raise _KnownWriteRejection(
+                                "mixelixir_refine_cost_material_projection_mismatch", f"item:{item_id}"
+                            )
+                    final_daily = uow.query_one(
+                        "SELECT COALESCE(mixelixir_num,0) AS mixelixir_num FROM user_xiuxian WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if final_daily is None or int(final_daily["mixelixir_num"]) != daily_count + 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_cost_daily_projection_mismatch", "daily_count"
+                        )
+                    final_task = uow.query_one(
+                        "SELECT user_id,recipe_set_id,recipe_key,status,materials_json,reward_id,reward_name,"
+                        "reward_quantity,expected_mix_state,updated_mix_state "
+                        "FROM mixelixir_refine_tasks WHERE task_id=?",
+                        (task_id,),
+                    )
+                    if final_task is None or tuple(final_task.values()) != expected_task:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_cost_task_projection_mismatch", "task"
+                        )
+            except _KnownWriteRejection as rejected:
+                return MixelixirRefineCostResult(
+                    "write_rejected", reason=rejected.reason, subject=rejected.subject
                 )
-                if changed.rowcount != 1:
-                    raise RuntimeError("mixelixir materials changed during settlement")
-
-            changed = uow.execute(
-                "UPDATE user_xiuxian SET mixelixir_num=COALESCE(mixelixir_num,0)+1 "
-                "WHERE user_id=? AND COALESCE(mixelixir_num,0)=?",
-                (user_id, daily_count),
-            )
-            if changed.rowcount != 1:
-                raise RuntimeError("mixelixir daily count changed during settlement")
-
-            uow.execute(
-                "INSERT INTO mixelixir_refine_tasks "
-                "(task_id,user_id,recipe_set_id,recipe_key,status,materials_json,reward_id,reward_name,"
-                "reward_quantity,expected_mix_state,updated_mix_state) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    task_id,
-                    user_id,
-                    recipe_set_id,
-                    recipe_key,
-                    "ready",
-                    json.dumps(sorted(normalized_materials.items()), separators=(",", ":")),
-                    reward_id,
-                    str(reward_name),
-                    reward_quantity,
-                    json.dumps(expected_snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-                    json.dumps(updated_mix_state, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
-                ),
-            )
-            uow.execute(
-                "INSERT INTO mixelixir_refine_cost_operations(operation_id,payload,task_id) VALUES(?,?,?)",
-                (operation_id, payload, task_id),
-            )
             return MixelixirRefineCostResult("applied", task_id)
 
 

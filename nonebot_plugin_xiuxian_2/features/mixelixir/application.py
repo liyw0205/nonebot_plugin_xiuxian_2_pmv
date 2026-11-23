@@ -5,9 +5,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Mapping
 
-from ...core.errors import ConflictError, DomainError, ValidationError
+from ...core.errors import ConflictError, DomainError, OperationConflictError, ValidationError
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.observability import trace_context
 from .domain import HarvestRequest, SettlementRequest, normalize_rewards
 from .repository import MixelixirRepository
@@ -49,7 +50,19 @@ class MixelixirApplication:
                 raw = call()
                 data = normalize(_data(raw))
                 status = str(data.get("status", "failed"))
-                if status in success_statuses:
+                if status == "write_rejected" and data.get("reason"):
+                    from ...core.player_reasons import reason_text
+
+                    reason = str(data["reason"])
+                    outcome = OperationOutcome.failed(
+                        operation_id,
+                        action,
+                        reason_text(reason) or "炼丹写入失败，本次操作已回滚。",
+                        code=reason,
+                        data=data,
+                        audit_category="mixelixir",
+                    )
+                elif status in success_statuses:
                     outcome = OperationOutcome.applied(operation_id, action, data=data, granted=data.get("granted", {}), audit_category="mixelixir")
                 else:
                     outcome = OperationOutcome.rejected(operation_id, action, messages.get(status, "炼丹操作未完成。"), code=status, data=data, audit_category="mixelixir")
@@ -174,6 +187,26 @@ class MixelixirApplication:
             },
             normalize=lambda data: data,
         )
+
+    def refine_cost_replay(self, *, operation_id: str, recipe_key: str):
+        """Return a terminal cost result before the handler checks consumed materials."""
+        payload = {"recipe_set_id": "custom", "recipe_key": str(recipe_key)}
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            if uow.query_one(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_ledger'"
+            ) is None:
+                return None
+            record = self.ledger.get(uow, str(operation_id), "mixelixir.refine_cost")
+        if record is None:
+            return None
+        if record.request_hash != request_hash(payload):
+            raise OperationConflictError(str(operation_id), "mixelixir.refine_cost")
+        if record.status in {"failed", "needs_reconcile"}:
+            return None
+        outcome = record.outcome()
+        if outcome is None:
+            raise ConflictError("炼丹请求正在处理中")
+        return outcome
 
     def refine_reward(self, *, operation_id: str, user_id: str, task_id: str, max_goods_num: int):
         return self._execute(
