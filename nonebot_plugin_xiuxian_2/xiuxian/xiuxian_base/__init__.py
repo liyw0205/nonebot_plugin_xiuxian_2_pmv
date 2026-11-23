@@ -9,7 +9,7 @@ from typing import Any
 
 from nonebot.typing import T_State
 from ...paths import get_paths
-from ..command_guard import result_failure, report_exception
+from ..command_guard import guard_command, result_failure, report_exception
 from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
@@ -1879,18 +1879,28 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     args = args.extract_plain_text().split()
     date_str = None
     page = 1
+
+    def parse_page(value: str) -> int | None:
+        if not value.isdecimal():
+            return None
+        page_value = 0
+        for digit in value:
+            page_value = page_value * 10 + int(digit)
+            if page_value >= _sys.maxsize:
+                return _sys.maxsize
+        return page_value
     
     # 解析参数
     if len(args) >= 1:
         # 检查第一个参数是否是6位数字（日期格式yymmdd）
-        if args[0].isdigit() and len(args[0]) == 6:
+        if args[0].isdecimal() and len(args[0]) == 6:
             date_str = args[0]
             # 如果有第二个参数且是数字，作为页码
-            if len(args) >= 2 and args[1].isdigit():
-                page = int(args[1])
-        elif args[0].isdigit():
+            if len(args) >= 2 and (parsed_page := parse_page(args[1])) is not None:
+                page = parsed_page
+        elif (parsed_page := parse_page(args[0])) is not None:
             # 如果只有一个数字参数，作为页码
-            page = int(args[0])
+            page = parsed_page
     
     user_id = event.get_user_id()
     logs_data = get_logs(user_id, date_str=date_str, page=page)
@@ -1942,10 +1952,11 @@ async def view_logs_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     await view_logs.finish()
 
 @view_data.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("修仙数据", known_rejections=("statistics_read_failed",))
 async def view_data_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看修仙数据"""
     user_id = event.get_user_id()
-    stats_data = get_statistics_data(user_id)
+    stats_data = get_statistics_data(user_id, raise_errors=True)
     
     if not stats_data:
         msg = "暂无统计数据"

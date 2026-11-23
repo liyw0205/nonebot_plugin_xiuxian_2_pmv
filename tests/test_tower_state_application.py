@@ -97,6 +97,48 @@ def test_feature_tower_state_application_rolls_weekly_purchases_on_new_iso_week(
     ]
 
 
+def test_feature_tower_state_read_is_non_mutating_for_missing_and_stale_rows(tmp_path):
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database, immediate=True) as uow:
+        apply_tower_state(uow)
+        uow.execute(
+            "INSERT INTO tower(user_id,current_floor,max_floor,score,weekly_purchases) "
+            "VALUES('stale',7,12,4321,'{\"_last_reset\":\"2020-12-31\",\"9\":4}')"
+        )
+        uow.execute(
+            "INSERT INTO tower(user_id,current_floor,max_floor,score,weekly_purchases) "
+            "VALUES('invalid',3,8,7654,'not-json')"
+        )
+    app = TowerStateApplication(database, clock=FixedClock())
+
+    before = database.read_bytes()
+    missing = app.read("missing")
+    stale = app.read("stale")
+    invalid = app.read("invalid")
+
+    assert missing == {
+        "current_floor": 0,
+        "max_floor": 0,
+        "score": 0,
+        "weekly_purchases": {"_last_reset": "2026-07-14"},
+    }
+    assert stale == {
+        "current_floor": 7,
+        "max_floor": 12,
+        "score": 4321,
+        "weekly_purchases": {"_last_reset": "2026-07-14"},
+    }
+    assert invalid == {
+        "current_floor": 3,
+        "max_floor": 8,
+        "score": 7654,
+        "weekly_purchases": {"_last_reset": "2026-07-14"},
+    }
+    assert database.read_bytes() == before
+    with DatabaseUnitOfWork(database) as uow:
+        assert uow.query_all("SELECT operation_id FROM tower_state_operations") == []
+
+
 def test_tower_global_floor_reset_preserves_state_and_replay_does_not_clear_new_progress(tmp_path):
     database = tmp_path / "player.db"
     with DatabaseUnitOfWork(database, immediate=True) as uow:

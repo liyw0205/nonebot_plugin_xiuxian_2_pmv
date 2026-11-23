@@ -82,6 +82,7 @@ class TiantiTrainingApplication:
         consumed: Mapping[str, Any] | None = None,
         granted: Mapping[str, Any] | None = None,
         result_summary: Callable[[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]] | None = None,
+        retry_domain_errors: bool = False,
     ) -> OperationOutcome[dict[str, Any]]:
         with trace_context(operation_id=operation_id, user_scope=user_id):
             try:
@@ -119,7 +120,24 @@ class TiantiTrainingApplication:
                 with DatabaseUnitOfWork(ledger_database, immediate=True) as uow:
                     self.ledger.finish(uow, outcome)
                 return outcome
-            except DomainError:
+            except ConflictError:
+                raise
+            except DomainError as exc:
+                if retry_domain_errors:
+                    reason = str(exc.details.get("reason") or exc.code)
+                    failure_data = {"reason": reason}
+                    subject = str(exc.details.get("subject") or "")
+                    if subject:
+                        failure_data["subject"] = subject
+                    self.ledger.record_failure(
+                        ledger_database,
+                        operation_id,
+                        action,
+                        payload,
+                        f"{exc.code}:{reason}",
+                        code=exc.code,
+                        data=failure_data,
+                    )
                 raise
             except Exception as exc:
                 self.ledger.record_failure(ledger_database, operation_id, action, payload, str(exc))
@@ -229,6 +247,7 @@ class TiantiTrainingApplication:
                 "consumed": {"stone": int(data.get("stone_cost", 0) or 0)},
                 "granted": {"tianti_hp": as_int_like(data.get("hp_gain", 0) or 0)},
             },
+            retry_domain_errors=True,
         )
 
     def apply_bath(
@@ -282,6 +301,7 @@ class TiantiTrainingApplication:
                 "item_changed": "药材库存已更新，请重新查看后再炼体。",
                 "user_missing": "未找到修仙数据。",
             },
+            retry_domain_errors=True,
         )
 
     def breakthrough(
@@ -323,6 +343,7 @@ class TiantiTrainingApplication:
                 "state_changed": "炼体状态已变化，请重新执行。",
                 "user_missing": "炼体档案已变化，请重新执行。",
             },
+            retry_domain_errors=True,
         )
 
     def open_qiaoxue(self, *, operation_id: str, user_id: str, roll: int) -> OperationOutcome[dict[str, Any]]:
@@ -345,6 +366,7 @@ class TiantiTrainingApplication:
                 "state_changed": "炼体状态已变化，请重新执行。",
                 "user_missing": "未找到炼体档案，暂时无法冲窍。",
             },
+            retry_domain_errors=True,
         )
 
     def reply(self, **kwargs: Any) -> ReplyPlan:

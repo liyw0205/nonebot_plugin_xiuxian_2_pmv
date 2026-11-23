@@ -9,6 +9,7 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_fusion.fusion_service import FusionService
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from tests.test_db_backend import db_backend
 
 
@@ -42,6 +43,7 @@ class FusionServiceTests(unittest.TestCase):
             conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)", ("user", 1, "material", "道具", 5, 0))
             conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)", ("user", 20006, "protection", "道具", 1, 0))
         self.service = FusionService(self.database)
+        self.service.get_result("schema-probe")
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -95,11 +97,105 @@ class FusionServiceTests(unittest.TestCase):
 
     def test_operation_failure_rolls_back_every_change(self) -> None:
         with db_backend.transaction(self.database) as conn:
-            conn.execute("CREATE TABLE fusion_operations (operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, successful INTEGER NOT NULL, protected INTEGER NOT NULL)")
             conn.execute("CREATE TRIGGER fail_fusion BEFORE INSERT ON fusion_operations BEGIN SELECT RAISE(ABORT, 'failed'); END")
         with self.assertRaises(db_backend.IntegrityError):
             self.apply("rollback", True)
         self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+
+    def test_ignored_reward_write_rolls_back_every_change(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_reward BEFORE INSERT ON back "
+                "WHEN NEW.goods_id=2 BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("reward-ignore", True)
+        self.assertEqual(raised.exception.code, "fusion_reward_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "item:2")
+        self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM fusion_operations").fetchone()[0], 0,
+            )
+
+    def test_ignored_stone_write_rolls_back_with_wallet_reason(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_stone BEFORE UPDATE OF stone ON user_xiuxian "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("stone-ignore", True)
+        self.assertEqual(raised.exception.code, "fusion_stone_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "stone_wallet")
+        self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+
+    def test_ignored_material_write_rolls_back_with_item_subject(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_material BEFORE UPDATE OF goods_num ON back "
+                "WHEN OLD.goods_id=1 BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("material-ignore", True)
+        self.assertEqual(raised.exception.code, "fusion_material_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "item:1")
+        self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+
+    def test_rewritten_reward_projection_rolls_back(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,bind_num) "
+                "VALUES('user',2,'target','装备',1,0)"
+            )
+            conn.execute(
+                "CREATE TRIGGER rewrite_fusion_reward AFTER UPDATE OF goods_num ON back "
+                "WHEN NEW.goods_id=2 BEGIN UPDATE back SET goods_num=goods_num+3 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id; END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("reward-rewrite", True)
+        self.assertEqual(raised.exception.code, "fusion_reward_projection_mismatch")
+        self.assertEqual(raised.exception.details["subject"], "item:2")
+        self.assertEqual(self.state(), (100, {1: 5, 2: 1, 20006: 1}))
+
+    def test_ignored_receipt_rolls_back_and_same_operation_can_retry(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_receipt BEFORE INSERT ON fusion_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("receipt-ignore", True)
+        self.assertEqual(raised.exception.code, "fusion_receipt_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "receipt")
+        self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM fusion_operations").fetchone()[0], 0,
+            )
+
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TRIGGER ignore_fusion_receipt")
+        result = self.apply("receipt-ignore", True)
+        replay = self.apply("receipt-ignore", False)
+        self.assertEqual((result.status, replay.status, replay.successful), ("applied", "duplicate", True))
+        self.assertEqual(self.state(), (70, {1: 3, 2: 1, 20006: 1}))
+
+    def test_receipt_projection_rewrite_rolls_back_every_change(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER rewrite_fusion_receipt AFTER INSERT ON fusion_operations "
+                "BEGIN UPDATE fusion_operations SET successful=0 WHERE operation_id=NEW.operation_id; END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("receipt-rewrite", True)
+        self.assertEqual(raised.exception.code, "fusion_receipt_projection_mismatch")
+        self.assertEqual(raised.exception.details["subject"], "receipt")
+        self.assertEqual(self.state(), (100, {1: 5, 20006: 1}))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM fusion_operations").fetchone()[0], 0,
+            )
 
 
 if __name__ == "__main__":

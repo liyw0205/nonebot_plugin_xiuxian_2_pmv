@@ -7,6 +7,7 @@ BONUS_FIELDS = (
     "impart_mp_per", "boss_atk", "impart_know_per", "impart_burst_per",
     "impart_mix_per", "impart_reap_per",
 )
+MAX_EFFECTIVE_CARD_QUANTITY = 25
 
 
 def calculate_card_bonuses(cards: dict[str, int], definitions: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -15,8 +16,11 @@ def calculate_card_bonuses(cards: dict[str, int], definitions: dict[str, dict[st
         card = definitions.get(card_name)
         if not card or card.get("type") not in bonuses:
             continue
-        effective_count = min(max(int(count), 0), 25)
-        bonuses[card["type"]] += card["vale"] * (1 + effective_count // 5)
+        effective_count = min(max(int(count), 0), MAX_EFFECTIVE_CARD_QUANTITY)
+        if effective_count:
+            bonuses[card["type"]] += card["vale"] * (
+                1 + (effective_count - 1) * 0.5
+            )
     return bonuses
 
 
@@ -56,4 +60,9 @@ def refresh_card_bonuses(
     return bonuses
 
 
-__all__ = ["BONUS_FIELDS", "calculate_card_bonuses", "refresh_card_bonuses"]
+__all__ = [
+    "BONUS_FIELDS",
+    "MAX_EFFECTIVE_CARD_QUANTITY",
+    "calculate_card_bonuses",
+    "refresh_card_bonuses",
+]

@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,6 +69,65 @@ class MixelixirRefineCostRepositoryTests(unittest.TestCase):
             with db_backend.transaction(db) as conn:
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM mixelixir_refine_tasks").fetchone()[0], 0)
                 self.assertEqual(conn.execute("SELECT mixelixir_num FROM user_xiuxian WHERE user_id='u'").fetchone()[0], 1)
+
+    def test_each_cost_write_point_rolls_back_and_recovers_after_fault_removal(self):
+        write_points = {
+            "material": (
+                "UPDATE OF goods_num ON back WHEN OLD.goods_id=1",
+                "UPDATE back SET goods_num=NEW.goods_num+1 WHERE user_id=NEW.user_id AND goods_id=NEW.goods_id",
+                "mixelixir_refine_cost_material",
+                "item:1",
+            ),
+            "daily": (
+                "UPDATE OF mixelixir_num ON user_xiuxian WHEN OLD.user_id='u'",
+                "UPDATE user_xiuxian SET mixelixir_num=NEW.mixelixir_num+1 WHERE user_id=NEW.user_id",
+                "mixelixir_refine_cost_daily",
+                "daily_count",
+            ),
+            "task": (
+                "INSERT ON mixelixir_refine_tasks WHEN NEW.task_id='r1:task'",
+                "UPDATE mixelixir_refine_tasks SET recipe_key=NEW.recipe_key||':changed' WHERE task_id=NEW.task_id",
+                "mixelixir_refine_cost_task",
+                "task",
+            ),
+            "receipt": (
+                "INSERT ON mixelixir_refine_cost_operations WHEN NEW.operation_id='r1'",
+                "UPDATE mixelixir_refine_cost_operations SET task_id=NEW.task_id||':changed' WHERE operation_id=NEW.operation_id",
+                "mixelixir_refine_cost_receipt",
+                "receipt",
+            ),
+        }
+        for point, (event, rewrite, reason_prefix, subject) in write_points.items():
+            for fault in ("ignore", "rewrite", "abort"):
+                with self.subTest(point=point, fault=fault), tempfile.TemporaryDirectory() as temp:
+                    db = self._database(temp)
+                    trigger = f"inject_{point}_{fault}"
+                    timing = "AFTER" if fault == "rewrite" else "BEFORE"
+                    body = rewrite if fault == "rewrite" else (
+                        "SELECT RAISE(IGNORE)" if fault == "ignore"
+                        else "SELECT RAISE(ABORT,'isolated cost write failure')"
+                    )
+                    with DatabaseUnitOfWork(db) as uow:
+                        uow.execute(f"CREATE TRIGGER {trigger} {timing} {event} BEGIN {body}; END")
+                    repo = MixelixirRefineCostSqlRepository(db)
+                    if fault == "abort":
+                        with self.assertRaises(sqlite3.IntegrityError):
+                            self._start(repo)
+                    else:
+                        result = self._start(repo)
+                        self.assertEqual(result.status, "write_rejected")
+                        self.assertEqual(result.reason, f"{reason_prefix}_{'projection_mismatch' if fault == 'rewrite' else 'write_rejected'}")
+                        self.assertEqual(result.subject, subject)
+                    with db_backend.transaction(db) as conn:
+                        self.assertEqual(conn.execute("SELECT goods_num FROM back WHERE user_id='u' AND goods_id=1").fetchone()[0], 3)
+                        self.assertEqual(conn.execute("SELECT mixelixir_num FROM user_xiuxian WHERE user_id='u'").fetchone()[0], 1)
+                        self.assertEqual(conn.execute("SELECT COUNT(*) FROM mixelixir_refine_tasks").fetchone()[0], 0)
+                        self.assertEqual(conn.execute("SELECT COUNT(*) FROM mixelixir_refine_cost_operations").fetchone()[0], 0)
+                        self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                    with DatabaseUnitOfWork(db) as uow:
+                        uow.execute(f"DROP TRIGGER {trigger}")
+                    recovered = self._start(repo)
+                    self.assertEqual(recovered.status, "applied")
 
 
 if __name__ == "__main__":

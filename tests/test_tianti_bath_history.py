@@ -84,10 +84,12 @@ class BathHistoryTests(unittest.TestCase):
     def test_window_uses_lower_bound_only_within_seven_days(self):
         self._insert("old", "u1", [{"name": "恒心草", "amount": 1}], 1.2,
                      created_at=(self.now - timedelta(days=8)).strftime("%Y-%m-%d %H:%M:%S"))
+        self._insert("boundary", "u1", [{"name": "天青花", "amount": 2}], 1.3,
+                     created_at=(self.now - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S"))
         self._insert("fresh", "u1", [{"name": "恒心草", "amount": 1}], 1.2,
                      created_at=(self.now - timedelta(days=6)).strftime("%Y-%m-%d %H:%M:%S"))
         summary = self.app.summary("u1")
-        self.assertEqual(summary["total"], 1)
+        self.assertEqual(summary["total"], 2)
 
     def test_future_timestamp_row_is_not_dropped(self):
         # 本地时间写入方可能写出「未来」行；只用下界，不得被上界误删。
@@ -131,6 +133,19 @@ class BathHistoryTests(unittest.TestCase):
                 conn.commit()
             app = TiantiBathHistoryApplication(partial, clock=_Clock(self.now))
             self.assertFalse(app.summary("u1")["ok"])
+
+            without_request = Path(other) / "without-request.db"
+            with sqlite3.connect(without_request) as conn:
+                conn.execute(
+                    "CREATE TABLE tianti_medicine_bath_operations ("
+                    "operation_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, "
+                    "result_json TEXT NOT NULL, created_at TEXT NOT NULL)"
+                )
+                conn.commit()
+            app = TiantiBathHistoryApplication(
+                without_request, clock=_Clock(self.now)
+            )
+            self.assertEqual(app.summary("u1")["notice"], EMPTY_TEXT)
 
     def test_bad_json_and_missing_consumed_are_skipped(self):
         with sqlite3.connect(self.db) as conn:

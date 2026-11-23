@@ -56,13 +56,17 @@ class Probe:
         self.calls = []
         self.evidence = {}
 
-    async def command(self, name, text=None, *, actor="900001", number=None, allow_exception=False):
+    async def command(
+        self, name, text=None, *, actor="900001", number=None,
+        allow_exception=False, timeout=8, event_type="group",
+    ):
         from tests.parameter_exception_watch import watch_handler_catches
         candidates = [entry for entry in self.entries if entry["command"] == name or name in entry["aliases"]]
         assert len(candidates) == 1, (name, [entry["module"] for entry in candidates])
         with watch_handler_catches(candidates[0]) as caught:
             result = await run_case(candidates[0], "parameter", number or 910000 + len(self.calls),
-                                    input_text=text or name, actor=actor)
+                                    input_text=text or name, actor=actor, timeout=timeout,
+                                    event_type=event_type)
         if caught:
             result.update(status="exception", caught_exceptions=caught)
         self.calls.append({"command": name, **result})
@@ -400,13 +404,269 @@ from tests.parameter_cases_remaining import register as register_remaining
 
 register_remaining(case)
 
+from tests.parameter_cases_team_invite import register as register_team_invite
+
+register_team_invite(case)
+
+from tests.parameter_cases_team_join import register as register_team_join
+
+register_team_join(case)
+
+from tests.parameter_cases_team_reject import register as register_team_reject
+
+register_team_reject(case)
+
+from tests.parameter_cases_team_transfer import register as register_team_transfer
+
+register_team_transfer(case)
+
+from tests.parameter_cases_team_leave import register as register_team_leave
+
+register_team_leave(case)
+
+from tests.parameter_cases_team_kick import register as register_team_kick
+
+register_team_kick(case)
+
+from tests.parameter_cases_team_disband import register as register_team_disband
+
+register_team_disband(case)
+
+from tests.parameter_cases_team_view import register as register_team_view
+
+register_team_view(case)
+
+from tests.parameter_cases_dungeon_exit import register as register_dungeon_exit
+
+register_dungeon_exit(case)
+
+from tests.parameter_cases_dungeon_status import register as register_dungeon_status
+
+register_dungeon_status(case)
+
+from tests.parameter_cases_dungeon_info import register as register_dungeon_info
+
+register_dungeon_info(case)
+
+from tests.parameter_cases_dungeon_history import register as register_dungeon_history
+
+register_dungeon_history(case)
+
+from tests.parameter_cases_dungeon_explore import register as register_dungeon_explore
+
+register_dungeon_explore(case)
+
+from tests.parameter_cases_dungeon_shop import register as register_dungeon_shop
+
+register_dungeon_shop(case)
+
+from tests.parameter_cases_title_unlock import register as register_title_unlock
+
+register_title_unlock(case)
+
+from tests.parameter_cases_title_info import register as register_title_info
+
+register_title_info(case)
+
+from tests.parameter_cases_title_list import register as register_title_list
+
+register_title_list(case)
+
+from tests.parameter_cases_achievement import register as register_achievement
+
+register_achievement(case)
+
+from tests.parameter_cases_achievement_check import register as register_achievement_check
+
+register_achievement_check(case)
+
+from tests.parameter_cases_title_grant import register as register_title_grant
+
+register_title_grant(case)
+
+from tests.parameter_cases_title_refresh import register as register_title_refresh
+
+register_title_refresh(case)
+
+from tests.parameter_cases_title_help import register as register_title_help
+
+register_title_help(case)
+
+from tests.parameter_cases_help_search import register as register_help_search
+
+register_help_search(case)
+
+from tests.parameter_cases_log_view import register as register_log_view
+
+register_log_view(case)
+
+from tests.parameter_cases_statistics_view import register as register_statistics_view
+
+register_statistics_view(case)
+
 from tests.parameter_cases_additional import register as register_additional
 
 register_additional(case)
 
+from tests.parameter_cases_tianti_profile import register as register_tianti_profile
 
-async def execute(args, checkpoint):
-    context, managers = await prepare()
+register_tianti_profile(case)
+
+from tests.parameter_cases_tianti_bath_history import register as register_tianti_bath_history
+
+register_tianti_bath_history(case)
+
+from tests.parameter_cases_tianti_bath import register as register_tianti_bath
+
+register_tianti_bath(case)
+
+from tests.parameter_cases_tianti_stone import register as register_tianti_stone
+
+register_tianti_stone(case)
+
+from tests.parameter_cases_tianti_breakthrough import register as register_tianti_breakthrough
+
+register_tianti_breakthrough(case)
+
+from tests.parameter_cases_tianti_qiaoxue import register as register_tianti_qiaoxue
+
+register_tianti_qiaoxue(case)
+
+from tests.parameter_cases_tianti_settlement import register as register_tianti_settlement
+
+register_tianti_settlement(case)
+
+from tests.parameter_cases_ranking import register as register_ranking
+
+register_ranking(case)
+
+from tests.parameter_cases_tower_shop import register as register_tower_shop
+
+register_tower_shop(case)
+
+from tests.parameter_cases_training_shop import register as register_training_shop
+
+register_training_shop(case)
+
+from tests.parameter_cases_training_purchase import register as register_training_purchase
+
+register_training_purchase(case)
+
+from tests.parameter_cases_dongfu_harvest import register as register_dongfu_harvest
+
+register_dongfu_harvest(case)
+
+from tests.parameter_cases_dongfu_fertilize import register as register_dongfu_fertilize
+
+register_dongfu_fertilize(case)
+
+from tests.parameter_cases_dongfu_accelerate import register as register_dongfu_accelerate
+
+register_dongfu_accelerate(case)
+
+from tests.parameter_cases_dongfu_plant import register as register_dongfu_plant
+
+register_dongfu_plant(case)
+
+from tests.parameter_cases_dongfu_patrol import register as register_dongfu_patrol
+
+register_dongfu_patrol(case)
+
+from tests.parameter_cases_dongfu_infiltrate import register as register_dongfu_infiltrate
+
+register_dongfu_infiltrate(case)
+
+from tests.parameter_cases_dongfu_array import register as register_dongfu_array
+
+register_dongfu_array(case)
+
+from tests.parameter_cases_dongfu_visit import register as register_dongfu_visit
+
+register_dongfu_visit(case)
+
+from tests.parameter_cases_dongfu_expansion import register as register_dongfu_expansion
+
+register_dongfu_expansion(case)
+
+from tests.parameter_cases_dongfu_build import register as register_dongfu_build
+
+register_dongfu_build(case)
+
+from tests.parameter_cases_map_home_return import register as register_map_home_return
+
+register_map_home_return(case)
+
+from tests.parameter_cases_dongfu_status_view import register as register_dongfu_status_view
+
+register_dongfu_status_view(case)
+
+from tests.parameter_cases_dongfu_geomancy import register as register_dongfu_geomancy
+
+register_dongfu_geomancy(case)
+
+from tests.parameter_cases_dongfu_harvest_history import register as register_dongfu_harvest_history
+
+register_dongfu_harvest_history(case)
+
+from tests.parameter_cases_dongfu_help import register as register_dongfu_help
+
+register_dongfu_help(case)
+
+from tests.parameter_cases_map_help import register as register_map_help
+
+register_map_help(case)
+
+from tests.parameter_cases_map_movement import register as register_map_movement
+
+register_map_movement(case)
+
+from tests.parameter_cases_map_position import register as register_map_position
+
+register_map_position(case)
+
+from tests.parameter_cases_map_info import register as register_map_info
+
+register_map_info(case)
+
+from tests.parameter_cases_map_explore_start import register as register_map_explore_start
+
+register_map_explore_start(case)
+
+from tests.parameter_cases_map_explore_settlement import register as register_map_explore_settlement
+
+register_map_explore_settlement(case)
+
+from tests.parameter_cases_map_interactive import register as register_map_interactive
+
+register_map_interactive(case)
+
+from tests.parameter_cases_map_mission import register as register_map_mission
+
+register_map_mission(case)
+
+from tests.parameter_cases_map_combat import register as register_map_combat
+
+register_map_combat(case)
+
+from tests.parameter_cases_map_dao_battle import register as register_map_dao_battle
+
+register_map_dao_battle(case)
+
+from tests.parameter_cases_map_dao_view import register as register_map_dao_view
+
+register_map_dao_view(case)
+
+from tests.parameter_cases_map_nearby_display import register as register_map_nearby_display
+
+register_map_nearby_display(case)
+
+from tests.parameter_cases_mixelixir import register as register_mixelixir
+
+register_mixelixir(case)
+
+
+async def execute(args, checkpoint, *, minimal_map=False):
+    context, managers = await prepare(minimal_map=minimal_map)
     entries = inventory()
     matrix = parameter_inventory(entries)
     selected = [spec for spec in CASES if (not args.group or spec.group in args.group)
@@ -415,7 +675,7 @@ async def execute(args, checkpoint):
         previous = json.loads(args.retry_from.read_text(encoding="utf-8"))
         failed = {row["key"] for row in previous["results"] if row["status"] != "pass"}
         selected = [spec for spec in selected if spec.key in failed]
-    snapshot = FixtureSnapshot(tests._data_dir, managers)
+    snapshot = FixtureSnapshot(tests._data_dir, managers, minimal_map=minimal_map)
     rows = []
     report = {"scope": "real registered parameter dispatch/DI/handler/application/repository; isolated migrated fixture; mock transport",
               "base_sha": args.base_sha, "parameter_commands": len(matrix), "matrix": matrix, "results": rows}
@@ -450,6 +710,8 @@ def main():
     parser.add_argument("--case", action="append")
     parser.add_argument("--retry-from", type=Path)
     parser.add_argument("--inventory-only", action="store_true")
+    parser.add_argument("--minimal-map", action="store_true",
+                        help="register the real legacy map module without loading unrelated plugin matchers")
     parser.add_argument("--base-sha", default="505f4cb70f82304da5d9c56721e980abaf75f226")
     args = parser.parse_args()
     with args.report.open("w", encoding="utf-8") as report:
@@ -463,7 +725,7 @@ def main():
             report.truncate()
             report.flush()
 
-        result = asyncio.run(execute(args, checkpoint))
+        result = asyncio.run(execute(args, checkpoint, minimal_map=args.minimal_map))
         checkpoint(result)
         print(json.dumps({key: result.get(key) for key in ("parameter_commands", "summary", "outcomes")}, ensure_ascii=False))
         return int(result.get("summary", {}).get("exception", 0) > 0)

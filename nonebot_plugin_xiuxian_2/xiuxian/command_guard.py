@@ -117,7 +117,36 @@ def result_failure(action: str, result, *, messages: dict[str, str] | None = Non
 
 
 def _subject_label(subject) -> str:
-    return {"visitor": "来访方", "target": "目标方", "source": "材料", "destination": "目标", "sender": "赠送方", "recipient": "接收方", "buyer": "购买方", "seller": "出售方", "actor": "发起方", "challenger": "挑战者", "opponent": "对手", "sect": "宗门", "mentor": "师父", "apprentice": "徒弟"}.get(str(subject), "")
+    subject = str(subject)
+    if subject.startswith("item:"):
+        return f"背包物品（ID {subject[5:]}）"
+    return {
+        "visitor": "来访方",
+        "target": "目标方",
+        "source": "材料",
+        "destination": "目标",
+        "sender": "赠送方",
+        "recipient": "接收方",
+        "buyer": "购买方",
+        "seller": "出售方",
+        "actor": "发起方",
+        "challenger": "挑战者",
+        "opponent": "对手",
+        "sect": "宗门",
+        "mentor": "师父",
+        "apprentice": "徒弟",
+        "receipt": "操作回执",
+        "domain_outbox": "奖励统计回执",
+        "plan": "潜入结算计划",
+        "array": "洞府阵法",
+        "map_mission": "地图委托记录",
+        "player_profile": "玩家档案",
+        "stone_wallet": "灵石钱包",
+        "player_impart": "玩家传承属性",
+        "player_natal_treasure": "本命法宝",
+        "player_mixelixir": "玩家炼丹记录",
+        "player_statistics": "玩家统计记录",
+    }.get(subject, "")
 
 
 def report_exception(action: str, exc: BaseException, *, phase: str = "处理或回复", event=None) -> str:
@@ -147,6 +176,7 @@ def guard_command(
     *,
     send: Callable[..., Awaitable[Any]] | None = None,
     known_rejections: tuple[str, ...] = (),
+    subjects: Callable[[DomainError], dict[str, str]] | None = None,
 ) -> Callable[[Callable[..., Awaitable[Any]]], Callable[..., Awaitable[Any]]]:
     """Make ``action`` answer the player when its handler raises."""
 
@@ -164,7 +194,10 @@ def guard_command(
                 if isinstance(exc, DomainError) and (known_code in known_rejections or known_code == "currency_precision_unavailable") and (
                     reason_text(exc.details.get("reason", "")) or reason_text(known_code)
                 ):
-                    reply = failure_reply(action, exc)
+                    reply = result_failure(action, {
+                        "reason": exc.details.get("reason") or known_code,
+                        "subject": exc.details.get("subject", ""),
+                    }, subjects=subjects(exc)) if subjects is not None else failure_reply(action, exc)
                 else:
                     reply = report_exception(action, exc, event=event)
                 sender = send

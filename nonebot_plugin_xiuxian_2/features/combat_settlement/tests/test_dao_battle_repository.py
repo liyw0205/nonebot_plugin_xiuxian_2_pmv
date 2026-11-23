@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -103,6 +104,52 @@ class DaoBattleRepositoryTests(unittest.TestCase):
             self.assertEqual(
                 conn.execute("SELECT user_id,total FROM dao_record ORDER BY user_id").fetchall(),
                 [("a", 1), ("b", 1)],
+            )
+
+    def test_concurrent_application_retries_share_message_identity_not_random_outcome(self):
+        from ..application import CombatSettlementApplication
+        with sqlite3.connect(self.player) as conn:
+            conn.execute(
+                "CREATE TABLE operation_ledger(operation_id TEXT NOT NULL,action TEXT NOT NULL,"
+                "request_hash TEXT NOT NULL,status TEXT NOT NULL,result_json TEXT,created_at TEXT NOT NULL,"
+                "updated_at TEXT NOT NULL,PRIMARY KEY(operation_id,action))"
+            )
+            conn.execute(
+                "CREATE TABLE operation_audit(audit_id INTEGER PRIMARY KEY AUTOINCREMENT,operation_id TEXT,"
+                "action TEXT,status TEXT,before_json TEXT,after_json TEXT,consumed_json TEXT,granted_json TEXT,"
+                "category TEXT,occurred_at TEXT,created_at TEXT)"
+            )
+        app = CombatSettlementApplication(self.game, self.player)
+        position = {"realm": "凡界", "heaven": "一重天", "node_id": "n1"}
+
+        def settle(won):
+            return app.settle_dao_battle(
+                operation_id="same-message", challenger_id="a", target_id="b",
+                expected_position=position, challenger_won=won,
+                requested_target="目标道友", success_message="winner=" + str(won),
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = [future.result() for future in (executor.submit(settle, True), executor.submit(settle, False))]
+        self.assertTrue(all(outcome.ok for outcome in outcomes))
+        self.assertEqual(sorted(outcome.status for outcome in outcomes), ["applied", "replayed"])
+        self.assertEqual(len({outcome.message for outcome in outcomes}), 1)
+        committed = next(outcome for outcome in outcomes if outcome.status == "applied")
+        self.assertIn(committed.message, {"winner=True", "winner=False"})
+        challenger_won = committed.message == "winner=True"
+        with sqlite3.connect(self.player) as conn:
+            saved = conn.execute(
+                "SELECT status,result_json FROM operation_ledger WHERE operation_id=? AND action=?",
+                ("same-message", "combat.dao_battle"),
+            ).fetchone()
+            self.assertEqual(saved[0], "applied")
+            self.assertEqual(json.loads(saved[1])["message"], committed.message)
+            self.assertEqual(
+                conn.execute("SELECT user_id,total,win,lose FROM dao_record ORDER BY user_id").fetchall(),
+                [
+                    ("a", 1, int(challenger_won), int(not challenger_won)),
+                    ("b", 1, int(not challenger_won), int(challenger_won)),
+                ],
             )
 
 

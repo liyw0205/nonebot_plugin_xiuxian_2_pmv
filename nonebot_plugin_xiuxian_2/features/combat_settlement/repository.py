@@ -21,6 +21,43 @@ class DaoBattleRepository(Protocol):
     def get_record(self, user_id: str) -> dict[str, int]: ...
 
 
+class _CombatSettlementWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = reason, subject
+        super().__init__(reason)
+
+
+class DaoBattleWriteRejected(_CombatSettlementWriteRejected):
+    def result(self) -> dict[str, Any]:
+        return {"status": "state_changed", "reason": self.reason, "subject": self.subject}
+
+
+def totals_from_rewards(rewards: Sequence[tuple[int, str, str, int]]) -> dict[int, int]:
+    totals: dict[int, int] = {}
+    for item_id, _name, _item_type, amount in rewards:
+        totals[item_id] = totals.get(item_id, 0) + amount
+    return totals
+
+
+def _verify_settlement_write(
+    uow: DatabaseUnitOfWork,
+    statement: str,
+    params: tuple[Any, ...],
+    projection: str,
+    projection_params: tuple[Any, ...],
+    expected: tuple[Any, ...],
+    reason_prefix: str,
+    subject: str,
+    rejection_type: type[_CombatSettlementWriteRejected] = _CombatSettlementWriteRejected,
+) -> None:
+    if uow.execute(statement, params).rowcount != 1:
+        raise rejection_type(f"{reason_prefix}_write_rejected", subject)
+    row = uow.query_one(projection, projection_params)
+    actual = tuple(row.values()) if row is not None else None
+    if actual != expected:
+        raise rejection_type(f"{reason_prefix}_projection_mismatch", subject)
+
+
 class CombatSettlementSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any | None = None) -> None:
         self.game_database = str(game_database)
@@ -41,7 +78,13 @@ class CombatSettlementSqlRepository:
             if previous:
                 if str(previous["payload"]) != payload:
                     return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": as_int_like(previous["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"]))) }
+                try:
+                    old_rewards = tuple(tuple(map(int, value)) for value in json.loads(str(previous["rewards"])))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return {"status": "state_changed", "reason": "map_combat_settlement_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                if as_int_like(previous["stone"]) != stone or old_rewards != tuple(sorted((item_id, amount) for item_id, amount in totals_from_rewards(rewards).items())):
+                    return {"status": "state_changed", "reason": "map_combat_settlement_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                return {"status": "duplicate", "stone": as_int_like(previous["stone"]), "rewards": old_rewards}
             if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
                 return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
             daily = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
@@ -60,20 +103,75 @@ class CombatSettlementSqlRepository:
             for item_id, name, item_type, amount in rewards:
                 totals[item_id] = totals.get(item_id, 0) + amount
                 metadata[item_id] = (name, item_type)
+            inventory_before: dict[int, tuple[int, int, str, str] | None] = {}
             for item_id, amount in totals.items():
-                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
+                row = uow.query_one("SELECT goods_num,bind_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                inventory_before[item_id] = None if row is None else (
+                    int(row["goods_num"] or 0), int(row["bind_num"] or 0),
+                    str(row["goods_name"]), str(row["goods_type"]),
+                )
+                if (inventory_before[item_id][0] if row else 0) + amount > max_goods_num:
                     return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
-            uow.execute("UPDATE player_data.map_daily_limit SET combat_count=?,resource_total_count=? WHERE user_id=?", (int(daily["combat_count"] or 0) + 1, int(daily["resource_total_count"] or 0) + 1, user_id))
-            uow.execute("UPDATE player_data.map_combat_settlement SET snapshot=? WHERE user_id=?", ("", user_id))
-            if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
-            now = self.clock.now()
-            for item_id, amount in totals.items():
-                name, item_type = metadata[item_id]
-                uow.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
             compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_combat_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
+            try:
+                with uow.savepoint("map_combat_settlement"):
+                    next_combat = int(daily["combat_count"] or 0) + 1
+                    next_resources = int(daily["resource_total_count"] or 0) + 1
+                    _verify_settlement_write(
+                        uow,
+                        "UPDATE player_data.map_daily_limit SET combat_count=?,resource_total_count=? WHERE user_id=?",
+                        (next_combat, next_resources, user_id),
+                        "SELECT combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?",
+                        (user_id,), (next_combat, next_resources),
+                        "map_combat_settlement_daily", "daily_limit",
+                    )
+                    _verify_settlement_write(
+                        uow,
+                        "UPDATE player_data.map_combat_settlement SET snapshot=? WHERE user_id=?",
+                        ("", user_id),
+                        "SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?",
+                        (user_id,), ("",),
+                        "map_combat_settlement_snapshot", "snapshot",
+                    )
+                    if stone:
+                        wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                        next_stone = as_int_like(wallet["stone"] if wallet else 0) + stone
+                        _verify_settlement_write(
+                            uow,
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
+                            (stone, user_id),
+                            "SELECT stone FROM user_xiuxian WHERE user_id=?",
+                            (user_id,), (next_stone,),
+                            "map_combat_settlement_stone", "stone",
+                        )
+                    now = self.clock.now()
+                    for item_id, amount in totals.items():
+                        name, item_type = metadata[item_id]
+                        before = inventory_before[item_id]
+                        expected_inventory = (
+                            (amount, amount, name, item_type)
+                            if before is None
+                            else (before[0] + amount, before[1] + amount, before[2], before[3])
+                        )
+                        _verify_settlement_write(
+                            uow,
+                            "INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                            (user_id, item_id, name, item_type, amount, now, now, amount),
+                            "SELECT goods_num,bind_num,goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+                            (user_id, item_id), expected_inventory,
+                            "map_combat_settlement_inventory", f"goods:{item_id}",
+                        )
+                    compact_json = json.dumps(compact)
+                    _verify_settlement_write(
+                        uow,
+                        "INSERT INTO map_combat_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, stone, compact_json),
+                        "SELECT payload,stone,rewards FROM map_combat_settlement_operations WHERE operation_id=?",
+                        (operation_id,), (payload, as_int_like(stone), compact_json),
+                        "map_combat_settlement_receipt", "receipt",
+                    )
+            except _CombatSettlementWriteRejected as exc:
+                return {"status": "state_changed", "reason": exc.reason, "subject": exc.subject, "stone": 0, "rewards": ()}
             return {"status": "applied", "stone": stone, "rewards": compact}
 
 
@@ -83,42 +181,66 @@ class DaoBattleSqlRepository:
         self.game_database = str(game_database)
 
     def settle(self, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> dict[str, Any]:
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                return self.settle_in(uow, operation_id, challenger_id, target_id, expected_position, challenger_won)
+        except DaoBattleWriteRejected as exc:
+            return exc.result()
+
+    def settle_in(self, uow: DatabaseUnitOfWork, operation_id: str, challenger_id: str, target_id: str, expected_position: dict[str, Any], challenger_won: bool) -> dict[str, Any]:
         operation_id = str(operation_id).strip()
         challenger_id, target_id = str(challenger_id), str(target_id)
         position = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
         if not operation_id or not challenger_id or challenger_id == target_id:
             raise ValueError("valid operation and distinct players are required")
         payload = json.dumps([challenger_id, target_id, position, bool(challenger_won)], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            uow.attach_database(self.game_database, "game_data")
-            previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                return (
-                    {"status": "duplicate"}
-                    if str(previous["payload"]) == payload
-                    else {
-                        "status": "state_changed",
-                        "reason": "operation_conflict",
-                        "subject": "actor",
-                    }
-                )
-            users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
-            present = {str(row["user_id"]) for row in users}
-            if present != {challenger_id, target_id}:
-                return {
-                    "status": "user_missing",
-                    "reason": "user_missing",
-                    "subject": "challenger" if challenger_id not in present else "target",
-                }
-            rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
-            current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
-            expected = (position["realm"], position["heaven"], position["node_id"])
-            if current.get(challenger_id) != expected or current.get(target_id) != expected:
-                return {"status": "position_changed", "reason": "position_changed", "subject": "challenger" if current.get(challenger_id) != expected else "target"}
-            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (challenger_id, 1, int(bool(challenger_won)), int(not challenger_won)))
-            uow.execute("INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose", (target_id, 1, int(not challenger_won), int(bool(challenger_won))))
-            uow.execute("INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)", (operation_id, payload))
-            return {"status": "applied"}
+        previous = uow.query_one("SELECT payload FROM map_dao_battle_operations WHERE operation_id=?", (operation_id,))
+        if previous:
+            return (
+                {"status": "duplicate"}
+                if str(previous["payload"]) == payload
+                else {"status": "state_changed", "reason": "operation_conflict", "subject": "actor"}
+            )
+        uow.attach_database(self.game_database, "game_data")
+        users = uow.query_all("SELECT user_id FROM game_data.user_xiuxian WHERE user_id IN (?,?)", (challenger_id, target_id))
+        present = {str(row["user_id"]) for row in users}
+        if present != {challenger_id, target_id}:
+            return {
+                "status": "user_missing",
+                "reason": "user_missing",
+                "subject": "challenger" if challenger_id not in present else "target",
+            }
+        rows = uow.query_all("SELECT user_id,realm,heaven,node_id FROM map_status WHERE user_id IN (?,?)", (challenger_id, target_id))
+        current = {str(row["user_id"]): (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) for row in rows}
+        expected = (position["realm"], position["heaven"], position["node_id"])
+        if current.get(challenger_id) != expected or current.get(target_id) != expected:
+            return {"status": "position_changed", "reason": "position_changed", "subject": "challenger" if current.get(challenger_id) != expected else "target"}
+        record_sql = "SELECT total,win,lose FROM dao_record WHERE user_id=?"
+        projections = {}
+        for subject, uid, won in (("challenger", challenger_id, challenger_won), ("target", target_id, not challenger_won)):
+            row = uow.query_one(record_sql, (uid,))
+            before = tuple(row.values()) if row is not None else (0, 0, 0)
+            if any(type(value) is not int or value < 0 for value in before):
+                raise DaoBattleWriteRejected("map_dao_battle_record_invalid", subject)
+            projections[subject] = (uid, won, (before[0] + 1, before[1] + int(won), before[2] + int(not won)))
+        for subject, (uid, won, next_record) in projections.items():
+            _verify_settlement_write(
+                uow,
+                "INSERT INTO dao_record(user_id,total,win,lose) VALUES(?,?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET total=dao_record.total+1,win=dao_record.win+excluded.win,lose=dao_record.lose+excluded.lose",
+                (uid, 1, int(won), int(not won)), record_sql, (uid,), next_record,
+                "map_dao_battle_record", subject, DaoBattleWriteRejected,
+            )
+        _verify_settlement_write(
+            uow, "INSERT INTO map_dao_battle_operations(operation_id,payload) VALUES(?,?)",
+            (operation_id, payload), "SELECT payload FROM map_dao_battle_operations WHERE operation_id=?",
+            (operation_id,), (payload,), "map_dao_battle_receipt", "receipt", DaoBattleWriteRejected,
+        )
+        for subject, (uid, _, next_record) in projections.items():
+            row = uow.query_one(record_sql, (uid,))
+            if row is None or tuple(row.values()) != next_record:
+                raise DaoBattleWriteRejected("map_dao_battle_record_projection_mismatch", subject)
+        return {"status": "applied"}
 
     def get_record(self, user_id: str) -> dict[str, int]:
         with DatabaseUnitOfWork(self.player_database) as uow:

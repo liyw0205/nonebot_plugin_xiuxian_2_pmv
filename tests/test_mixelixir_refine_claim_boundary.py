@@ -34,6 +34,7 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
         module = importlib.import_module(
             "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir"
         )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
         with tempfile.TemporaryDirectory() as directory:
             game = Path(directory) / "game.db"
             player = Path(directory) / "player.db"
@@ -77,6 +78,9 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                 handler for handler in module.mix_make.handlers
                 if handler.call is module.mix_make_
             )
+            send = AsyncMock(
+                side_effect=[RuntimeError("isolated alchemy reply failure"), None, None]
+            )
 
             with (
                 patch.object(module, "mixelixir_application", application),
@@ -111,7 +115,8 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                 ),
                 patch.object(module, "UserBuffDate", return_value=fake_buff),
                 patch.object(module, "XiuConfig", return_value=SimpleNamespace(max_goods_num=99)),
-                patch.object(module, "handle_send", new=AsyncMock()) as send,
+                patch.object(module, "handle_send", new=send),
+                patch.object(utils, "handle_send", new=send),
                 patch.object(
                     module,
                     "_mixelixir_refine_cost_service",
@@ -125,6 +130,13 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                 patch.object(application, "refine_cost", wraps=application.refine_cost) as refine_cost,
                 patch.object(application, "refine_reward", wraps=application.refine_reward) as refine_reward,
             ):
+                asyncio.run(
+                    registered_handler.call(
+                        fake_bot,
+                        fake_event,
+                        mode="主药草1药引引1辅药辅1丹炉炉",
+                    )
+                )
                 with self.assertRaises(FinishedException):
                     asyncio.run(
                         registered_handler.call(
@@ -135,8 +147,10 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                     )
 
             self.assertEqual(refine_cost.call_count, 1)
-            self.assertEqual(refine_reward.call_count, 1)
-            self.assertEqual(send.await_count, 1)
+            self.assertEqual(refine_reward.call_count, 2)
+            self.assertEqual(send.await_count, 3)
+            self.assertIn("内部异常", str(send.await_args_list[1].args[2]))
+            self.assertIn("已经处理", str(send.await_args_list[2].args[2]))
             with db_backend.transaction(game) as conn:
                 self.assertEqual(
                     conn.execute(

@@ -4014,7 +4014,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "CREATE TABLE" not in map_display_repository
                 and "ALTER TABLE" not in map_display_repository
                 and "await asyncio.sleep(0)" in map_display_query
-                and "except MapCandidateReadError:\n        return []" in map_display_query
+                and "raise_on_error: bool = False" in map_display_query
+                and "except MapCandidateReadError:\n        if raise_on_error:\n            raise\n        return []" in map_display_query
             ),
             "nearby_display_fair_sample_and_legacy_small_order": (
                 "random_source.randint(1, eligible_count)" in map_display_query
@@ -4221,8 +4222,11 @@ def _slice_status() -> dict[str, dict[str, object]]:
             ),
             "my_qiaoxue_display_uses_feature_reader_and_static_catalog": (
                 "tianti_training_application.read_profile(user_id)" in tianti_qiaoxue_profile_handler
-                and "get_qiaoxue_pool()" in tianti_qiaoxue_profile_handler
-                and "get_qiaoxue_map()" in tianti_qiaoxue_profile_handler
+                and "qpool = read_qiaoxue_pool_strict()" in tianti_qiaoxue_profile_handler
+                and 'qmap = {item["name"]: item for item in qpool}' in tianti_qiaoxue_profile_handler
+                and "except QiaoxueConfigurationError as exc:" in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_pool()" not in tianti_qiaoxue_profile_handler
+                and "get_qiaoxue_map()" not in tianti_qiaoxue_profile_handler
                 and "TiantiDataManager" not in tianti_qiaoxue_profile_handler
                 and "get_user_tianti_info" not in tianti_qiaoxue_profile_handler
             ),

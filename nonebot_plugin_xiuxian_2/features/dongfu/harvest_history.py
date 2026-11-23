@@ -6,7 +6,7 @@
 ``[ID, 数量]``。`我的洞府` 只展示当前灵田与作物，玩家看不到最近收获了哪些物品。
 本模块补齐这段个人历史。
 
-只读；缺库、缺表、缺列、坏 JSON 或读失败返回空态，不建表、不补列。时间窗只用下界。
+只读；缺库、缺表、缺列或坏 JSON 返回空态，不建表、不补列。实际数据库读取错误透传给命令保护层。时间窗只用下界。
 """
 
 from __future__ import annotations
@@ -102,21 +102,20 @@ class DongfuHarvestHistoryApplication:
         if not user_id:
             return self._empty("缺少玩家身份，无法查询洞府收获记录。")
         since = (self._now() - timedelta(days=DAYS)).strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                if not _columns(uow, "dongfu_harvest_operations").issuperset(
-                    _RECEIPT_COLUMNS
-                ):
-                    return self._empty()
-                rows = uow.query_all(
-                    "SELECT payload, created_at FROM dongfu_harvest_operations "
-                    "WHERE json_valid(payload) "
-                    "AND json_extract(payload, '$[0]') = ? AND created_at >= ? "
-                    "ORDER BY created_at DESC, rowid DESC",
-                    (user_id, since),
-                )
-        except Exception:
+        if not Path(self.database).is_file():
             return self._empty()
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not _columns(uow, "dongfu_harvest_operations").issuperset(
+                _RECEIPT_COLUMNS
+            ):
+                return self._empty()
+            rows = uow.query_all(
+                "SELECT payload, created_at FROM dongfu_harvest_operations "
+                "WHERE json_valid(payload) "
+                "AND json_extract(payload, '$[0]') = ? AND created_at >= ? "
+                "ORDER BY created_at DESC, rowid DESC",
+                (user_id, since),
+            )
 
         runs: list[dict[str, Any]] = []
         for row in rows:

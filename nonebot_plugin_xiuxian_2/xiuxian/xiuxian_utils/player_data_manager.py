@@ -237,7 +237,7 @@ class PlayerDataManager:
             self._commit_write()
             self._invalidate_field_list_cache(table_name, field)
 
-    def get_fields(self, user_id, table_name):
+    def get_fields(self, user_id, table_name, *, raise_errors=False):
         """通过user_id查看一个表这个主键的全部字段"""
         if user_id is None:
             logger.warning(f"尝试获取表 {table_name} 的字段数据但 user_id 为 None")
@@ -253,6 +253,8 @@ class PlayerDataManager:
                 result = cursor.fetchone()
             except Exception as e:
                 logger.error(f"查询表 {table_name} user_id {user_id} 时出错: {e}")
+                if raise_errors:
+                    raise
                 return None
 
             if result is None:

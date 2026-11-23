@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like, require_exact_integer
 from datetime import datetime, timedelta
+import logging
 from pathlib import Path
 from threading import RLock
 from typing import Any, ClassVar, Protocol
 import json
+
+from ...core.errors import DomainError
+from ...core.numeric import as_int_like, exact_crystal_integer, require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork, OutboxStore
 from .schema import (
     COOLDOWN_COLUMNS,
@@ -14,9 +17,12 @@ from .schema import (
     MISSION_COLUMNS,
     SCHEMA_MISSING,
     STATUS_COLUMNS,
+    columns,
     table_ready,
 )
 from .schemas import MapNearbyTargetResult
+
+logger = logging.getLogger(__name__)
 
 
 class MapRepository(Protocol):
@@ -27,6 +33,44 @@ class MapMovementSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapMovementWriteConflict(f"map_move_{suffix}", subject)
+
+    @classmethod
+    def _verify_position(cls, uow, user_id: str, expected: dict[str, Any]) -> None:
+        row = uow.query_one(
+            "SELECT realm,heaven,node_id,visited_nodes FROM player_data.map_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("position_projection_mismatch", "map_status")
+        actual = {key: str(row[key] or "") for key in ("realm", "heaven", "node_id")}
+        try:
+            visited = json.loads(row["visited_nodes"]) if isinstance(row["visited_nodes"], str) else row["visited_nodes"]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            visited = []
+        actual["visited_nodes"] = [str(item) for item in visited] if isinstance(visited, list) else []
+        if actual != expected:
+            cls._reject("position_projection_mismatch", "map_status")
+
+    @classmethod
+    def _verify_stamina(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["user_stamina"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stamina_projection_mismatch", "stamina")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stamina: int) -> None:
+        row = uow.query_one(
+            "SELECT payload,stamina FROM map_movement_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        actual_stamina = exact_crystal_integer(row["stamina"]) if row is not None else None
+        if row is None or str(row["payload"]) != payload or actual_stamina != stamina:
+            cls._reject("receipt_projection_mismatch", "receipt")
 
     def move(self, operation_id: str, user_id: str, expected_position: dict[str, Any], target_position: dict[str, Any], expected_stamina: int, cost: int) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id)
@@ -40,7 +84,19 @@ class MapMovementSqlRepository:
             uow.attach_database(self.player_database, "player_data")
             old = uow.query_one("SELECT payload,stamina FROM map_movement_operations WHERE operation_id=?", (operation_id,))
             if old:
-                return {"status": "duplicate" if str(old["payload"]) == payload else "state_changed", "stamina": int(old["stamina"]) if str(old["payload"]) == payload else expected_stamina}
+                try:
+                    old_payload = json.loads(str(old["payload"]))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "map_move_receipt_invalid", "subject": "receipt"}
+                old_stamina = exact_crystal_integer(old["stamina"])
+                if old_stamina is None:
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "map_move_receipt_invalid", "subject": "receipt"}
+                if old_payload != json.loads(payload):
+                    return {"status": "state_changed", "stamina": expected_stamina,
+                            "reason": "operation_conflict", "subject": "receipt"}
+                return {"status": "duplicate", "stamina": old_stamina}
             user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return {"status": "user_missing", "stamina": expected_stamina}
@@ -55,21 +111,115 @@ class MapMovementSqlRepository:
             visited = row["visited_nodes"]
             try:
                 visited = json.loads(visited) if isinstance(visited, str) else visited
-            except json.JSONDecodeError:
+            except (TypeError, ValueError, json.JSONDecodeError):
                 visited = []
             visited = [str(item) for item in visited] if isinstance(visited, list) else []
             if target["node_id"] not in visited:
                 visited.append(target["node_id"])
+            expected_position = dict(target, visited_nodes=visited)
             remaining = stamina - cost
-            uow.execute("UPDATE player_data.map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? WHERE user_id=?", (*target.values(), json.dumps(visited, ensure_ascii=False), user_id))
-            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
-            uow.execute("INSERT INTO map_movement_operations(operation_id,payload,stamina) VALUES(?,?,?)", (operation_id, payload, remaining))
+            try:
+                with uow.savepoint("map_movement"):
+                    if uow.execute(
+                        "UPDATE player_data.map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? "
+                        "WHERE user_id=? AND realm=? AND heaven=? AND node_id=?",
+                        (*target.values(), json.dumps(visited, ensure_ascii=False), user_id, *expected.values()),
+                    ).rowcount != 1:
+                        self._reject("position_write_rejected", "map_status")
+                    self._verify_position(uow, user_id, expected_position)
+
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=? AND user_stamina=?",
+                        (remaining, user_id, stamina),
+                    ).rowcount != 1:
+                        self._reject("stamina_write_rejected", "stamina")
+                    self._verify_stamina(uow, user_id, remaining)
+
+                    if uow.execute(
+                        "INSERT INTO map_movement_operations(operation_id,payload,stamina) VALUES(?,?,?)",
+                        (operation_id, payload, remaining),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, remaining)
+                    self._verify_position(uow, user_id, expected_position)
+                    self._verify_stamina(uow, user_id, remaining)
+            except _MapMovementWriteConflict as conflict:
+                return {
+                    "status": "state_changed",
+                    "stamina": stamina,
+                    "reason": conflict.reason,
+                    "subject": conflict.subject,
+                }
             return {"status": "applied", "stamina": remaining}
+
+
+class _MapMovementWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
+
+
+class _MapHomeReturnWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapHomeReturnSqlRepository:
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapHomeReturnWriteConflict(f"map_home_return_{suffix}", subject)
+
+    @staticmethod
+    def _visited_nodes(value: Any) -> list[str]:
+        try:
+            parsed = json.loads(value) if isinstance(value, str) else value
+        except json.JSONDecodeError:
+            parsed = []
+        return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+    @classmethod
+    def _verify_position(
+        cls, uow: DatabaseUnitOfWork, user_id: str, expected: dict[str, Any]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT realm,heaven,node_id,visited_nodes "
+            "FROM map_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("position_projection_mismatch", "map_status")
+        if any(
+            str(row[key] or "") != expected[key]
+            for key in ("realm", "heaven", "node_id")
+        ) or cls._visited_nodes(row["visited_nodes"]) != expected["visited_nodes"]:
+            cls._reject("position_projection_mismatch", "map_status")
+
+    @classmethod
+    def _verify_receipt(
+        cls,
+        uow: DatabaseUnitOfWork,
+        operation_id: str,
+        payload: str,
+        status: str,
+        fields: dict[str, str],
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,result_status,realm,heaven,node_id,node_name "
+            "FROM map_home_return_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None or (
+            str(row["payload"]), str(row["result_status"]),
+            *(str(row[key] or "") for key in ("realm", "heaven", "node_id", "node_name")),
+        ) != (
+            payload, status, fields["realm"], fields["heaven"],
+            fields["node_id"], fields["node_name"],
+        ):
+            cls._reject("receipt_projection_mismatch", "receipt")
 
     def return_home(self, operation_id: str, user_id: str) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
@@ -77,46 +227,126 @@ class MapHomeReturnSqlRepository:
             raise ValueError("operation and user are required")
         payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":"))
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            previous = uow.query_one("SELECT payload,result_status,realm,heaven,node_id,node_name FROM map_home_return_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                if str(previous["payload"]) != payload:
+            previous = uow.query_one(
+                "SELECT payload,result_status,realm,heaven,node_id,node_name "
+                "FROM map_home_return_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if previous is not None:
+                try:
+                    previous_payload = json.loads(str(previous["payload"]))
+                except (TypeError, ValueError):
+                    return {
+                        "status": "state_changed",
+                        "reason": "map_home_return_receipt_invalid",
+                        "subject": "receipt",
+                    }
+                if previous_payload != [user_id]:
                     return {"status": "operation_conflict"}
-                result = {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"])}
-                result.update({key: str(previous[key] or "") for key in ("realm", "heaven", "node_id", "node_name")})
+                result_status = str(previous["result_status"] or "")
+                result = {
+                    key: str(previous[key] or "")
+                    for key in ("realm", "heaven", "node_id", "node_name")
+                }
+                allowed_statuses = {
+                    "applied", "dongfu_missing", "dongfu_invalid", "position_missing"
+                }
+                if result_status not in allowed_statuses or (
+                    result_status == "applied" and not all(result.values())
+                ) or (result_status != "applied" and any(result.values())):
+                    return {
+                        "status": "state_changed",
+                        "reason": "map_home_return_receipt_invalid",
+                        "subject": "receipt",
+                    }
+                result["status"] = "duplicate" if result_status == "applied" else result_status
                 return result
+
             def record(status: str, **values: str) -> dict[str, Any]:
                 fields = {"realm": "", "heaven": "", "node_id": "", "node_name": "", **values}
-                uow.execute("INSERT INTO map_home_return_operations(operation_id,payload,result_status,realm,heaven,node_id,node_name) VALUES(?,?,?,?,?,?,?)", (operation_id, payload, status, fields["realm"], fields["heaven"], fields["node_id"], fields["node_name"]))
+                if uow.execute(
+                    "INSERT INTO map_home_return_operations"
+                    "(operation_id,payload,result_status,realm,heaven,node_id,node_name) "
+                    "VALUES(?,?,?,?,?,?,?)",
+                    (
+                        operation_id, payload, status, fields["realm"], fields["heaven"],
+                        fields["node_id"], fields["node_name"],
+                    ),
+                ).rowcount != 1:
+                    self._reject("receipt_write_rejected", "receipt")
+                self._verify_receipt(uow, operation_id, payload, status, fields)
                 return {"status": status, **fields}
-            table = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='dongfu_status'")
-            if table is None:
-                return record("dongfu_missing")
-            columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(dongfu_status)")}
-            selected = "built,realm,heaven,node_id" + (",node_name" if "node_name" in columns else "")
-            dongfu = uow.query_one(f"SELECT {selected} FROM dongfu_status WHERE user_id=?", (user_id,))
-            if dongfu is None or int(dongfu["built"] or 0) != 1:
-                return record("dongfu_missing")
-            realm, heaven, node_id = str(dongfu["realm"] or ""), str(dongfu["heaven"] or ""), str(dongfu["node_id"] or "")
-            if not all((realm, heaven, node_id)):
-                return record("dongfu_invalid")
-            position = uow.query_one("SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='map_status'")
-            if position is None:
-                return record("position_missing")
-            current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
-            if current is None:
-                return record("position_missing")
-            visited = current["visited_nodes"]
             try:
-                visited = json.loads(visited) if isinstance(visited, str) else visited
-            except json.JSONDecodeError:
-                visited = []
-            visited = [str(item) for item in visited] if isinstance(visited, list) else []
-            if node_id not in visited:
-                visited.append(node_id)
-            uow.execute("UPDATE map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? WHERE user_id=?", (realm, heaven, node_id, json.dumps(visited, ensure_ascii=False), user_id))
-            return record("applied", realm=realm, heaven=heaven, node_id=node_id, node_name=str(dongfu.get("node_name") or node_id))
-
-
+                with uow.savepoint("map_home_return"):
+                    table = uow.query_one(
+                        "SELECT 1 AS present FROM sqlite_master "
+                        "WHERE type='table' AND name='dongfu_status'"
+                    )
+                    if table is None:
+                        return record("dongfu_missing")
+                    columns = {
+                        str(row["name"])
+                        for row in uow.query_all("PRAGMA table_info(dongfu_status)")
+                    }
+                    selected = "built,realm,heaven,node_id" + (
+                        ",node_name" if "node_name" in columns else ""
+                    )
+                    dongfu = uow.query_one(
+                        f"SELECT {selected} FROM dongfu_status WHERE user_id=?", (user_id,)
+                    )
+                    if dongfu is None or int(dongfu["built"] or 0) != 1:
+                        return record("dongfu_missing")
+                    realm = str(dongfu["realm"] or "")
+                    heaven = str(dongfu["heaven"] or "")
+                    node_id = str(dongfu["node_id"] or "")
+                    if not all((realm, heaven, node_id)):
+                        return record("dongfu_invalid")
+                    position_table = uow.query_one(
+                        "SELECT 1 AS present FROM sqlite_master "
+                        "WHERE type='table' AND name='map_status'"
+                    )
+                    if position_table is None:
+                        return record("position_missing")
+                    current = uow.query_one(
+                        "SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,)
+                    )
+                    if current is None:
+                        return record("position_missing")
+                    visited = self._visited_nodes(current["visited_nodes"])
+                    if node_id not in visited:
+                        visited.append(node_id)
+                    expected = {
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node_id,
+                        "visited_nodes": visited,
+                    }
+                    if uow.execute(
+                        "UPDATE map_status SET realm=?,heaven=?,node_id=?,visited_nodes=? "
+                        "WHERE user_id=?",
+                        (
+                            realm, heaven, node_id,
+                            json.dumps(visited, ensure_ascii=False), user_id,
+                        ),
+                    ).rowcount != 1:
+                        self._reject("position_write_rejected", "map_status")
+                    self._verify_position(uow, user_id, expected)
+                    fields = {
+                        "realm": realm,
+                        "heaven": heaven,
+                        "node_id": node_id,
+                        "node_name": str(dongfu["node_name"] or node_id)
+                        if "node_name" in columns else node_id,
+                    }
+                    result = record("applied", **fields)
+                    self._verify_position(uow, user_id, expected)
+                    return result
+            except _MapHomeReturnWriteConflict as conflict:
+                return {
+                    "status": "state_changed",
+                    "reason": conflict.reason,
+                    "subject": conflict.subject,
+                }
 class MapInteractiveSqlQueryRepository:
     def __init__(self, player_database: str | Path, game_database: str | Path | None = None) -> None:
         self.player_database = str(player_database)
@@ -300,7 +530,15 @@ class MapStatusSqlQueryRepository:
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             columns = self._columns(uow, self.player_database)
             if not columns:
-                return None
+                raise DomainError(
+                    "schema_missing", "map status schema is not initialized",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
+            if not {"user_id", "realm", "heaven", "node_id"}.issubset(columns):
+                raise DomainError(
+                    "schema_missing", "map status schema is incomplete",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
             visited_field = ",visited_nodes" if "visited_nodes" in columns else ""
             row = uow.query_one(
                 f"SELECT realm,heaven,node_id{visited_field} FROM map_status WHERE user_id=?",
@@ -338,17 +576,54 @@ class MapStatusSqlWriteRepository:
         if not user_id or not all(str(value).strip() for value in (realm, heaven, node_id)):
             raise ValueError("valid map status is required")
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            if not table_ready(uow, "map_status", STATUS_COLUMNS):
+            status_columns = columns(uow, "map_status")
+            if not status_columns:
                 return {"status": SCHEMA_MISSING}
+            if not STATUS_COLUMNS.issubset(status_columns):
+                raise DomainError(
+                    "schema_missing", "map status schema is incomplete",
+                    {"reason": "map_status_schema_missing", "subject": "map_status"},
+                )
             current = uow.query_one("SELECT visited_nodes FROM map_status WHERE user_id=?", (user_id,))
             merged = self._merge_visited(current["visited_nodes"] if current else [], visited_nodes)
-            uow.execute(
+            expected = {
+                "realm": str(realm),
+                "heaven": str(heaven),
+                "node_id": str(node_id),
+                "visited_nodes": merged,
+            }
+            cursor = uow.execute(
                 "INSERT INTO map_status(user_id,realm,heaven,node_id,visited_nodes) VALUES(?,?,?,?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET realm=excluded.realm,heaven=excluded.heaven,"
                 "node_id=excluded.node_id,visited_nodes=excluded.visited_nodes",
                 (user_id, str(realm), str(heaven), str(node_id), json.dumps(merged, ensure_ascii=False)),
             )
-        return {"realm": str(realm), "heaven": str(heaven), "node_id": str(node_id), "visited_nodes": merged}
+            if cursor.rowcount != 1:
+                raise DomainError(
+                    "conflict", "map status write was rejected",
+                    {"reason": "map_status_write_rejected", "subject": "map_status"},
+                )
+            row = uow.query_one(
+                "SELECT realm,heaven,node_id,visited_nodes FROM map_status WHERE user_id=?",
+                (user_id,),
+            )
+            try:
+                actual_visited = json.loads(row["visited_nodes"]) if row is not None else None
+            except (TypeError, ValueError, json.JSONDecodeError):
+                actual_visited = None
+            actual = ({
+                "realm": str(row["realm"]),
+                "heaven": str(row["heaven"]),
+                "node_id": str(row["node_id"]),
+                "visited_nodes": [str(item) for item in actual_visited]
+                if isinstance(actual_visited, list) else None,
+            } if row is not None else None)
+            if actual != expected:
+                raise DomainError(
+                    "conflict", "map status projection does not match the requested write",
+                    {"reason": "map_status_projection_mismatch", "subject": "map_status"},
+                )
+        return expected
 
     @staticmethod
     def _merge_visited(current: Any, incoming: list[str]) -> list[str]:
@@ -486,6 +761,10 @@ class MapMissionSqlWriteRepository:
     def __init__(self, player_database: str | Path) -> None:
         self.player_database = str(player_database)
 
+    @staticmethod
+    def _reject(reason: str, message: str) -> None:
+        raise DomainError(reason, message, {"reason": reason, "subject": "map_mission"})
+
     def save(self, user_id: str, state: dict[str, Any]) -> dict[str, Any]:
         user_id = str(user_id).strip()
         values = {
@@ -500,12 +779,37 @@ class MapMissionSqlWriteRepository:
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
             if not table_ready(uow, "map_mission", MISSION_COLUMNS):
                 return {"status": SCHEMA_MISSING}
-            uow.execute(
+            changed = uow.execute(
                 "INSERT INTO map_mission(user_id,date,mission_type,target,claimed,settlement) VALUES(?,?,?,?,?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET date=excluded.date,mission_type=excluded.mission_type,"
                 "target=excluded.target,claimed=excluded.claimed,settlement=excluded.settlement",
                 (user_id, values["date"], values["mission_type"], values["target"], values["claimed"], values["settlement"]),
             )
+            if changed.rowcount != 1:
+                self._reject(
+                    "map_mission_state_write_rejected",
+                    "map mission state write was rejected",
+                )
+            row = uow.query_one(
+                "SELECT date,mission_type,target,claimed,settlement FROM map_mission WHERE user_id=?",
+                (user_id,),
+            )
+            actual = (
+                str(row["date"] or ""),
+                str(row["mission_type"] or ""),
+                exact_crystal_integer(row["target"]),
+                exact_crystal_integer(row["claimed"]),
+                str(row["settlement"] or ""),
+            ) if row is not None else None
+            expected = (
+                values["date"], values["mission_type"], values["target"],
+                values["claimed"], values["settlement"],
+            )
+            if actual != expected:
+                self._reject(
+                    "map_mission_state_projection_mismatch",
+                    "map mission state projection mismatch",
+                )
         return values
 
 
@@ -547,12 +851,22 @@ class MapNearbyPlayersSqlQueryRepository:
         user_name: str,
         *,
         exclude_user_id: str | None = None,
+        raise_on_error: bool = False,
     ) -> MapNearbyTargetResult:
         realm, heaven, node_id = str(realm or ""), str(heaven or ""), str(node_id or "")
         user_name = str(user_name or "")
         player, game = Path(self.player_database), Path(self.game_database)
-        if not all((realm, heaven, node_id, user_name)) or not player.is_file() or not game.is_file():
+        if not all((realm, heaven, node_id, user_name)):
             return MapNearbyTargetResult()
+        if not player.is_file() or not game.is_file():
+            if not raise_on_error:
+                return MapNearbyTargetResult()
+            logger.error("[map-query] nearby target read failed: database missing subject=nearby_target")
+            raise DomainError(
+                "map_nearby_target_read_failed",
+                "nearby target data could not be read",
+                {"reason": "map_nearby_target_read_failed", "subject": "nearby_target"},
+            )
         scope = (
             "FROM map_status JOIN game_data.user_xiuxian AS profile "
             "ON CAST(profile.user_id AS TEXT)=CAST(map_status.user_id AS TEXT) "
@@ -583,7 +897,14 @@ class MapNearbyPlayersSqlQueryRepository:
                     "level": str(row["level"] or ""),
                     "power": require_exact_integer(row["power"] if row["power"] is not None else 0, field="power", subject="target"),
                 }
-        except Exception:
+        except Exception as exc:
+            if raise_on_error:
+                logger.exception("[map-query] nearby target read failed subject=nearby_target")
+                raise DomainError(
+                    "map_nearby_target_read_failed",
+                    "nearby target data could not be read",
+                    {"reason": "map_nearby_target_read_failed", "subject": "nearby_target"},
+                ) from exc
             return MapNearbyTargetResult()
         return MapNearbyTargetResult(target=target, has_candidates=True)
 
@@ -618,6 +939,68 @@ class MapInteractiveStartSqlRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
 
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapInteractiveWriteConflict(f"map_interactive_{suffix}", subject)
+
+    @classmethod
+    def _verify_stamina(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["user_stamina"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stamina_projection_mismatch", "stamina")
+
+    @classmethod
+    def _verify_cooldown(cls, uow, user_id: str, expected: str) -> None:
+        row = uow.query_one(
+            "SELECT gather_cd_until FROM player_data.map_cooldown WHERE user_id=?",
+            (user_id,),
+        )
+        actual = "" if row is None or row["gather_cd_until"] is None else str(row["gather_cd_until"])
+        if actual != expected:
+            cls._reject("cooldown_projection_mismatch", "map_cooldown")
+
+    @classmethod
+    def _verify_action(
+        cls, uow, user_id: str, action: dict[str, Any], action_json: str
+    ) -> None:
+        row = uow.query_one(
+            "SELECT action_id,action_type,status,state_json,settlement_json,ready_at,"
+            "expires_at,cooldown_seconds,updated_at "
+            "FROM player_data.map_interactive_actions WHERE user_id=?",
+            (user_id,),
+        )
+        expected = (
+            str(action["action_id"]), str(action["action"]), "active", action_json, "",
+            str(action["ready_ts"]), str(action["expire_ts"]),
+            exact_crystal_integer(action["cooldown_sec"]), str(action["start_ts"]),
+        )
+        actual = (
+            str(row["action_id"]), str(row["action_type"]), str(row["status"]),
+            str(row["state_json"]), str(row["settlement_json"] or ""),
+            str(row["ready_at"]), str(row["expires_at"]),
+            exact_crystal_integer(row["cooldown_seconds"]), str(row["updated_at"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("action_projection_mismatch", "map_interactive_actions")
+
+    @classmethod
+    def _verify_receipt(
+        cls, uow, operation_id: str, payload: str, status: str,
+        stamina: int, action_json: str,
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,result_status,stamina,action_json "
+            "FROM map_interactive_start_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        actual = (
+            str(row["payload"]), str(row["result_status"]),
+            exact_crystal_integer(row["stamina"]), str(row["action_json"]),
+        ) if row is not None else None
+        if actual != (payload, status, stamina, action_json):
+            cls._reject("start_receipt_projection_mismatch", "receipt")
+
     def start(self, operation_id: str, user_id: str, action_type: str, expected_stamina: int, stamina_cost: int, expected_position: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, expected_cooldown: str, action: dict[str, Any]) -> dict[str, Any]:
         operation_id, user_id, action_type = str(operation_id).strip(), str(user_id).strip(), str(action_type).strip()
         expected = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
@@ -630,61 +1013,165 @@ class MapInteractiveStartSqlRepository:
             raise ValueError("valid interactive action snapshots are required")
         identity = json.dumps([user_id, action_type], ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         action_json = json.dumps(action, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            previous = uow.query_one("SELECT payload,result_status,stamina,action_json FROM map_interactive_start_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                if str(previous["payload"]) != identity:
-                    return {"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor", "stamina": expected_stamina, "action": {}}
-                result = {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "stamina": int(previous["stamina"] or 0)}
-                try: result["action"] = json.loads(str(previous["action_json"]))
-                except json.JSONDecodeError: result["action"] = {}
-                if result["status"] not in {"applied", "duplicate"} and isinstance(result["action"], dict):
-                    result["reason"] = str(result["action"].get("_rejection_reason") or result["status"])
-                    result["subject"] = str(result["action"].get("_rejection_subject") or "actor")
-                return result
-            user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
-            if user is None: status, stamina, reason = "user_missing", expected_stamina, "user_missing"
-            else: stamina = int(user["user_stamina"] or 0); status, reason = (("state_changed", "stamina_changed") if stamina != expected_stamina else ("", ""))
-            row = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
-            if not status and (row is None or (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) != tuple(expected.values())): status, reason = "state_changed", "position_changed"
-            limit_row = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if not status and (limit_row is None or (str(limit_row["date"]), str(limit_row["gather_count"]), str(limit_row["resource_total_count"])) != (daily["date"], daily.get("gather_count", "0"), daily.get("resource_total_count", "0"))): status, reason = "state_changed", "daily_changed"
-            if not status and limit_row is not None and int(limit_row["gather_count"] or 0) >= daily_limit: status, reason = "limit_reached", "limit_reached"
-            if not status:
-                cooldown_row = uow.query_one("SELECT gather_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
-                current_cooldown = "" if cooldown_row is None or cooldown_row["gather_cd_until"] is None else str(cooldown_row["gather_cd_until"])
-                if current_cooldown != expected_cooldown:
-                    status, reason = "state_changed", "cooldown_changed"
-                elif current_cooldown and current_cooldown > str(action["start_ts"]):
-                    status, reason, action = "cooldown", "cooldown_changed", {"cooldown_until": current_cooldown}
-            if not status:
-                active = uow.query_one("SELECT action_id,state_json,expires_at,cooldown_seconds FROM player_data.map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
-                if active is not None:
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                previous = uow.query_one("SELECT payload,result_status,stamina,action_json FROM map_interactive_start_operations WHERE operation_id=?", (operation_id,))
+                if previous:
+                    if str(previous["payload"]) != identity:
+                        return {"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor", "stamina": expected_stamina, "action": {}}
                     try:
-                        previous_action = json.loads(str(active["state_json"]))
-                    except json.JSONDecodeError:
-                        previous_action = {}
-                    try:
-                        expires_at = datetime.strptime(str(active["expires_at"]), "%Y-%m-%d %H:%M:%S")
-                        start_at = datetime.strptime(str(action["start_ts"]), "%Y-%m-%d %H:%M:%S")
-                    except (TypeError, ValueError):
-                        expires_at = start_at = None
-                    if expires_at is None or start_at is None or expires_at > start_at:
-                        status, reason, action = "already_running", "action_changed", previous_action
-                    else:
-                        cooldown_until = (start_at + timedelta(seconds=int(active["cooldown_seconds"] or 0))).strftime("%Y-%m-%d %H:%M:%S")
-                        uow.execute("UPDATE player_data.map_interactive_actions SET status='expired',updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (str(action["start_ts"]), user_id, str(active["action_id"])))
-                        uow.execute("INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
-                        status, reason, action = "cooldown", "cooldown_changed", {"cooldown_until": cooldown_until}
-            if not status and stamina < stamina_cost: status, reason = "stamina_insufficient", "stamina_insufficient"
-            stored_action = action_json if not status else json.dumps({**action, "_rejection_reason": reason, "_rejection_subject": "actor"}, ensure_ascii=True, sort_keys=True)
-            uow.execute("INSERT INTO map_interactive_start_operations(operation_id,payload,result_status,stamina,action_json) VALUES(?,?,?,?,?)", (operation_id, identity, status or "applied", stamina - stamina_cost if not status else stamina, stored_action))
-            if status: return {"status": status, "reason": reason, "subject": "actor", "stamina": stamina, "action": action if status in {"already_running", "cooldown"} else {}}
-            remaining = stamina - stamina_cost
-            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
-            uow.execute("INSERT INTO player_data.map_interactive_actions(user_id,action_id,action_type,status,state_json,settlement_json,ready_at,expires_at,cooldown_seconds,updated_at) VALUES(?,?,?,'active',?,'',?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET action_id=excluded.action_id,action_type=excluded.action_type,status='active',state_json=excluded.state_json,settlement_json='',ready_at=excluded.ready_at,expires_at=excluded.expires_at,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at", (user_id, operation_id, action_type, action_json, str(action["ready_ts"]), str(action["expire_ts"]), int(action["cooldown_sec"]), str(action["start_ts"])))
-            return {"status": "applied", "stamina": remaining, "action": action}
+                        previous_stamina = exact_crystal_integer(previous["stamina"])
+                        previous_action = json.loads(str(previous["action_json"]))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        previous_stamina, previous_action = None, None
+                    if previous_stamina is None or not isinstance(previous_action, dict):
+                        return {"status": "state_changed", "reason": "map_interactive_start_receipt_invalid", "subject": "receipt", "stamina": expected_stamina, "action": {}}
+                    result_status = str(previous["result_status"])
+                    result = {
+                        "status": "duplicate" if result_status == "applied" else result_status,
+                        "stamina": previous_stamina,
+                        "action": previous_action,
+                    }
+                    if result["status"] not in {"applied", "duplicate"}:
+                        result["reason"] = str(previous_action.get("_rejection_reason") or result_status)
+                        result["subject"] = str(previous_action.get("_rejection_subject") or "actor")
+                    return result
+
+                user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+                if user is None:
+                    status, stamina, reason = "user_missing", expected_stamina, "user_missing"
+                else:
+                    stamina = exact_crystal_integer(user["user_stamina"])
+                    status, reason = (("state_changed", "stamina_changed") if stamina != expected_stamina else ("", ""))
+                    if stamina is None:
+                        status, reason = "state_changed", "map_interactive_stamina_invalid"
+                        stamina = expected_stamina
+
+                row = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
+                if not status and (row is None or (str(row["realm"]), str(row["heaven"]), str(row["node_id"])) != tuple(expected.values())):
+                    status, reason = "state_changed", "position_changed"
+                limit_row = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                if not status and (limit_row is None or (str(limit_row["date"]), str(limit_row["gather_count"]), str(limit_row["resource_total_count"])) != (daily["date"], daily.get("gather_count", "0"), daily.get("resource_total_count", "0"))):
+                    status, reason = "state_changed", "daily_changed"
+                if not status and limit_row is not None and int(limit_row["gather_count"] or 0) >= daily_limit:
+                    status, reason = "limit_reached", "limit_reached"
+                if not status:
+                    cooldown_row = uow.query_one("SELECT gather_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
+                    current_cooldown = "" if cooldown_row is None or cooldown_row["gather_cd_until"] is None else str(cooldown_row["gather_cd_until"])
+                    if current_cooldown != expected_cooldown:
+                        status, reason = "state_changed", "cooldown_changed"
+                    elif current_cooldown and current_cooldown > str(action["start_ts"]):
+                        status, reason, action = "cooldown", "cooldown_changed", {"cooldown_until": current_cooldown}
+                expired_action = None
+                if not status:
+                    active = uow.query_one("SELECT action_id,state_json,expires_at,cooldown_seconds FROM player_data.map_interactive_actions WHERE user_id=? AND status='active'", (user_id,))
+                    if active is not None:
+                        try:
+                            previous_action = json.loads(str(active["state_json"]))
+                        except json.JSONDecodeError:
+                            previous_action = {}
+                        try:
+                            expires_at = datetime.strptime(str(active["expires_at"]), "%Y-%m-%d %H:%M:%S")
+                            start_at = datetime.strptime(str(action["start_ts"]), "%Y-%m-%d %H:%M:%S")
+                        except (TypeError, ValueError):
+                            expires_at = start_at = None
+                        if expires_at is None or start_at is None or expires_at > start_at:
+                            status, reason, action = "already_running", "action_changed", previous_action
+                        else:
+                            cooldown_until = (start_at + timedelta(seconds=int(active["cooldown_seconds"] or 0))).strftime("%Y-%m-%d %H:%M:%S")
+                            expired_action = (str(active["action_id"]), cooldown_until, str(action["start_ts"]))
+                            status, reason, action = "cooldown", "cooldown_changed", {"cooldown_until": cooldown_until}
+                if not status and stamina < stamina_cost:
+                    status, reason = "stamina_insufficient", "stamina_insufficient"
+
+                result_status = status or "applied"
+                result_action = action if status in {"already_running", "cooldown"} else action if not status else {}
+                stored_action = action_json if not status else json.dumps(
+                    {**result_action, "_rejection_reason": reason, "_rejection_subject": "actor"},
+                    ensure_ascii=True, sort_keys=True,
+                )
+                result_stamina = stamina if status else stamina - stamina_cost
+
+                with uow.savepoint("map_interactive_start"):
+                    if expired_action is not None:
+                        old_action_id, cooldown_until, changed_at = expired_action
+                        cursor = uow.execute(
+                            "UPDATE player_data.map_interactive_actions SET status='expired',updated_at=? "
+                            "WHERE user_id=? AND action_id=? AND status='active'",
+                            (changed_at, user_id, old_action_id),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("terminal_action_write_rejected", "map_interactive_actions")
+                        expired_row = uow.query_one(
+                            "SELECT status,updated_at FROM player_data.map_interactive_actions "
+                            "WHERE user_id=? AND action_id=?", (user_id, old_action_id)
+                        )
+                        if expired_row is None or (str(expired_row["status"]), str(expired_row["updated_at"])) != ("expired", changed_at):
+                            self._reject("terminal_action_projection_mismatch", "map_interactive_actions")
+                        cursor = uow.execute(
+                            "INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) "
+                            "ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until",
+                            (user_id, cooldown_until),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("cooldown_write_rejected", "map_cooldown")
+                        self._verify_cooldown(uow, user_id, cooldown_until)
+                    elif not status:
+                        remaining = stamina - stamina_cost
+                        cursor = uow.execute(
+                            "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?",
+                            (remaining, user_id),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("stamina_write_rejected", "stamina")
+                        self._verify_stamina(uow, user_id, remaining)
+                        cursor = uow.execute(
+                            "INSERT INTO player_data.map_interactive_actions "
+                            "(user_id,action_id,action_type,status,state_json,settlement_json,ready_at,expires_at,cooldown_seconds,updated_at) "
+                            "VALUES(?,?,?,'active',?,'',?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET "
+                            "action_id=excluded.action_id,action_type=excluded.action_type,status='active',"
+                            "state_json=excluded.state_json,settlement_json='',ready_at=excluded.ready_at,"
+                            "expires_at=excluded.expires_at,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at",
+                            (user_id, operation_id, action_type, action_json, str(action["ready_ts"]),
+                             str(action["expire_ts"]), int(action["cooldown_sec"]), str(action["start_ts"])),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("action_write_rejected", "map_interactive_actions")
+                        self._verify_action(uow, user_id, action, action_json)
+
+                    cursor = uow.execute(
+                        "INSERT INTO map_interactive_start_operations(operation_id,payload,result_status,stamina,action_json) "
+                        "VALUES(?,?,?,?,?)",
+                        (operation_id, identity, result_status, result_stamina, stored_action),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("start_receipt_write_rejected", "receipt")
+                    self._verify_receipt(
+                        uow, operation_id, identity, result_status, result_stamina, stored_action
+                    )
+                    if expired_action is not None:
+                        self._verify_cooldown(uow, user_id, expired_action[1])
+                    elif not status:
+                        self._verify_stamina(uow, user_id, result_stamina)
+                        self._verify_action(uow, user_id, action, action_json)
+
+                return {
+                    "status": result_status, "reason": reason, "subject": "actor",
+                    "stamina": result_stamina,
+                    "action": result_action,
+                }
+        except _MapInteractiveWriteConflict as conflict:
+            return {
+                "status": "state_changed", "reason": conflict.reason,
+                "subject": conflict.subject, "stamina": expected_stamina, "action": {},
+            }
+
+
+class _MapInteractiveWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapInteractiveFailureSqlRepository:
@@ -697,27 +1184,57 @@ class MapInteractiveFailureSqlRepository:
         if not operation_id or not user_id or not action_id or outcome not in {"expired", "failed", "invalid"} or not cooldown_until:
             raise ValueError("valid terminal action is required")
         payload = json.dumps([user_id, action_id, outcome, cooldown_until], ensure_ascii=True, separators=(",", ":"))
-        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            previous = uow.query_one("SELECT payload,result_status,action_json FROM map_interactive_terminal_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                if str(previous["payload"]) != payload:
-                    return {"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor", "action": {}}
-                try: action = json.loads(str(previous["action_json"]))
-                except json.JSONDecodeError: action = {}
-                return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "action": action}
-            row = uow.query_one("SELECT state_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
-            action: dict[str, Any] = {}
-            status = "state_changed"
-            reason = "action_changed"
-            if row is not None:
-                try: action = json.loads(str(row["state_json"]))
-                except json.JSONDecodeError: action = {}
-                action["action_id"] = action_id
-                uow.execute("UPDATE map_interactive_actions SET status=?,updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (outcome, cooldown_until, user_id, action_id))
-                uow.execute("INSERT INTO map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
-                status = "applied"
-            uow.execute("INSERT INTO map_interactive_terminal_operations(operation_id,payload,result_status,action_json) VALUES(?,?,?,?)", (operation_id, payload, status, json.dumps(action, ensure_ascii=True, sort_keys=True)))
-            return {"status": status, "reason": "" if status == "applied" else reason, "subject": "actor", "action": action}
+        action_json = "{}"
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                previous = uow.query_one("SELECT payload,result_status,action_json FROM map_interactive_terminal_operations WHERE operation_id=?", (operation_id,))
+                if previous:
+                    if str(previous["payload"]) != payload:
+                        return {"status": "operation_conflict", "reason": "operation_conflict", "subject": "actor", "action": {}}
+                    try:
+                        action = json.loads(str(previous["action_json"]))
+                    except (TypeError, json.JSONDecodeError):
+                        return {"status": "state_changed", "reason": "map_interactive_terminal_receipt_invalid", "subject": "receipt", "action": {}}
+                    if not isinstance(action, dict):
+                        return {"status": "state_changed", "reason": "map_interactive_terminal_receipt_invalid", "subject": "receipt", "action": {}}
+                    return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "action": action}
+                row = uow.query_one("SELECT state_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
+                action: dict[str, Any] = {}
+                status = "state_changed"
+                reason = "action_changed"
+                with uow.savepoint("map_interactive_failure"):
+                    if row is not None:
+                        try:
+                            action = json.loads(str(row["state_json"]))
+                        except (TypeError, json.JSONDecodeError):
+                            action = {}
+                        if not isinstance(action, dict):
+                            MapInteractiveStartSqlRepository._reject("terminal_action_state_invalid", "map_interactive_actions")
+                        action["action_id"] = action_id
+                        cursor = uow.execute("UPDATE map_interactive_actions SET status=?,updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (outcome, cooldown_until, user_id, action_id))
+                        if cursor.rowcount != 1:
+                            MapInteractiveStartSqlRepository._reject("terminal_action_write_rejected", "map_interactive_actions")
+                        projected = uow.query_one("SELECT status,updated_at FROM map_interactive_actions WHERE user_id=? AND action_id=?", (user_id, action_id))
+                        if projected is None or (str(projected["status"]), str(projected["updated_at"])) != (outcome, cooldown_until):
+                            MapInteractiveStartSqlRepository._reject("terminal_action_projection_mismatch", "map_interactive_actions")
+                        cursor = uow.execute("INSERT INTO map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
+                        if cursor.rowcount != 1:
+                            MapInteractiveStartSqlRepository._reject("terminal_cooldown_write_rejected", "map_cooldown")
+                        cooldown = uow.query_one("SELECT gather_cd_until FROM map_cooldown WHERE user_id=?", (user_id,))
+                        if cooldown is None or str(cooldown["gather_cd_until"] or "") != cooldown_until:
+                            MapInteractiveStartSqlRepository._reject("terminal_cooldown_projection_mismatch", "map_cooldown")
+                        status = "applied"
+                        reason = ""
+                    action_json = json.dumps(action, ensure_ascii=True, sort_keys=True)
+                    cursor = uow.execute("INSERT INTO map_interactive_terminal_operations(operation_id,payload,result_status,action_json) VALUES(?,?,?,?)", (operation_id, payload, status, action_json))
+                    if cursor.rowcount != 1:
+                        MapInteractiveStartSqlRepository._reject("terminal_receipt_write_rejected", "receipt")
+                    receipt = uow.query_one("SELECT payload,result_status,action_json FROM map_interactive_terminal_operations WHERE operation_id=?", (operation_id,))
+                    if receipt is None or (str(receipt["payload"]), str(receipt["result_status"]), str(receipt["action_json"])) != (payload, status, action_json):
+                        MapInteractiveStartSqlRepository._reject("terminal_receipt_projection_mismatch", "receipt")
+            return {"status": status, "reason": reason, "subject": "actor", "action": action}
+        except _MapInteractiveWriteConflict as conflict:
+            return {"status": "state_changed", "reason": conflict.reason, "subject": conflict.subject, "action": {}}
 
 
 class MapInteractiveSettlementSqlRepository:
@@ -729,20 +1246,35 @@ class MapInteractiveSettlementSqlRepository:
         if not user_id or not action_id or not isinstance(settlement, dict):
             raise ValueError("user, action and settlement are required")
         value = json.dumps(settlement, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-        with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            row = uow.query_one("SELECT state_json,settlement_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
-            if row is None:
-                return {"status": "state_changed", "reason": "action_changed", "subject": "actor", "action": {}}
-            try: action = json.loads(str(row["state_json"]))
-            except json.JSONDecodeError: action = {}
-            action["action_id"] = action_id
-            if row["settlement_json"]:
-                try: action["settlement"] = json.loads(str(row["settlement_json"]))
-                except json.JSONDecodeError: action["settlement"] = {}
-                return {"status": "duplicate", "action": action}
-            uow.execute("UPDATE map_interactive_actions SET settlement_json=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND action_id=? AND status='active'", (value, user_id, action_id))
-            action["settlement"] = settlement
-            return {"status": "applied", "action": action}
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                row = uow.query_one("SELECT state_json,settlement_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
+                if row is None:
+                    return {"status": "state_changed", "reason": "action_changed", "subject": "actor", "action": {}}
+                try:
+                    action = json.loads(str(row["state_json"]))
+                except (TypeError, json.JSONDecodeError):
+                    return {"status": "state_changed", "reason": "map_interactive_action_state_invalid", "subject": "map_interactive_actions", "action": {}}
+                if not isinstance(action, dict):
+                    return {"status": "state_changed", "reason": "map_interactive_action_state_invalid", "subject": "map_interactive_actions", "action": {}}
+                action["action_id"] = action_id
+                if row["settlement_json"]:
+                    try:
+                        action["settlement"] = json.loads(str(row["settlement_json"]))
+                    except (TypeError, json.JSONDecodeError):
+                        return {"status": "state_changed", "reason": "map_interactive_settlement_invalid", "subject": "map_interactive_actions", "action": {}}
+                    return {"status": "duplicate", "action": action}
+                with uow.savepoint("map_interactive_settlement"):
+                    cursor = uow.execute("UPDATE map_interactive_actions SET settlement_json=?,updated_at=CURRENT_TIMESTAMP WHERE user_id=? AND action_id=? AND status='active'", (value, user_id, action_id))
+                    if cursor.rowcount != 1:
+                        MapInteractiveStartSqlRepository._reject("settlement_write_rejected", "map_interactive_actions")
+                    projected = uow.query_one("SELECT settlement_json FROM map_interactive_actions WHERE user_id=? AND action_id=? AND status='active'", (user_id, action_id))
+                    if projected is None or str(projected["settlement_json"] or "") != value:
+                        MapInteractiveStartSqlRepository._reject("settlement_projection_mismatch", "map_interactive_actions")
+                action["settlement"] = settlement
+                return {"status": "applied", "action": action}
+        except _MapInteractiveWriteConflict as conflict:
+            return {"status": "state_changed", "reason": conflict.reason, "subject": conflict.subject, "action": {}}
 
 
 class MapResourceRewardSqlRepository:
@@ -750,6 +1282,63 @@ class MapResourceRewardSqlRepository:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
         self.clock = clock
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapInteractiveWriteConflict(f"map_resource_reward_{suffix}", subject)
+
+    @classmethod
+    def _verify_daily(cls, uow, user_id: str, expected: tuple[str, int, int]) -> None:
+        row = uow.query_one(
+            "SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?",
+            (user_id,),
+        )
+        actual = (
+            str(row["date"] or ""), exact_crystal_integer(row["gather_count"]),
+            exact_crystal_integer(row["resource_total_count"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("daily_projection_mismatch", "map_daily_limit")
+
+    @classmethod
+    def _verify_wallet(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["stone"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, expected: tuple[str, str, int, int]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        actual = (
+            str(row["goods_name"] or ""), str(row["goods_type"] or ""),
+            exact_crystal_integer(row["goods_num"]), exact_crystal_integer(row["bind_num"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_action(cls, uow, user_id: str, action_id: str, updated_at: str) -> None:
+        row = uow.query_one(
+            "SELECT status,updated_at FROM player_data.map_interactive_actions WHERE user_id=? AND action_id=?",
+            (user_id, action_id),
+        )
+        if row is None or (str(row["status"]), str(row["updated_at"])) != ("completed", updated_at):
+            cls._reject("action_projection_mismatch", "map_interactive_actions")
+
+    @classmethod
+    def _verify_cooldown(cls, uow, user_id: str, expected: str) -> None:
+        row = uow.query_one(
+            "SELECT gather_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,)
+        )
+        actual = "" if row is None or row["gather_cd_until"] is None else str(row["gather_cd_until"])
+        if actual != expected:
+            cls._reject("cooldown_projection_mismatch", "map_cooldown")
 
     def settle(self, operation_id: str, user_id: str, expected_daily: dict[str, Any], daily_limit: int, stone: int, items: list[dict[str, Any]] | tuple[dict[str, Any], ...], max_goods_num: int, *, action_id: str, action_settlement: dict[str, Any], cooldown_until: str) -> dict[str, Any]:
         operation_id, user_id, action_id = str(operation_id).strip(), str(user_id).strip(), str(action_id).strip()
@@ -760,51 +1349,157 @@ class MapResourceRewardSqlRepository:
             raise ValueError("valid resource reward lifecycle is required")
         settlement_json = json.dumps(action_settlement, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         payload = json.dumps([user_id, expected, daily_limit, stone, rewards, max_goods_num, action_id, settlement_json, cooldown_until], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            old = uow.query_one("SELECT payload,stone,rewards FROM map_resource_reward_operations WHERE operation_id=?", (operation_id,))
-            if old:
-                if str(old["payload"]) != payload:
-                    return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": as_int_like(old["stone"]), "rewards": tuple(tuple(map(int, value)) for value in json.loads(str(old["rewards"]))) }
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
-                return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
-            action = uow.query_one("SELECT status,settlement_json FROM player_data.map_interactive_actions WHERE user_id=? AND action_id=?", (user_id, action_id))
-            if action is None or str(action["status"]) != "active" or str(action["settlement_json"] or "") != settlement_json:
-                return {"status": "state_changed", "reason": "action_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            daily = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if daily is None or (str(daily["date"]), str(daily["gather_count"]), str(daily["resource_total_count"])) != (expected["date"], expected.get("gather_count", "0"), expected.get("resource_total_count", "0")):
-                return {"status": "state_changed", "reason": "daily_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            if int(daily["gather_count"] or 0) >= daily_limit:
-                return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stone": 0, "rewards": ()}
-            totals: dict[int, int] = {}
-            metadata: dict[int, tuple[str, str]] = {}
-            for item_id, name, item_type, amount in rewards:
-                totals[item_id] = totals.get(item_id, 0) + amount
-                metadata[item_id] = (name, item_type)
-            for item_id, amount in totals.items():
-                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
-                    return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
-            uow.execute("UPDATE player_data.map_daily_limit SET gather_count=?,resource_total_count=? WHERE user_id=?", (int(daily["gather_count"] or 0) + 1, int(daily["resource_total_count"] or 0) + 1, user_id))
-            if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
-            now = self.clock.now() if self.clock is not None else None
-            now_value = now.isoformat() if now is not None else ""
-            for item_id, amount in totals.items():
-                name, item_type = metadata[item_id]
-                uow.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now_value, now_value, amount))
-            uow.execute("UPDATE player_data.map_interactive_actions SET status='completed',updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (now_value or cooldown_until, user_id, action_id))
-            uow.execute("INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
-            compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_resource_reward_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
-            return {"status": "applied", "stone": stone, "rewards": compact}
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                old = uow.query_one("SELECT payload,stone,rewards FROM map_resource_reward_operations WHERE operation_id=?", (operation_id,))
+                if old:
+                    if str(old["payload"]) != payload:
+                        return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
+                    try:
+                        old_stone = exact_crystal_integer(old["stone"])
+                        old_rewards = tuple(tuple(map(int, value)) for value in json.loads(str(old["rewards"])))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        return {"status": "state_changed", "reason": "map_resource_reward_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                    if old_stone is None:
+                        return {"status": "state_changed", "reason": "map_resource_reward_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                    return {"status": "duplicate", "stone": old_stone, "rewards": old_rewards}
+                user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                if user is None:
+                    return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
+                old_stone = exact_crystal_integer(user["stone"])
+                if old_stone is None:
+                    return {"status": "state_changed", "reason": "map_resource_reward_stone_invalid", "subject": "stone_wallet", "stone": 0, "rewards": ()}
+                action = uow.query_one("SELECT status,settlement_json FROM player_data.map_interactive_actions WHERE user_id=? AND action_id=?", (user_id, action_id))
+                if action is None or str(action["status"]) != "active" or str(action["settlement_json"] or "") != settlement_json:
+                    return {"status": "state_changed", "reason": "action_changed", "subject": "actor", "stone": 0, "rewards": ()}
+                daily = uow.query_one("SELECT date,gather_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                if daily is None or (str(daily["date"]), str(daily["gather_count"]), str(daily["resource_total_count"])) != (expected["date"], expected.get("gather_count", "0"), expected.get("resource_total_count", "0")):
+                    return {"status": "state_changed", "reason": "daily_changed", "subject": "actor", "stone": 0, "rewards": ()}
+                current_daily = (
+                    str(daily["date"] or ""), exact_crystal_integer(daily["gather_count"]),
+                    exact_crystal_integer(daily["resource_total_count"]),
+                )
+                if current_daily[1] is None or current_daily[2] is None:
+                    return {"status": "state_changed", "reason": "map_resource_reward_daily_invalid", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                if current_daily[1] >= daily_limit:
+                    return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stone": 0, "rewards": ()}
+                totals: dict[int, int] = {}
+                metadata: dict[int, tuple[str, str]] = {}
+                for item_id, name, item_type, amount in rewards:
+                    totals[item_id] = totals.get(item_id, 0) + amount
+                    metadata[item_id] = (name, item_type)
+                inventory_before: dict[int, tuple[str, str, int, int]] = {}
+                for item_id, amount in totals.items():
+                    row = uow.query_one("SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                    if row is None:
+                        before_num = before_bind = 0
+                    else:
+                        before_num = exact_crystal_integer(row["goods_num"])
+                        before_bind = (
+                            0 if row["bind_num"] is None
+                            else exact_crystal_integer(row["bind_num"])
+                        )
+                        if before_num is None or before_bind is None:
+                            return {"status": "state_changed", "reason": "map_resource_reward_inventory_invalid", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                    if before_num + amount > max_goods_num:
+                        return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
+                    name, item_type = metadata[item_id]
+                    inventory_before[item_id] = (name, item_type, before_num, before_bind)
+                expected_daily_after = (current_daily[0], current_daily[1] + 1, current_daily[2] + 1)
+                expected_stone = old_stone + stone
+                now = self.clock.now() if self.clock is not None else None
+                now_value = now.isoformat() if now is not None else ""
+                action_updated_at = now_value or cooldown_until
+                compact = tuple(sorted(totals.items()))
+                rewards_json = json.dumps(compact)
+                with uow.savepoint("map_resource_reward"):
+                    cursor = uow.execute("UPDATE player_data.map_daily_limit SET gather_count=?,resource_total_count=? WHERE user_id=?", (expected_daily_after[1], expected_daily_after[2], user_id))
+                    if cursor.rowcount != 1:
+                        self._reject("daily_write_rejected", "map_daily_limit")
+                    self._verify_daily(uow, user_id, expected_daily_after)
+                    if stone:
+                        cursor = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
+                        if cursor.rowcount != 1:
+                            self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_wallet(uow, user_id, expected_stone)
+                    for item_id, amount in totals.items():
+                        name, item_type, before_num, before_bind = inventory_before[item_id]
+                        cursor = uow.execute("INSERT INTO back (user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now_value, now_value, amount))
+                        if cursor.rowcount != 1:
+                            self._reject("inventory_write_rejected", f"item:{item_id}")
+                        self._verify_inventory(uow, user_id, item_id, (name, item_type, before_num + amount, before_bind + amount))
+                    cursor = uow.execute("UPDATE player_data.map_interactive_actions SET status='completed',updated_at=? WHERE user_id=? AND action_id=? AND status='active'", (action_updated_at, user_id, action_id))
+                    if cursor.rowcount != 1:
+                        self._reject("action_write_rejected", "map_interactive_actions")
+                    self._verify_action(uow, user_id, action_id, action_updated_at)
+                    cursor = uow.execute("INSERT INTO player_data.map_cooldown(user_id,gather_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET gather_cd_until=excluded.gather_cd_until", (user_id, cooldown_until))
+                    if cursor.rowcount != 1:
+                        self._reject("cooldown_write_rejected", "map_cooldown")
+                    self._verify_cooldown(uow, user_id, cooldown_until)
+                    cursor = uow.execute("INSERT INTO map_resource_reward_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, rewards_json))
+                    if cursor.rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    receipt = uow.query_one("SELECT payload,stone,rewards FROM map_resource_reward_operations WHERE operation_id=?", (operation_id,))
+                    actual = (str(receipt["payload"]), exact_crystal_integer(receipt["stone"]), str(receipt["rewards"])) if receipt is not None else None
+                    if actual != (payload, stone, rewards_json):
+                        self._reject("receipt_projection_mismatch", "receipt")
+                    self._verify_daily(uow, user_id, expected_daily_after)
+                    self._verify_wallet(uow, user_id, expected_stone)
+                    self._verify_action(uow, user_id, action_id, action_updated_at)
+                    self._verify_cooldown(uow, user_id, cooldown_until)
+                return {"status": "applied", "stone": stone, "rewards": compact}
+        except _MapInteractiveWriteConflict as conflict:
+            return {"status": "state_changed", "reason": conflict.reason, "subject": conflict.subject, "stone": 0, "rewards": ()}
 
 
 class MapExploreStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapExploreStartWriteConflict(f"map_explore_start_{suffix}", subject)
+
+    @classmethod
+    def _verify_stamina(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["user_stamina"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stamina_projection_mismatch", "stamina")
+
+    @classmethod
+    def _verify_status(cls, uow, user_id: str, target: dict[str, str]) -> None:
+        row = uow.query_one(
+            "SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min "
+            "FROM player_data.map_explore_status WHERE user_id=?", (user_id,),
+        )
+        integer_fields = {"running", "duration_min", "max_duration_min", "interval_min"}
+        if row is None:
+            cls._reject("status_projection_mismatch", "map_explore_status")
+        for field in target:
+            actual = exact_crystal_integer(row[field]) if field in integer_fields else str(row[field] or "")
+            wanted = exact_crystal_integer(target[field]) if field in integer_fields else str(target[field] or "")
+            if actual is None or actual != wanted:
+                cls._reject("status_projection_mismatch", "map_explore_status")
+
+    @classmethod
+    def _verify_cooldown(cls, uow, user_id: str, cooldown_until: str) -> None:
+        row = uow.query_one(
+            "SELECT explore_start_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,),
+        )
+        if row is None or str(row["explore_start_cd_until"] or "") != cooldown_until:
+            cls._reject("cooldown_projection_mismatch", "map_cooldown")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stamina: int) -> None:
+        row = uow.query_one(
+            "SELECT payload,stamina FROM map_explore_start_operations WHERE operation_id=?", (operation_id,),
+        )
+        actual_stamina = exact_crystal_integer(row["stamina"]) if row is not None else None
+        if row is None or str(row["payload"]) != payload or actual_stamina != stamina:
+            cls._reject("receipt_projection_mismatch", "receipt")
 
     def start(self, operation_id: str, user_id: str, expected_stamina: int, stamina_cost: int, expected_position: dict[str, Any], expected_status: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, expected_cooldown: str, cooldown_until: str, new_status: dict[str, Any]) -> dict[str, Any]:
         operation_id, user_id = str(operation_id).strip(), str(user_id).strip()
@@ -817,39 +1512,236 @@ class MapExploreStartSqlRepository:
         if not operation_id or not user_id or min(stamina, cost, limit) < 0 or not {"realm", "heaven", "node_id"}.issubset(position) or status.get("running", "0") != "0" or not daily.get("date") or target.get("running") != "1":
             raise ValueError("valid operation and exploration snapshots are required")
         payload = json.dumps([user_id, stamina, cost, position, status, daily, limit, expected_cooldown, str(cooldown_until), target], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            old = uow.query_one("SELECT payload,stamina FROM map_explore_start_operations WHERE operation_id=?", (operation_id,))
-            if old:
-                return {"status": "duplicate" if str(old["payload"]) == payload else "state_changed", "stamina": int(old["stamina"]) if str(old["payload"]) == payload else stamina, "reason": "" if str(old["payload"]) == payload else "operation_conflict", "subject": "actor"}
-            user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
-            if user is None: return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stamina": stamina}
-            current_stamina = int(user["user_stamina"] or 0)
-            if current_stamina != stamina: return {"status": "state_changed", "reason": "stamina_changed", "subject": "actor", "stamina": current_stamina}
-            if current_stamina < cost: return {"status": "stamina_insufficient", "reason": "stamina_insufficient", "subject": "actor", "stamina": current_stamina}
-            pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
-            if pos is None or tuple(str(pos[key]) for key in position) != tuple(position.values()): return {"status": "state_changed", "reason": "position_changed", "subject": "actor", "stamina": current_stamina}
-            state = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
-            if state is None or any(str("" if state[key] is None else state[key]) != wanted for key, wanted in status.items()):
-                return {"status": "already_running" if state is not None and int(state["running"] or 0) == 1 else "state_changed", "reason": "explore_changed", "subject": "actor", "stamina": current_stamina}
-            daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")): return {"status": "state_changed", "reason": "daily_changed", "subject": "actor", "stamina": current_stamina}
-            if int(daily_row["explore_count"] or 0) >= limit: return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stamina": current_stamina}
-            cd = uow.query_one("SELECT explore_start_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
-            current_cd = "" if cd is None or cd["explore_start_cd_until"] is None else str(cd["explore_start_cd_until"])
-            if current_cd != expected_cooldown: return {"status": "state_changed", "reason": "cooldown_changed", "subject": "actor", "stamina": current_stamina}
-            remaining = current_stamina - cost
-            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
-            fields = ("running", "node_type", "node_name", "start_time", "duration_min", "settlement", "max_duration_min", "interval_min")
-            uow.execute("UPDATE player_data.map_explore_status SET " + ",".join(f"{key}=?" for key in fields) + " WHERE user_id=?", tuple(target.get(key, "") for key in fields) + (user_id,))
-            uow.execute("INSERT INTO player_data.map_cooldown(user_id,explore_start_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET explore_start_cd_until=excluded.explore_start_cd_until", (user_id, str(cooldown_until)))
-            uow.execute("INSERT INTO map_explore_start_operations(operation_id,payload,stamina) VALUES(?,?,?)", (operation_id, payload, remaining))
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                old = uow.query_one("SELECT payload,stamina FROM map_explore_start_operations WHERE operation_id=?", (operation_id,))
+                if old:
+                    if str(old["payload"]) != payload:
+                        return {"status": "state_changed", "stamina": stamina, "reason": "operation_conflict", "subject": "receipt"}
+                    old_stamina = exact_crystal_integer(old["stamina"])
+                    if old_stamina is None:
+                        return {"status": "state_changed", "stamina": stamina, "reason": "map_explore_start_receipt_invalid", "subject": "receipt"}
+                    return {"status": "duplicate", "stamina": old_stamina}
+                user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+                if user is None: return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stamina": stamina}
+                current_stamina = exact_crystal_integer(user["user_stamina"])
+                if current_stamina is None or current_stamina != stamina: return {"status": "state_changed", "reason": "stamina_changed", "subject": "stamina", "stamina": stamina if current_stamina is None else current_stamina}
+                if current_stamina < cost: return {"status": "stamina_insufficient", "reason": "stamina_insufficient", "subject": "actor", "stamina": current_stamina}
+                pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
+                if pos is None or tuple(str(pos[key]) for key in position) != tuple(position.values()): return {"status": "state_changed", "reason": "position_changed", "subject": "map_status", "stamina": current_stamina}
+                state = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
+                if state is None or any(str("" if state[key] is None else state[key]) != wanted for key, wanted in status.items()):
+                    return {"status": "already_running" if state is not None and int(state["running"] or 0) == 1 else "state_changed", "reason": "explore_changed", "subject": "map_explore_status", "stamina": current_stamina}
+                daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")): return {"status": "state_changed", "reason": "daily_changed", "subject": "map_daily_limit", "stamina": current_stamina}
+                if int(daily_row["explore_count"] or 0) >= limit: return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stamina": current_stamina}
+                cd = uow.query_one("SELECT explore_start_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,))
+                current_cd = "" if cd is None or cd["explore_start_cd_until"] is None else str(cd["explore_start_cd_until"])
+                if current_cd != expected_cooldown: return {"status": "state_changed", "reason": "cooldown_changed", "subject": "map_cooldown", "stamina": current_stamina}
+                remaining = current_stamina - cost
+                fields = ("running", "node_type", "node_name", "start_time", "duration_min", "settlement", "max_duration_min", "interval_min")
+                with uow.savepoint("map_explore_start"):
+                    if uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id)).rowcount != 1:
+                        self._reject("stamina_write_rejected", "stamina")
+                    self._verify_stamina(uow, user_id, remaining)
+                    if uow.execute("UPDATE player_data.map_explore_status SET " + ",".join(f"{key}=?" for key in fields) + " WHERE user_id=?", tuple(target.get(key, "") for key in fields) + (user_id,)).rowcount != 1:
+                        self._reject("status_write_rejected", "map_explore_status")
+                    self._verify_status(uow, user_id, target)
+                    if uow.execute("INSERT INTO player_data.map_cooldown(user_id,explore_start_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET explore_start_cd_until=excluded.explore_start_cd_until", (user_id, str(cooldown_until))).rowcount != 1:
+                        self._reject("cooldown_write_rejected", "map_cooldown")
+                    self._verify_cooldown(uow, user_id, str(cooldown_until))
+                    if uow.execute("INSERT INTO map_explore_start_operations(operation_id,payload,stamina) VALUES(?,?,?)", (operation_id, payload, remaining)).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, remaining)
+                    self._verify_stamina(uow, user_id, remaining)
+                    self._verify_status(uow, user_id, target)
+                    self._verify_cooldown(uow, user_id, str(cooldown_until))
             return {"status": "applied", "stamina": remaining}
+        except _MapExploreStartWriteConflict as conflict:
+            return {"status": "state_changed", "stamina": stamina,
+                    "reason": conflict.reason, "subject": conflict.subject}
+
+
+class _MapExploreStartWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapExploreSettlementSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
         self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapExploreSettlementWriteConflict(
+            f"map_explore_settlement_{suffix}", subject
+        )
+
+    @classmethod
+    def _verify_daily(cls, uow, user_id: str, expected: tuple[str, int, int]) -> None:
+        row = uow.query_one(
+            "SELECT date,explore_count,resource_total_count "
+            "FROM player_data.map_daily_limit WHERE user_id=?",
+            (user_id,),
+        )
+        actual = (
+            str(row["date"] or ""),
+            exact_crystal_integer(row["explore_count"]),
+            exact_crystal_integer(row["resource_total_count"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("daily_projection_mismatch", "map_daily_limit")
+
+    @classmethod
+    def _verify_status(cls, uow, user_id: str) -> None:
+        row = uow.query_one(
+            "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+            "max_duration_min,interval_min "
+            "FROM player_data.map_explore_status WHERE user_id=?",
+            (user_id,),
+        )
+        cleared = (0, "", "", "", 0, "", 0, 0)
+        actual = (
+            exact_crystal_integer(row["running"]),
+            str(row["node_type"] or ""),
+            str(row["node_name"] or ""),
+            str(row["start_time"] or ""),
+            exact_crystal_integer(row["duration_min"]),
+            str(row["settlement"] or ""),
+            exact_crystal_integer(row["max_duration_min"]),
+            exact_crystal_integer(row["interval_min"]),
+        ) if row is not None else None
+        if actual != cleared:
+            cls._reject("status_projection_mismatch", "map_explore_status")
+
+    @classmethod
+    def _verify_wallet(cls, uow, user_id: str, expected_stone: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["stone"]) if row is not None else None
+        if actual != expected_stone:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, expected_num: int, expected_bind: int
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        actual = (
+            exact_crystal_integer(row["goods_num"]),
+            exact_crystal_integer(row["bind_num"]),
+        ) if row is not None else None
+        if actual != (expected_num, expected_bind):
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(
+        cls, uow, operation_id: str, payload: str, stone: int, rewards: tuple[tuple[int, int], ...]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone,rewards FROM map_explore_settlement_operations "
+            "WHERE operation_id=?",
+            (operation_id,),
+        )
+        try:
+            actual_rewards = tuple(
+                sorted((int(item_id), int(amount)) for item_id, amount in json.loads(row["rewards"]))
+            ) if row is not None else None
+        except (TypeError, ValueError, json.JSONDecodeError):
+            actual_rewards = None
+        actual_stone = exact_crystal_integer(row["stone"]) if row is not None else None
+        if (
+            row is None or str(row["payload"]) != payload
+            or actual_stone != stone or actual_rewards != rewards
+        ):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    @staticmethod
+    def _verify_explore_state(uow, user_id: str, expected: dict[str, str]) -> None:
+        columns = {
+            str(row["name"])
+            for row in uow.query_all("PRAGMA table_info(map_explore_status)")
+        }
+        legacy_field = ",reward_plan" if "reward_plan" in columns else ""
+        row = uow.query_one(
+            "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+            "max_duration_min,interval_min" + legacy_field
+            + " FROM map_explore_status WHERE user_id=?",
+            (user_id,),
+        )
+        fields = (
+            "running", "node_type", "node_name", "start_time", "duration_min",
+            "settlement", "max_duration_min", "interval_min",
+        )
+        if row is None or any(
+            str("" if row[key] is None else row[key]) != expected[key]
+            for key in fields
+        ):
+            MapExploreSettlementSqlRepository._reject(
+                "snapshot_projection_mismatch", "map_explore_status"
+            )
+        if "reward_plan" in columns and str(row["reward_plan"] or ""):
+            MapExploreSettlementSqlRepository._reject(
+                "snapshot_projection_mismatch", "map_explore_status"
+            )
+
+    def prepare_snapshot(
+        self, user_id: str, expected_state: dict[str, Any], settlement: str
+    ) -> dict[str, Any]:
+        state = {key: str(value) for key, value in dict(expected_state).items()}
+        if state.get("running") != "1" or not settlement:
+            raise ValueError("an active exploration and non-empty settlement are required")
+        target = dict(state, settlement=str(settlement))
+        try:
+            with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
+                current = uow.query_one(
+                    "SELECT running,node_type,node_name,start_time,duration_min,settlement,"
+                    "max_duration_min,interval_min FROM map_explore_status WHERE user_id=?",
+                    (str(user_id),),
+                )
+                fields = (
+                    "running", "node_type", "node_name", "start_time", "duration_min",
+                    "settlement", "max_duration_min", "interval_min",
+                )
+                if current is None or any(
+                    str("" if current[key] is None else current[key]) != state[key]
+                    for key in fields
+                ):
+                    if current is not None and all(
+                        str("" if current[key] is None else current[key]) == target[key]
+                        for key in fields
+                    ):
+                        return {"status": "applied"}
+                    return {
+                        "status": "state_changed",
+                        "reason": "explore_changed",
+                        "subject": "map_explore_status",
+                    }
+                columns = {
+                    str(row["name"])
+                    for row in uow.query_all("PRAGMA table_info(map_explore_status)")
+                }
+                legacy_update = ",reward_plan=''" if "reward_plan" in columns else ""
+                with uow.savepoint("map_explore_prepare_snapshot"):
+                    cursor = uow.execute(
+                        "UPDATE map_explore_status SET settlement=?" + legacy_update
+                        + " WHERE user_id=?",
+                        (settlement, str(user_id)),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("snapshot_write_rejected", "map_explore_status")
+                    self._verify_explore_state(uow, str(user_id), target)
+            return {"status": "applied"}
+        except _MapExploreSettlementWriteConflict as conflict:
+            return {
+                "status": "state_changed",
+                "reason": conflict.reason,
+                "subject": conflict.subject,
+            }
 
     def settle(self, operation_id: str, user_id: str, expected_state: dict[str, Any], expected_daily: dict[str, Any], daily_limit: int, stone: int, items: list[dict[str, Any]], max_goods_num: int) -> dict[str, Any]:
         state = {key: str(value) for key, value in dict(expected_state).items()}
@@ -860,43 +1752,117 @@ class MapExploreSettlementSqlRepository:
         if not operation_id or state.get("running") != "1" or not daily.get("date") or min(daily_limit, stone, max_goods_num) < 0:
             raise ValueError("valid explore settlement is required")
         payload = json.dumps([user_id, state, daily, daily_limit, stone, rewards, max_goods_num], ensure_ascii=True, sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            uow.attach_database(self.player_database, "player_data")
-            old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
-            if old:
-                if str(old["payload"]) != payload:
-                    return {"status": "state_changed", "reason": "operation_conflict", "subject": "actor", "stone": 0, "rewards": ()}
-                return {"status": "duplicate", "stone": as_int_like(old["stone"]), "rewards": tuple(tuple(map(int, x)) for x in json.loads(str(old["rewards"])))}
-            if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
-                return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
-            current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
-            if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
-                return {"status": "state_changed", "reason": "explore_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
-                return {"status": "state_changed", "reason": "daily_changed", "subject": "actor", "stone": 0, "rewards": ()}
-            if int(daily_row["explore_count"] or 0) >= daily_limit:
-                return {"status": "limit_reached", "reason": "limit_reached", "subject": "actor", "stone": 0, "rewards": ()}
-            totals: dict[int, int] = {}
-            metadata: dict[int, tuple[str, str]] = {}
-            for item_id, name, item_type, amount in rewards:
-                totals[item_id] = totals.get(item_id, 0) + amount
-                metadata[item_id] = (name, item_type)
-            for item_id, amount in totals.items():
-                row = uow.query_one("SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-                if (int(row["goods_num"]) if row else 0) + amount > max_goods_num:
-                    return {"status": "inventory_full", "reason": "inventory_full", "subject": "actor", "stone": 0, "rewards": ()}
-            uow.execute("UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?", (int(daily_row["explore_count"] or 0) + 1, int(daily_row["resource_total_count"] or 0) + 1, user_id))
-            uow.execute("UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?", (user_id,))
-            if stone:
-                uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?", (stone, user_id))
-            now = self.clock.now().isoformat()
-            for item_id, amount in totals.items():
-                name, item_type = metadata[item_id]
-                uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time", (user_id, item_id, name, item_type, amount, now, now, amount))
-            compact = tuple(sorted(totals.items()))
-            uow.execute("INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)", (operation_id, payload, stone, json.dumps(compact)))
+        try:
+            with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+                uow.attach_database(self.player_database, "player_data")
+                old = uow.query_one("SELECT payload,stone,rewards FROM map_explore_settlement_operations WHERE operation_id=?", (operation_id,))
+                if old:
+                    if str(old["payload"]) != payload:
+                        return {"status": "state_changed", "reason": "operation_conflict", "subject": "receipt", "stone": 0, "rewards": ()}
+                    try:
+                        old_stone = exact_crystal_integer(old["stone"])
+                        old_rewards = tuple(sorted((int(item_id), int(amount)) for item_id, amount in json.loads(old["rewards"])))
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        old_stone, old_rewards = None, ()
+                    if old_stone is None:
+                        return {"status": "state_changed", "reason": "map_explore_settlement_receipt_invalid", "subject": "receipt", "stone": 0, "rewards": ()}
+                    return {"status": "duplicate", "stone": old_stone, "rewards": old_rewards}
+                if uow.query_one("SELECT 1 FROM user_xiuxian WHERE user_id=?", (user_id,)) is None:
+                    return {"status": "user_missing", "reason": "user_missing", "subject": "actor", "stone": 0, "rewards": ()}
+                current = uow.query_one("SELECT running,node_type,node_name,start_time,duration_min,settlement,max_duration_min,interval_min FROM player_data.map_explore_status WHERE user_id=?", (user_id,))
+                if current is None or any(str("" if current[k] is None else current[k]) != wanted for k, wanted in state.items()):
+                    return {"status": "state_changed", "reason": "explore_changed", "subject": "map_explore_status", "stone": 0, "rewards": ()}
+                daily_row = uow.query_one("SELECT date,explore_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                if daily_row is None or (str(daily_row["date"]), str(daily_row["explore_count"]), str(daily_row["resource_total_count"])) != (daily["date"], daily.get("explore_count", "0"), daily.get("resource_total_count", "0")):
+                    return {"status": "state_changed", "reason": "daily_changed", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                old_count = exact_crystal_integer(daily_row["explore_count"])
+                old_resources = exact_crystal_integer(daily_row["resource_total_count"])
+                if old_count is None or old_resources is None:
+                    return {"status": "state_changed", "reason": "map_explore_settlement_daily_invalid", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                if old_count >= daily_limit:
+                    return {"status": "limit_reached", "reason": "limit_reached", "subject": "map_daily_limit", "stone": 0, "rewards": ()}
+                totals: dict[int, int] = {}
+                metadata: dict[int, tuple[str, str]] = {}
+                for item_id, name, item_type, amount in rewards:
+                    totals[item_id] = totals.get(item_id, 0) + amount
+                    metadata[item_id] = (name, item_type)
+                existing_items = {}
+                for item_id, amount in totals.items():
+                    row = uow.query_one("SELECT goods_num,COALESCE(bind_num,0) AS bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+                    old_num = exact_crystal_integer(row["goods_num"]) if row is not None else 0
+                    old_bind = exact_crystal_integer(row["bind_num"]) if row is not None else 0
+                    if old_num is None or old_bind is None or old_num < 0 or old_bind < 0:
+                        return {"status": "state_changed", "reason": "map_explore_settlement_inventory_invalid", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                    if old_num + amount > max_goods_num:
+                        return {"status": "inventory_full", "reason": "inventory_full", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                    existing_items[item_id] = (old_num, old_bind)
+                wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+                old_stone = exact_crystal_integer(wallet["stone"]) if wallet is not None else None
+                if old_stone is None:
+                    return {"status": "state_changed", "reason": "map_explore_settlement_stone_invalid", "subject": "stone_wallet", "stone": 0, "rewards": ()}
+                compact = tuple(sorted(totals.items()))
+                expected_daily = (str(daily_row["date"]), old_count + 1, old_resources + 1)
+                expected_wallet = old_stone + stone
+                now = self.clock.now().isoformat()
+                with uow.savepoint("map_explore_settlement"):
+                    cursor = uow.execute(
+                        "UPDATE player_data.map_daily_limit SET explore_count=?,resource_total_count=? WHERE user_id=?",
+                        (expected_daily[1], expected_daily[2], user_id),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("daily_write_rejected", "map_daily_limit")
+                    self._verify_daily(uow, user_id, expected_daily)
+                    cursor = uow.execute(
+                        "UPDATE player_data.map_explore_status SET running=0,node_type='',node_name='',start_time='',duration_min=0,settlement='',max_duration_min=0,interval_min=0 WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("status_write_rejected", "map_explore_status")
+                    self._verify_status(uow, user_id)
+                    if stone:
+                        cursor = uow.execute(
+                            "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=?",
+                            (stone, user_id),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_wallet(uow, user_id, expected_wallet)
+                    for item_id, amount in totals.items():
+                        name, item_type = metadata[item_id]
+                        cursor = uow.execute(
+                            "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                            "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                            "goods_num=back.goods_num+excluded.goods_num,"
+                            "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                            (user_id, item_id, name, item_type, amount, now, now, amount),
+                        )
+                        if cursor.rowcount != 1:
+                            self._reject("inventory_write_rejected", f"item:{item_id}")
+                        old_num, old_bind = existing_items[item_id]
+                        self._verify_inventory(uow, user_id, item_id, old_num + amount, old_bind + amount)
+                    cursor = uow.execute(
+                        "INSERT INTO map_explore_settlement_operations(operation_id,payload,stone,rewards) "
+                        "VALUES(?,?,xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, stone, json.dumps(compact)),
+                    )
+                    if cursor.rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, stone, compact)
+                    self._verify_daily(uow, user_id, expected_daily)
+                    self._verify_status(uow, user_id)
+                    self._verify_wallet(uow, user_id, expected_wallet)
+                    for item_id, amount in totals.items():
+                        old_num, old_bind = existing_items[item_id]
+                        self._verify_inventory(uow, user_id, item_id, old_num + amount, old_bind + amount)
             return {"status": "applied", "stone": stone, "rewards": compact}
+        except _MapExploreSettlementWriteConflict as conflict:
+            return {"status": "state_changed", "reason": conflict.reason, "subject": conflict.subject, "stone": 0, "rewards": ()}
+
+
+class _MapExploreSettlementWriteConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapMissionClaimSqlRepository:
@@ -904,6 +1870,79 @@ class MapMissionClaimSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path, *, clock: Any) -> None:
         self.game_database, self.player_database, self.clock = str(game_database), str(player_database), clock
         self.outbox = OutboxStore(clock=clock)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        reason = f"map_mission_claim_{suffix}"
+        raise DomainError(reason, reason, {"reason": reason, "subject": subject})
+
+    @classmethod
+    def _verify_mission(
+        cls, uow, user_id: str, expected: tuple[str, str, int, int, str]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT date,mission_type,target,claimed,settlement "
+            "FROM player_data.map_mission WHERE user_id=?",
+            (user_id,),
+        )
+        actual = (
+            str(row["date"] or ""),
+            str(row["mission_type"] or ""),
+            exact_crystal_integer(row["target"]),
+            exact_crystal_integer(row["claimed"]),
+            str(row["settlement"] or ""),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("mission_projection_mismatch", "map_mission")
+
+    @classmethod
+    def _verify_wallet(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        actual = exact_crystal_integer(row["stone"]) if row is not None else None
+        if actual != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, expected: tuple[str, str, int, int]
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_name,goods_type,goods_num,bind_num FROM back "
+            "WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        actual = (
+            str(row["goods_name"] or ""),
+            str(row["goods_type"] or ""),
+            exact_crystal_integer(row["goods_num"]),
+            0 if row["bind_num"] is None else exact_crystal_integer(row["bind_num"]),
+        ) if row is not None else None
+        if actual != expected:
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stone: int, rewards: str) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone,rewards FROM map_mission_claim_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        actual = (
+            str(row["payload"]), exact_crystal_integer(row["stone"]), str(row["rewards"])
+        ) if row is not None else None
+        if actual != (payload, stone, rewards):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    @classmethod
+    def _verify_outbox(cls, uow, event_id: str, expected: dict[str, Any]) -> None:
+        row = uow.query_one("SELECT payload_json FROM domain_outbox WHERE event_id=?", (event_id,))
+        if row is None:
+            cls._reject("outbox_write_rejected", "domain_outbox")
+        try:
+            actual = json.loads(str(row["payload_json"]))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            actual = None
+        if actual != expected:
+            cls._reject("outbox_projection_mismatch", "domain_outbox")
     def claim(self, operation_id: str, user_id: str, expected_mission: dict[str, Any], expected_daily: dict[str, Any], progress_key: str, stone: int, items: list[dict[str, Any]], max_goods_num: int, event_meta: dict[str, Any] | None = None) -> dict[str, Any]:
         mission={k:str(v) for k,v in dict(expected_mission).items()};daily={k:str(v) for k,v in dict(expected_daily).items()};progress_key=str(progress_key)
         event_meta = dict(event_meta or {})
@@ -923,21 +1962,65 @@ class MapMissionClaimSqlRepository:
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(user_id,)) is None:return {'status':'user_missing','reason':'user_missing','subject':'actor','stone':0,'rewards':()}
             row=uow.query_one('SELECT date,mission_type,target,claimed,settlement FROM player_data.map_mission WHERE user_id=?',(user_id,))
             if row is None or any(str('' if row[k] is None else row[k])!=v for k,v in mission.items()):return {'status':'state_changed','reason':'mission_changed','subject':'actor','stone':0,'rewards':()}
+            expected_mission_after = (
+                mission.get("date", ""), mission.get("mission_type", ""),
+                int(mission.get("target", "0")), 1, mission.get("settlement", ""),
+            )
             progress=uow.query_one(f'SELECT date,"{progress_key}" AS progress FROM player_data.map_daily_limit WHERE user_id=?',(user_id,))
             if progress is None or (str(progress['date']),str(progress['progress']))!=(daily.get('date',''),daily.get(progress_key,'0')):return {'status':'state_changed','reason':'progress_changed','subject':'actor','stone':0,'rewards':()}
             if int(mission.get('claimed','0'))!=0:return {'status':'already_claimed','reason':'already_claimed','subject':'actor','stone':0,'rewards':()}
             if int(progress['progress'] or 0)<int(mission.get('target','0')):return {'status':'not_completed','reason':'not_completed','subject':'actor','stone':0,'rewards':()}
+            wallet = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            old_stone = exact_crystal_integer(wallet["stone"]) if wallet is not None else None
+            if old_stone is None:
+                return {"status": "state_changed", "reason": "map_mission_claim_stone_invalid", "subject": "stone_wallet", "stone": 0, "rewards": ()}
+            expected_stone = old_stone + stone
             totals={};meta={}
             for item_id,name,item_type,amount in rewards:totals[item_id]=totals.get(item_id,0)+amount;meta[item_id]=(name,item_type)
+            inventory_before = {}
             for item_id,amount in totals.items():
-                item=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id))
-                if (int(item['goods_num']) if item else 0)+amount>max_goods_num:return {'status':'inventory_full','reason':'inventory_full','subject':'actor','stone':0,'rewards':()}
-            uow.execute('UPDATE player_data.map_mission SET claimed=1 WHERE user_id=?',(user_id,))
-            if stone:uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(stone,user_id))
+                item=uow.query_one('SELECT goods_name,goods_type,goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id))
+                if item is None:
+                    before_num = before_bind = 0
+                else:
+                    before_num = exact_crystal_integer(item["goods_num"])
+                    before_bind = 0 if item["bind_num"] is None else exact_crystal_integer(item["bind_num"])
+                    if before_num is None or before_bind is None or before_num < 0 or before_bind < 0 or before_bind > before_num:
+                        return {"status": "state_changed", "reason": "map_mission_claim_inventory_invalid", "subject": f"item:{item_id}", "stone": 0, "rewards": ()}
+                if before_num + amount > max_goods_num:
+                    return {'status':'inventory_full','reason':'inventory_full','subject':'actor','stone':0,'rewards':()}
+                inventory_before[item_id] = (before_num, before_bind)
+            cursor = uow.execute(
+                "UPDATE player_data.map_mission SET claimed=1 WHERE user_id=? AND date=? "
+                "AND mission_type=? AND target=? AND claimed=? AND settlement=?",
+                (user_id, mission.get("date", ""), mission.get("mission_type", ""),
+                 int(mission.get("target", "0")), int(mission.get("claimed", "0")),
+                 mission.get("settlement", "")),
+            )
+            if cursor.rowcount != 1:
+                self._reject("mission_write_rejected", "map_mission")
+            self._verify_mission(uow, user_id, expected_mission_after)
+            if stone:
+                cursor = uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(stone,user_id))
+                if cursor.rowcount != 1:
+                    self._reject("stone_write_rejected", "stone_wallet")
+            self._verify_wallet(uow, user_id, expected_stone)
             now=self.clock.now().isoformat()
             for item_id,amount in totals.items():
-                name,item_type=meta[item_id];uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
-            compact=tuple(sorted(totals.items()));uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,stone,json.dumps(compact)))
+                name,item_type=meta[item_id]
+                cursor=uow.execute('INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time',(user_id,item_id,name,item_type,amount,now,now,amount))
+                if cursor.rowcount != 1:
+                    self._reject("inventory_write_rejected", f"item:{item_id}")
+                self._verify_inventory(
+                    uow, user_id, item_id,
+                    (str(name), str(item_type), inventory_before[item_id][0] + amount, inventory_before[item_id][1] + amount),
+                )
+            compact=tuple(sorted(totals.items()))
+            rewards_json=json.dumps(compact)
+            cursor=uow.execute('INSERT INTO map_mission_claim_operations(operation_id,payload,stone,rewards) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,stone,rewards_json))
+            if cursor.rowcount != 1:
+                self._reject("receipt_write_rejected", "receipt")
+            self._verify_receipt(uow, operation_id, payload, stone, rewards_json)
             occurred_at = self.clock.now().isoformat()
             frozen_meta = {
                 "source": "map",
@@ -951,69 +2034,448 @@ class MapMissionClaimSqlRepository:
                     **dict(event_meta.get("detail") or {}),
                 },
             }
+            event_payload = {
+                "operation_id": operation_id,
+                "user_id": user_id,
+                "event_key": "map_mission_complete",
+                "amount": 1,
+                "occurred_at": occurred_at,
+                "meta": frozen_meta,
+            }
             self.outbox.append(
                 uow,
                 event_id=effects_event_id,
                 aggregate_type="player",
                 aggregate_id=user_id,
                 event_type="game_event.projection",
-                payload={
-                    "operation_id": operation_id,
-                    "user_id": user_id,
-                    "event_key": "map_mission_complete",
-                    "amount": 1,
-                    "occurred_at": occurred_at,
-                    "meta": frozen_meta,
-                },
+                payload=event_payload,
             )
+            self._verify_mission(uow, user_id, expected_mission_after)
+            self._verify_wallet(uow, user_id, expected_stone)
+            for item_id, amount in totals.items():
+                name, item_type = meta[item_id]
+                self._verify_inventory(
+                    uow, user_id, item_id,
+                    (str(name), str(item_type), inventory_before[item_id][0] + amount, inventory_before[item_id][1] + amount),
+                )
+            self._verify_receipt(uow, operation_id, payload, stone, rewards_json)
+            self._verify_outbox(uow, effects_event_id, event_payload)
             return {'status':'applied','stone':stone,'rewards':compact,'effects_event_id':effects_event_id,'occurred_at':occurred_at}
 
 
 class MapSeedPurchaseSqlRepository:
     def __init__(self, game_database: str | Path, *, clock: Any) -> None:
         self.game_database,self.clock=str(game_database),clock
-    def purchase(self,operation_id:str,user_id:str,item_id:int,item_name:str,quantity:int,unit_cost:int,expected_stone:int,max_goods_num:int)->dict[str,Any]:
-        operation_id,user_id,item_name=str(operation_id).strip(),str(user_id),str(item_name);item_id,quantity,unit_cost,expected_stone,max_goods_num=map(int,(item_id,quantity,unit_cost,expected_stone,max_goods_num))
-        if not operation_id or quantity<=0 or min(item_id,unit_cost,expected_stone,max_goods_num)<0:raise ValueError('valid seed purchase required')
-        payload=json.dumps([user_id,item_id,item_name,quantity,unit_cost],ensure_ascii=True,sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            old=uow.query_one('SELECT payload,quantity,cost,stone,inventory FROM map_seed_purchase_operations WHERE operation_id=?',(operation_id,))
-            if old:
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapSeedPurchaseConflict(f"map_seed_purchase_{suffix}", subject)
+
+    @staticmethod
+    def _exact(value: Any, storage_type: Any, *, suffix: str, subject: str) -> int:
+        number = exact_crystal_integer(value, storage_type)
+        if number is None:
+            MapSeedPurchaseSqlRepository._reject(suffix, subject)
+        return number
+
+    @classmethod
+    def _verify_stone(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one(
+            "SELECT stone,typeof(stone) AS storage_type FROM user_xiuxian WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None or cls._exact(
+            row["stone"], row["storage_type"], suffix="stone_projection_mismatch", subject="stone_wallet"
+        ) != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_inventory(
+        cls, uow, user_id: str, item_id: int, item_name: str,
+        expected_goods: int, expected_bound: int,
+    ) -> None:
+        row = uow.query_one(
+            "SELECT goods_num,typeof(goods_num) AS goods_storage_type,bind_num,typeof(bind_num) AS bind_type,"
+            "goods_name,goods_type FROM back WHERE user_id=? AND goods_id=?",
+            (user_id, item_id),
+        )
+        if row is None:
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+        goods = cls._exact(
+            row["goods_num"], row["goods_storage_type"],
+            suffix="inventory_projection_mismatch", subject=f"item:{item_id}",
+        )
+        bound = cls._exact(
+            row["bind_num"], row["bind_type"],
+            suffix="inventory_projection_mismatch", subject=f"item:{item_id}",
+        )
+        if (goods, bound, str(row["goods_name"]), str(row["goods_type"])) != (
+            expected_goods, expected_bound, item_name, "特殊物品"
+        ):
+            cls._reject("inventory_projection_mismatch", f"item:{item_id}")
+
+    @classmethod
+    def _verify_receipt(
+        cls, uow, operation_id: str, payload: str, quantity: int, cost: int,
+        stone: int, inventory: int,
+    ) -> None:
+        row = uow.query_one(
+            "SELECT payload,quantity,typeof(quantity) AS quantity_type,cost,typeof(cost) AS cost_type,"
+            "stone,typeof(stone) AS stone_type,inventory,typeof(inventory) AS inventory_type "
+            "FROM map_seed_purchase_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None:
+            cls._reject("receipt_projection_mismatch", "receipt")
+        actual_stone = cls._exact(
+            row["stone"], row["stone_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_quantity = cls._exact(
+            row["quantity"], row["quantity_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_cost = cls._exact(
+            row["cost"], row["cost_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual_inventory = cls._exact(
+            row["inventory"], row["inventory_type"], suffix="receipt_projection_mismatch", subject="receipt"
+        )
+        actual = (str(row["payload"]), actual_quantity, actual_cost, actual_stone, actual_inventory)
+        if actual != (payload, quantity, cost, stone, inventory):
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    def purchase(
+        self,
+        operation_id: str,
+        user_id: str,
+        item_id: int,
+        item_name: str,
+        quantity: int,
+        unit_cost: int,
+        expected_stone: int,
+        max_goods_num: int,
+    ) -> dict[str, Any]:
+        operation_id, user_id, item_name = str(operation_id).strip(), str(user_id), str(item_name)
+        item_id, quantity, unit_cost, expected_stone, max_goods_num = map(
+            int, (item_id, quantity, unit_cost, expected_stone, max_goods_num)
+        )
+        if not operation_id or quantity <= 0 or min(item_id, unit_cost, expected_stone, max_goods_num) < 0:
+            raise ValueError("valid seed purchase required")
+        payload = json.dumps([user_id, item_id, item_name, quantity, unit_cost], ensure_ascii=True, sort_keys=True)
+
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            old = uow.query_one(
+                "SELECT payload,quantity,typeof(quantity) AS quantity_type,cost,typeof(cost) AS cost_type,"
+                "stone,typeof(stone) AS stone_type,inventory,typeof(inventory) AS inventory_type "
+                "FROM map_seed_purchase_operations WHERE operation_id=?", (operation_id,)
+            )
+            if old is not None:
                 try:
-                    old_identity = json.loads(str(old['payload']))[:5]
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    old_identity = None
-                return {'status':'duplicate','quantity':int(old['quantity']),'cost':int(old['cost']),'stone':as_int_like(old['stone']),'inventory':int(old['inventory'])} if old_identity == [user_id,item_id,item_name,quantity,unit_cost] else {'status':'state_changed','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
-            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
-            if user is None:return {'status':'user_missing','quantity':0,'cost':0,'stone':expected_stone,'inventory':0}
-            stone=as_int_like(user['stone'] or 0)
-            if stone!=expected_stone:return {'status':'state_changed','quantity':0,'cost':0,'stone':stone,'inventory':0}
-            cost=quantity*unit_cost
-            if stone<cost:return {'status':'stone_insufficient','quantity':0,'cost':0,'stone':stone,'inventory':0}
-            row=uow.query_one('SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?',(user_id,item_id));inventory=int(row['goods_num']) if row else 0
-            if inventory+quantity>max_goods_num:return {'status':'inventory_full','quantity':0,'cost':0,'stone':stone,'inventory':inventory}
-            stone-=cost;inventory+=quantity;now=self.clock.now().isoformat();uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(stone,user_id));uow.execute("INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET goods_name=excluded.goods_name,goods_type=excluded.goods_type,goods_num=back.goods_num+excluded.goods_num,bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",(user_id,item_id,item_name,'特殊物品',quantity,now,now,quantity));uow.execute('INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) VALUES(?,?,?,xiuxian_int_store(?,\'stone\',\'actor\'),xiuxian_int_store(?,\'stone\',\'actor\'),?)',(operation_id,payload,quantity,cost,stone,inventory));return {'status':'applied','quantity':quantity,'cost':cost,'stone':stone,'inventory':inventory}
+                    old_payload = json.loads(str(old["payload"]))
+                    old_identity = old_payload[:5] if isinstance(old_payload, list) and len(old_payload) >= 5 else None
+                    old_quantity = self._exact(
+                        old["quantity"], old["quantity_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_cost = self._exact(
+                        old["cost"], old["cost_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_stone = self._exact(
+                        old["stone"], old["stone_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                    old_inventory = self._exact(
+                        old["inventory"], old["inventory_type"], suffix="receipt_invalid", subject="receipt"
+                    )
+                except (TypeError, ValueError, OverflowError, json.JSONDecodeError, _MapSeedPurchaseConflict):
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "map_seed_purchase_receipt_invalid", "subject": "receipt"}
+                if (
+                    old_identity is None
+                    or not isinstance(old_identity[0], str)
+                    or type(old_identity[1]) is not int
+                    or not isinstance(old_identity[2], str)
+                    or type(old_identity[3]) is not int
+                    or type(old_identity[4]) is not int
+                    or old_quantity != old_identity[3]
+                    or old_quantity <= 0
+                    or old_cost != old_quantity * old_identity[4]
+                    or old_inventory < old_quantity
+                ):
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "map_seed_purchase_receipt_invalid", "subject": "receipt"}
+                if old_identity != [user_id, item_id, item_name, quantity, unit_cost]:
+                    return {"status": "state_changed", "quantity": 0, "cost": 0,
+                            "stone": expected_stone, "inventory": 0,
+                            "reason": "operation_conflict", "subject": "receipt"}
+                return {"status": "duplicate", "quantity": old_quantity, "cost": old_cost,
+                        "stone": old_stone, "inventory": old_inventory}
+
+            user = uow.query_one(
+                "SELECT stone,typeof(stone) AS storage_type FROM user_xiuxian WHERE user_id=?",
+                (user_id,),
+            )
+            if user is None:
+                return {"status": "user_missing", "quantity": 0, "cost": 0,
+                        "stone": expected_stone, "inventory": 0}
+            try:
+                stone = self._exact(user["stone"], user["storage_type"],
+                                    suffix="stone_invalid", subject="stone_wallet")
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": expected_stone, "inventory": 0,
+                        "reason": conflict.reason, "subject": conflict.subject}
+            if stone != expected_stone:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0,
+                        "reason": "map_seed_purchase_stone_changed", "subject": "stone_wallet"}
+            cost = quantity * unit_cost
+            if stone < cost:
+                return {"status": "stone_insufficient", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0}
+
+            row = uow.query_one(
+                "SELECT goods_num,typeof(goods_num) AS goods_storage_type,bind_num,typeof(bind_num) AS bind_type "
+                "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id)
+            )
+            try:
+                inventory = self._exact(row["goods_num"], row["goods_storage_type"],
+                                        suffix="inventory_invalid", subject=f"item:{item_id}") if row else 0
+                bound = self._exact(row["bind_num"], row["bind_type"],
+                                    suffix="inventory_invalid", subject=f"item:{item_id}") if row else 0
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": 0,
+                        "reason": conflict.reason, "subject": conflict.subject}
+            if inventory < 0 or bound < 0:
+                return {
+                    "status": "state_changed",
+                    "quantity": 0,
+                    "cost": 0,
+                    "stone": stone,
+                    "inventory": inventory,
+                    "reason": "map_seed_purchase_inventory_invalid",
+                    "subject": f"item:{item_id}",
+                }
+            if inventory + quantity > max_goods_num:
+                return {"status": "inventory_full", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": inventory}
+
+            remaining_stone = stone - cost
+            remaining_inventory = inventory + quantity
+            remaining_bound = bound + quantity
+            now = self.clock.now().isoformat()
+            try:
+                with uow.savepoint("map_seed_purchase"):
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                        (remaining_stone, user_id, expected_stone),
+                    ).rowcount != 1:
+                        self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_stone(uow, user_id, remaining_stone)
+
+                    if uow.execute(
+                        "INSERT INTO back(user_id,goods_id,goods_name,goods_type,goods_num,create_time,update_time,bind_num) "
+                        "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id,goods_id) DO UPDATE SET "
+                        "goods_name=excluded.goods_name,goods_type=excluded.goods_type,"
+                        "goods_num=back.goods_num+excluded.goods_num,"
+                        "bind_num=COALESCE(back.bind_num,0)+excluded.bind_num,update_time=excluded.update_time",
+                        (user_id, item_id, item_name, "特殊物品", quantity, now, now, quantity),
+                    ).rowcount != 1:
+                        self._reject("inventory_write_rejected", f"item:{item_id}")
+                    self._verify_inventory(
+                        uow, user_id, item_id, item_name, remaining_inventory, remaining_bound
+                    )
+
+                    if uow.execute(
+                        "INSERT INTO map_seed_purchase_operations(operation_id,payload,quantity,cost,stone,inventory) "
+                        "VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'stone','actor'),?)",
+                        (operation_id, payload, quantity, cost, remaining_stone, remaining_inventory),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(
+                        uow, operation_id, payload, quantity, cost, remaining_stone, remaining_inventory
+                    )
+                    self._verify_stone(uow, user_id, remaining_stone)
+                    self._verify_inventory(
+                        uow, user_id, item_id, item_name, remaining_inventory, remaining_bound
+                    )
+                    self._verify_receipt(
+                        uow, operation_id, payload, quantity, cost, remaining_stone, remaining_inventory
+                    )
+            except _MapSeedPurchaseConflict as conflict:
+                return {"status": "state_changed", "quantity": 0, "cost": 0,
+                        "stone": stone, "inventory": inventory,
+                        "reason": conflict.reason, "subject": conflict.subject}
+
+            return {"status": "applied", "quantity": quantity, "cost": cost,
+                    "stone": remaining_stone, "inventory": remaining_inventory}
+
+
+class _MapSeedPurchaseConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = reason, subject
+
+
+class _MapDongfuBuildConflict(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason = reason
+        self.subject = subject
 
 
 class MapDongfuBuildSqlRepository:
-    def __init__(self,game_database:str|Path,player_database:str|Path)->None:self.game_database,self.player_database=str(game_database),str(player_database)
-    def build(self,operation_id:str,user_id:str,expected_stone:int,cost:int,expected_position:dict[str,Any],dongfu:dict[str,Any])->dict[str,Any]:
-        operation_id,user_id=str(operation_id).strip(),str(user_id);expected_stone,cost=int(expected_stone),int(cost);position={k:str(v) for k,v in dict(expected_position).items()};dongfu={k:str(v) for k,v in dict(dongfu).items()}
-        if not operation_id or min(expected_stone,cost)<0 or not {'realm','heaven','node_id'}.issubset(position) or dongfu.get('built')!='1':raise ValueError('valid dongfu build required')
-        payload=json.dumps([user_id,expected_stone,cost,position,dongfu],ensure_ascii=True,sort_keys=True)
-        with DatabaseUnitOfWork(self.game_database,immediate=True) as uow:
-            uow.attach_database(self.player_database,'player_data');old=uow.query_one('SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?',(operation_id,))
-            if old:return {'status':'duplicate','stone':as_int_like(old['stone'])} if str(old['payload'])==payload else {'status':'state_changed','stone':expected_stone}
-            user=uow.query_one('SELECT stone FROM user_xiuxian WHERE user_id=?',(user_id,))
-            if user is None:return {'status':'user_missing','stone':expected_stone}
-            stone=as_int_like(user['stone'] or 0)
-            if stone!=expected_stone:return {'status':'state_changed','stone':stone}
-            if stone<cost:return {'status':'stone_insufficient','stone':stone}
-            pos=uow.query_one('SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?',(user_id,))
-            if pos is None or tuple(str(pos[k]) for k in position)!=tuple(position.values()):return {'status':'state_changed','stone':stone}
-            existing=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(user_id,))
-            if existing is not None and int(existing['built'] or 0)==1:return {'status':'already_built','stone':stone}
-            remaining=stone-cost;uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(?,\'stone\',\'actor\') WHERE user_id=?',(remaining,user_id));fields=('built','realm','heaven','node_id','node_name','node_type');uow.execute('INSERT INTO player_data.dongfu_status(user_id,'+','.join(fields)+') VALUES('+','.join(['?']*7)+') ON CONFLICT(user_id) DO UPDATE SET '+','.join(f'{k}=excluded.{k}' for k in fields),(user_id,*(dongfu.get(k,'') for k in fields)));uow.execute('INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) VALUES(?,?,xiuxian_int_store(?,\'stone\',\'actor\'))',(operation_id,payload,remaining));return {'status':'applied','stone':remaining}
+    def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
+        self.game_database = str(game_database)
+        self.player_database = str(player_database)
+
+    @staticmethod
+    def _reject(suffix: str, subject: str) -> None:
+        raise _MapDongfuBuildConflict(f"map_dongfu_build_{suffix}", subject)
+
+    @classmethod
+    def _verify_stone(cls, uow, user_id: str, expected: int) -> None:
+        row = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+        if row is None or as_int_like(row["stone"] or 0) != expected:
+            cls._reject("stone_projection_mismatch", "stone_wallet")
+
+    @classmethod
+    def _verify_dongfu(cls, uow, user_id: str, expected: dict[str, str]) -> None:
+        row = uow.query_one(
+            "SELECT built,realm,heaven,node_id,node_name,node_type "
+            "FROM player_data.dongfu_status WHERE user_id=?",
+            (user_id,),
+        )
+        if row is None:
+            cls._reject("state_projection_mismatch", "dongfu_status")
+        actual = {key: str(row[key] or "") for key in expected}
+        actual["built"] = str(as_int_like(row["built"] or 0))
+        if actual != expected:
+            cls._reject("state_projection_mismatch", "dongfu_status")
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id: str, payload: str, stone: int) -> None:
+        row = uow.query_one(
+            "SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        if row is None or str(row["payload"]) != payload or as_int_like(row["stone"] or 0) != stone:
+            cls._reject("receipt_projection_mismatch", "receipt")
+
+    def build(
+        self,
+        operation_id: str,
+        user_id: str,
+        expected_stone: int,
+        cost: int,
+        expected_position: dict[str, Any],
+        dongfu: dict[str, Any],
+    ) -> dict[str, Any]:
+        operation_id, user_id = str(operation_id).strip(), str(user_id)
+        expected_stone, cost = int(expected_stone), int(cost)
+        position = {key: str(dict(expected_position)[key]) for key in ("realm", "heaven", "node_id")}
+        dongfu = {key: str(value) for key, value in dict(dongfu).items()}
+        if not operation_id or min(expected_stone, cost) < 0 or dongfu.get("built") != "1":
+            raise ValueError("valid dongfu build required")
+        payload = json.dumps(
+            [user_id, expected_stone, cost, position, dongfu],
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        expected_state = {key: dongfu.get(key, "") for key in (
+            "built", "realm", "heaven", "node_id", "node_name", "node_type"
+        )}
+
+        with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
+            uow.attach_database(self.player_database, "player_data")
+            old = uow.query_one(
+                "SELECT payload,stone FROM map_dongfu_build_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if old is not None:
+                try:
+                    old_payload = json.loads(str(old["payload"]))
+                    old_stone = int(old["stone"])
+                except (TypeError, ValueError, OverflowError):
+                    return {
+                        "status": "state_changed", "stone": expected_stone,
+                        "reason": "map_dongfu_build_receipt_invalid", "subject": "receipt",
+                    }
+                if old_payload != json.loads(payload):
+                    return {
+                        "status": "state_changed", "stone": expected_stone,
+                        "reason": "operation_conflict", "subject": "receipt",
+                    }
+                return {"status": "duplicate", "stone": old_stone}
+
+            user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,))
+            if user is None:
+                return {"status": "user_missing", "stone": expected_stone}
+            stone = as_int_like(user["stone"] or 0)
+            if stone != expected_stone:
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": "map_dongfu_build_stone_changed", "subject": "stone_wallet",
+                }
+            if stone < cost:
+                return {"status": "stone_insufficient", "stone": stone}
+
+            current_position = uow.query_one(
+                "SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?",
+                (user_id,),
+            )
+            if current_position is None or any(
+                str(current_position[key]) != position[key] for key in position
+            ):
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": "map_dongfu_build_position_changed", "subject": "map_position",
+                }
+            existing = uow.query_one(
+                "SELECT built FROM player_data.dongfu_status WHERE user_id=?", (user_id,)
+            )
+            if existing is not None and as_int_like(existing["built"] or 0) == 1:
+                return {"status": "already_built", "stone": stone}
+
+            remaining = stone - cost
+            try:
+                with uow.savepoint("map_dongfu_build"):
+                    if uow.execute(
+                        "UPDATE user_xiuxian SET stone=xiuxian_int_store(?,'stone','actor') "
+                        "WHERE user_id=? AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                        (remaining, user_id, expected_stone),
+                    ).rowcount != 1:
+                        self._reject("stone_write_rejected", "stone_wallet")
+                    self._verify_stone(uow, user_id, remaining)
+
+                    fields = ("built", "realm", "heaven", "node_id", "node_name", "node_type")
+                    if uow.execute(
+                        "INSERT INTO player_data.dongfu_status "
+                        "(user_id,built,realm,heaven,node_id,node_name,node_type) "
+                        "VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET "
+                        "built=excluded.built,realm=excluded.realm,heaven=excluded.heaven,"
+                        "node_id=excluded.node_id,node_name=excluded.node_name,node_type=excluded.node_type "
+                        "WHERE COALESCE(dongfu_status.built,0)<>1",
+                        (user_id, *(expected_state[key] for key in fields)),
+                    ).rowcount != 1:
+                        self._reject("state_write_rejected", "dongfu_status")
+                    self._verify_dongfu(uow, user_id, expected_state)
+
+                    if uow.execute(
+                        "INSERT INTO map_dongfu_build_operations(operation_id,payload,stone) "
+                        "VALUES(?,?,xiuxian_int_store(?,'stone','actor'))",
+                        (operation_id, payload, remaining),
+                    ).rowcount != 1:
+                        self._reject("receipt_write_rejected", "receipt")
+                    self._verify_receipt(uow, operation_id, payload, remaining)
+
+                    self._verify_stone(uow, user_id, remaining)
+                    self._verify_dongfu(uow, user_id, expected_state)
+            except _MapDongfuBuildConflict as conflict:
+                return {
+                    "status": "state_changed", "stone": stone,
+                    "reason": conflict.reason, "subject": conflict.subject,
+                }
+
+            return {"status": "applied", "stone": remaining}
 
 
 class MapCombatLifecycleQueryRepository:
@@ -1037,6 +2499,30 @@ class MapCombatLifecycleQueryRepository:
         return {'status':'pending','stamina':0,'task':self._parse(snapshot),'snapshot':snapshot}
 
 
+class _MapCombatWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        self.reason, self.subject = reason, subject
+        super().__init__(reason)
+
+
+def _verify_map_combat_write(
+    uow: DatabaseUnitOfWork,
+    statement: str,
+    params: tuple[Any, ...],
+    projection: str,
+    projection_params: tuple[Any, ...],
+    expected: tuple[Any, ...],
+    reason_prefix: str,
+    subject: str,
+) -> None:
+    if uow.execute(statement, params).rowcount != 1:
+        raise _MapCombatWriteRejected(f"{reason_prefix}_write_rejected", subject)
+    row = uow.query_one(projection, projection_params)
+    actual = tuple(row.values()) if row is not None else None
+    if actual != expected:
+        raise _MapCombatWriteRejected(f"{reason_prefix}_projection_mismatch", subject)
+
+
 class MapCombatLifecycleStartSqlRepository:
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database, self.player_database = str(game_database), str(player_database)
@@ -1054,30 +2540,46 @@ class MapCombatLifecycleStartSqlRepository:
         payload = json.dumps([user_id], ensure_ascii=True, separators=(",", ":")); task_json = json.dumps(task, ensure_ascii=False, sort_keys=True)
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
             uow.attach_database(self.player_database, "player_data")
-            previous = uow.query_one("SELECT payload,result_status,stamina,task_json FROM map_combat_start_operations WHERE operation_id=?", (operation_id,))
-            if previous:
-                if str(previous["payload"]) != payload: return {"status": "operation_conflict", "stamina": 0, "task": {}, "snapshot": ""}
-                old_task = self._parse(previous["task_json"]); return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "stamina": int(previous["stamina"] or 0), "task": old_task, "snapshot": json.dumps(old_task, ensure_ascii=False, sort_keys=True) if old_task else ""}
-            user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
-            if user is None: return self._record(uow, operation_id, payload, "user_missing", expected_stamina, {})
-            stamina = int(user["user_stamina"] or 0)
-            if stamina != expected_stamina: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="stamina_changed")
-            pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
-            if pos is None or tuple(str(pos[k]) for k in position) != tuple(position.values()): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="position_changed")
-            dr = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
-            if dr is None or (str(dr["date"]), str(dr["combat_count"]), str(dr["resource_total_count"])) != (daily.get("date", ""), daily.get("combat_count", "0"), daily.get("resource_total_count", "0")): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="daily_changed")
-            if int(dr["combat_count"] or 0) >= daily_limit: return self._record(uow, operation_id, payload, "limit_reached", stamina, {})
-            cd = uow.query_one("SELECT combat_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,)); current_cd = "" if cd is None or cd["combat_cd_until"] is None else str(cd["combat_cd_until"])
-            if current_cd != expected_cooldown: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="cooldown_changed")
-            if current_cd and current_cd > str(task["started_at"]): return self._record(uow, operation_id, payload, "cooldown", stamina, {"cooldown_until": current_cd})
-            pending = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
-            if pending is not None and str(pending["snapshot"] or ""): return self._record(uow, operation_id, payload, "already_running", stamina, self._parse(pending["snapshot"]))
-            if stamina < stamina_cost: return self._record(uow, operation_id, payload, "stamina_insufficient", stamina, {})
-            remaining = stamina - stamina_cost
-            uow.execute("UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id))
-            uow.execute("INSERT INTO player_data.map_cooldown(user_id,combat_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET combat_cd_until=excluded.combat_cd_until", (user_id, str(task["cooldown_until"])))
-            uow.execute("INSERT INTO player_data.map_combat_settlement(user_id,snapshot) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot", (user_id, task_json))
-            return self._record(uow, operation_id, payload, "applied", remaining, task)
+            try:
+                with uow.savepoint("map_combat_start"):
+                    previous = uow.query_one("SELECT payload,result_status,stamina,task_json FROM map_combat_start_operations WHERE operation_id=?", (operation_id,))
+                    if previous:
+                        if str(previous["payload"]) != payload: return {"status": "operation_conflict", "stamina": 0, "task": {}, "snapshot": ""}
+                        old_task = self._parse(previous["task_json"]); return {"status": "duplicate" if str(previous["result_status"]) == "applied" else str(previous["result_status"]), "stamina": int(previous["stamina"] or 0), "task": old_task, "snapshot": json.dumps(old_task, ensure_ascii=False, sort_keys=True) if old_task else ""}
+                    user = uow.query_one("SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,))
+                    if user is None: return self._record(uow, operation_id, payload, "user_missing", expected_stamina, {})
+                    stamina = int(user["user_stamina"] or 0)
+                    if stamina != expected_stamina: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="stamina_changed")
+                    pos = uow.query_one("SELECT realm,heaven,node_id FROM player_data.map_status WHERE user_id=?", (user_id,))
+                    if pos is None or tuple(str(pos[k]) for k in position) != tuple(position.values()): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="position_changed")
+                    dr = uow.query_one("SELECT date,combat_count,resource_total_count FROM player_data.map_daily_limit WHERE user_id=?", (user_id,))
+                    if dr is None or (str(dr["date"]), str(dr["combat_count"]), str(dr["resource_total_count"])) != (daily.get("date", ""), daily.get("combat_count", "0"), daily.get("resource_total_count", "0")): return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="daily_changed")
+                    if int(dr["combat_count"] or 0) >= daily_limit: return self._record(uow, operation_id, payload, "limit_reached", stamina, {})
+                    cd = uow.query_one("SELECT combat_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,)); current_cd = "" if cd is None or cd["combat_cd_until"] is None else str(cd["combat_cd_until"])
+                    if current_cd != expected_cooldown: return self._record(uow, operation_id, payload, "state_changed", stamina, {}, reason="cooldown_changed")
+                    if current_cd and current_cd > str(task["started_at"]): return self._record(uow, operation_id, payload, "cooldown", stamina, {"cooldown_until": current_cd})
+                    pending = uow.query_one("SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,))
+                    if pending is not None and str(pending["snapshot"] or ""): return self._record(uow, operation_id, payload, "already_running", stamina, self._parse(pending["snapshot"]))
+                    if stamina < stamina_cost: return self._record(uow, operation_id, payload, "stamina_insufficient", stamina, {})
+                    remaining = stamina - stamina_cost
+                    _verify_map_combat_write(
+                        uow, "UPDATE user_xiuxian SET user_stamina=? WHERE user_id=?", (remaining, user_id),
+                        "SELECT user_stamina FROM user_xiuxian WHERE user_id=?", (user_id,), (remaining,),
+                        "map_combat_start_stamina", "stamina",
+                    )
+                    _verify_map_combat_write(
+                        uow, "INSERT INTO player_data.map_cooldown(user_id,combat_cd_until) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET combat_cd_until=excluded.combat_cd_until", (user_id, str(task["cooldown_until"])),
+                        "SELECT combat_cd_until FROM player_data.map_cooldown WHERE user_id=?", (user_id,), (str(task["cooldown_until"]),),
+                        "map_combat_start_cooldown", "cooldown",
+                    )
+                    _verify_map_combat_write(
+                        uow, "INSERT INTO player_data.map_combat_settlement(user_id,snapshot) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET snapshot=excluded.snapshot", (user_id, task_json),
+                        "SELECT snapshot FROM player_data.map_combat_settlement WHERE user_id=?", (user_id,), (task_json,),
+                        "map_combat_start_snapshot", "snapshot",
+                    )
+                    return self._record(uow, operation_id, payload, "applied", remaining, task)
+            except _MapCombatWriteRejected as exc:
+                return {"status": "state_changed", "reason": exc.reason, "subject": exc.subject, "stamina": expected_stamina, "task": {}, "snapshot": ""}
 
     @staticmethod
     def _parse(value: Any) -> dict[str, Any]:
@@ -1089,7 +2591,16 @@ class MapCombatLifecycleStartSqlRepository:
     def _record(uow: DatabaseUnitOfWork, operation_id: str, payload: str, status: str, stamina: int, task: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
         task = {**task, "_rejection_reason": reason} if reason else task
         task_json = json.dumps(task, ensure_ascii=False, sort_keys=True)
-        uow.execute("INSERT INTO map_combat_start_operations(operation_id,payload,result_status,stamina,task_json) VALUES(?,?,?,?,?)", (operation_id, payload, status, stamina, task_json))
+        _verify_map_combat_write(
+            uow,
+            "INSERT INTO map_combat_start_operations(operation_id,payload,result_status,stamina,task_json) VALUES(?,?,?,?,?)",
+            (operation_id, payload, status, stamina, task_json),
+            "SELECT payload,result_status,stamina,task_json FROM map_combat_start_operations WHERE operation_id=?",
+            (operation_id,),
+            (payload, status, stamina, task_json),
+            "map_combat_start_receipt",
+            "receipt",
+        )
         return {"status": status, "reason": reason, "subject": "actor", "stamina": stamina, "task": task, "snapshot": task_json if task else ""}
 
 
@@ -1104,17 +2615,29 @@ class MapCombatLifecyclePlanSqlRepository:
             raise ValueError("valid combat plan is required")
         snapshot = json.dumps(plan, ensure_ascii=False, sort_keys=True)
         with DatabaseUnitOfWork(self.player_database, immediate=True) as uow:
-            old = uow.query_one("SELECT payload,snapshot FROM map_combat_plan_operations WHERE operation_id=?", (operation_id,))
-            if old:
-                return {"status": "duplicate", "task": self._parse(old["snapshot"]), "snapshot": str(old["snapshot"])} if str(old["payload"]) == snapshot else {"status": "operation_conflict", "task": {}, "snapshot": ""}
-            current = uow.query_one("SELECT snapshot FROM map_combat_settlement WHERE user_id=?", (user_id,))
-            current_snapshot = "" if current is None or current["snapshot"] is None else str(current["snapshot"])
-            current_task = self._parse(current_snapshot)
-            if str(current_task.get("task_id", "")) != task_id or str(current_task.get("status", "")) != "running":
-                return {"status": "state_changed", "task": {}, "snapshot": ""}
-            uow.execute("UPDATE map_combat_settlement SET snapshot=? WHERE user_id=?", (snapshot, user_id))
-            uow.execute("INSERT INTO map_combat_plan_operations(operation_id,user_id,task_id,payload,snapshot) VALUES(?,?,?,?,?)", (operation_id, user_id, task_id, snapshot, snapshot))
-            return {"status": "applied", "task": plan, "snapshot": snapshot}
+            try:
+                with uow.savepoint("map_combat_plan"):
+                    old = uow.query_one("SELECT payload,snapshot FROM map_combat_plan_operations WHERE operation_id=?", (operation_id,))
+                    if old:
+                        return {"status": "duplicate", "task": self._parse(old["snapshot"]), "snapshot": str(old["snapshot"])} if str(old["payload"]) == snapshot else {"status": "operation_conflict", "task": {}, "snapshot": ""}
+                    current = uow.query_one("SELECT snapshot FROM map_combat_settlement WHERE user_id=?", (user_id,))
+                    current_snapshot = "" if current is None or current["snapshot"] is None else str(current["snapshot"])
+                    current_task = self._parse(current_snapshot)
+                    if str(current_task.get("task_id", "")) != task_id or str(current_task.get("status", "")) != "running":
+                        return {"status": "state_changed", "task": {}, "snapshot": ""}
+                    _verify_map_combat_write(
+                        uow, "UPDATE map_combat_settlement SET snapshot=? WHERE user_id=?", (snapshot, user_id),
+                        "SELECT snapshot FROM map_combat_settlement WHERE user_id=?", (user_id,), (snapshot,),
+                        "map_combat_plan_snapshot", "snapshot",
+                    )
+                    _verify_map_combat_write(
+                        uow, "INSERT INTO map_combat_plan_operations(operation_id,user_id,task_id,payload,snapshot) VALUES(?,?,?,?,?)", (operation_id, user_id, task_id, snapshot, snapshot),
+                        "SELECT user_id,task_id,payload,snapshot FROM map_combat_plan_operations WHERE operation_id=?", (operation_id,),
+                        (user_id, task_id, snapshot, snapshot), "map_combat_plan_receipt", "receipt",
+                    )
+                    return {"status": "applied", "task": plan, "snapshot": snapshot}
+            except _MapCombatWriteRejected as exc:
+                return {"status": "state_changed", "reason": exc.reason, "subject": exc.subject, "task": {}, "snapshot": ""}
 
     @staticmethod
     def _parse(value: Any) -> dict[str, Any]:

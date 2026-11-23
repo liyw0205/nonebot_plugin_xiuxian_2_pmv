@@ -12,7 +12,7 @@ from ..on_compat import on_command
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.log import logger
-from ..command_guard import result_failure, report_exception
+from ..command_guard import guard_command, result_failure, report_exception
 from nonebot.exception import MatcherException, ProcessException
 
 from ..adapter_compat import (
@@ -62,6 +62,7 @@ from ...features.dungeon.explore_snapshot import (
 from ...features.dungeon.team_application import DungeonTeamApplication
 from ...features.dungeon.invite_expiry import DungeonInviteExpiryWorker
 from ...features.dungeon.team_repository import TeamExitResult, TeamMutationResult, TeamStateSnapshot
+from ...features.dungeon.repository import DUNGEON_EXPLORE_WRITE_REJECTIONS
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 
@@ -231,7 +232,28 @@ def _missing_team_snapshot(team_id: str = "") -> TeamStateSnapshot:
 
 def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
     if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
-        return result_failure("队伍操作", result)
+        subjects = {}
+        if action == "create" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        if action == "invite" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_invite_expiry_"):
+                subjects[result.subject] = f"旧邀请【{result.subject}】"
+            else:
+                target = _sql_message().get_user_info_with_id(result.target_id) or {}
+                subjects[result.subject] = f"被邀请者【{target.get('user_name', result.target_id)}】"
+        if action == "join" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_join_invite_"):
+                subjects[result.subject] = f"邀请【{result.subject}】"
+            elif result.reason.startswith("dungeon_team_join_cooldown_"):
+                target = _sql_message().get_user_info_with_id(result.target_id) or {}
+                subjects[result.subject] = f"入队玩家【{target.get('user_name', result.target_id)}】"
+            else:
+                subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        if action == "reject" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"邀请【{result.subject}】"
+        if action == "transfer" and getattr(result, "subject", ""):
+            subjects[result.subject] = f"队伍【{result.team_name or result.team_id}】"
+        return result_failure({"create": "创建队伍", "invite": "邀请组队", "join": "同意组队", "reject": "拒绝组队", "transfer": "转移队长"}.get(action, "队伍操作"), result, subjects=subjects)
     target_info = _sql_message().get_user_info_with_id(result.target_id) or {}
     target_name = target_info.get("user_name", result.target_id or "指定用户")
     if action == "create":
@@ -310,6 +332,30 @@ def _team_mutation_message(action: str, result: TeamMutationResult) -> str:
 
 def _team_exit_message(action: str, result: TeamExitResult) -> str:
     if result.status not in {"applied", "duplicate"} and getattr(result, "reason", ""):
+        if action == "disband" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_disband_cooldown_"):
+                subjects = {result.subject: f"队伍成员【{result.subject}】"}
+            elif result.reason.startswith("dungeon_team_disband_invite_"):
+                subjects = {result.subject: f"邀请【{result.subject}】"}
+            else:
+                subjects = {result.subject: f"队伍【{result.team_name or result.team_id}】"}
+            return result_failure("解散队伍", result, subjects=subjects)
+        if action == "kick" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_kick_cooldown_"):
+                subjects = {result.subject: "被移除队员"}
+            elif result.reason.startswith("dungeon_team_kick_invite_"):
+                subjects = {result.subject: f"邀请【{result.subject}】"}
+            else:
+                subjects = {result.subject: f"队伍【{result.team_name or result.team_id}】"}
+            return result_failure("踢出队伍", result, subjects=subjects)
+        if action == "leave" and getattr(result, "subject", ""):
+            if result.reason.startswith("dungeon_team_leave_cooldown_"):
+                subjects = {result.subject: "离队玩家"}
+            elif result.reason.startswith("dungeon_team_leave_invite_"):
+                subjects = {result.subject: f"邀请【{result.subject}】"}
+            else:
+                subjects = {result.subject: f"队伍【{result.team_name or result.team_id}】"}
+            return result_failure("离开队伍", result, subjects=subjects)
         return result_failure("退出队伍", result)
     if result.status not in {"applied", "duplicate"}:
         return {
@@ -321,16 +367,22 @@ def _team_exit_message(action: str, result: TeamExitResult) -> str:
             "session_active": "副本探索会话进行中，无法变更队伍！",
         }.get(result.status) or result_failure("退出队伍", result)
     if action == "leave":
+        cooldown_message = f"\n组队冷却至{result.cooldown_until}。" if result.target_id in result.cooldown_members else ""
         if result.disbanded:
-            return f"你已离开队伍【{result.team_name}】，队伍已解散。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+            return f"你已离开队伍【{result.team_name}】，队伍已解散。" + cooldown_message
         if result.new_leader_id:
             leader = _sql_message().get_user_info_with_id(result.new_leader_id) or {}
-            return f"你已离开队伍【{result.team_name}】，队长已转让给{leader.get('user_name', result.new_leader_id)}。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-        return f"你已离开队伍【{result.team_name}】。\n你进入了{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+            return f"你已离开队伍【{result.team_name}】，当前队长为{leader.get('user_name', result.new_leader_id)}。" + cooldown_message
+        return f"你已离开队伍【{result.team_name}】。" + cooldown_message
     if action == "kick":
         target = _sql_message().get_user_info_with_id(result.target_id) or {}
-        return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。\n对方进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
-    return f"队伍【{result.team_name}】已解散。\n全体成员进入{TEAM_JOIN_CD_HOURS}小时组队冷却。"
+        cooldown_message = f"\n对方组队冷却至{result.cooldown_until}。" if result.target_id in result.cooldown_members else ""
+        return f"已将成员{target.get('user_name', result.target_id)}踢出队伍。" + cooldown_message
+    cooldown_message = (
+        f"\n{len(result.cooldown_members)}名符合冷却条件的队员组队冷却至{result.cooldown_until}。"
+        if result.cooldown_members else ""
+    )
+    return f"队伍【{result.team_name}】已解散。" + cooldown_message
 
 
 # =========================
@@ -430,6 +482,7 @@ async def help_dungeon_cmd_(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 # 组队逻辑
 # =========================
 @create_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("创建队伍")
 async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -439,11 +492,6 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "create", user_id)
-    replay = dungeon_team_application.operation_result(operation_id, "create")
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("create", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await create_team_cmd.finish()
-
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
 
     team_name = args.extract_plain_text().strip()
@@ -461,6 +509,7 @@ async def create_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @invite_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("邀请组队")
 async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     notification_bot_id = str(bot.self_id)
     notification_scene = get_chat_scene(event)
@@ -473,11 +522,6 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "invite", user_id)
-    replay = dungeon_team_application.operation_result(operation_id, "invite")
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await invite_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -485,8 +529,15 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
-    team_id = dungeon_team_application.team_id_for_user(user_id) or ""
     group_id = str(getattr(event, "group_id", "") or "")
+    replay = dungeon_team_application.operation_result(operation_id, "invite")
+    if replay is not None:
+        if replay.target_id != target_user_id or replay.group_id != group_id:
+            replay = TeamMutationResult("state_changed", reason="operation_conflict", target_id=target_user_id, group_id=group_id)
+        await handle_send(bot, event, _team_mutation_message("invite", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await invite_team_cmd.finish()
+
+    team_id = dungeon_team_application.team_id_for_user(user_id) or ""
     now = runtime_clock.now().timestamp()
     invite_id = f"{operation_id}:{target_user_id or 'missing'}"
     result = dungeon_team_application.invite(
@@ -521,6 +572,7 @@ async def invite_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @agree_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("同意组队")
 async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -532,6 +584,8 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
     operation_id = _team_operation_id(event, "join", user_id)
     replay = dungeon_team_application.operation_result(operation_id, "join")
     if replay is not None:
+        if isinstance(event, GroupMessageEvent) and replay.group_id and replay.group_id != str(event.group_id):
+            replay = TeamMutationResult("state_changed", reason="operation_conflict")
         await handle_send(bot, event, _team_mutation_message("join", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
         await agree_team_cmd.finish()
 
@@ -559,6 +613,7 @@ async def agree_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 
 @reject_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("拒绝组队")
 async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -570,6 +625,8 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
     operation_id = _team_operation_id(event, "reject", user_id)
     replay = dungeon_team_application.operation_result(operation_id, "reject")
     if replay is not None:
+        if replay.status in {"applied", "duplicate"} and isinstance(event, GroupMessageEvent) and replay.group_id and replay.group_id != str(event.group_id):
+            replay = TeamMutationResult("state_changed", reason="operation_conflict")
         await handle_send(bot, event, _team_mutation_message("reject", replay), md_type="team", k1="队伍帮助", v1="队伍帮助")
         await reject_team_cmd.finish()
 
@@ -588,6 +645,7 @@ async def reject_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateM
 
 
 @leave_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("离开队伍")
 async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -617,6 +675,7 @@ async def leave_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMe
 
 
 @kick_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("踢出队伍")
 async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -626,13 +685,6 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "kick", user_id)
-    replay = dungeon_team_application.exit_operation_result(
-        operation_id, "kick", user_id
-    )
-    if replay is not None:
-        await handle_send(bot, event, _team_exit_message("kick", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await kick_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -640,6 +692,13 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
+    replay = dungeon_team_application.exit_operation_result(
+        operation_id, "kick", user_id, target_user_id
+    )
+    if replay is not None:
+        await handle_send(bot, event, _team_exit_message("kick", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await kick_team_cmd.finish()
+
     team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     team_snapshot = dungeon_team_application.snapshot(team_id)
     exit_result = dungeon_team_application.kick(
@@ -654,6 +713,7 @@ async def kick_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
 
 @disband_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("解散队伍")
 async def disband_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent]):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -717,6 +777,7 @@ async def view_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMes
 
 
 @transfer_team_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("转移队长")
 async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, PrivateMessageEvent], args: Message = CommandArg()):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
@@ -726,13 +787,6 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
 
     user_id = str(user_info['user_id'])
     operation_id = _team_operation_id(event, "transfer", user_id)
-    replay = dungeon_team_application.operation_result(
-        operation_id, "transfer"
-    )
-    if replay is not None:
-        await handle_send(bot, event, _team_mutation_message("transfer", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
-        await transfer_team_cmd.finish()
-
     arg = args.extract_plain_text().strip()
     target_user_id = get_at_user_id(args)
     if not target_user_id and arg:
@@ -740,6 +794,16 @@ async def transfer_team_handler(bot: Bot, event: Union[GroupMessageEvent, Privat
         if target_db_info:
             target_user_id = str(target_db_info['user_id'])
     target_user_id = str(target_user_id or "")
+    replay = dungeon_team_application.operation_result(
+        operation_id, "transfer"
+    )
+    if replay is not None:
+        if replay.target_id and replay.target_id != target_user_id:
+            replay = TeamMutationResult("state_changed", team_id=replay.team_id, team_name=replay.team_name,
+                                         target_id=target_user_id, reason="operation_conflict")
+        await handle_send(bot, event, _team_mutation_message("transfer", replay), md_type="team", k1="查看队伍", v1="查看队伍", k2="队伍帮助", v2="队伍帮助")
+        await transfer_team_cmd.finish()
+
     team_id = dungeon_team_application.team_id_for_user(user_id) or f"missing:{user_id}"
     snapshot = dungeon_team_application.snapshot(team_id)
     result = dungeon_team_application.transfer(
@@ -946,6 +1010,8 @@ async def _send_explore_response(bot: Bot, event, response: dict) -> None:
     if battle_messages:
         try:
             await send_msg_handler(bot, event, battle_messages)
+        except (MatcherException, ProcessException):
+            raise
         except Exception:
             logger.exception("副本战报发送失败，结算 operation 已保留完整战报")
     await handle_send(
@@ -1198,6 +1264,7 @@ async def handle_dungeon_purchase(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 @dungeon_exit.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("退出副本")
 async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1226,17 +1293,29 @@ async def handle_dungeon_exit(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, "当前未在副本探索中。")
     elif result_status == "completed":
         await handle_send(bot, event, "今日副本已完成，无需退出。")
-    elif result_status == "state_changed":
-        await handle_send(bot, event, result_failure("退出副本", result))
-    else:
+    elif result_status in {"applied", "duplicate"}:
         await handle_send(bot, event, "已退出当前副本，进度将保留。")
+    else:
+        await handle_send(bot, event, result_failure("退出副本", result, subjects={str(user_id): "玩家"}))
     await dungeon_exit.finish()
 
 
 # =========================
 # 探索副本
 # =========================
+def _explore_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    player, separator, item = subject.partition(":")
+    label = f"玩家【{player}】" if player.isdigit() else ""
+    if label and separator and item.isdigit():
+        label += f"的物品【{item}】"
+    return {subject: label} if label else {}
+
+
 @explore_dungeon.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("探索副本", known_rejections=DUNGEON_EXPLORE_WRITE_REJECTIONS + (
+    "dungeon_status_initialization_write_rejected", "dungeon_status_initialization_projection_mismatch",
+), subjects=_explore_failure_subjects)
 async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 
@@ -1253,13 +1332,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         else f"dungeon-explore:{dungeon_ids.new_id()}:{user_id}"
     )
 
-    try:
-        replay_data = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
-        replay = replay_data
-    except Exception:
-        logger.exception("读取副本探索 operation 失败")
-        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-        await explore_dungeon.finish()
+    replay = dungeon_application.replay(operation_id=operation_id, user_id=user_id)
 
     if replay.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法重放。")
@@ -1268,16 +1341,11 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         await _send_explore_response(bot, event, replay.get("response") or {})
         await explore_dungeon.finish()
     if replay.get("phase") == "prepared":
-        try:
-            resumed = dungeon_application.settle(
-                operation_id=operation_id,
-                user_id=user_id,
-                max_goods_num=XiuConfig().max_goods_num,
-            )
-        except Exception:
-            logger.exception("恢复副本探索 operation 失败")
-            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-            await explore_dungeon.finish()
+        resumed = dungeon_application.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=XiuConfig().max_goods_num,
+        )
         if resumed.get("phase") == "completed":
             await _send_explore_response(bot, event, resumed.get("response") or {})
         else:
@@ -1289,20 +1357,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     async def reject(result_status: str, message: str, status=None) -> None:
         status = status or {}
         response = _explore_response(message)
-        try:
-            stored_data = dungeon_application.resolve_rejection(
-                operation_id=operation_id,
-                user_id=user_id,
-                result_status=result_status,
-                response=response,
-                max_goods_num=XiuConfig().max_goods_num,
-                current_layer=int(status.get("current_layer", 0) or 0),
-                dungeon_status=str(status.get("dungeon_status", "")),
-            )
-            await _send_explore_response(bot, event, stored_data.get("response") or response)
-        except Exception:
-            logger.exception("持久化副本探索拒绝响应失败")
-            await handle_send(bot, event, "副本探索校验失败：处理过程异常。")
+        stored_data = dungeon_application.resolve_rejection(
+            operation_id=operation_id,
+            user_id=user_id,
+            result_status=result_status,
+            response=response,
+            max_goods_num=XiuConfig().max_goods_num,
+            current_layer=int(status.get("current_layer", 0) or 0),
+            dungeon_status=str(status.get("dungeon_status", "")),
+        )
+        await _send_explore_response(bot, event, stored_data.get("response") or response)
 
     player_status = dungeon_manager.get_player_status(user_id)
     if player_status["dungeon_status"] == "completed":
@@ -1478,14 +1542,9 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
     if frozen_intent:
         intent = frozen_intent
     if not frozen_intent:
-        try:
-            intent_result = dungeon_application.prepare_intent(
-                operation_id=operation_id, user_id=user_id, intent=intent
-            )
-        except Exception:
-            logger.exception("持久化副本探索 resolution intent 失败")
-            await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-            await explore_dungeon.finish()
+        intent_result = dungeon_application.prepare_intent(
+            operation_id=operation_id, user_id=user_id, intent=intent
+        )
         if intent_result.get("phase") == "intent" and isinstance(intent_result.get("intent"), dict):
             if _snapshot_digest(intent_result["intent"]) != _snapshot_digest(intent):
                 await reject(
@@ -1789,22 +1848,16 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
         "resolved": resolved,
         "response": response,
     }
-    try:
-        prepared_data = dungeon_application.prepare_resolution(
-            operation_id=operation_id, user_id=user_id, plan=plan
+    prepared = dungeon_application.prepare_resolution(
+        operation_id=operation_id, user_id=user_id, plan=plan
+    )
+    settled = None
+    if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
+        settled = dungeon_application.settle(
+            operation_id=operation_id,
+            user_id=user_id,
+            max_goods_num=XiuConfig().max_goods_num,
         )
-        prepared = prepared_data
-        settled = None
-        if prepared.get("status") not in {"operation_conflict", "schema_missing", "unsupported"} and prepared.get("phase") != "completed":
-            settled = dungeon_application.settle(
-                operation_id=operation_id,
-                user_id=user_id,
-                max_goods_num=XiuConfig().max_goods_num,
-            )
-    except Exception:
-        logger.exception("副本探索事务结算失败")
-        await handle_send(bot, event, "副本探索结算失败：处理过程异常。")
-        await explore_dungeon.finish()
 
     if prepared.get("status") == "operation_conflict":
         await handle_send(bot, event, "该探索事件身份冲突，无法结算。")
@@ -1826,6 +1879,7 @@ async def handle_explore_dungeon(bot: Bot, event: GroupMessageEvent | PrivateMes
 # 我的副本状态
 # =========================
 @dungeon_status.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的副本状态", known_rejections=("dungeon_status_initialization_write_rejected", "dungeon_status_initialization_projection_mismatch"))
 async def handle_dungeon_status(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, send_group_id = await assign_bot(bot=bot, event=event)
 

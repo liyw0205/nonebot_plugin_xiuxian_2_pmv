@@ -67,7 +67,9 @@ from .relation_utils import (
     get_mentor_required_gap,
     get_realm_gap,
     is_wujie_or_above,
+    remaining_whole_count,
     safe_int,
+    whole_count_limit,
 )
 from .two_exp_cd import two_exp_cd
 
@@ -497,10 +499,13 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     impart_two_exp_1 = impart_data_1['impart_two_exp'] if impart_data_1 else 0
     main_two_data_1 = UserBuffDate(user_id).get_user_main_buff_data()
     main_two_1 = main_two_data_1['two_buff'] if main_two_data_1 else 0
-    max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
+    max_count_1 = remaining_whole_count(
+        two_exp_limit, impart_two_exp_1, main_two_1, limt_1
+    )
 
     if max_count_1 <= 0:
-        msg = f"你的今日双修次数已用尽（已用{limt_1}/上限{limt_1 + max_count_1}），请等待每日重置或使用双修令。"
+        total_limit = whole_count_limit(two_exp_limit, impart_two_exp_1, main_two_1)
+        msg = f"你的今日双修次数已用尽（已用{limt_1}/上限{total_limit}），请等待每日重置或使用双修令。"
         await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
         await two_exp_invite.finish()
 
@@ -531,10 +536,13 @@ async def two_exp_invite_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         impart_two_exp_2 = impart_data_2['impart_two_exp'] if impart_data_2 else 0
         main_two_data_2 = UserBuffDate(two_qq).get_user_main_buff_data()
         main_two_2 = main_two_data_2['two_buff'] if main_two_data_2 else 0
-        max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
+        max_count_2 = remaining_whole_count(
+            two_exp_limit, impart_two_exp_2, main_two_2, limt_2
+        )
 
         if max_count_2 <= 0:
-            msg = f"{user_2_info['user_name']}今日双修次数已用尽（已用{limt_2}/上限{limt_2 + max_count_2}），请对方等待每日重置或使用双修令。"
+            total_limit = whole_count_limit(two_exp_limit, impart_two_exp_2, main_two_2)
+            msg = f"{user_2_info['user_name']}今日双修次数已用尽（已用{limt_2}/上限{total_limit}），请对方等待每日重置或使用双修令。"
             await handle_send(bot, event, msg, md_type="buff", k1="双修", v1="双修", k2="次数", v2="我的双修次数", k3="修为", v3="我的修为")
             await two_exp_invite.finish()
         
@@ -639,11 +647,16 @@ async def direct_two_exp(
     main_two_1 = main_two_data_1["two_buff"] if main_two_data_1 else 0
     main_two_2 = main_two_data_2["two_buff"] if main_two_data_2 else 0
 
-    max_count_1 = two_exp_limit + impart_two_exp_1 + main_two_1 - limt_1
-    max_count_2 = two_exp_limit + impart_two_exp_2 + main_two_2 - limt_2
+    max_count_1 = remaining_whole_count(
+        two_exp_limit, impart_two_exp_1, main_two_1, limt_1
+    )
+    max_count_2 = remaining_whole_count(
+        two_exp_limit, impart_two_exp_2, main_two_2, limt_2
+    )
 
     if max_count_1 <= 0:
-        msg = f"发起人{user_1.get('user_name', user_id_1)}今日双修次数已用尽（已用{limt_1}/上限{limt_1 + max_count_1}），请等待每日重置或使用双修令。"
+        total_limit = whole_count_limit(two_exp_limit, impart_two_exp_1, main_two_1)
+        msg = f"发起人{user_1.get('user_name', user_id_1)}今日双修次数已用尽（已用{limt_1}/上限{total_limit}），请等待每日重置或使用双修令。"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -654,7 +667,8 @@ async def direct_two_exp(
         return
 
     if max_count_2 <= 0:
-        msg = f"受邀人{user_2.get('user_name', user_id_2)}今日双修次数已用尽（已用{limt_2}/上限{limt_2 + max_count_2}），请等待每日重置或使用双修令。"
+        total_limit = whole_count_limit(two_exp_limit, impart_two_exp_2, main_two_2)
+        msg = f"受邀人{user_2.get('user_name', user_id_2)}今日双修次数已用尽（已用{limt_2}/上限{total_limit}），请等待每日重置或使用双修令。"
         await handle_send(
             bot, event, msg,
             md_type="buff",
@@ -1175,7 +1189,9 @@ async def my_exp_num_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
     main_two = main_two_data['two_buff'] if main_two_data is not None else 0
     
-    num = (two_exp_limit + impart_two_exp + main_two) - limt
+    num = remaining_whole_count(
+        two_exp_limit, impart_two_exp, main_two, limt
+    )
     if num <= 0:
         num = 0
     msg = f"道友剩余双修次数{num}次！"
@@ -1205,7 +1221,9 @@ async def use_two_exp_token(bot, event, item_id, num):
         impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
         main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
         main_two = main_two_data['two_buff'] if main_two_data is not None else 0
-        remaining_count = (two_exp_limit + impart_two_exp + main_two) - result.used_count
+        remaining_count = remaining_whole_count(
+            two_exp_limit, impart_two_exp, main_two, result.used_count
+        )
         msg = f"增加{tokens_used}次双修！\n"
         msg += f"当前剩余双修次数：{remaining_count}次"
     elif result.status == "limit_full":

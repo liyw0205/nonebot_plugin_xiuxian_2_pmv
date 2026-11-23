@@ -267,6 +267,9 @@ class OperationLedger:
         action: str,
         payload: Any,
         error: str,
+        *,
+        code: str = "internal_error",
+        data: Any = None,
     ) -> None:
         """Persist an exception after the business transaction rolled back."""
         digest = request_hash(payload)
@@ -275,7 +278,8 @@ class OperationLedger:
             operation_id,
             action,
             error,
-            code="internal_error",
+            code=code,
+            data=data,
             audit_category="failure",
             occurred_at=now,
         )

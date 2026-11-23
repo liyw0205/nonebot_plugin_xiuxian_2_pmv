@@ -299,11 +299,15 @@ class TrainingPurchaseSqlRepository:
             back_columns = {
                 str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")
             }
+            inventory_select = "COALESCE(goods_num,0) AS goods_num"
+            if "bind_num" in back_columns:
+                inventory_select += ",COALESCE(bind_num,0) AS bind_num"
             inventory_row = uow.query_one(
-                "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                f"SELECT {inventory_select} FROM back WHERE user_id=? AND goods_id=?",
                 (user_id, item_id),
             )
             inventory = int(inventory_row["goods_num"]) if inventory_row else 0
+            previous_bind = int(inventory_row["bind_num"]) if inventory_row and "bind_num" in back_columns else 0
             if inventory + quantity > max_goods_num:
                 return self._result(
                     "inventory_full", quantity, unit_cost, points=expected_points,
@@ -318,10 +322,33 @@ class TrainingPurchaseSqlRepository:
                 (bind_sqlite_param(points, exact=True), weekly_json, user_id, bind_sqlite_param(expected_points, exact=True)),
             )
             if changed.rowcount != 1:
-                raise DomainError("training_points_write_rejected", "training points write did not affect one row")
-            saved = uow.query_one("SELECT points FROM player_data.training WHERE user_id=?", (user_id,))
-            if saved is None or require_exact_integer(saved["points"], field="training_points", subject=user_id) != points:
-                raise DomainError("training_points_write_rejected", "training points did not persist exactly", {"reason": "training_points_write_rejected", "subject": user_id})
+                raise DomainError(
+                    "training_purchase_state_write_rejected",
+                    "training purchase state write did not affect one row",
+                    {"reason": "training_purchase_state_write_rejected", "subject": user_id},
+                )
+            saved = uow.query_one(
+                "SELECT points,weekly_purchases FROM player_data.training WHERE user_id=?",
+                (user_id,),
+            )
+            if saved is None:
+                raise DomainError(
+                    "training_points_projection_mismatch",
+                    "training state disappeared after purchase",
+                    {"reason": "training_points_projection_mismatch", "subject": user_id},
+                )
+            if require_exact_integer(saved["points"], field="training_points", subject=user_id) != points:
+                raise DomainError(
+                    "training_points_projection_mismatch",
+                    "training points did not persist exactly",
+                    {"reason": "training_points_projection_mismatch", "subject": user_id},
+                )
+            if _normalize_weekly(saved["weekly_purchases"], today) != weekly:
+                raise DomainError(
+                    "training_weekly_purchases_projection_mismatch",
+                    "training weekly purchases did not persist exactly",
+                    {"reason": "training_weekly_purchases_projection_mismatch", "subject": user_id},
+                )
 
             timestamp = self.clock.now().isoformat(sep=" ", timespec="seconds")
             if inventory_row is None:
@@ -336,10 +363,16 @@ class TrainingPurchaseSqlRepository:
                 if "bind_num" in back_columns:
                     fields.append("bind_num")
                     values.append(quantity if bind_flag else 0)
-                uow.execute(
+                inserted = uow.execute(
                     f"INSERT INTO back({','.join(fields)}) VALUES({','.join('?' for _ in values)})",
                     tuple(values),
                 )
+                if inserted.rowcount != 1:
+                    raise DomainError(
+                        "training_inventory_write_rejected",
+                        "training inventory insert did not affect one row",
+                        {"reason": "training_inventory_write_rejected", "subject": user_id},
+                    )
             else:
                 assignments = "goods_num=goods_num+?"
                 values = [quantity]
@@ -353,17 +386,63 @@ class TrainingPurchaseSqlRepository:
                     assignments += ",update_time=?"
                     values.append(timestamp)
                 values.extend((user_id, item_id))
-                if uow.execute(
+                updated = uow.execute(
                     f"UPDATE back SET {assignments} WHERE user_id=? AND goods_id=?",
                     tuple(values),
-                ).rowcount != 1:
-                    raise RuntimeError("training inventory changed during purchase")
+                )
+                if updated.rowcount != 1:
+                    raise DomainError(
+                        "training_inventory_write_rejected",
+                        "training inventory update did not affect one row",
+                        {"reason": "training_inventory_write_rejected", "subject": user_id},
+                    )
 
-            uow.execute(
+            saved_inventory = uow.query_one(
+                f"SELECT {inventory_select} FROM back WHERE user_id=? AND goods_id=?",
+                (user_id, item_id),
+            )
+            expected_bind = previous_bind + quantity if "bind_num" in back_columns and bind_flag else previous_bind
+            if (
+                saved_inventory is None
+                or int(saved_inventory["goods_num"]) != inventory
+                or ("bind_num" in back_columns and int(saved_inventory["bind_num"]) != expected_bind)
+            ):
+                raise DomainError(
+                    "training_inventory_projection_mismatch",
+                    "training inventory did not persist exactly",
+                    {"reason": "training_inventory_projection_mismatch", "subject": user_id},
+                )
+
+            receipt = uow.execute(
                 "INSERT INTO training_purchase_operations"
                 "(operation_id,payload,quantity,cost,points,purchased,inventory) VALUES(?,?,?,xiuxian_int_store(?,'stone','actor'),xiuxian_int_store(?,'training_points','actor'),?,?)",
                 (operation_id, payload, quantity, bind_sqlite_param(cost, exact=True), bind_sqlite_param(points, exact=True), purchased, inventory),
             )
+            if receipt.rowcount != 1:
+                raise DomainError(
+                    "training_purchase_receipt_write_rejected",
+                    "training purchase receipt insert did not affect one row",
+                    {"reason": "training_purchase_receipt_write_rejected", "subject": user_id},
+                )
+            saved_receipt = uow.query_one(
+                "SELECT payload,quantity,cost,points,purchased,inventory "
+                "FROM training_purchase_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if (
+                saved_receipt is None
+                or not operation_payload_matches(saved_receipt["payload"], payload)
+                or int(saved_receipt["quantity"]) != quantity
+                or require_exact_integer(saved_receipt["cost"], field="training_receipt_cost", subject=user_id) != cost
+                or require_exact_integer(saved_receipt["points"], field="training_receipt_points", subject=user_id) != points
+                or int(saved_receipt["purchased"]) != purchased
+                or int(saved_receipt["inventory"]) != inventory
+            ):
+                raise DomainError(
+                    "training_purchase_receipt_projection_mismatch",
+                    "training purchase receipt did not persist exactly",
+                    {"reason": "training_purchase_receipt_projection_mismatch", "subject": user_id},
+                )
             return TrainingPurchaseResult("applied", quantity, cost, points, purchased, inventory)
 
 

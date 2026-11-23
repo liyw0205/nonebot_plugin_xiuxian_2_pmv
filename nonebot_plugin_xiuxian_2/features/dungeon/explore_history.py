@@ -6,7 +6,7 @@
 `current_layer`、`dungeon_status`、`updated_at`。玩家只有 `我的副本状态` 的当前进度，
 看不到近几天探索过哪些层、结果与奖励摘要；本模块补齐这段个人历史。
 
-只读；缺表/缺列/坏 JSON 或读失败返回空态，不建表、不补列。时间窗只用下界。
+只读；缺表/缺列或读失败返回空态，跳过坏 JSON 和无效时间，不建表、不补列。时间窗只用下界。
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ class DungeonExploreHistoryApplication:
         user_id = str(user_id or "").strip()
         if not user_id:
             return self._empty("缺少玩家身份，无法查询副本记录。")
-        since = (self._now() - timedelta(days=DAYS)).strftime("%Y-%m-%d %H:%M:%S")
+        since = (self._now() - timedelta(days=DAYS)).isoformat()
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
                 if not _columns(uow, "dungeon_explore_operations").issuperset(_COLUMNS):
@@ -93,8 +93,8 @@ class DungeonExploreHistoryApplication:
                     "SELECT result_json,current_layer,dungeon_status,updated_at "
                     "FROM dungeon_explore_operations "
                     "WHERE request_identity = ? AND phase = 'completed' "
-                    "AND result_status = 'applied' AND updated_at >= ? "
-                    "ORDER BY updated_at DESC, rowid DESC",
+                    "AND result_status = 'applied' AND julianday(updated_at) >= julianday(?) "
+                    "ORDER BY julianday(updated_at) DESC, rowid DESC",
                     (_identity(user_id), since),
                 )
         except Exception:

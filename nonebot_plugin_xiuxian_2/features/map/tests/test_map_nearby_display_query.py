@@ -103,7 +103,8 @@ def test_display_handler_awaits_bounded_application_and_preserves_messages(users
     query = AsyncMock(return_value=users)
     env["map_application"].nearby_display = query
     asyncio.run(env["_"]("bot", object()))
-    query.assert_awaited_once_with(**POSITION, exclude_user_id="me", random_source=env["runtime_random"])
+    query.assert_awaited_once_with(**POSITION, exclude_user_id="me", random_source=env["runtime_random"],
+                                   raise_on_error=True)
     env["_get_all_in_same_node"].assert_not_called()
     assert env["handle_send"].await_args.args[2] == (
         "【附近道友】\n- target（level）" if users else "附近暂无其他道友。"
@@ -124,7 +125,8 @@ def test_nearby_command_preserves_reply_without_nested_event_loop():
         return POSITION
 
     async def nearby_display(**kwargs):
-        assert kwargs == POSITION | {"exclude_user_id": "me", "random_source": env["runtime_random"]}
+        assert kwargs == POSITION | {"exclude_user_id": "me", "random_source": env["runtime_random"],
+                                    "raise_on_error": True}
         return [{"user_id": "first", "user_name": "target", "level": "level"}]
 
     env["check_user"] = check_user
@@ -145,7 +147,8 @@ def test_application_awaits_feature_selector_with_injected_rng(nearby, monkeypat
         **POSITION, exclude_user_id="me", random_source=source,
     )) is result
     assert isinstance(query.await_args.args[0], MapNearbyDisplaySqlQueryRepository)
-    assert query.await_args.kwargs == POSITION | {"exclude_user_id": "me", "random_source": source}
+    assert query.await_args.kwargs == POSITION | {"exclude_user_id": "me", "random_source": source,
+                                                  "raise_on_error": False}
 
 
 def test_duplicate_map_and_profile_rows_use_first_matching_pair_without_weight(nearby):
@@ -673,6 +676,7 @@ def test_real_display_handler_caps_messages_and_preserves_application_order(near
     add_users(nearby, 10)
     env = load_handler("nearby_users_cmd", None)
     env["map_application"] = MapApplication(nearby[2], nearby[1])
+    env["_is_canonical_map_status"] = Mock(return_value=True)
     env["runtime_random"].randint = Mock(side_effect=lambda low, high: high)
     env["runtime_random"].sample = Mock(side_effect=lambda items, count: list(reversed(items)))
     asyncio.run(env["_"]("bot", object()))

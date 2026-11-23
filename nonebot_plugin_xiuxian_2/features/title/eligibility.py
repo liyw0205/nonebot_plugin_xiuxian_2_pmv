@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sqlite3
 from typing import Any, Iterable
 
 from ...core.numeric import normalize_user_row
@@ -51,7 +52,9 @@ class TitleEligibilitySqlRepository:
                     }
                     if tower_keys:
                         tower = self._read_fields(uow, "tower", str(user_id), tower_keys)
-            except Exception:
+            except sqlite3.OperationalError:
+                if Path(self.player_database).exists():
+                    raise
                 statistics, tower = {}, {}
         return TitleConditionSnapshot(profile, statistics, tower)
 
@@ -63,7 +66,9 @@ class TitleEligibilitySqlRepository:
                     "ORDER BY rowid ASC LIMIT 1",
                     (user_id,),
                 )
-        except Exception:
+        except sqlite3.OperationalError:
+            if Path(self.game_database).exists():
+                raise
             return None
         return normalize_user_row(dict(row)) if row is not None else None
 

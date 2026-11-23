@@ -202,9 +202,9 @@ class TowerShopSearchTests(unittest.TestCase):
             patch.object(module, "assign_bot", AsyncMock(return_value=(BOT, None))),
             patch.object(module.tower_data, "config", {"商店商品": shop}),
             patch.object(
-                module.tower_limit, "get_user_tower_info", lambda uid: {"score": 0}
+                module.tower_limit, "read_user_tower_info",
+                lambda uid: {"score": 0, "weekly_purchases": {}}
             ),
-            patch.object(module.tower_limit, "get_weekly_purchases", lambda uid, iid: 0),
             patch.object(module, "_items", lambda: FakeItems(rows)),
             patch.object(module, "send_msg_handler", send_msg),
             patch.object(module, "handle_send", handle_send),
@@ -251,7 +251,7 @@ class TrainingShopSearchTests(unittest.TestCase):
             patch.object(module.training_data, "config", {"商店商品": shop}),
             patch.object(
                 module.training_application,
-                "get_state",
+                "read_state",
                 lambda uid: {"weekly_purchases": {}, "points": 0},
             ),
             patch.object(module, "_items", lambda: FakeItems(rows)),

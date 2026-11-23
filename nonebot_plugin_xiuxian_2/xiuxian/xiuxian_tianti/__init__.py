@@ -2,8 +2,9 @@ import random
 import re
 import time
 from datetime import datetime
+from nonebot.log import logger
 from ..on_compat import on_command
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 from ..adapter_compat import Bot, Message, GroupMessageEvent, PrivateMessageEvent
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
@@ -18,7 +19,8 @@ from .tianti_data import (
     get_tianti_level_index,
     get_opened_qiaoxue_count,
     get_qiaoxue_pool,
-    get_qiaoxue_map,
+    QiaoxueConfigurationError,
+    read_qiaoxue_pool_strict,
 )
 from ...features.tianti_settlement.application import TiantiSettlementApplication
 from ...features.tianti_training.application import TiantiTrainingApplication
@@ -264,6 +266,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_settle.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体结算",
+    known_rejections=(
+        "tianti_settlement_profile_write_rejected",
+        "tianti_settlement_profile_projection_mismatch",
+        "tianti_settlement_receipt_write_rejected",
+        "tianti_settlement_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -341,6 +352,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_stone.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "灵石炼体",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_stone_wallet_write_rejected",
+        "tianti_stone_wallet_projection_mismatch",
+        "tianti_stone_profile_write_rejected",
+        "tianti_stone_profile_projection_mismatch",
+        "tianti_stone_receipt_write_rejected",
+        "tianti_stone_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -350,13 +373,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     user_id = str(user_info["user_id"])
     txt = args.extract_plain_text().strip()
-    if not txt.isdigit():
+    normalized = txt.lstrip("0") or "0"
+    max_integer = "9223372036854775807"
+    if (
+        not txt.isascii()
+        or not txt.isdigit()
+        or len(normalized) > len(max_integer)
+        or (len(normalized) == len(max_integer) and normalized > max_integer)
+    ):
         await handle_send(bot, event, "用法：灵石炼体 灵石数量")
         return
 
-    stone_cost = int(txt)
+    stone_cost = int(normalized)
     if stone_cost <= 9:
-        await handle_send(bot, event, "请输入大于10的灵石数量。")
+        await handle_send(bot, event, "灵石数量必须至少为10。")
         return
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = (
@@ -380,8 +410,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if status == "at_cap":
         await handle_send(bot, event, "已达当前炼体境界上限，无法继续灵石炼体。")
         return
-    if status in {"stone_insufficient", "stone_changed"}:
-        await handle_send(bot, event, "灵石不足或余额已更新，请重新查看后再炼体。")
+    if status == "stone_insufficient":
+        await handle_send(bot, event, "灵石余额不足，本次未扣费。")
+        return
+    if status == "stone_changed":
+        await handle_send(bot, event, "灵石余额已变化，本次未扣费，请重新查看后再炼体。")
+        return
+    if status == "user_missing":
+        await handle_send(bot, event, "未找到修仙数据，本次未扣费。")
         return
     if not outcome.ok:
         raise RuntimeError(f"unexpected tianti stone training status: {status}")
@@ -393,6 +429,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @tianti_medicine_bath.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体药浴",
+    known_rejections=(
+        "tianti_bath_item_write_rejected",
+        "tianti_bath_item_projection_mismatch",
+        "tianti_bath_profile_write_rejected",
+        "tianti_bath_profile_projection_mismatch",
+        "tianti_bath_receipt_write_rejected",
+        "tianti_bath_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -537,7 +584,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     pre_result = result.get("settlement", {})
 
     pre_msg = ""
-    if pre_result["status"] == "ok" and pre_result.get("real_gain", 0) > 0:
+    if pre_result["status"] in {"ok", "settle"} and pre_result.get("real_gain", 0) > 0:
         pre_msg = f"\n药浴前已自动结算炼体气血：{number_to(pre_result['real_gain'])}"
         pre_msg += _format_sect_fairyland_msg(pre_result)
 
@@ -566,6 +613,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @tianti_break.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "炼体突破",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_breakthrough_profile_write_rejected",
+        "tianti_breakthrough_profile_projection_mismatch",
+        "tianti_breakthrough_receipt_write_rejected",
+        "tianti_breakthrough_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -640,6 +697,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_info.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("我的炼体")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -713,6 +771,16 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_chongqiao.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command(
+    "冲窍",
+    known_rejections=(
+        "operation_conflict",
+        "tianti_qiaoxue_profile_write_rejected",
+        "tianti_qiaoxue_profile_projection_mismatch",
+        "tianti_qiaoxue_receipt_write_rejected",
+        "tianti_qiaoxue_receipt_projection_mismatch",
+    ),
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """
     冲窍
@@ -804,10 +872,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     user_id = str(user_info["user_id"])
+    try:
+        qpool = read_qiaoxue_pool_strict()
+    except QiaoxueConfigurationError as exc:
+        logger.warning(
+            f"我的体窍查询失败 reason={exc.reason} subject=炼体窍穴.json"
+        )
+        messages = {
+            "qiaoxue_config_missing": "体窍配置缺失",
+            "qiaoxue_config_invalid": "体窍配置无效",
+            "qiaoxue_config_unreadable": "体窍配置不可读",
+        }
+        label = messages.get(exc.reason, "体窍配置无效")
+        await handle_send(
+            bot,
+            event,
+            f"{label}（reason={exc.reason}，subject=炼体窍穴.json），未执行查询。",
+        )
+        return
+
     data = tianti_training_application.read_profile(user_id)
     opened = set(data.get("opened_qiaoxue", []))
-    qpool = get_qiaoxue_pool()
-    qmap = get_qiaoxue_map()
+    qmap = {item["name"]: item for item in qpool}
     arg = args.extract_plain_text().strip()
 
     base_ratio, gain_pct = calc_qiaoxue_bonus(data)
@@ -884,6 +970,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @tianti_bath_history.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("我的药浴记录")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)

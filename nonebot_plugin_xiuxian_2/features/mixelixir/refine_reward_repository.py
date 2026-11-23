@@ -7,11 +7,29 @@ from ...infrastructure.database import DatabaseUnitOfWork
 
 
 class MixelixirRefineRewardResult:
-    def __init__(self, status: str, reward_id: int = 0, reward_name: str = "", reward_quantity: int = 0) -> None:
+    def __init__(
+        self,
+        status: str,
+        reward_id: int = 0,
+        reward_name: str = "",
+        reward_quantity: int = 0,
+        *,
+        reason: str = "",
+        subject: str = "",
+    ) -> None:
         self.status = status
         self.reward_id = reward_id
         self.reward_name = reward_name
         self.reward_quantity = reward_quantity
+        self.reason = reason
+        self.subject = subject
+
+
+class _KnownWriteRejection(Exception):
+    def __init__(self, reason: str, subject: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.subject = subject
 
 
 class MixelixirRefineRewardSqlRepository:
@@ -170,54 +188,201 @@ class MixelixirRefineRewardSqlRepository:
             if (int(inventory["goods_num"]) if inventory else 0) + quantity > max_goods_num:
                 return MixelixirRefineRewardResult("inventory_full")
 
-            if inventory is None:
-                back_columns = {
-                    str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")
-                }
-                insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
-                values = [user_id, reward_id, reward_name, "丹药", quantity]
-                if "bind_num" in back_columns:
-                    insert_columns.append("bind_num")
-                    values.append(0)
-                columns_sql = ",".join(f'"{column}"' for column in insert_columns)
-                placeholders = ",".join("?" for _ in values)
-                uow.execute(
-                    f"INSERT INTO back({columns_sql}) VALUES({placeholders})",
-                    tuple(values),
-                )
-            else:
-                uow.execute(
-                    "UPDATE back SET goods_name=?,goods_type='丹药',goods_num=goods_num+? "
-                    "WHERE user_id=? AND goods_id=?",
-                    (reward_name, quantity, user_id, reward_id),
-                )
-
-            assignments = ",".join(f'"{field}"=?' for field in self._MIX_FIELDS)
-            changed = uow.execute(
-                f"UPDATE player_data.mix_elixir_info SET {assignments} WHERE user_id=?",
-                tuple(self._state_value(field, updated[field]) for field in self._MIX_FIELDS) + (user_id,),
+            back_columns = {
+                str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")
+            }
+            has_bind_num = "bind_num" in back_columns
+            current_inventory = uow.query_one(
+                "SELECT goods_name,goods_type,COALESCE(goods_num,0) AS goods_num"
+                + (",COALESCE(bind_num,0) AS bind_num" if has_bind_num else "")
+                + " FROM back WHERE user_id=? AND goods_id=?",
+                (user_id, reward_id),
             )
-            if changed.rowcount != 1:
-                raise RuntimeError("mixelixir player state changed during claim")
-
-            uow.execute(
-                'INSERT INTO player_data.statistics(user_id,"炼丹次数") VALUES(?,1) '
-                'ON CONFLICT(user_id) DO UPDATE SET "炼丹次数"='
-                'COALESCE(player_data.statistics."炼丹次数",0)+1',
+            previous_stats = uow.query_one(
+                'SELECT COALESCE("炼丹次数",0) AS count FROM player_data.statistics WHERE user_id=?',
                 (user_id,),
             )
-            changed = uow.execute(
-                "UPDATE mixelixir_refine_tasks SET status='claimed',claimed_at=CURRENT_TIMESTAMP "
-                "WHERE task_id=? AND user_id=? AND status='ready'",
-                (task_id, user_id),
+            expected_inventory_num = (int(current_inventory["goods_num"]) if current_inventory else 0) + quantity
+            expected_bind_num = int(current_inventory["bind_num"]) if current_inventory and has_bind_num else 0
+            previous_count = int(previous_stats["count"]) if previous_stats else 0
+            updated_state = tuple(
+                self._state_value(field, updated[field]) for field in self._MIX_FIELDS
             )
-            if changed.rowcount != 1:
-                raise RuntimeError("mixelixir task changed during claim")
-            uow.execute(
-                "INSERT INTO mixelixir_refine_reward_operations "
-                "(operation_id,payload,task_id,reward_id,reward_name,reward_quantity) VALUES(?,?,?,?,?,?)",
-                (operation_id, payload, task_id, reward_id, reward_name, quantity),
-            )
+            expected_inventory = (reward_name, "丹药", expected_inventory_num)
+            if has_bind_num:
+                expected_inventory += (expected_bind_num,)
+            try:
+                with uow.savepoint("mixelixir_refine_reward"):
+                    if current_inventory is None:
+                        insert_columns = ["user_id", "goods_id", "goods_name", "goods_type", "goods_num"]
+                        values = [user_id, reward_id, reward_name, "丹药", quantity]
+                        if has_bind_num:
+                            insert_columns.append("bind_num")
+                            values.append(0)
+                        columns_sql = ",".join(f'"{column}"' for column in insert_columns)
+                        placeholders = ",".join("?" for _ in values)
+                        changed = uow.execute(
+                            f"INSERT INTO back({columns_sql}) VALUES({placeholders})",
+                            tuple(values),
+                        )
+                    else:
+                        changed = uow.execute(
+                            "UPDATE back SET goods_name=?,goods_type='丹药',goods_num=goods_num+? "
+                            "WHERE user_id=? AND goods_id=? AND COALESCE(goods_num,0)=?",
+                            (reward_name, quantity, user_id, reward_id, int(current_inventory["goods_num"])),
+                        )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_inventory_write_rejected", f"item:{reward_id}"
+                        )
+                    saved_inventory = uow.query_one(
+                        "SELECT goods_name,goods_type,COALESCE(goods_num,0) AS goods_num"
+                        + (",COALESCE(bind_num,0) AS bind_num" if has_bind_num else "")
+                        + " FROM back WHERE user_id=? AND goods_id=?",
+                        (user_id, reward_id),
+                    )
+                    actual_inventory = None if saved_inventory is None else (
+                        str(saved_inventory["goods_name"]),
+                        str(saved_inventory["goods_type"]),
+                        int(saved_inventory["goods_num"]),
+                    ) + ((int(saved_inventory["bind_num"]),) if has_bind_num else ())
+                    if actual_inventory != expected_inventory:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_inventory_projection_mismatch", f"item:{reward_id}"
+                        )
+
+                    assignments = ",".join(f'"{field}"=?' for field in self._MIX_FIELDS)
+                    changed = uow.execute(
+                        f"UPDATE player_data.mix_elixir_info SET {assignments} WHERE user_id=?",
+                        updated_state + (user_id,),
+                    )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_player_write_rejected", "player_mixelixir"
+                        )
+                    saved_mix = uow.query_one(
+                        f"SELECT {quoted_fields} FROM player_data.mix_elixir_info WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if saved_mix is None or self._state_tuple(
+                        saved_mix[field] for field in self._MIX_FIELDS
+                    ) != self._state_tuple(updated_state):
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_player_projection_mismatch", "player_mixelixir"
+                        )
+
+                    changed = uow.execute(
+                        'INSERT INTO player_data.statistics(user_id,"炼丹次数") VALUES(?,1) '
+                        'ON CONFLICT(user_id) DO UPDATE SET "炼丹次数"='
+                        'COALESCE(player_data.statistics."炼丹次数",0)+1',
+                        (user_id,),
+                    )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_statistics_write_rejected", "player_statistics"
+                        )
+                    saved_stats = uow.query_one(
+                        'SELECT COALESCE("炼丹次数",0) AS count FROM player_data.statistics WHERE user_id=?',
+                        (user_id,),
+                    )
+                    if saved_stats is None or int(saved_stats["count"]) != previous_count + 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_statistics_projection_mismatch", "player_statistics"
+                        )
+
+                    changed = uow.execute(
+                        "UPDATE mixelixir_refine_tasks SET status='claimed',claimed_at=CURRENT_TIMESTAMP "
+                        "WHERE task_id=? AND user_id=? AND status='ready'",
+                        (task_id, user_id),
+                    )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_task_write_rejected", "task"
+                        )
+                    saved_task = uow.query_one(
+                        "SELECT status,claimed_at FROM mixelixir_refine_tasks WHERE task_id=? AND user_id=?",
+                        (task_id, user_id),
+                    )
+                    if saved_task is None or saved_task["status"] != "claimed" or not saved_task["claimed_at"]:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_task_projection_mismatch", "task"
+                        )
+
+                    changed = uow.execute(
+                        "INSERT INTO mixelixir_refine_reward_operations "
+                        "(operation_id,payload,task_id,reward_id,reward_name,reward_quantity) VALUES(?,?,?,?,?,?)",
+                        (operation_id, payload, task_id, reward_id, reward_name, quantity),
+                    )
+                    if changed.rowcount != 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_receipt_write_rejected", "receipt"
+                        )
+                    saved_receipt = uow.query_one(
+                        "SELECT payload,task_id,reward_id,reward_name,reward_quantity "
+                        "FROM mixelixir_refine_reward_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if saved_receipt is None or tuple(saved_receipt.values()) != (
+                        payload, task_id, reward_id, reward_name, quantity
+                    ):
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_receipt_projection_mismatch", "receipt"
+                        )
+
+                    final_inventory = uow.query_one(
+                        "SELECT COALESCE(goods_num,0) AS goods_num FROM back WHERE user_id=? AND goods_id=?",
+                        (user_id, reward_id),
+                    )
+                    if final_inventory is None or int(final_inventory["goods_num"]) != expected_inventory_num:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_inventory_projection_mismatch", f"item:{reward_id}"
+                        )
+                    final_mix = uow.query_one(
+                        f"SELECT {quoted_fields} FROM player_data.mix_elixir_info WHERE user_id=?",
+                        (user_id,),
+                    )
+                    if final_mix is None or self._state_tuple(
+                        final_mix[field] for field in self._MIX_FIELDS
+                    ) != self._state_tuple(updated_state):
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_player_projection_mismatch", "player_mixelixir"
+                        )
+                    final_stats = uow.query_one(
+                        'SELECT COALESCE("炼丹次数",0) AS count FROM player_data.statistics WHERE user_id=?',
+                        (user_id,),
+                    )
+                    if final_stats is None or int(final_stats["count"]) != previous_count + 1:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_statistics_projection_mismatch", "player_statistics"
+                        )
+                    final_task = uow.query_one(
+                        "SELECT status,claimed_at FROM mixelixir_refine_tasks WHERE task_id=? AND user_id=?",
+                        (task_id, user_id),
+                    )
+                    if final_task is None or final_task["status"] != "claimed" or not final_task["claimed_at"]:
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_task_projection_mismatch", "task"
+                        )
+                    final_receipt = uow.query_one(
+                        "SELECT payload,task_id,reward_id,reward_name,reward_quantity "
+                        "FROM mixelixir_refine_reward_operations WHERE operation_id=?",
+                        (operation_id,),
+                    )
+                    if final_receipt is None or tuple(final_receipt.values()) != (
+                        payload, task_id, reward_id, reward_name, quantity
+                    ):
+                        raise _KnownWriteRejection(
+                            "mixelixir_refine_reward_receipt_projection_mismatch", "receipt"
+                        )
+            except _KnownWriteRejection as rejected:
+                return MixelixirRefineRewardResult(
+                    "write_rejected",
+                    reward_id,
+                    reward_name,
+                    quantity,
+                    reason=rejected.reason,
+                    subject=rejected.subject,
+                )
             return MixelixirRefineRewardResult("applied", reward_id, reward_name, quantity)
 
 

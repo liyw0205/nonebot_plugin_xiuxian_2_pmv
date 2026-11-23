@@ -57,6 +57,7 @@ from ..xiuxian_training.training_limit import training_limit
 from ..xiuxian_Illusion import IllusionData
 from ..xiuxian_dungeon import dungeon_manager
 from .two_exp_cd import two_exp_cd
+from .relation_utils import remaining_whole_count, whole_count_limit
 from .transaction_service import BlessedSpotService
 from .transaction_service import ClosingSettlementService
 from .transaction_service import StoneTrainingSettlementService
@@ -1319,7 +1320,7 @@ async def daily_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     impart_two_exp = impart_data['impart_two_exp'] if impart_data is not None else 0
     main_two_data = UserBuffDate(user_id).get_user_main_buff_data()
     main_two = main_two_data['two_buff'] if main_two_data is not None else 0
-    max_two_exp = two_exp_limit + impart_two_exp + main_two
+    max_two_exp = whole_count_limit(two_exp_limit, impart_two_exp, main_two)
     remaining_two_exp = max(max_two_exp - limt, 0)
     if remaining_two_exp <= 0:
         two_exp_msg = f"✅ 已用尽 0/{max_two_exp}"

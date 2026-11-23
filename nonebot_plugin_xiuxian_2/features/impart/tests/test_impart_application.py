@@ -325,6 +325,17 @@ class ImpartApplicationTest(unittest.TestCase):
             self.assertEqual(paid.new_cards, ("A",))
             self.assertEqual(app.draw_result("paid-1", "u", 1).status, "duplicate")
             self.assertEqual(app.draw_result("paid-1", "u", 2).status, "operation_conflict")
+            with DatabaseUnitOfWork(impart, read_only=True) as uow:
+                state = uow.query_one(
+                    "SELECT impart_atk_per FROM xiuxian_impart WHERE user_id='u'"
+                )
+                self.assertAlmostEqual(state["impart_atk_per"], 0.1)
+                self.assertEqual(
+                    uow.query_one(
+                        "SELECT quantity FROM impart_cards WHERE user_id='u' AND card_name='A'"
+                    )["quantity"],
+                    1,
+                )
 
             crystal = app.crystal_draw(
                 operation_id="crystal-1",
@@ -350,7 +361,8 @@ class ImpartApplicationTest(unittest.TestCase):
                 state = uow.query_one(
                     "SELECT stone_num,wish,impart_num,exp_day,impart_atk_per FROM xiuxian_impart WHERE user_id='u'"
                 )
-                self.assertEqual(tuple(state.values()), (40, 20, 1, 66, 0.1))
+                self.assertEqual(tuple(state.values())[:4], (40, 20, 1, 66))
+                self.assertAlmostEqual(state["impart_atk_per"], 0.15)
                 self.assertEqual(uow.query_one("SELECT quantity FROM impart_cards WHERE user_id='u' AND card_name='A'")["quantity"], 2)
             with DatabaseUnitOfWork(player, read_only=True) as uow:
                 stats = uow.query_one(

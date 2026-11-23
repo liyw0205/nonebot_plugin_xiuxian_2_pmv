@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Mapping
 
@@ -37,6 +38,15 @@ def as_int(value: Any, default: int = 0) -> int:
             return int(float(str(value)))
         except (TypeError, ValueError):
             return default
+
+
+def as_float(value: Any, default: float = 0.0) -> float:
+    """Tolerant numeric coercion for fractional harvest bonuses."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return result if math.isfinite(result) else default
 
 
 def normalize_now(value: datetime) -> datetime:
@@ -109,7 +119,12 @@ def harvest_count(
 ) -> int:
     """本次可收取数量：灵田数量 + 收取等级 + 传承加成 + 功法加成。"""
     return max(
-        as_int(field_count) + as_int(harvest_level) + as_int(impart_reap_per) + as_int(reap_buff),
+        math.floor(
+            as_int(field_count)
+            + as_int(harvest_level)
+            + as_float(impart_reap_per)
+            + as_float(reap_buff)
+        ),
         0,
     )
 

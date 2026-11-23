@@ -12,6 +12,13 @@ No new HTTP route is exposed in this migration slice. Existing URLs remain serve
 ## 数据模型与迁移
 `legacy.impart.001` records the feature boundary in `game_db`. The application ledger stays in `game_db`, while `ImpartRepository` is wired to the actual `xiuxian_impart.db`. `impart.002` creates the prayer replay table in `game_db`, and `impart.003` prepares the three prayer statistics columns in `player_db`. For love sand, `impart.004` creates the replay table in `game_db`, and `impart.005` prepares its two statistics columns in `player_db`. The `20005` use handler keeps random card selection at the adapter boundary; `ImpartPrayerSqlRepository` atomically consumes the item, updates cards and bonuses, increments those statistics, and records replay state across the attached game/impart/player databases. The `20016` handler keeps reward rolls at the adapter boundary; `LoveSandSqlRepository` consumes the item, grants crystals, increments statistics, and stores replay state across the same databases. Legacy rows remain the compatibility data source.
 
+## 卡牌属性累计
+每种卡第 1 张提供完整基础属性，后续每张提供半份；单种卡属性计算最多计入 25 张，但背包库存不截断，第 26 张及以后仍保留。`impart.013` 会按现存卡库存一次性重算已有角色的持久化加成；若旧 `impart_person.json` 在启动重算后才首次迁入，迁入路径也会按最终库存刷新已有角色，不改卡片数量。`传承抽卡` 的每日 100 次上限和 `传承祈愿` 的每次 10 颗结晶消耗保持不变。百分比属性按持久化加成直接进入战斗/修炼计算；双修、炼丹和灵田等整数产出在应用边界按完整单位结算。
+
+按同一种卡的总库存计算，跨抽卡、祈愿和祈愿石累计，不因活动或请求批次重新给予首张加成。基础属性为 `v` 时，1、2、5、24、25、26 张分别计 `v`、`1.5v`、`3v`、`12.5v`、`13v`、`13v`；不同卡种各自保留首张全额，即使其属性类型相同。
+
+获取规则沿用既有实现：灵石抽卡每次消耗 1000 万灵石、每日最多 100 次；结晶祈愿每次消耗 10 颗思恋结晶。两者沿用原中奖判断，每次概率计数增加 10，达到 89 保底，出卡后清零；祈愿石每颗获得一张随机卡。`传承合成` 仍消耗 5 张源卡换 1 张目标卡；背包星级仍每 5 张显示一颗实星、最多五颗，星级不决定属性跳变，卡片逐张累计。
+
 ## 事务与失败回滚
 Prayer and love-sand requests carry an `operation_id`; asset changes, player statistics, and replay data commit or roll back together. Replays return the first result without incrementing statistics again. The request path does not create or alter schema and rejects requests while required startup migrations are missing. Disable the feature flag or restore the pre-migration backup to roll back.
 

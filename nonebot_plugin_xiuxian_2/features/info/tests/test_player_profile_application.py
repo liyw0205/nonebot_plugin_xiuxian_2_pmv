@@ -4,8 +4,11 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from ....core.errors import DomainError
 from ..profile_application import PlayerProfileApplication
+from .. import profile_repository
 from ..profile_repository import (
     MAX_USER_SEARCH_QUERY_CHARS,
     MAX_USER_SEARCH_RESULTS,
@@ -37,6 +40,38 @@ class PlayerProfileReadTest(unittest.TestCase):
             database = Path(directory) / "missing.db"
             self.assertIsNone(PlayerProfileSqlRepository(database).get_user_profile("u"))
             self.assertFalse(database.exists())
+
+    def test_strict_read_failure_keeps_cause_and_does_not_alias_missing_user(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with sqlite3.connect(database) as connection:
+                connection.execute("CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT)")
+                connection.execute("INSERT INTO user_xiuxian VALUES ('u','道友')")
+
+            unit_of_work = profile_repository.DatabaseUnitOfWork
+
+            class DenyProfileRead(unit_of_work):
+                def __enter__(self):
+                    result = super().__enter__()
+                    self.connection.set_authorizer(
+                        lambda action, table, *_: sqlite3.SQLITE_DENY
+                        if action == sqlite3.SQLITE_READ and table == "user_xiuxian"
+                        else sqlite3.SQLITE_OK
+                    )
+                    return result
+
+            application = PlayerProfileApplication(database)
+            with patch.object(profile_repository, "DatabaseUnitOfWork", DenyProfileRead):
+                with self.assertRaises(DomainError) as caught:
+                    application.get_user_profile("u", raise_errors=True)
+                self.assertEqual(
+                    caught.exception.details,
+                    {"reason": "profile_read_failed", "subject": "player_profile"},
+                )
+                self.assertIsInstance(caught.exception.__cause__, sqlite3.DatabaseError)
+                self.assertIsNone(application.get_user_profile("u"))
+
+            self.assertIsNone(application.get_user_profile("missing", raise_errors=True))
 
     def test_duplicate_user_ids_keep_legacy_first_row_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

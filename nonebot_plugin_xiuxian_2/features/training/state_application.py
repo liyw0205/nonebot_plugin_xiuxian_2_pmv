@@ -27,5 +27,9 @@ class TrainingStateApplication:
         with self.lock:
             return self.repository.initialize(user_id, self.clock.now().date())
 
+    def read(self, user_id: str) -> dict[str, Any]:
+        with self.lock:
+            return self.repository.read(user_id, self.clock.now().date())
+
 
 __all__ = ["TrainingStateApplication"]

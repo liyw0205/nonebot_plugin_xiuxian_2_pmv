@@ -4,7 +4,9 @@ except ImportError:
     import json
 
 import asyncio
+import hashlib
 from datetime import datetime, timedelta
+from ...core.errors import DomainError
 from ...paths import get_paths
 from ..on_compat import on_command
 from nonebot.log import logger
@@ -39,7 +41,7 @@ from ...features.map.rewards import MapRewardResolver
 from ...features.map.static_data import MapStaticDataProvider
 from ...compatibility.legacy_map_battle import build_legacy_map_battle_runner
 from ...features._legacy_application import result_data
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.json_document import JsonDocumentReader
@@ -144,6 +146,22 @@ def _map_operation_id(event, action: str, *identifiers) -> str:
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     suffix = ":".join(str(value) for value in identifiers)
     return f"map-{action}:{event_id or runtime_ids.new_id()}:{suffix}"
+
+
+def _map_movement_failure(result) -> str:
+    result_info = result_data(result.data)
+    if result_info.get("reason"):
+        return result_failure(
+            "地图移动",
+            result_info,
+            subjects={"map_status": "地图位置", "stamina": "移动体力", "receipt": "移动回执"},
+        )
+    if result.code == "stamina_insufficient":
+        return "体力不足，无法移动。"
+    if result.code == "state_changed":
+        return "移动未完成：所在节点已更新，请重新移动。"
+    return f"无法移动（{result.code}）。"
+
 
 # =========================================
 # 每日限制配置
@@ -463,6 +481,22 @@ map_mission_cmd = on_command("地图委托", priority=8, block=True)
 map_mission_accept_cmd = on_command("接取委托", priority=8, block=True)
 map_mission_claim_cmd = on_command("委托完成", priority=8, block=True)
 
+_MAP_MISSION_COMMAND_REJECTIONS = (
+    "map_mission_schema_missing",
+    "map_mission_state_write_rejected",
+    "map_mission_state_projection_mismatch",
+    "map_mission_claim_mission_write_rejected",
+    "map_mission_claim_mission_projection_mismatch",
+    "map_mission_claim_stone_write_rejected",
+    "map_mission_claim_stone_projection_mismatch",
+    "map_mission_claim_inventory_write_rejected",
+    "map_mission_claim_inventory_projection_mismatch",
+    "map_mission_claim_receipt_write_rejected",
+    "map_mission_claim_receipt_projection_mismatch",
+    "map_mission_claim_outbox_write_rejected",
+    "map_mission_claim_outbox_projection_mismatch",
+)
+
 # =========================================
 # 限制/冷却工具
 # =========================================
@@ -506,8 +540,8 @@ def _check_daily_cap(uid: str, key: str, cap: int):
     return cur < cap, cur, cap
 
 
-def _get_reward_decay(uid: str):
-    d = _get_daily_limit(uid)
+def _get_reward_decay(uid: str, daily: dict | None = None):
+    d = daily if daily is not None else _get_daily_limit(uid)
     n = int(d.get("resource_total_count", 0))
     for threshold, ratio in REWARD_DECAY_STEPS:
         if n <= threshold:
@@ -543,16 +577,20 @@ def _get_map_mission(uid: str):
     # 跨天重置
     if d.get("date") != _today_str():
         d = default.copy()
-        return map_application.save_mission(str(uid), d)
+        return _save_map_mission(uid, d)
 
     for k, v in default.items():
         if k not in d or d.get(k) is None:
             d[k] = v
-    return map_application.save_mission(str(uid), d)
+    return _save_map_mission(uid, d)
 
 
 def _save_map_mission(uid: str, d: dict):
-    return map_application.save_mission(str(uid), d)
+    result = map_application.save_mission(str(uid), d)
+    if result.get("status") == "schema_missing":
+        reason = "map_mission_schema_missing"
+        raise DomainError(reason, reason, {"reason": reason, "subject": "map_mission"})
+    return result
 
 
 def _roll_new_map_mission(uid: str, *, random_source=None, clock=None):
@@ -640,40 +678,42 @@ def _get_realm_heaven_order(map_data, realm: str):
     return _heaven_names(map_data, realm)
 
 
+def _save_player_map_status(user_id: str, realm: str, heaven: str, node_id: str, visited_nodes: list[str]):
+    result = map_application.save_status(user_id, realm, heaven, node_id, visited_nodes)
+    if result.get("status") == "schema_missing":
+        raise DomainError(
+            "schema_missing", "map status schema is not initialized",
+            {"reason": "map_status_schema_missing", "subject": "map_status"},
+        )
+    return result
+
+
 def _get_player_map_status(user_id: str, map_data: dict):
     data = map_application.map_status(str(user_id))
     if data is None:
         return _init_player_map_status(user_id, map_data)
     if data and data.get("realm") and data.get("heaven") and data.get("node_id"):
-        if data.get("realm") == "仙域" and data.get("heaven") == "九天天":
-            data["heaven"] = "九重天"
-            data = map_application.save_status(
-                str(user_id), data["realm"], "九重天", data["node_id"], data.get("visited_nodes", [])
-            )
         realm = data.get("realm")
         if realm not in _all_realms(map_data):
             return _init_player_map_status(user_id, map_data)
 
-        heaven = _resolve_heaven_alias(map_data, realm, data.get("heaven"))
-        if heaven != data.get("heaven"):
-            data["heaven"] = heaven
-            data = map_application.save_status(
-                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
-            )
+        heaven = data.get("heaven")
+        if realm == "仙域" and heaven == "九天天":
+            heaven = "九重天"
+        heaven = _resolve_heaven_alias(map_data, realm, heaven)
 
         if heaven not in map_data[realm]["heavens"]:
             order = _get_realm_heaven_order(map_data, realm)
             heaven = order[0]
-            data["heaven"] = heaven
-            data = map_application.save_status(
-                str(user_id), data["realm"], heaven, data["node_id"], data.get("visited_nodes", [])
-            )
 
-        if not _find_node_by_id(map_data, realm, heaven, data.get("node_id")):
+        node_id = data.get("node_id")
+        if not _find_node_by_id(map_data, realm, heaven, node_id):
             node = _nodes(map_data, realm, heaven)[0]
-            data["node_id"] = node["id"]
-            data = map_application.save_status(
-                str(user_id), data["realm"], data["heaven"], node["id"], data.get("visited_nodes", [])
+            node_id = node["id"]
+
+        if heaven != data.get("heaven") or node_id != data.get("node_id"):
+            data = _save_player_map_status(
+                str(user_id), realm, heaven, node_id, data.get("visited_nodes", [])
             )
 
         return data
@@ -701,7 +741,7 @@ def _init_player_map_status(user_id: str, map_data: dict, *, random_source=None)
         "node_id": node["id"],
         "visited_nodes": [node["id"]],
     }
-    return map_application.save_status(
+    return _save_player_map_status(
         str(user_id), init_data["realm"], init_data["heaven"], init_data["node_id"], init_data["visited_nodes"]
     )
 
@@ -815,6 +855,7 @@ def _merge_reward_text(rewards: list[str]) -> str:
 # 洞府
 # =========================================
 @build_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("建设洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -874,7 +915,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         dongfu=save_data,
     )
     data = result_data(outcome.data)
-    result = MapDongfuBuildResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0))
+    result = MapDongfuBuildResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stone", 0) or 0),
+        str(data.get("reason", "") or ""),
+        str(data.get("subject", "") or ""),
+    )
     if result.status == "already_built":
         await handle_send(bot, event, "你已建立洞府，无需重复建设。")
         return
@@ -882,6 +928,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"建设洞府需要{number_to(DONGFU_COST)}灵石，你当前灵石不足。")
         return
     if not result.succeeded:
+        if result.reason:
+            await handle_send(bot, event, result_failure(
+                "建设洞府",
+                result,
+                subjects={
+                    "stone_wallet": "灵石钱包",
+                    "dongfu_status": "洞府状态",
+                    "map_position": "地图位置",
+                    "receipt": "建设回执",
+                },
+            ))
+            return
         await handle_send(bot, event, "建设洞府未完成：洞府状态已更新，请重新建设。")
         return
 
@@ -889,6 +947,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @go_home.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("回府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -900,6 +959,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     outcome = map_application.return_home(
         operation_id=_map_operation_id(event, "home", user_id), user_id=user_id
     )
+    result = result_data(outcome.data)
+    if not outcome.ok and result.get("reason"):
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "回府",
+                result,
+                subjects={"map_status": "地图位置", "receipt": "回府回执"},
+            ),
+        )
+        return
     if not outcome.ok and outcome.code == "dongfu_missing":
         await handle_send(bot, event, "你尚未建设洞府，请先使用【建设洞府】。")
         return
@@ -911,6 +982,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
     if not outcome.ok and outcome.code == "operation_conflict":
         await handle_send(bot, event, "该事件已用于其他回府操作。")
+        return
+    if not outcome.ok:
+        await handle_send(
+            bot,
+            event,
+            f"回府未完成：操作状态为{outcome.code}，地图位置未确认改变，请核对后重试。",
+        )
         return
     await handle_send(
         bot,
@@ -928,24 +1006,27 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "**地图帮助**\n"
         "---\n"
         "**移动**\n"
-        "- 地图 / 我的位置 / 前往 节点名\n"
-        "> 查看地图、当前位置，前往指定节点\n"
+        "- 地图帮助 / 地图 / 我的位置 / 前往\n"
+        "> 用法：地图 [界名/天名]；前往 节点名/天名/界名\n"
         "- 建设洞府 / 回府\n"
         "> 在当前节点建设洞府，或返回洞府\n"
         "- 附近道友 / 论道切磋 / 论道查看\n"
-        "> 查看附近修士并发起/查看论道\n"
+        "> 用法：论道切磋 [道号]；论道查看 [道号]\n"
         "\n"
         "**资源与战斗**\n"
         "- 钓鱼 / 挖矿 / 采集\n"
         "> 含每日上限，可产出洞府材料\n"
-        "- 节点战斗（试炼/险地）\n"
+        "- 收杆 / 落镐 / 采收\n"
+        "> 分别在钓鱼、挖矿、采集触发交互时使用\n"
+        "- 节点战斗 / 试炼挑战 / 险地挑战\n"
         "> 含每日上限\n"
-        "- 开始探索 [分钟] / 探索结算\n"
-        "> 长时探索，含每日上限\n"
+        "- 开始探索 / 节点探索 / 探索结算\n"
+        "> 用法：开始探索 [分钟]；节点探索 [分钟]，含每日上限\n"
         "- 种子商店 / 购买种子\n"
-        "> 购买洞府种植所需种子\n"
+        "> 用法：购买种子 种子名 数量\n"
         "\n"
         "**洞府与委托**\n"
+        "- 洞府帮助\n"
         "- 我的洞府 / 洞府地脉 / 洞府巡山 / 洞府种植 / 洞府收获\n"
         "- 洞府施肥 / 洞府催熟 / 洞府扩建 / 洞府布阵 / 潜入洞府\n"
         "- 地图委托 / 接取委托 / 委托完成\n"
@@ -962,6 +1043,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @map_info.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "地图",
+    known_rejections=(
+        "map_status_schema_missing",
+        "map_status_write_rejected",
+        "map_status_projection_mismatch",
+    ),
+    subjects=lambda exc: {"map_status": "地图位置"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -971,9 +1061,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     uid = str(user_info["user_id"])
     map_data = _load_map_data()
-    st = _get_player_map_status(uid, map_data)
-
     query = args.extract_plain_text().strip()
+    kind, parsed = _parse_map_query(map_data, query) if query else (None, None)
+    if query and kind is None:
+        await handle_send(bot, event, f"未识别参数【{query}】，可输入界名或天名。")
+        return
+
+    st = _get_player_map_status(uid, map_data)
     if not query:
         cur_node = _find_node_by_id(map_data, st["realm"], st["heaven"], st["node_id"])
         lines = [
@@ -997,11 +1091,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             native_markdown=True,
             fallback_msg="\n".join(lines),
         )
-        return
-
-    kind, parsed = _parse_map_query(map_data, query)
-    if kind is None:
-        await handle_send(bot, event, f"未识别参数【{query}】，可输入界名或天名。")
         return
 
     if kind == "realm":
@@ -1040,6 +1129,15 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @my_pos.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "我的位置",
+    known_rejections=(
+        "map_status_schema_missing",
+        "map_status_write_rejected",
+        "map_status_projection_mismatch",
+    ),
+    subjects=lambda exc: {"map_status": "地图位置"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1056,6 +1154,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @map_go.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("地图移动")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, msg = check_user(event)
@@ -1125,12 +1224,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"🚀 跨界成功！\n已抵达 {tar_realm}·{first_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
@@ -1164,12 +1258,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"☁️ 跨天成功！\n已抵达 {tar_realm}·{tar_heaven}·{tar_node['name']}\n消耗体力：{cost}")
         return
@@ -1207,12 +1296,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             cost=cost,
         )
         if not result.ok:
-            message = (
-                "体力不足，无法移动。" if result.code == "stamina_insufficient"
-                else "移动未完成：所在节点已更新，请重新移动。" if result.code == "state_changed"
-                else f"无法移动（{result.code}）。"
-            )
-            await handle_send(bot, event, message)
+            await handle_send(bot, event, _map_movement_failure(result))
             return
         await handle_send(bot, event, f"👣 移动成功！\n已前往【{tar_node['name']}】\n跨越 {steps} 个节点，消耗体力：{cost}")
         return
@@ -1222,6 +1306,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 # 社交
 # =========================================
 @nearby_users_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "附近道友",
+    known_rejections=("map_nearby_position_read_failed", "map_nearby_display_read_failed"),
+    subjects=lambda exc: {"map_status": "本人地图位置", "nearby_candidates": "附近道友列表"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1240,12 +1329,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
             exclude_user_id=uid,
             status_validator=lambda status: _is_canonical_map_status(status, map_data),
             random_source=runtime_random,
+            raise_on_error=True,
         )
     if combined is None:
         st = _get_player_map_status(uid, map_data)
         users = await map_application.nearby_display(
             realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
-            exclude_user_id=uid, random_source=runtime_random,
+            exclude_user_id=uid, random_source=runtime_random, raise_on_error=True,
         )
     else:
         st, users = combined
@@ -1257,7 +1347,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, "\n".join(lines))
 
 
-@dao_qc.handle(parameterless=[Cooldown(cd_time=20, stamina_cost=1)])
+async def _send_dao_battle_outcome(bot, event, outcome):
+    message = outcome.message
+    if not outcome.ok and (outcome.data or {}).get("reason") != "position_changed":
+        message = result_failure(
+            "论道切磋", outcome, subjects={"challenger": "发起方战绩", "target": "对方", "receipt": "论道回执"},
+        )
+    await handle_send(bot, event, message)
+
+
+@dao_qc.handle(parameterless=[Cooldown(cd_time=20, stamina_cost=1, stamina_operation_prefix="map-dao-stamina")])
+@guard_command("论道切磋")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1267,6 +1367,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
     uid = str(user_info["user_id"])
     target_name = args.extract_plain_text().strip()
+    operation_id = _map_operation_id(event, "dao", uid)
+    previous = dao_battle_application.replay_dao_battle(
+        operation_id=operation_id, challenger_id=uid, requested_target=target_name,
+    )
+    if previous is not None:
+        await _send_dao_battle_outcome(bot, event, previous)
+        return
 
     map_data = _load_map_data()
     st = _get_player_map_status(uid, map_data)
@@ -1297,23 +1404,25 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     my_win_rate = 0.5 if (my_power + ta_power) == 0 else my_power / (my_power + ta_power)
     my_win = runtime_random.random() < my_win_rate
 
+    winner = user_info["user_name"] if my_win else target["user_name"]
     outcome = dao_battle_application.settle_dao_battle(
-        operation_id=_map_operation_id(event, "dao", uid, target["user_id"]),
+        operation_id=operation_id,
         challenger_id=uid,
         target_id=target["user_id"],
         expected_position=st,
         challenger_won=my_win,
+        requested_target=target_name,
+        success_message=f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}",
     )
-    if not outcome.ok:
-        message = outcome.message or "论道未完成：双方位置或体力已更新，请重新发起。"
-        await handle_send(bot, event, message)
-        return
-
-    winner = user_info["user_name"] if my_win else target["user_name"]
-    await handle_send(bot, event, f"你与【{target['user_name']}】论道切磋一番，胜者：{winner}")
+    await _send_dao_battle_outcome(bot, event, outcome)
 
 
 @dao_view.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command(
+    "论道查看",
+    known_rejections=("map_nearby_target_read_failed", "map_dao_record_read_failed"),
+    subjects=lambda exc: {"nearby_target": "附近道友资料", "dao_record": "论道战绩"},
+)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1332,7 +1441,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         st = _get_player_map_status(uid, map_data)
         target = map_application.nearby_target(
             realm=st["realm"], heaven=st["heaven"], node_id=st["node_id"],
-            user_name=target_name, exclude_user_id=None,
+            user_name=target_name, exclude_user_id=None, raise_on_error=True,
         ).target
         if not target:
             await handle_send(bot, event, f"附近未找到道友【{target_name}】")
@@ -1379,6 +1488,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @buy_seed.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("购买种子")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     is_user, user_info, m = check_user(event)
@@ -1396,7 +1506,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     seed_name = parts[0]
     try:
         num = int(parts[1])
-    except Exception:
+    except ValueError:
         await handle_send(bot, event, "数量必须是整数。")
         return
     if num <= 0:
@@ -1440,7 +1550,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, "背包物品已达上限，购买未完成。")
         return
     if result.status in {"state_changed", "user_missing"}:
+        if data.get("reason"):
+            await handle_send(bot, event, result_failure(
+                "购买种子",
+                data,
+                subjects={"stone_wallet": "灵石钱包", "receipt": "购买回执"},
+            ))
+            return
+        if result.status == "user_missing":
+            await handle_send(bot, event, "角色资料不存在，请重新加入修仙后再购买种子。")
+            return
         await handle_send(bot, event, "操作未完成：灵石数额已更新，请重新发起。")
+        return
+    if result.status not in {"applied", "duplicate"}:
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "购买种子",
+                {"status": result.status, "reason": data.get("reason", ""),
+                 "subject": data.get("subject", "")},
+                subjects={"stone_wallet": "灵石钱包", "receipt": "购买回执"},
+            ),
+        )
         return
     await handle_send(bot, event, f"购买成功：{seed['name']} x{result.quantity}，花费{number_to(result.cost)}灵石。")
 
@@ -1477,6 +1609,7 @@ def _interactive_start_message(result, action_type: str) -> str:
     )
 
 
+@guard_command("资源行动")
 async def _interactive_ready_notice(bot, event, uid: str, action: dict):
     action_id = str(action["action_id"])
     action_type = str(action["action"])
@@ -1496,7 +1629,8 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
             f"{config['trigger_msg']}（地点：{action['node_name']}）",
         )
 
-    await asyncio.sleep(max(0, (expires_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()))
+    remaining = (expires_at - runtime_clock.now().replace(tzinfo=None)).total_seconds()
+    await asyncio.sleep(max(0, remaining) + 0.001)
     current = map_application.get_active(uid)
     if current is None or str(current.get("action_id")) != action_id:
         return
@@ -1510,14 +1644,17 @@ async def _interactive_ready_notice(bot, event, uid: str, action: dict):
         "expired",
         cooldown_until,
     )
-    if expired.status == "applied":
+    if expired.succeeded:
         await handle_send(
             bot,
             event,
             f"❌ 时机已过，{action_type}失败（{action['node_name']}）",
         )
+    else:
+        await handle_send(bot, event, result_failure("资源行动", expired))
 
 
+@guard_command("资源行动")
 async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, action_type: str):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1596,6 +1733,7 @@ async def _process_node_action(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
 
 
+@guard_command("资源行动")
 async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, resolve_cmd: str):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1615,13 +1753,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=25)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        reset = _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
             "invalid",
             cooldown_until,
         )
+        if not reset.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", reset))
+            return
         await handle_send(bot, event, "状态异常，已重置。")
         return
     if ia["resolve_cmd"] != resolve_cmd:
@@ -1633,13 +1774,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (
             now + timedelta(seconds=int(st.get("cooldown_sec", 25) or 25))
         ).strftime("%Y-%m-%d %H:%M:%S")
-        _finish_interactive_failure(
+        reset = _finish_interactive_failure(
             f"map-interactive-invalid:{st['action_id']}",
             uid,
             st["action_id"],
             "invalid",
             cooldown_until,
         )
+        if not reset.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", reset))
+            return
         await handle_send(bot, event, "资源行动状态异常，已重置。")
         return
     if now < ready_ts:
@@ -1650,13 +1794,16 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        expired = _finish_interactive_failure(
             f"map-interactive-timeout:{st['action_id']}",
             uid,
             st["action_id"],
             "expired",
             cooldown_until,
         )
+        if not expired.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", expired))
+            return
         await handle_send(bot, event, f"❌ 时机已过，{action}失败。")
         return
 
@@ -1664,20 +1811,23 @@ async def _resolve_interactive_action(bot: Bot, event: GroupMessageEvent | Priva
         cooldown_until = (now + timedelta(seconds=ia["cooldown_sec"])).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        _finish_interactive_failure(
+        failed = _finish_interactive_failure(
             f"map-interactive-failed:{st['action_id']}",
             uid,
             st["action_id"],
             "failed",
             cooldown_until,
         )
+        if not failed.succeeded:
+            await handle_send(bot, event, result_failure("资源行动", failed))
+            return
         await handle_send(bot, event, f"💨 你动作慢了半拍，{action}失败（目标跑了）")
         return
 
     settlement = st.get("settlement")
     if settlement is None:
         daily = _get_daily_limit(uid)
-        decay = _get_reward_decay(uid)
+        decay = _get_reward_decay(uid, daily=daily)
         reward_decision = decide_interactive_reward(runtime_random.random(), st["pool_key"])
         rewards, stone, reward_items = map_reward_resolver.roll_rewards(
             reward_decision.plan, decay, random_source=runtime_random
@@ -2100,6 +2250,28 @@ def _roll_explore_event(user_info: dict, node_type: str, node_name: str, decay: 
     return text, rewards, stone, reward_items
 
 
+@guard_command(
+    "发起探索",
+    known_rejections=(
+        "map_explore_start_stamina_write_rejected",
+        "map_explore_start_stamina_projection_mismatch",
+        "map_explore_start_status_write_rejected",
+        "map_explore_start_status_projection_mismatch",
+        "map_explore_start_cooldown_write_rejected",
+        "map_explore_start_cooldown_projection_mismatch",
+        "map_explore_start_receipt_write_rejected",
+        "map_explore_start_receipt_projection_mismatch",
+        "map_explore_start_receipt_invalid",
+    ),
+    subjects=lambda _exc: {
+        "stamina": "探索体力",
+        "map_status": "地图位置",
+        "map_daily_limit": "探索次数",
+        "map_explore_status": "探索状态",
+        "map_cooldown": "探索冷却",
+        "receipt": "探索永久回执",
+    },
+)
 async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, duration_arg: int | None):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -2178,31 +2350,26 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     expected_cooldown = map_application.cooldown_until(uid, "explore_start_cd_until")
     cooldown_until = (start_at + timedelta(seconds=EXPLORE_START_COOLDOWN_SEC)).strftime("%Y-%m-%d %H:%M:%S")
     event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    try:
-        outcome = map_application.explore_start(
-            operation_id=f"map-explore-start:{uid}:{event_message_id or runtime_ids.new_id()}",
-            user_id=uid,
-            expected_stamina=stamina,
-            stamina_cost=need_stamina,
-            expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
-            expected_status=expected_status,
-            expected_daily=expected_daily,
-            daily_limit=DAILY_LIMIT_CONFIG["explore"],
-            expected_cooldown=expected_cooldown,
-            cooldown_until=cooldown_until,
-            new_status=new_st,
-        )
-        data = result_data(outcome.data)
-        result = MapExploreStartResult(
-            str(data.get("status", outcome.code)),
-            int(data.get("stamina", stamina) or 0),
-            reason=str(data.get("reason", "")),
-            subject=str(data.get("subject", "actor")),
-        )
-    except Exception:
-        logger.exception("地图探索发起事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索发起失败：处理过程异常。")
-        return
+    outcome = map_application.explore_start(
+        operation_id=f"map-explore-start:{uid}:{event_message_id or runtime_ids.new_id()}",
+        user_id=uid,
+        expected_stamina=stamina,
+        stamina_cost=need_stamina,
+        expected_position={key: position[key] for key in ("realm", "heaven", "node_id")},
+        expected_status=expected_status,
+        expected_daily=expected_daily,
+        daily_limit=DAILY_LIMIT_CONFIG["explore"],
+        expected_cooldown=expected_cooldown,
+        cooldown_until=cooldown_until,
+        new_status=new_st,
+    )
+    data = result_data(outcome.data)
+    result = MapExploreStartResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stamina", stamina) or 0),
+        reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "actor")),
+    )
     if result.status == "already_running":
         await handle_send(bot, event, "你已有进行中的探索，请先【探索结算】。")
         return
@@ -2213,7 +2380,12 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, f"今日探索发起次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），请明日再来。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("发起探索", result))
+        await handle_send(bot, event, result_failure(
+            "发起探索", result,
+            subjects={"stamina": "探索体力", "map_status": "地图位置",
+                      "map_daily_limit": "探索次数", "map_explore_status": "探索状态",
+                      "map_cooldown": "探索冷却", "receipt": "探索永久回执"},
+        ))
         return
 
     await handle_send(
@@ -2224,6 +2396,30 @@ async def _start_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     )
 
 
+@guard_command(
+    "探索结算",
+    known_rejections=(
+        "map_explore_settlement_daily_write_rejected",
+        "map_explore_settlement_daily_projection_mismatch",
+        "map_explore_settlement_status_write_rejected",
+        "map_explore_settlement_status_projection_mismatch",
+        "map_explore_settlement_stone_write_rejected",
+        "map_explore_settlement_stone_projection_mismatch",
+        "map_explore_settlement_inventory_write_rejected",
+        "map_explore_settlement_inventory_projection_mismatch",
+        "map_explore_settlement_receipt_write_rejected",
+        "map_explore_settlement_receipt_projection_mismatch",
+        "map_explore_settlement_receipt_invalid",
+        "map_explore_settlement_snapshot_write_rejected",
+        "map_explore_settlement_snapshot_projection_mismatch",
+    ),
+    subjects=lambda _exc: {
+        "map_daily_limit": "探索次数",
+        "map_explore_status": "探索状态",
+        "stone_wallet": "灵石钱包",
+        "receipt": "探索结算回执",
+    },
+)
 async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     ok, user_info, m = check_user(event)
     if not ok:
@@ -2231,7 +2427,10 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         return
 
     uid = str(user_info["user_id"])
-    st = _get_explore_status(uid)
+    st = map_application.explore_status(uid)
+    if not st:
+        await handle_send(bot, event, "当前没有进行中的探索。")
+        return
     if int(st.get("running", 0)) != 1:
         await handle_send(bot, event, "当前没有进行中的探索。")
         return
@@ -2271,7 +2470,45 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
                 snapshot = None
                 st["settlement"] = ""
                 raw_snapshot = ""
+    daily = _get_daily_limit(uid)
+
+    async def freeze_snapshot(value):
+        frozen = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        snapshot_operation_id = "map-explore-snapshot:" + hashlib.sha256(
+            (uid + start_time + frozen).encode("utf-8")
+        ).hexdigest()[:32]
+        prepared = map_application.prepare_explore_settlement_snapshot(
+            operation_id=snapshot_operation_id,
+            user_id=uid,
+            expected_state={
+                "running": 1,
+                "node_type": st.get("node_type", ""),
+                "node_name": st.get("node_name", ""),
+                "start_time": st.get("start_time", ""),
+                "duration_min": st.get("duration_min", 0),
+                "settlement": st.get("settlement", ""),
+                "max_duration_min": st.get("max_duration_min", 0),
+                "interval_min": st.get("interval_min", 0),
+            },
+            settlement=frozen,
+        )
+        if not prepared.ok:
+            await handle_send(bot, event, result_failure(
+                "探索结算",
+                prepared,
+                messages={
+                    "explore_changed": "探索状态已变化，奖励快照未保存，本次未结算。",
+                },
+                subjects={"map_explore_status": "探索状态"},
+            ))
+            return False
+        st["settlement"] = frozen
+        return True
+
     if snapshot is None:
+        if int(daily.get("explore_count", 0)) >= DAILY_LIMIT_CONFIG["explore"]:
+            await handle_send(bot, event, f"今日探索次数已达上限（{DAILY_LIMIT_CONFIG['explore']}次），探索奖励未结算，请明日再来。")
+            return
         elapsed_min = max(0, int((runtime_clock.now().replace(tzinfo=None) - start_at).total_seconds() // 60))
         duration_min = int(st.get("duration_min", 0))
         max_duration = int(st.get("max_duration_min", 0))
@@ -2283,7 +2520,6 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         rounds = max(1, settle_min // interval)
         node_type = str(st.get("node_type", ""))
         node_name = str(st.get("node_name", "未知地点"))
-        daily = _get_daily_limit(uid)
         decay = _get_reward_decay(uid)
         event_lines, rewards, reward_items, stone = [], [], [], 0
         for index in range(rounds):
@@ -2303,8 +2539,12 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
             "settle_min": settle_min,
             "stone": stone,
         }
-        st["settlement"] = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
-        _save_explore_status(uid, st)
+        if not await freeze_snapshot(snapshot):
+            return
+    elif snapshot.get("daily") != daily:
+        snapshot["daily"] = daily
+        if not await freeze_snapshot(snapshot):
+            return
 
     expected_state = {
         "running": 1,
@@ -2317,35 +2557,46 @@ async def _settle_explore(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         "settlement": st.get("settlement", ""),
     }
     operation_id = f"map-explore:{uid}:{start_time}"
-    try:
-        outcome = map_application.explore_settle(
-            operation_id=operation_id,
-            user_id=uid,
-            expected_state=expected_state,
-            expected_daily=snapshot["daily"],
-            daily_limit=DAILY_LIMIT_CONFIG["explore"],
-            stone=snapshot["stone"],
-            items=snapshot["items"],
-            max_goods_num=XiuConfig().max_goods_num,
-            clock=runtime_clock,
-        )
-        data = result_data(outcome.data)
-        result = MapExploreSettlementResult(
-            str(data.get("status", outcome.code)),
-            int(data.get("stone", 0) or 0),
-            tuple(data.get("rewards", ())),
-            reason=str(data.get("reason", "")),
-            subject=str(data.get("subject", "actor")),
-        )
-    except Exception:
-        logger.exception("地图探索结算事务失败 user_id={}", uid)
-        await handle_send(bot, event, "探索结算失败：处理过程异常。")
-        return
-    if result.status == "inventory_full":
-        await handle_send(bot, event, "背包物品已达上限，探索奖励尚未领取。")
-        return
-    if result.status in {"limit_reached", "state_changed", "user_missing"}:
-        await handle_send(bot, event, result_failure("探索结算", result, messages={"limit_reached": "今日探索次数已达上限，请明日再来。", "inventory_full": "背包物品已达上限，探索奖励尚未领取。"}))
+    outcome = map_application.explore_settle(
+        operation_id=operation_id,
+        user_id=uid,
+        expected_state=expected_state,
+        expected_daily=snapshot["daily"],
+        daily_limit=DAILY_LIMIT_CONFIG["explore"],
+        stone=snapshot["stone"],
+        items=snapshot["items"],
+        max_goods_num=XiuConfig().max_goods_num,
+        clock=runtime_clock,
+    )
+    data = result_data(outcome.data)
+    result = MapExploreSettlementResult(
+        str(data.get("status", outcome.code)),
+        int(data.get("stone", 0) or 0),
+        tuple(data.get("rewards", ())),
+        reason=str(data.get("reason", "")),
+        subject=str(data.get("subject", "actor")),
+    )
+    if not result.succeeded:
+        await handle_send(bot, event, result_failure(
+            "探索结算",
+            result,
+            messages={
+                "limit_reached": "今日探索次数已达上限，探索奖励未结算。",
+                "inventory_full": "背包物品已达上限，探索奖励尚未领取。",
+                "user_missing": "角色资料不存在，探索奖励未结算。",
+                "explore_changed": "探索状态已变化，本次奖励未结算。",
+                "daily_changed": "探索次数已变化，本次奖励未结算。",
+                "map_explore_settlement_daily_invalid": "探索次数记录无效，本次奖励未结算。",
+                "map_explore_settlement_inventory_invalid": "背包记录无效，本次奖励未结算。",
+                "map_explore_settlement_stone_invalid": "灵石余额无效，本次奖励未结算。",
+            },
+            subjects={
+                "map_daily_limit": "探索次数",
+                "map_explore_status": "探索状态",
+                "stone_wallet": "灵石钱包",
+                "receipt": "探索结算回执",
+            },
+        ))
         return
 
     decay_tip = f"\n当前收益系数：{int(snapshot['decay'] * 100)}%" if snapshot["decay"] < 1 else ""
@@ -2402,7 +2653,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if txt:
         try:
             duration_arg = int(txt)
-        except Exception:
+        except ValueError:
             duration_arg = None
     await _start_explore(bot, event, duration_arg)
 
@@ -2413,6 +2664,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await _settle_explore(bot, event)
 
 @map_mission_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("地图委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2447,6 +2699,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     await handle_send(bot, event, msg)
 
 @map_mission_accept_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("接取委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2472,6 +2725,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     await handle_send(bot, event, msg)
 @map_mission_claim_cmd.handle(parameterless=[Cooldown(cd_time=1.2)])
+@guard_command("领取地图委托", known_rejections=_MAP_MISSION_COMMAND_REJECTIONS)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -2539,11 +2793,20 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     )
     data = result_data(outcome.data)
     result = MapMissionClaimResult(str(data.get("status", outcome.code)), int(data.get("stone", 0) or 0), tuple(data.get("rewards", ())), reason=str(data.get("reason", "")), subject=str(data.get("subject", "actor")))
-    if result.status == "inventory_full":
-        await handle_send(bot, event, "背包物品已达上限，委托奖励尚未领取。")
-        return
-    if result.status in {"not_completed", "already_claimed", "state_changed", "user_missing"}:
-        await handle_send(bot, event, result_failure("领取地图委托", result, messages={"not_completed": "委托目标尚未完成，请完成目标后领取。", "already_claimed": "该委托奖励已经领取，请查看背包。", "inventory_full": "背包物品已达上限，委托奖励尚未领取。"}))
+    if result.status not in {"applied", "duplicate"}:
+        await handle_send(
+            bot,
+            event,
+            result_failure(
+                "领取地图委托",
+                result,
+                messages={
+                    "not_completed": "委托目标尚未完成，请完成目标后领取。",
+                    "already_claimed": "该委托奖励已经领取，请查看背包。",
+                    "inventory_full": "背包物品已达上限，委托奖励尚未领取。",
+                },
+            ),
+        )
         return
 
     completion_message = f"✅ 地图委托完成！\n任务：{_get_mission_desc(mission)}\n获得奖励：{_merge_reward_text(rewards)}"

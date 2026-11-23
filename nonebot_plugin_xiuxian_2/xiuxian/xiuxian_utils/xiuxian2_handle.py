@@ -4322,6 +4322,15 @@ def get_base_attributes(user_id: str | int, *, user_info: dict | None = None) ->
     }
 
 
+def _int_after_float_math(value: float) -> int:
+    """Preserve truncation except when binary float noise hides an integer."""
+    nearest_integer = round(value)
+    tolerance = max(1e-9, abs(value) * 1e-15)
+    if abs(value - nearest_integer) <= tolerance:
+        return int(nearest_integer)
+    return int(value)
+
+
 def get_final_attributes(
     user_id: str | int,
     ratio: float = 1.0,
@@ -4408,13 +4417,21 @@ def get_final_attributes(
     perm_atk = int(buff_info.get("atk_buff", 0) or 0)
 
     # ===== 常规最终值（不含饰品）=====
-    max_hp = int((base["exp"] / 2) * (1 + main_hp + impart_hp + hppractice))
-    max_mp = int(base["exp"] * (1 + main_mp + impart_mp + mppractice))
+    max_hp = _int_after_float_math(
+        (base["exp"] / 2) * (1 + main_hp + impart_hp + hppractice)
+    )
+    max_mp = _int_after_float_math(
+        base["exp"] * (1 + main_mp + impart_mp + mppractice)
+    )
 
-    current_hp = int(base["base_hp"] * (1 + main_hp + impart_hp + hppractice))
-    current_mp = int(base["base_mp"] * (1 + main_mp + impart_mp + mppractice))
+    current_hp = _int_after_float_math(
+        base["base_hp"] * (1 + main_hp + impart_hp + hppractice)
+    )
+    current_mp = _int_after_float_math(
+        base["base_mp"] * (1 + main_mp + impart_mp + mppractice)
+    )
 
-    final_atk = int(
+    final_atk = _int_after_float_math(
         (base["base_atk"] * (1 + atkpractice) * (1 + main_atk) * (1 + weapon_atk) * (1 + armor_atk)) * (1 + impart_atk)
     ) + perm_atk
 
@@ -4446,9 +4463,9 @@ def get_final_attributes(
     acc_effect = calc_accessory_effects(user_id, accessory_provider=accessory_provider)
 
     # 百分比型基础属性加成
-    max_hp = int(max_hp * (1 + float(acc_effect.get("hp_pct", 0))))
-    current_hp = int(current_hp * (1 + float(acc_effect.get("hp_pct", 0))))
-    final_atk = int(final_atk * (1 + float(acc_effect.get("atk_pct", 0))))
+    max_hp = _int_after_float_math(max_hp * (1 + float(acc_effect.get("hp_pct", 0))))
+    current_hp = _int_after_float_math(current_hp * (1 + float(acc_effect.get("hp_pct", 0))))
+    final_atk = _int_after_float_math(final_atk * (1 + float(acc_effect.get("atk_pct", 0))))
 
     # 战斗率属性加成
     crit_rate += float(acc_effect.get("crit_rate", 0))
@@ -4481,7 +4498,7 @@ def get_final_attributes(
         sb_val = float(sb.get("value", 0))
 
         if sb_type == "attack":
-            final_atk = int(final_atk * (1 + sb_val))
+            final_atk = _int_after_float_math(final_atk * (1 + sb_val))
         elif sb_type == "dmg_reduction":
             damage_reduction += sb_val
         elif sb_type == "crit_rate":
@@ -4497,7 +4514,10 @@ def get_final_attributes(
             # 这些交给战斗层处理
             pass
 
-    final_speed = max(1, int((base_speed + speed_flat) * max(0.1, 1 + speed_pct)))
+    final_speed = max(
+        1,
+        _int_after_float_math((base_speed + speed_flat) * max(0.1, 1 + speed_pct)),
+    )
 
     # 上限裁剪
     crit_rate = max(0.0, crit_rate)
@@ -4505,11 +4525,11 @@ def get_final_attributes(
     crit_damage_reduction = max(0.0, crit_damage_reduction)
 
     # 比例缩放（例如PVE多队平衡）
-    max_hp = int(max_hp * ratio)
-    max_mp = int(max_mp * ratio)
-    current_hp = int(current_hp * ratio) if include_current else max_hp
-    current_mp = int(current_mp * ratio) if include_current else max_mp
-    final_atk = int(final_atk * ratio)
+    max_hp = _int_after_float_math(max_hp * ratio)
+    max_mp = _int_after_float_math(max_mp * ratio)
+    current_hp = _int_after_float_math(current_hp * ratio) if include_current else max_hp
+    current_mp = _int_after_float_math(current_mp * ratio) if include_current else max_mp
+    final_atk = _int_after_float_math(final_atk * ratio)
 
     # 当前值不能超过上限，也不能低于0
     max_hp = max(1, max_hp)

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.dongfu import migrations as dongfu_migrations
 from nonebot_plugin_xiuxian_2.features.dongfu.harvest_history import (
@@ -142,6 +144,54 @@ class DongfuHarvestHistoryTests(unittest.TestCase):
             self.assertEqual(summary["notice"], EMPTY_TEXT)
             self.assertNotIn("dongfu_harvest_operations", fixture.tables())
 
+    def test_missing_database_degrades_without_creating_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "missing.db"
+            summary = DongfuHarvestHistoryApplication(
+                database, clock=FixedClock()
+            ).summary("u")
+            self.assertFalse(summary["ok"])
+            self.assertEqual(summary["notice"], EMPTY_TEXT)
+            self.assertFalse(database.exists())
+
+    def test_sql_read_failure_is_not_reported_as_empty_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = self._fixture(Path(temp))
+            original_uow = DatabaseUnitOfWork
+
+            class DenyPayloadReadUnitOfWork:
+                def __init__(self, *args, **kwargs):
+                    self.delegate = original_uow(*args, **kwargs)
+
+                def __enter__(self):
+                    active = self.delegate.__enter__()
+
+                    def authorize(action, table, column, database, trigger):
+                        if (
+                            action == sqlite3.SQLITE_READ
+                            and table == "dongfu_harvest_operations"
+                            and column == "payload"
+                        ):
+                            return sqlite3.SQLITE_DENY
+                        return sqlite3.SQLITE_OK
+
+                    active.connection.set_authorizer(authorize)
+                    return active
+
+                def __exit__(self, exc_type, exc, traceback):
+                    return self.delegate.__exit__(exc_type, exc, traceback)
+
+            with patch(
+                "nonebot_plugin_xiuxian_2.features.dongfu.harvest_history.DatabaseUnitOfWork",
+                DenyPayloadReadUnitOfWork,
+            ):
+                with self.assertRaisesRegex(
+                    sqlite3.DatabaseError, "payload is prohibited"
+                ):
+                    DongfuHarvestHistoryApplication(
+                        fixture.database, clock=FixedClock()
+                    ).summary("u")
+
     def test_malformed_and_legacy_payloads_are_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = HistoryFixture(Path(temp))
@@ -187,6 +237,7 @@ class DongfuHarvestHistoryTests(unittest.TestCase):
         )
         self.assertIn("dongfu_harvest_history_application.summary", source)
         self.assertIn("format_dongfu_harvest_history", source)
+        self.assertIn('@guard_command("我的洞府收获记录")', source)
         self.assertIn("我的洞府收获记录", [spec.name for spec in FEATURE.commands])
         self.assertIn("- 我的洞府收获记录", source)
         self.assertIn("查看近7天收获物品", source)

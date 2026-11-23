@@ -1389,7 +1389,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             await handle_send(
                 bot,
                 event,
-                messages.get(result.status, _acc_fail_msg(result, action="饰品操作")),
+                _acc_fail_msg(result, action="饰品升阶", subject=result.subject)
+                if result.reason else messages.get(result.status, _acc_fail_msg(result)),
             )
             return
 
@@ -1458,8 +1459,14 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             deepcopy(_get_accessory_preset(user_id, preset_idx)),
         )
         if not save_result.succeeded:
+            from ..command_guard import result_failure
+
             await handle_send(
-                bot, event, _acc_fail_msg(save_result, action="保存预设")
+                bot, event,
+                result_failure(
+                    "保存预设", save_result,
+                    subjects={f"preset:{preset_idx}": f"饰品预设{preset_idx}"},
+                ),
             )
             return
 
@@ -1514,14 +1521,18 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             deepcopy(preset),
         )
         if not equip_result.succeeded:
-            messages = {
-                "preset_empty": f"饰品预设{preset_idx}为空，无法快速装备。",
-                "state_changed": _acc_fail_msg(equip_result, action="切换预设"),
-            }
+            from ..command_guard import result_failure
+
+            message = (
+                f"饰品预设{preset_idx}为空，无法快速装备。"
+                if equip_result.status == "preset_empty"
+                else result_failure(
+                    "切换预设", equip_result,
+                    subjects={f"preset:{preset_idx}": f"饰品预设{preset_idx}"},
+                )
+            )
             await handle_send(
-                bot,
-                event,
-                messages.get(equip_result.status, f"快速装备饰品失败（{equip_result.status}）"),
+                bot, event, message,
             )
             return
 

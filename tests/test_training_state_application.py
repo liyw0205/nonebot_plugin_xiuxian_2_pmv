@@ -43,6 +43,41 @@ def test_feature_training_state_application_initializes_once_with_injected_clock
     ]
 
 
+def test_read_state_does_not_create_or_normalize_persisted_weekly_state(tmp_path):
+    database = tmp_path / "player.db"
+    with DatabaseUnitOfWork(database) as uow:
+        apply_training_state(uow)
+        uow.execute(
+            "INSERT INTO training(user_id,points,weekly_purchases) VALUES(?,?,?)",
+            ("expired", 4321, '{"_last_reset":"2020-12-31","1999":4}'),
+        )
+        uow.execute(
+            "INSERT INTO training(user_id,points,weekly_purchases) VALUES(?,?,?)",
+            ("invalid", 8765, "not-json"),
+        )
+    application = TrainingStateApplication(database, clock=FixedClock())
+
+    cold = application.read("cold")
+    expired = application.read("expired")
+    invalid = application.read("invalid")
+
+    assert cold["points"] == 0
+    assert cold["weekly_purchases"] == {"_last_reset": "2026-07-14"}
+    assert expired["points"] == 4321
+    assert expired["weekly_purchases"] == {"_last_reset": "2026-07-14"}
+    assert invalid["points"] == 8765
+    assert invalid["weekly_purchases"] == {"_last_reset": "2026-07-14"}
+    with DatabaseUnitOfWork(database, read_only=True) as uow:
+        assert uow.query_one("SELECT 1 AS present FROM training WHERE user_id='cold'") is None
+        assert uow.query_one(
+            "SELECT weekly_purchases FROM training WHERE user_id='expired'"
+        ) == {"weekly_purchases": '{"_last_reset":"2020-12-31","1999":4}'}
+        assert uow.query_one(
+            "SELECT weekly_purchases FROM training WHERE user_id='invalid'"
+        ) == {"weekly_purchases": "not-json"}
+        assert uow.query_all("SELECT operation_id FROM training_state_operations") == []
+
+
 def test_training_limit_defaults_to_feature_state_application():
     root = Path(__file__).parents[1] / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_training"
     source = (root / "training_limit.py").read_text(encoding="utf-8")

@@ -8,10 +8,16 @@ from typing import Any
 from ...infrastructure.database import DatabaseUnitOfWork
 
 
+class _InfiltrationPlanWriteRejected(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class DongfuInfiltrationPlanResult:
     status: str
     plan: dict[str, Any] | None = None
+    reason: str = ""
+    subject: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -100,21 +106,36 @@ class DongfuInfiltrationPlanSqlRepository:
             return DongfuInfiltrationPlanResult("plan_invalid")
         if not self.database.is_file():
             return DongfuInfiltrationPlanResult("schema_missing")
-        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
-            if not self._schema_ready(uow):
-                return DongfuInfiltrationPlanResult("schema_missing")
-            row = uow.query_one(
-                "SELECT user_id,payload FROM dongfu_infiltration_operations WHERE operation_id=?",
-                (operation_id,),
-            )
-            if row is not None:
-                result = self._decode(row["payload"], request_identity, user_id)
-                if str(row["user_id"]) != user_id:
-                    return DongfuInfiltrationPlanResult("operation_conflict")
-                return result
-            uow.execute(
-                "INSERT INTO dongfu_infiltration_operations(operation_id,user_id,payload) VALUES(?,?,?)",
-                (operation_id, user_id, payload),
+        try:
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                if not self._schema_ready(uow):
+                    return DongfuInfiltrationPlanResult("schema_missing")
+                row = uow.query_one(
+                    "SELECT user_id,payload FROM dongfu_infiltration_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                if row is not None:
+                    result = self._decode(row["payload"], request_identity, user_id)
+                    if str(row["user_id"]) != user_id:
+                        return DongfuInfiltrationPlanResult("operation_conflict")
+                    return result
+                changed = uow.execute(
+                    "INSERT INTO dongfu_infiltration_operations(operation_id,user_id,payload) VALUES(?,?,?)",
+                    (operation_id, user_id, payload),
+                )
+                if changed.rowcount != 1:
+                    raise _InfiltrationPlanWriteRejected
+                stored = uow.query_one(
+                    "SELECT user_id,payload FROM dongfu_infiltration_operations WHERE operation_id=?",
+                    (operation_id,),
+                )
+                if stored is None or str(stored["user_id"]) != user_id or str(stored["payload"]) != payload:
+                    raise _InfiltrationPlanWriteRejected
+        except _InfiltrationPlanWriteRejected:
+            return DongfuInfiltrationPlanResult(
+                "state_changed",
+                reason="dongfu_infiltrate_plan_write_rejected",
+                subject="plan",
             )
         return DongfuInfiltrationPlanResult("planned", plan)
 

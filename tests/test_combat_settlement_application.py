@@ -56,16 +56,17 @@ class CombatSettlementApplicationTests(unittest.TestCase):
             self.assertEqual(ledger["status"], "applied")
             self.assertEqual(audit["category"], "combat_settlement")
 
-    def test_business_rejection_is_stable(self):
+    def test_business_rejection_can_be_retried_after_state_change(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = _Repository("inventory_full")
             app = self._application(directory, repository)
             result = self._call(app, "combat-2")
+            repository.status = "applied"
             replay = self._call(app, "combat-2")
             self.assertFalse(result.ok)
             self.assertEqual(result.code, "inventory_full")
-            self.assertEqual(replay.code, "inventory_full")
-            self.assertEqual(repository.calls, 1)
+            self.assertTrue(replay.ok)
+            self.assertEqual(repository.calls, 2)
 
     def test_invalid_request_does_not_call_repository(self):
         with tempfile.TemporaryDirectory() as directory:

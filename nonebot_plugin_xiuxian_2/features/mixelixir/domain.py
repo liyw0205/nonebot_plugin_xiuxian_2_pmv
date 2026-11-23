@@ -62,4 +62,20 @@ def normalize_rewards(rewards: Sequence[Any]) -> tuple[dict[str, Any], ...]:
     return tuple(normalized)
 
 
-__all__ = ["HarvestRequest", "SettlementRequest", "normalize_rewards"]
+def refine_output_counts(
+    requested_quantity: Any, current_count: Any, max_count: Any
+) -> tuple[int, int]:
+    """Return whole units actually produced and the portion counting toward recipe mastery."""
+    reward_quantity = max(0, int(requested_quantity))
+    current_count = int(current_count)
+    max_count = int(max_count)
+    experience_count = max(0, min(reward_quantity, max_count - current_count))
+    return reward_quantity, experience_count
+
+
+__all__ = [
+    "HarvestRequest",
+    "SettlementRequest",
+    "normalize_rewards",
+    "refine_output_counts",
+]

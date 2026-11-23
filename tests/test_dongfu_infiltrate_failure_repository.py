@@ -118,6 +118,63 @@ class DongfuInfiltrateFailureSqlRepositoryTests(unittest.TestCase):
             self.settle("rollback")
         self.assertEqual(self.state(), (1000, ("", 0), ("", 0, 1)))
 
+    def test_write_refusals_and_projection_rewrites_keep_failure_reasons_specific(self) -> None:
+        faults = (
+            (self.player_database, "BEFORE UPDATE ON dongfu_status WHEN NEW.user_id='u' "
+             "BEGIN SELECT RAISE(IGNORE); END", "dongfu_infiltrate_failure_visitor_write_rejected", "visitor"),
+            (self.player_database, "AFTER UPDATE ON dongfu_status WHEN NEW.user_id='u' "
+             "BEGIN UPDATE dongfu_status SET infiltrate_active_count=9 WHERE user_id='u'; END",
+             "dongfu_infiltrate_failure_visitor_projection_mismatch", "visitor"),
+            (self.player_database, "BEFORE UPDATE ON dongfu_status WHEN NEW.user_id='t' "
+             "BEGIN SELECT RAISE(IGNORE); END", "dongfu_infiltrate_failure_target_write_rejected", "target"),
+            (self.player_database, "AFTER UPDATE ON dongfu_status WHEN NEW.user_id='t' "
+             "BEGIN UPDATE dongfu_status SET patrol_guard=9 WHERE user_id='t'; END",
+             "dongfu_infiltrate_failure_target_projection_mismatch", "target"),
+            (self.game_database, "AFTER UPDATE ON user_xiuxian WHEN NEW.user_id='u' "
+             "BEGIN UPDATE user_xiuxian SET stone=1 WHERE user_id='u'; END",
+             "dongfu_infiltrate_failure_stone_projection_mismatch", "stone_wallet"),
+            (self.game_database, "BEFORE INSERT ON dongfu_infiltrate_failure_operations "
+             "BEGIN SELECT RAISE(IGNORE); END", "dongfu_infiltrate_failure_receipt_write_rejected", "receipt"),
+            (self.game_database, "AFTER INSERT ON dongfu_infiltrate_failure_operations "
+             "BEGIN UPDATE dongfu_infiltrate_failure_operations SET payload='changed' "
+             "WHERE operation_id=NEW.operation_id; END",
+             "dongfu_infiltrate_failure_receipt_projection_mismatch", "receipt"),
+        )
+        for index, (database, trigger, reason, subject) in enumerate(faults):
+            with self.subTest(reason=reason):
+                before = self.state()
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("CREATE TRIGGER infiltration_fault " + trigger)
+                result = self.settle(f"fault-{index}")
+                self.assertEqual((result.status, result.reason, result.subject),
+                                 ("state_changed", reason, subject))
+                self.assertEqual(self.state(), before)
+                with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+                    self.assertEqual(uow.query_one(
+                        "SELECT COUNT(*) AS n FROM dongfu_infiltrate_failure_operations"
+                    )["n"], 0)
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("DROP TRIGGER infiltration_fault")
+
+    def test_abort_at_each_failure_write_rolls_back_both_databases(self) -> None:
+        faults = (
+            (self.player_database, "BEFORE UPDATE ON dongfu_status WHEN NEW.user_id='u'"),
+            (self.player_database, "BEFORE UPDATE ON dongfu_status WHEN NEW.user_id='t'"),
+            (self.game_database, "BEFORE UPDATE ON user_xiuxian"),
+            (self.game_database, "BEFORE INSERT ON dongfu_infiltrate_failure_operations"),
+        )
+        for index, (database, event) in enumerate(faults):
+            with self.subTest(event=event):
+                before = self.state()
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("CREATE TRIGGER infiltration_abort " + event +
+                                " BEGIN SELECT RAISE(ABORT,'infiltrate refused'); END")
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "infiltrate refused"):
+                    self.settle(f"abort-{index}")
+                self.assertEqual(self.state(), before)
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("DROP TRIGGER infiltration_abort")
+
     def test_asset_rowcount_failure_rolls_back_prior_player_updates(self) -> None:
         with DatabaseUnitOfWork(self.game_database) as uow:
             uow.execute(
@@ -125,7 +182,10 @@ class DongfuInfiltrateFailureSqlRepositoryTests(unittest.TestCase):
                 "BEGIN SELECT RAISE(IGNORE); END"
             )
         result = self.settle("rowcount")
-        self.assertEqual((result.status, result.reason, result.subject), ("state_changed", "stone_write_rejected", "visitor"))
+        self.assertEqual(
+            (result.status, result.reason, result.subject),
+            ("state_changed", "dongfu_infiltrate_failure_stone_write_rejected", "stone_wallet"),
+        )
         self.assertEqual(self.state(), (1000, ("", 0), ("", 0, 1)))
         with DatabaseUnitOfWork(self.game_database) as uow:
             self.assertEqual(uow.query_one("SELECT COUNT(*) AS n FROM dongfu_infiltrate_failure_operations")["n"], 0)

@@ -366,7 +366,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await tower_shop.finish()
     
     user_id = user_info["user_id"]
-    tower_info = tower_limit.get_user_tower_info(user_id)
+    tower_info = tower_limit.read_user_tower_info(user_id)
     shop_items = tower_data.config["商店商品"]
     
     if not shop_items:
@@ -400,12 +400,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     end_idx = start_idx + items_per_page
     current_page_items = shop_rows[start_idx:end_idx]
     title = f"道友目前拥有的通天塔积分：{tower_info['score']}点"
-    msg_list = []
+    msg_list = [title]
     msg_list.append(f"════════════\n【通天塔商店】第{page}/{total_pages}页")
+    weekly_purchases = tower_info["weekly_purchases"]
     
     for item_id, item_data in current_page_items:
         item_info = _items().get_data_by_item_id(item_id)
-        already_purchased = tower_limit.get_weekly_purchases(user_id, item_id)
+        already_purchased = int(weekly_purchases.get(str(item_id), 0))
         if item_info:  # 确保物品存在
             msg_list.append(
                 f"编号：{item_id}\n"
@@ -419,7 +420,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     page_label = f"{page}/{total_pages}"
     msg_list.append(f"提示：发送 {next_cmd} 查看其他页（共{total_pages}页）")
     page = ["翻页", next_cmd, "信息", "通天塔信息", "兑换", "通天塔兑换", page_label]
-    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, title=title, page=page)
+    await send_msg_handler(bot, event, "通天塔商店", bot.self_id, msg_list, page=page)
     await tower_shop.finish()
 
 @tower_buy.handle(parameterless=[Cooldown(cd_time=0)])

@@ -412,6 +412,44 @@ def restore_impart_duplicate_archive(uow: DatabaseUnitOfWork) -> int:
     return len(rows)
 
 
+def apply_impart_card_bonus_recalculation(uow: DatabaseUnitOfWork) -> None:
+    """Refresh denormalized bonuses once after the card weighting rule changes."""
+    from .card_bonus import BONUS_FIELDS, refresh_card_bonuses
+    from .catalog import card_definitions
+
+    tables = {
+        str(row[0])
+        for row in uow.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('xiuxian_impart','impart_cards')"
+        ).fetchall()
+    }
+    if tables != {"xiuxian_impart", "impart_cards"}:
+        raise RuntimeError("cannot recalculate impart bonuses: card schema is missing")
+
+    columns = {
+        str(row[1])
+        for row in uow.execute('PRAGMA table_info("xiuxian_impart")').fetchall()
+    }
+    missing_fields = set(BONUS_FIELDS) - columns
+    if missing_fields:
+        raise RuntimeError(
+            "cannot recalculate impart bonuses: fields are missing: "
+            + ",".join(sorted(missing_fields))
+        )
+
+    definitions = card_definitions()
+    users = uow.query_all(
+        "SELECT DISTINCT CAST(user_id AS TEXT) AS user_id FROM xiuxian_impart "
+        "WHERE user_id IS NOT NULL AND trim(CAST(user_id AS TEXT))<>'' "
+        "ORDER BY user_id"
+    )
+    for row in users:
+        refresh_card_bonuses(
+            uow.connection, str(row["user_id"]), definitions, schema="main"
+        )
+
+
 def apply_impart_draw_player_statistics(uow: DatabaseUnitOfWork) -> None:
     uow.execute("CREATE TABLE IF NOT EXISTS statistics(user_id TEXT PRIMARY KEY)")
     columns = {str(row[1]) for row in uow.execute("PRAGMA table_info(statistics)").fetchall()}
@@ -435,5 +473,6 @@ __all__ = [
     "apply_impart_crystal_and_card_operations",
     "apply_impart_exact_crystal_game_receipts",
     "apply_impart_exact_crystal_balances",
+    "apply_impart_card_bonus_recalculation",
     "apply_impart_draw_player_statistics",
 ]

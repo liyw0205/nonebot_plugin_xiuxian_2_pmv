@@ -6,7 +6,11 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff import partner
-from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.relation_utils import _parse_datetime
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_buff.relation_utils import (
+    _parse_datetime,
+    remaining_whole_count,
+    whole_count_limit,
+)
 
 
 class _FixedClock:
@@ -85,6 +89,13 @@ class PartnerDatetimeRegressionTests(unittest.TestCase):
 
         self.assertEqual(0, partner._cooldown_remaining("mentor", "mentor_cd_until"))
         self.assertEqual(0, partner._get_pair_rebind_remaining("apprentice", "mentor"))
+
+    def test_fractional_count_bonus_is_floored_after_aggregation(self):
+        self.assertEqual(3, whole_count_limit(3, 0.5))
+        self.assertEqual(4, whole_count_limit(3, 1.5))
+        self.assertEqual(0, remaining_whole_count(3, 0.5, used_count=3))
+        self.assertEqual(1, remaining_whole_count(3, 1.5, used_count=3))
+        self.assertEqual(4, remaining_whole_count(3, 0.5, 0.5))
 
 
 if __name__ == "__main__":

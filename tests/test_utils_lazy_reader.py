@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 import unittest
 
@@ -16,8 +17,18 @@ class UtilsLazyReaderTests(unittest.TestCase):
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
         self.assertNotIn("player_data_manager = PlayerDataManager()", source)
-        self.assertIn("_player_data_manager().get_field_data(", source)
-        self.assertIn("_player_data_manager().get_fields(", source)
+        reader = next(node for node in ast.parse(source).body
+                      if isinstance(node, ast.FunctionDef) and node.name == "get_statistics_data")
+        bindings = [node for node in ast.walk(reader) if isinstance(node, ast.Assign)
+                    and any(isinstance(target, ast.Name) and target.id == "manager" for target in node.targets)]
+        self.assertEqual([ast.unparse(node.value) for node in bindings], ["_player_data_manager()"])
+        calls = {ast.unparse(node.func): node for node in ast.walk(reader) if isinstance(node, ast.Call)}
+        self.assertEqual([ast.unparse(arg) for arg in calls["manager.get_field_data"].args],
+                         ["str(user_id_for_stats)", "'statistics'", "key"])
+        self.assertEqual([ast.unparse(arg) for arg in calls["manager.get_fields"].args],
+                         ["str(user_id_for_stats)", "'statistics'"])
+        self.assertEqual({kw.arg: ast.unparse(kw.value) for kw in calls["manager.get_fields"].keywords},
+                         {"raise_errors": "raise_errors"})
         self.assertIn("_player_data_manager().update_or_write_data(", source)
 
 

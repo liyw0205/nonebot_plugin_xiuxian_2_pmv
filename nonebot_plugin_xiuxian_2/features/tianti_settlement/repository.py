@@ -5,7 +5,9 @@ from pathlib import Path
 import json
 from typing import Any, Callable, Mapping, Protocol
 
+from ...core.errors import DomainError
 from ...features.tianti_training.repository import TiantiProfileReader
+from ...features.tianti_training.repository import _profile_projection_matches
 from ...features.tianti_training.domain import decide_tianti_gain, decide_tianti_settlement_window
 from ...features.tianti_training.profile_persistence import upsert_tianti_profile
 from ...features.tianti_training.presentation import (
@@ -128,8 +130,64 @@ class TiantiSettlementSqlRepository:
             })
         elif window.status == "init":
             data["last_settle_time"] = settled_at.strftime("%Y-%m-%d %H:%M:%S")
-        upsert_tianti_profile(uow, user_id, fields, data)
-        uow.execute("INSERT INTO tianti_settlement_operations(operation_id,user_id,sect_level,result_status,detail_json) VALUES(?,?,?,?,?)", (operation_id, user_id, int(sect_fairyland_level), str(detail["status"]), json.dumps(detail, ensure_ascii=False, default=str)))
+        profile_rows = upsert_tianti_profile(uow, user_id, fields, data)
+        if profile_rows != 1:
+            raise DomainError(
+                "tianti_settlement_profile_write_rejected",
+                "炼体结算档案保存失败，本次结算已撤销。",
+                {"reason": "tianti_settlement_profile_write_rejected", "subject": "player_profile"},
+            )
+        saved_profile = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
+        if saved_profile is None or not _profile_projection_matches(saved_profile, fields, data):
+            raise DomainError(
+                "tianti_settlement_profile_projection_mismatch",
+                "炼体结算档案与预期结果不一致，本次结算已撤销。",
+                {"reason": "tianti_settlement_profile_projection_mismatch", "subject": "player_profile"},
+            )
+
+        detail_json = json.dumps(detail, ensure_ascii=False, default=str)
+        receipt_rows = uow.execute(
+            "INSERT INTO tianti_settlement_operations"
+            "(operation_id,user_id,sect_level,result_status,detail_json) VALUES(?,?,?,?,?)",
+            (operation_id, user_id, int(sect_fairyland_level), str(detail["status"]), detail_json),
+        )
+        if receipt_rows.rowcount != 1:
+            raise DomainError(
+                "tianti_settlement_receipt_write_rejected",
+                "炼体结算回执保存失败，本次结算已撤销。",
+                {"reason": "tianti_settlement_receipt_write_rejected", "subject": "receipt"},
+            )
+        saved_receipt = uow.query_one(
+            "SELECT user_id,sect_level,result_status,detail_json "
+            "FROM tianti_settlement_operations WHERE operation_id=?",
+            (operation_id,),
+        )
+        try:
+            saved_detail = json.loads(saved_receipt["detail_json"]) if saved_receipt else None
+            expected_detail = json.loads(detail_json)
+            receipt_matches = (
+                saved_receipt is not None
+                and str(saved_receipt["user_id"]) == user_id
+                and int(saved_receipt["sect_level"]) == int(sect_fairyland_level)
+                and str(saved_receipt["result_status"]) == str(detail["status"])
+                and saved_detail == expected_detail
+            )
+        except (KeyError, TypeError, ValueError, OverflowError):
+            receipt_matches = False
+        if not receipt_matches:
+            raise DomainError(
+                "tianti_settlement_receipt_projection_mismatch",
+                "炼体结算回执与本次结果不一致，本次结算已撤销。",
+                {"reason": "tianti_settlement_receipt_projection_mismatch", "subject": "receipt"},
+            )
+
+        final_profile = uow.query_one("SELECT * FROM tianti_info WHERE user_id=?", (user_id,))
+        if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+            raise DomainError(
+                "tianti_settlement_profile_projection_mismatch",
+                "炼体结算档案与最终结果不一致，本次结算已撤销。",
+                {"reason": "tianti_settlement_profile_projection_mismatch", "subject": "player_profile"},
+            )
         return {"status": "settled", "user_id": user_id, "detail": detail}
 
 

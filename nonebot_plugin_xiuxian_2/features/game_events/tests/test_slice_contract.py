@@ -4,7 +4,11 @@ import unittest
 
 from ..application import GameEventApplication
 from ..manifest import FEATURE
-from ..migrations import MIGRATION_VERSION, MIGRATIONS
+from ..migrations import (
+    DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION,
+    MIGRATION_VERSION,
+    MIGRATIONS,
+)
 from ..schemas import GameEventStatisticsRequest
 
 
@@ -23,7 +27,10 @@ class GameEventsSliceContractTests(unittest.TestCase):
         self.assertEqual(FEATURE.key, "game_events")
         self.assertEqual(FEATURE.migration_version, "game_events.001")
         self.assertEqual(MIGRATION_VERSION, "game_events.001")
-        self.assertEqual(MIGRATIONS, (MIGRATION_VERSION,))
+        self.assertEqual(
+            MIGRATIONS,
+            (MIGRATION_VERSION, DONGFU_HARVEST_STATISTICS_MIGRATION_VERSION),
+        )
 
     def test_application_normalizes_and_reports_replay(self) -> None:
         repository = _Repository(changed=False)

@@ -214,6 +214,12 @@ class DungeonManager:
                 cls._instance = super(DungeonManager, cls).__new__(cls)
         return cls._instance
 
+    def __copy__(self):
+        # Frozen encounter resolution needs an independent instance despite the singleton constructor.
+        copied = object.__new__(type(self))
+        copied.__dict__.update(self.__dict__)
+        return copied
+
     def __init__(self, random_source=None, clock=None, *, business_timezone=None):
         with self._lock:
             if self.__class__._has_init:

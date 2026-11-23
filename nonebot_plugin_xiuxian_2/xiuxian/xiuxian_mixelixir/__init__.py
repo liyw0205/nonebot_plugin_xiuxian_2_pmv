@@ -19,6 +19,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     XiuxianDateManage, get_player_info,
     UserBuffDate, XIUXIAN_IMPART_BUFF
 )
+from ..command_guard import guard_command, result_failure
 from ..xiuxian_utils.utils import (
     check_user, send_msg_handler,
     get_msg_pic, handle_send, log_message,
@@ -36,6 +37,7 @@ from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
 from ...features.mixelixir.application import MixelixirApplication
+from ...features.mixelixir.domain import refine_output_counts
 
 from .transaction_service import MixelixirHarvestLevelUpgradeService
 from .transaction_service import MixelixirRecipeService
@@ -58,6 +60,8 @@ def _mixelixir_result(outcome):
     data["status"] = str(data.get("status", outcome.status))
     data["succeeded"] = outcome.ok
     data["replayed"] = outcome.replayed
+    data["code"] = outcome.code or ""
+    data["message"] = outcome.message or ""
     return SimpleNamespace(**data)
 
 
@@ -557,6 +561,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 # 配方
 @mix_make.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("炼丹", known_rejections=("operation_conflict",))
 async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mode: str = EventPlainText()):
     """配方,用来炼制丹药"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -567,10 +572,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
     user_id = user_info['user_id']
     pattern = r"主药([\u4e00-\u9fa5]+)(\d+)药引([\u4e00-\u9fa5]+)(\d+)辅药([\u4e00-\u9fa5]+)(\d+)丹炉([\u4e00-\u9fa5]+)+"
     matched = re.search(pattern, mode)
-    if user_info['mixelixir_num'] >= 100:
-        msg = "道友今日炼丹已达上限，请明日再来！"
-        await handle_send(bot, event, msg, md_type="炼丹", k1="丹药", v1="丹药背包", k2="药材", v2="药材背包", k3="帮助", v3="炼丹帮助")
-        await mix_make.finish()
     if matched is None:
         msg = f"请输入正确的配方！"
         await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="药材", v2="药材背包", k3="帮助", v3="炼丹帮助")
@@ -578,20 +579,92 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
     else:
         zhuyao_name = matched.groups()[0]
         zhuyao_num = int(matched.groups()[1])  # 数量一定会有
+        yaoyin_name = matched.groups()[2]
+        yaoyin_num = int(matched.groups()[3])
+        fuyao_name = matched.groups()[4]
+        fuyao_num = int(matched.groups()[5])
+        ldl_name = matched.groups()[6]
+        recipe_key = (
+            f"主药{zhuyao_name}{zhuyao_num}"
+            f"药引{yaoyin_name}{yaoyin_num}"
+            f"辅药{fuyao_name}{fuyao_num}"
+            f"丹炉{ldl_name}"
+        )
+        event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+        operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
+
+        async def claim_and_finish(task_id: str, *, recovery: bool = False, exp_gain: int = 0):
+            claim_operation = (
+                f"mixelixir-reward-recover:{event_id}:{user_id}:{task_id}"
+                if recovery and event_id
+                else f"mixelixir-reward:{event_id}:{user_id}"
+                if event_id
+                else f"mixelixir-reward-recover:{user_id}:{task_id}:{runtime_ids.new_id()}"
+                if recovery
+                else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
+            )
+            claimed_outcome = mixelixir_application.refine_reward(
+                operation_id=claim_operation,
+                user_id=user_id,
+                task_id=task_id,
+                max_goods_num=XiuConfig().max_goods_num,
+            )
+            claimed = _mixelixir_result(claimed_outcome)
+            if claimed.succeeded:
+                if claimed.replayed or claimed.status == "duplicate":
+                    msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
+                elif recovery:
+                    msg = (
+                        f"**炼丹结果**\n---\n✅ 补领成功\n"
+                        f"丹药\n> {claimed.reward_name} ×{claimed.reward_quantity}\n"
+                        "已补领此前扣材未发的丹药。"
+                    )
+                else:
+                    msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚"
+                    if exp_gain:
+                        msg += f"\n获得炼丹经验{exp_gain}点"
+            elif claimed.status == "inventory_full":
+                msg = "丹药背包已满，材料消耗记录已保留。请清理背包后，重新提交同一配方领取。"
+            elif claimed.status == "write_rejected":
+                msg = result_failure("炼丹", claimed)
+            else:
+                msg = claimed.message or "丹药尚未入账：炼丹领取未完成，材料消耗记录已保留，请稍后重试原消息。"
+            await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
+            await mix_make.finish()
+
+        replay = mixelixir_application.refine_cost_replay(
+            operation_id=operation_id,
+            recipe_key=recipe_key,
+        ) if event_id else None
+        if replay is not None:
+            started = _mixelixir_result(replay)
+            if started.succeeded:
+                await claim_and_finish(str(started.task_id))
+            msg = started.message or "炼丹请求已经处理，本次没有重复扣材。"
+            await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
+            await mix_make.finish()
+
+        ready_task_id = mixelixir_application.latest_ready_refine_task(
+            user_id=user_id, recipe_key=recipe_key
+        )
+        if ready_task_id:
+            await claim_and_finish(ready_task_id, recovery=True)
+
+        if int(user_info.get('mixelixir_num', 0) or 0) >= 100:
+            msg = "道友今日炼丹已达上限，请明日再来！"
+            await handle_send(bot, event, msg, md_type="炼丹", k1="丹药", v1="丹药背包", k2="药材", v2="药材背包", k3="帮助", v3="炼丹帮助")
+            await mix_make.finish()
+
         check, zhuyao_goods_id = await check_yaocai_name_in_back(user_id, zhuyao_name, zhuyao_num)
         if not check:
             msg = f"请检查主药：{zhuyao_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
-        yaoyin_name = matched.groups()[2]
-        yaoyin_num = int(matched.groups()[3])  # 数量一定会有
         check, yaoyin_goods_id = await check_yaocai_name_in_back(user_id, yaoyin_name, yaoyin_num)
         if not check:
             msg = f"请检查药引：{yaoyin_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
-        fuyao_name = matched.groups()[4]
-        fuyao_num = int(matched.groups()[5])
         check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num)
         if not check:
             msg = f"请检查辅药：{fuyao_name} 是否在背包中，或者数量是否足够！"
@@ -610,7 +683,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()
 
-        ldl_name = matched.groups()[6]
         check, ldl_info = await check_ldl_name_in_back(user_id, ldl_name)
         if not check:
             msg = f"请检查炼丹炉：{ldl_name} 是否在背包中！"
@@ -625,12 +697,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await mix_make.finish()
         else:
             # 自定义配方：以当前提交文本为准，不强制先「炼丹」生成/保存
-            recipe_key = (
-                f"主药{zhuyao_name}{zhuyao_num}"
-                f"药引{yaoyin_name}{yaoyin_num}"
-                f"辅药{fuyao_name}{fuyao_num}"
-                f"丹炉{ldl_name}"
-            )
             # 合并同名药材数量（主/辅同名等）
             material_counts: dict[int, int] = {}
             for goods_id, qty in (
@@ -654,28 +720,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             if furnace_id <= 0:
                 await handle_send(bot, event, f"请检查炼丹炉：{ldl_name} 是否在背包中！", md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()
-
-            # 优先补领此前同配方已扣材未发的任务（不依赖保存表）
-            event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-            ready_task_id = mixelixir_application.latest_ready_refine_task(
-                user_id=user_id, recipe_key=recipe_key
-            )
-            if ready_task_id:
-                claim_operation = (
-                    f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
-                    if event_id
-                    else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
-                )
-                claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
-                claimed = _mixelixir_result(claimed_outcome)
-                if claimed.succeeded:
-                    msg = (
-                        f"**炼丹结果**\n---\n✅ 补领成功\n"
-                        f"丹药\n> {claimed.reward_name} ×{claimed.reward_quantity}\n"
-                        f"已补领此前扣材未发的丹药。"
-                    )
-                    await handle_send(bot, event, msg, md_type="炼丹", k1="继续", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包", k4="日常", v4="日常")
-                    await mix_make.finish()
 
             elixir_config = {
                 str(zhuyao_info['主药']['type']): zhuyao_info['主药']['power'] * zhuyao_num
@@ -718,12 +762,16 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 record_key = str(id)
                 current = records.get(record_key, {"name": goods_info["name"], "num": 0})
                 now_num = int(current.get("num", 0) or 0)
-                exp_count = max(0, min(num, int(goods_info["mix_all"]) - now_num))
+                reward_quantity, exp_count = refine_output_counts(
+                    num, now_num, goods_info["mix_all"]
+                )
                 exp_gain = (int(goods_info["mix_exp"]) + int(main_exp)) * exp_count
-                records[record_key] = {"name": goods_info["name"], "num": now_num + num}
+                records[record_key] = {
+                    "name": goods_info["name"],
+                    "num": now_num + reward_quantity,
+                }
                 updated_mix_state["炼丹经验"] = int(updated_mix_state["炼丹经验"] or 0) + exp_gain
 
-                operation_id = f"mixelixir-cost:{event_id}:{user_id}" if event_id else f"mixelixir-cost:{user_id}:{runtime_ids.new_id()}"
                 outcome = mixelixir_application.refine_cost(
                     operation_id=operation_id,
                     user_id=user_id,
@@ -737,18 +785,12 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                     furnace_id=furnace_id,
                     reward_id=int(id),
                     reward_name=str(goods_info["name"]),
-                    reward_quantity=int(num),
+                    reward_quantity=reward_quantity,
                 )
                 started = _mixelixir_result(outcome)
                 started.task_id = str(getattr(started, "task_id", ""))
                 if started.status == "duplicate" or started.replayed:
-                    claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                    claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=started.task_id, max_goods_num=XiuConfig().max_goods_num)
-                    claimed = _mixelixir_result(claimed_outcome)
-                    if claimed.succeeded:
-                        msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
-                        await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
-                        await mix_make.finish()
+                    await claim_and_finish(started.task_id)
                 if not started.succeeded:
                     # The unified settlement facade is the compatibility path
                     # for callers that do not need the two-phase task UI:
@@ -760,56 +802,20 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                         user_id=user_id, recipe_key=recipe_key
                     ) or mixelixir_application.latest_ready_refine_task(user_id=user_id)
                     if ready_task_id:
-                        claim_operation = (
-                            f"mixelixir-reward-recover:{event_id}:{user_id}:{ready_task_id}"
-                            if event_id
-                            else f"mixelixir-reward-recover:{user_id}:{ready_task_id}:{runtime_ids.new_id()}"
-                        )
-                        claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=ready_task_id, max_goods_num=XiuConfig().max_goods_num)
-                        claimed = _mixelixir_result(claimed_outcome)
-                        if claimed.succeeded:
-                            msg = (
-                                f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n"
-                                f"已补领此前扣材未发的丹药。"
-                            )
-                            await handle_send(
-                                bot, event, msg, md_type="炼丹",
-                                k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包",
-                            )
-                            await mix_make.finish()
-                        if claimed.status == "inventory_full":
-                            msg = "丹药背包已满，材料已扣但丹药未发。请先清理背包，再提交同一配方补领。"
-                        else:
-                            msg = "炼丹未结算：炼丹数据冲突，本次未扣材。若此前已扣材，请稍后再提同一配方补领。"
+                        await claim_and_finish(ready_task_id, recovery=True)
                     else:
                         if started.status == "item_insufficient":
                             msg = "药材数量不足，本次未消耗药材。"
                         elif started.status == "limit_reached":
                             msg = "道友今日炼丹已达上限，请明日再来！"
+                        elif started.status == "write_rejected":
+                            msg = result_failure("炼丹", started)
                         else:
-                            msg = "炼丹未完成：炼丹状态已更新，本次未扣材，请检查背包后重试。"
+                            msg = started.message or "炼丹未完成：炼丹状态已更新，本次未扣材，请检查背包后重试。"
                     await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
                     await mix_make.finish()
 
-                claim_operation = f"mixelixir-reward:{event_id}:{user_id}" if event_id else f"mixelixir-reward:{user_id}:{runtime_ids.new_id()}"
-                claimed_outcome = mixelixir_application.refine_reward(operation_id=claim_operation, user_id=user_id, task_id=started.task_id, max_goods_num=XiuConfig().max_goods_num)
-                claimed = _mixelixir_result(claimed_outcome)
-                if claimed.status == "duplicate" or claimed.replayed:
-                    msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚\n该炼丹请求已经处理，无需重复提交。"
-                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
-                    await mix_make.finish()
-                if not claimed.succeeded:
-                    if claimed.status == "inventory_full":
-                        msg = "丹药背包已满，材料消耗记录已保留。请清理背包后，重新提交同一配方领取。"
-                    else:
-                        msg = "丹药尚未入账：领取冲突，材料消耗记录已保留，请重新提交同一配方领取。"
-                    await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
-                    await mix_make.finish()
-                msg = f"恭喜道友成功炼成丹药：{claimed.reward_name}{claimed.reward_quantity}枚"
-                if exp_gain:
-                    msg += f"\n获得炼丹经验{exp_gain}点"
-                await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
-                await mix_make.finish()
+                await claim_and_finish(started.task_id, exp_gain=exp_gain)
             else:
                 msg = f"没有炼成丹药哦~就不扣你药材啦"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")

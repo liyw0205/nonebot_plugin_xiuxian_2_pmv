@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -86,8 +87,23 @@ class PlayerProfileReadContractTest(unittest.TestCase):
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(source.count("get_user_profile("), 4)
         self.assertNotIn("_sql_message().get_user_real_info", source)
-        self.assertIn("get_player_attributes(\n        user_id,", source)
-        self.assertIn("base_provider=", source)
+        tree = ast.parse(source)
+        calls = [node for node in ast.walk(tree)
+                 if isinstance(node, ast.Call) and ast.unparse(node.func) == "get_player_attributes"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([ast.unparse(arg) for arg in calls[0].args], ["user_id"])
+        self.assertEqual([(kw.arg, ast.unparse(kw.value)) for kw in calls[0].keywords],
+                         [(None, "attribute_providers")])
+        providers = next(node.value for node in ast.walk(tree)
+                         if isinstance(node, ast.Assign)
+                         and any(isinstance(target, ast.Name) and target.id == "attribute_providers"
+                                 for target in node.targets))
+        self.assertIsInstance(providers, ast.Dict)
+        self.assertEqual({ast.literal_eval(key): ast.unparse(value)
+                          for key, value in zip(providers.keys, providers.values)}, {
+            "buff_data_provider": "user_buff_data",
+            "base_provider": "lambda _user_id: _base_attributes_from_profile(user_info)",
+        })
 
     def test_dynamic_attribute_reads_use_feature_application_boundary(self) -> None:
         root = Path(__file__).resolve().parents[1]

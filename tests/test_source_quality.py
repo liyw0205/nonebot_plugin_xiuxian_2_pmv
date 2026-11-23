@@ -3822,9 +3822,15 @@ class SourceQualityTests(unittest.TestCase):
     def test_map_status_initialization_and_repair_use_feature_writer(self) -> None:
         source = (SOURCE_ROOT / "xiuxian/xiuxian_map/__init__.py").read_text(encoding="utf-8")
         start = source.index("def _get_player_map_status")
+        save_start = source.rfind("\ndef _save_player_map_status", 0, start) + 1
         end = source.index("def _parse_map_query", start)
-        helpers = source[start:end]
-        self.assertGreaterEqual(helpers.count("map_application.save_status("), 5)
+        helpers = source[save_start:end]
+        normalize = helpers[helpers.index("def _get_player_map_status"):]
+        normalize = normalize[:normalize.index("def _is_canonical_map_status")]
+        self.assertEqual(normalize.count("_save_player_map_status("), 1)
+        self.assertIn("node_id = node[\"id\"]", normalize)
+        self.assertIn("def _save_player_map_status(", helpers)
+        self.assertIn("map_application.save_status(", helpers)
         self.assertNotIn("def _save_map_status", helpers)
 
     def test_map_explore_status_reads_through_feature_application(self) -> None:

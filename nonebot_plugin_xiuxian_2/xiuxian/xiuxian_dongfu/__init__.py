@@ -5,7 +5,7 @@ except ImportError:
 
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ...paths import get_paths
 from ...features.dongfu.application import DongfuApplication
@@ -144,6 +144,127 @@ def _now():
 
 def _fmt_dt(dt: datetime):
     return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _harvest_snapshot_from_receipt(user_id: str, operation_id: str, receipt: dict):
+    try:
+        payload = json.loads(str(receipt.get("payload") or ""))
+        rewards = json.loads(str(receipt.get("rewards") or "[]"))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, list) or not payload or str(payload[0]) != str(user_id):
+        return None
+    if len(payload) == 2 and isinstance(payload[1], list):
+        expected_slots, slot_numbers, reward_rows, failed_slots = [], payload[1], [], []
+    elif len(payload) in {4, 5}:
+        _, expected_slots, slot_numbers, reward_rows, *failed = payload
+        failed_slots = failed[0] if failed else []
+    else:
+        return None
+    if not all(isinstance(value, list) for value in (expected_slots, slot_numbers, reward_rows)):
+        return None
+    if not isinstance(failed_slots, list) or not isinstance(rewards, list):
+        return None
+    names = {}
+    reward_items = []
+    try:
+        slot_numbers = [int(number) for number in slot_numbers]
+        for row in reward_rows:
+            if not isinstance(row, list) or len(row) != 4:
+                return None
+            names[int(row[0])] = (str(row[1]), str(row[2]))
+        for row in rewards:
+            if not isinstance(row, list) or len(row) != 2:
+                return None
+            item_id, amount = int(row[0]), int(row[1])
+            definition = items.get_data_by_item_id(item_id) if item_id not in names else {}
+            name, item_type = names.get(item_id, (
+                (definition or {}).get("name", f"物品{item_id}"),
+                (definition or {}).get("type", "物品"),
+            ))
+            reward_items.append({"id": item_id, "name": name, "type": item_type, "amount": amount})
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return {
+        "expected_slots": expected_slots,
+        "slot_numbers": slot_numbers,
+        "items": reward_items,
+        "failed_slots": failed_slots,
+        "operation_id": operation_id,
+    }
+
+
+def _harvest_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"plant_slots": "灵田状态", "harvest_snapshot": "收获方案",
+             "receipt": "收获回执", "outbox": "收获补偿事件"}.get(subject, "")
+    if subject.startswith("item:"):
+        item_id = subject.removeprefix("item:")
+        definition = items.get_data_by_item_id(item_id) or {}
+        label = definition.get("name", f"物品{item_id}")
+    return {subject: label}
+
+
+def _fertilize_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    else:
+        label = {"item:21006": "五色灵壤", "receipt": "施肥回执"}.get(subject, "")
+    return {subject: label}
+
+
+def _accelerate_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    else:
+        label = {"item:21005": "灵息露", "receipt": "催熟回执"}.get(subject, "")
+    return {subject: label}
+
+
+def _plant_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = ""
+    if subject.startswith("plot:"):
+        label = subject.removeprefix("plot:") + "号灵田"
+    elif subject.startswith("item:"):
+        config = SEED_CONFIG.get(_to_int(subject.removeprefix("item:")), {})
+        label = config.get("name", "种子")
+    elif subject == "receipt":
+        label = "种植回执"
+    return {subject: label}
+
+
+def _patrol_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"actor": "玩家体力与灵石", "patrol": "巡山记录", "receipt": "巡山回执"}.get(subject, "")
+    if subject.startswith("item:"):
+        definition = items.get_data_by_item_id(subject.removeprefix("item:")) or {}
+        label = definition.get("name", "巡山材料")
+    return {subject: label}
+
+
+def _visit_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    label = {"visitor": "来访方", "target": "目标方", "stone_wallet": "灵石钱包",
+             "receipt": "拜访奖励回执"}.get(subject, "")
+    return {subject: label}
+
+
+def _patrol_receipt_day(receipt, user_id):
+    try:
+        payload = json.loads(str(receipt.get("payload") or ""))
+        if not isinstance(payload, list) or len(payload) != 2 or payload[0] != user_id:
+            return None
+        day = str(payload[1])
+        if datetime.strptime(day, "%Y-%m-%d").strftime("%Y-%m-%d") != day:
+            return None
+        if not 1 <= int(receipt["patrol_count"]) <= DONGFU_PATROL_DAILY_LIMIT or not 1 <= int(receipt["patrol_guard"]) <= 3:
+            return None
+        return day
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def _parse_dt(s: str):
@@ -301,8 +422,15 @@ def _format_minutes_left(finish: datetime, now: datetime):
     return max(1, int((finish - now).total_seconds() + 59) // 60)
 
 
+def _plant_wall_time(now: datetime):
+    if now.tzinfo is not None:
+        # Stored plant timestamps are naive UTC.
+        return now.astimezone(timezone.utc).replace(tzinfo=None)
+    return now
+
+
 def _format_plant_slot(slot: dict, now: datetime | None = None):
-    now = now or _now()
+    now = _plant_wall_time(now if now is not None else _now())
     seed_id = _to_int(slot.get("seed_id"))
     if seed_id not in SEED_CONFIG:
         return f"{slot.get('slot')}号灵田：空闲"
@@ -318,8 +446,8 @@ def _format_plant_slot(slot: dict, now: datetime | None = None):
     return f"{slot.get('slot')}号灵田：{seed_name}（剩余{_format_minutes_left(finish, now)}分钟{fertilizer_msg}）"
 
 
-def _format_plant_slots(d: dict):
-    now = _now()
+def _format_plant_slots(d: dict, now: datetime | None = None):
+    now = now if now is not None else _now()
     lines = ["【洞府灵田状态】"]
     lines.extend(_format_plant_slot(slot, now) for slot in _normalize_plant_slots(d))
     return "\n".join(lines)
@@ -478,21 +606,21 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         "**指令**\n"
         "- 我的洞府\n"
         "> 查看洞府信息\n"
-        "- 洞府种植 [种子名] / 洞府种植 [编号] [种子名]\n"
-        "> 在灵田种植\n"
-        "- 洞府收获 / 洞府收获 [编号]\n"
+        "- 洞府种植 种子名 / 洞府种植 [灵田编号] 种子名\n"
+        "> 在灵田种植；省略编号时选择首块空田\n"
+        "- 洞府收获 [灵田编号]（别名：收获洞府）\n"
         "> 收获成熟作物\n"
-        "- 我的洞府收获记录\n"
+        "- 我的洞府收获记录（别名：洞府收获记录、灵田收获记录）\n"
         "> 查看近7天收获物品\n"
-        "- 洞府施肥 [编号] / 洞府催熟 [编号]\n"
+        "- 洞府施肥 灵田编号 / 洞府催熟 灵田编号\n"
         "> 施肥或催熟\n"
-        "- 洞府地脉 / 洞府巡山\n"
+        "- 洞府地脉（别名：地脉查看）/ 洞府巡山（别名：巡山护府）\n"
         "> 查看地脉、巡山\n"
-        "- 洞府扩建 / 洞府布阵\n"
+        "- 洞府扩建 [数量] / 洞府布阵\n"
         "> 扩建灵田、布置护阵\n"
         "- 拜访道友 道号\n"
         "> 拜访其他道友洞府\n"
-        "- 潜入洞府 道号 / 随机潜入洞府\n"
+        "- 潜入洞府 [道号]（别名：随机潜入、随机潜入洞府；省略道号时随机）\n"
         "> 潜入其他洞府（有风险）\n"
         "\n"
         "**规则**\n"
@@ -512,6 +640,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_harvest_history.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的洞府收获记录")
 async def dongfu_harvest_history_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的洞府收获记录：近7天收获物品（只读）"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -525,6 +654,7 @@ async def dongfu_harvest_history_(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 @my_dongfu.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的洞府")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -544,10 +674,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     intrude_left = INFILTRATE_DAILY_LIMIT - _to_int(d.get("intrude_count"))
     active_left = _get_infiltrate_left(d, is_random=False)
     random_left = _get_infiltrate_left(d, is_random=True)
-    active_count = len(_active_plant_slots(d))
+    active_slots = _active_plant_slots(d)
+    active_count = len(active_slots)
     ready_count = 0
-    now = _now()
-    for slot in _active_plant_slots(d):
+    now = _plant_wall_time(_now())
+    for slot in active_slots:
         finish = _parse_dt(slot.get("plant_finish", ""))
         if finish and now >= finish:
             ready_count += 1
@@ -561,13 +692,17 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         f"巡山护府：{_to_int(d.get('patrol_guard'))}层，今日巡山{_to_int(d.get('patrol_count'))}/{DONGFU_PATROL_DAILY_LIMIT}\n"
         f"今日可发起潜入：主动{active_left}/{INFILTRATE_ACTIVE_DAILY_LIMIT}，随机{random_left}/{INFILTRATE_RANDOM_DAILY_LIMIT}\n"
         f"今日剩余可被潜入次数：{intrude_left}\n"
-        f"{_format_plant_slots(d)}"
+        f"{_format_plant_slots(d, now)}"
     )
     await handle_send(bot, event, msg)
 
 
 @dongfu_plant.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:plant")])
-@guard_command("洞府种植")
+@guard_command("洞府种植", known_rejections=(
+    "dongfu_plant_inventory_write_rejected", "dongfu_plant_inventory_projection_mismatch",
+    "dongfu_plant_state_write_rejected", "dongfu_plant_state_projection_mismatch",
+    "dongfu_plant_receipt_write_rejected", "dongfu_plant_receipt_projection_mismatch",
+), subjects=_plant_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -576,12 +711,43 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("plant", operation_id) if event_message_id else None
+    if receipt is not None:
+        slot_no, seed_name = _parse_plant_args(args.extract_plain_text())
+        if not seed_name:
+            await handle_send(bot, event, "请指定种子名，例如：洞府种植 青灵草种；也可指定灵田：洞府种植 2 青灵草种")
+            return
+        seed_id = _find_seed_id(seed_name)
+        if seed_id is None:
+            await handle_send(bot, event, f"未识别种子【{seed_name}】。")
+            return
+        parts = str(receipt.get("payload") or "").split("|")
+        recorded_slot = _to_int(parts[1], 0) if len(parts) == 3 else 0
+        if len(parts) != 3 or parts[0] != uid or recorded_slot < 1:
+            await handle_send(bot, event, result_failure("洞府种植", {
+                "reason": "dongfu_plant_receipt_invalid", "subject": "receipt",
+            }, subjects={"receipt": "种植回执"}))
+            return
+        result = dongfu_application.plant(
+            operation_id=operation_id, user_id=uid, expected_slots="[]",
+            slot_no=recorded_slot if slot_no is None else slot_no, seed_id=seed_id,
+            seed_name=seed_name, plant_start="", plant_finish="",
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该种植请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府种植", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
         return
 
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     slot_no, seed_name = _parse_plant_args(args.extract_plain_text())
     if not seed_name:
         await handle_send(bot, event, "请指定种子名，例如：洞府种植 青灵草种；也可指定灵田：洞府种植 2 青灵草种")
@@ -592,8 +758,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"未识别种子【{seed_name}】。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-plant:{uid}:{event_message_id or runtime_ids.new_id()}"
     slots = _normalize_plant_slots(d)
     if slot_no is None:
         slot = next((s for s in slots if _to_int(s.get("seed_id")) not in SEED_CONFIG), None)
@@ -647,7 +811,13 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_harvest.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=2, stamina_operation_prefix="dongfu:harvest")])
-@guard_command("洞府收获")
+@guard_command("洞府收获", known_rejections=(
+    "harvest_snapshot_write_rejected", "harvest_snapshot_projection_mismatch",
+    "dongfu_harvest_state_write_rejected", "dongfu_harvest_state_projection_mismatch",
+    "dongfu_harvest_inventory_write_rejected", "dongfu_harvest_inventory_projection_mismatch",
+    "dongfu_harvest_receipt_write_rejected", "dongfu_harvest_receipt_projection_mismatch",
+    "dongfu_harvest_outbox_write_rejected", "dongfu_harvest_outbox_projection_mismatch",
+), subjects=_harvest_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -656,6 +826,40 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(
+        getattr(event, "message_id", "") or getattr(event, "id", "") or ""
+    ).strip()
+    operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id:
+        receipt = dongfu_application.operation_receipt("harvest", operation_id)
+        if receipt is not None:
+            snapshot = _harvest_snapshot_from_receipt(uid, operation_id, receipt)
+            if snapshot is None:
+                await handle_send(bot, event, "洞府收获回执数据异常，请联系管理员核查收获记录。")
+                return
+            result = dongfu_application.harvest(
+                operation_id=operation_id,
+                user_id=uid,
+                expected_slots=snapshot["expected_slots"],
+                slot_numbers=snapshot["slot_numbers"],
+                rewards=snapshot["items"],
+                max_goods_num=XiuConfig().max_goods_num,
+                settled_at=_fmt_dt(_now()),
+                failed_slots=snapshot["failed_slots"],
+            )
+            if result.status == "duplicate":
+                lines = [f"洞府收获完成，共收获{len(snapshot['slot_numbers'])}块灵田："]
+                lines.extend(
+                    f"- {item['name']} x{item['amount']}" for item in snapshot["items"]
+                )
+                lines.append("该收获请求已经处理，无需重复提交。")
+                if result.effects_pending:
+                    lines.append("统计与任务进度正在补偿。")
+                await handle_send(bot, event, "\n".join(lines))
+            elif not result.succeeded:
+                await handle_send(bot, event, result_failure("灵田收获", result))
+            return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -693,8 +897,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         else:
             wait_lines.append(f"{slot.get('slot')}号灵田状态异常，无法收获。")
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-harvest:{uid}:{event_message_id or runtime_ids.new_id()}"
     snapshot = None
     raw_snapshot = d.get("harvest_settlement", "")
     if raw_snapshot:
@@ -814,6 +1016,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_geomancy.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("洞府地脉")
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -836,7 +1039,12 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_patrol.handle(parameterless=[Cooldown(cd_time=0)])
-@guard_command("洞府巡山")
+@guard_command("洞府巡山", known_rejections=(
+    "dongfu_patrol_player_write_rejected", "dongfu_patrol_player_projection_mismatch",
+    "dongfu_patrol_state_write_rejected", "dongfu_patrol_state_projection_mismatch",
+    "dongfu_patrol_inventory_write_rejected", "dongfu_patrol_inventory_projection_mismatch",
+    "dongfu_patrol_receipt_write_rejected", "dongfu_patrol_receipt_projection_mismatch",
+), subjects=_patrol_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -845,6 +1053,28 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("patrol", operation_id) if event_message_id else None
+    if receipt is not None:
+        day = _patrol_receipt_day(receipt, uid)
+        if day is None:
+            await handle_send(bot, event, result_failure("洞府巡山", {
+                "reason": "dongfu_patrol_receipt_invalid", "subject": "receipt",
+            }, subjects={"receipt": "巡山回执"}))
+            return
+        result = dongfu_application.patrol(
+            operation_id=operation_id, user_id=uid, day=day,
+            stamina_cost=DONGFU_PATROL_STAMINA, daily_limit=DONGFU_PATROL_DAILY_LIMIT, stone_gain=0,
+        )
+        if result.status == "duplicate":
+            day_label = "今日巡山" if day == _today_str() else f"{day}巡山"
+            await handle_send(bot, event, f"洞府巡山完成。\n巡山护府：{result.patrol_guard}层\n"
+                              f"{day_label}：{result.patrol_count}/{DONGFU_PATROL_DAILY_LIMIT}\n"
+                              "该巡山请求已经处理，无需重复提交。")
+        else:
+            await handle_send(bot, event, result_failure("洞府巡山", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -864,8 +1094,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         item_id, item_name, chance = material_plan[node_type]
         if runtime_random.random() < chance:
             reward = (item_id, item_name, 1)
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-patrol:{uid}:{event_message_id or runtime_ids.new_id()}"
     stone_gain = runtime_random.randint(50000, 150000)
     if geomancy.get("name"):
         stone_gain = int(stone_gain * 1.2)
@@ -919,7 +1147,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
 
 @dongfu_fertilize.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:fertilize")])
-@guard_command("洞府施肥")
+@guard_command("洞府施肥", known_rejections=(
+    "dongfu_fertilize_inventory_write_rejected", "dongfu_fertilize_inventory_projection_mismatch",
+    "dongfu_fertilize_state_write_rejected", "dongfu_fertilize_state_projection_mismatch",
+    "dongfu_fertilize_receipt_write_rejected", "dongfu_fertilize_receipt_projection_mismatch",
+), subjects=_fertilize_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -928,6 +1160,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id and dongfu_application.operation_receipt("fertilize", operation_id) is not None:
+        slot_no = _parse_slot_no(args.extract_plain_text())
+        if slot_no is None:
+            await handle_send(bot, event, "请指定灵田编号，例如：洞府施肥 1")
+            return
+        result = dongfu_application.fertilize(
+            operation_id=operation_id, user_id=uid, expected_slots="[]", slot_no=slot_no,
+            item_id=DONGFU_ITEM_FERTILIZER, fertilizer_max=DONGFU_FERTILIZER_MAX,
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该施肥请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府施肥", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -948,8 +1196,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田当前空闲，无法施肥。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-fertilize:{uid}:{event_message_id or runtime_ids.new_id()}"
     fertilizer = _to_int(slot.get("fertilizer"))
     if fertilizer >= DONGFU_FERTILIZER_MAX:
         await handle_send(bot, event, f"{slot_no}号灵田肥力已满。")
@@ -979,7 +1225,11 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_accelerate.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=1, stamina_operation_prefix="dongfu:accelerate")])
-@guard_command("洞府催熟")
+@guard_command("洞府催熟", known_rejections=(
+    "dongfu_accelerate_inventory_write_rejected", "dongfu_accelerate_inventory_projection_mismatch",
+    "dongfu_accelerate_state_write_rejected", "dongfu_accelerate_state_projection_mismatch",
+    "dongfu_accelerate_receipt_write_rejected", "dongfu_accelerate_receipt_projection_mismatch",
+), subjects=_accelerate_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -988,6 +1238,22 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
+    if event_message_id and dongfu_application.operation_receipt("accelerate", operation_id) is not None:
+        slot_no = _parse_slot_no(args.extract_plain_text())
+        if slot_no is None:
+            await handle_send(bot, event, "请指定灵田编号，例如：洞府催熟 1")
+            return
+        result = dongfu_application.accelerate(
+            operation_id=operation_id, user_id=uid, expected_slots="[]", slot_no=slot_no,
+            item_id=DONGFU_ITEM_ACCELERATE, now="", new_finish="",
+        )
+        if result.status == "duplicate":
+            await handle_send(bot, event, f"该催熟请求已经处理，无需重复提交。\n{_format_plant_slots(_get_dongfu(uid))}")
+        else:
+            await handle_send(bot, event, result_failure("洞府催熟", result))
+        return
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1008,10 +1274,10 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, f"{slot_no}号灵田当前空闲，无法催熟。")
         return
 
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-accelerate:{uid}:{event_message_id or runtime_ids.new_id()}"
     finish = _parse_dt(slot.get("plant_finish", ""))
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     if not finish:
         await handle_send(bot, event, f"{slot_no}号灵田状态异常，无法催熟。")
         return
@@ -1029,8 +1295,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         expected_slots=expected_slots,
         slot_no=slot_no,
         item_id=DONGFU_ITEM_ACCELERATE,
-        now=_fmt_dt(now),
-        new_finish=_fmt_dt(new_finish),
+        now=now.isoformat(sep=" "),
+        new_finish=new_finish.isoformat(sep=" "),
     )
 
     if result.status == "duplicate":
@@ -1048,7 +1314,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
 @dongfu_expand.handle(parameterless=[Cooldown(cd_time=0)])
-async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+@guard_command("洞府扩建")
+async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
     if not ok:
@@ -1056,14 +1323,24 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    raw_levels = args.extract_plain_text().strip()
+    levels = 1
+    if raw_levels:
+        if not raw_levels.isascii() or not raw_levels.isdigit():
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+        try:
+            levels = int(raw_levels)
+        except ValueError:
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+        if levels < 1:
+            await handle_send(bot, event, "请使用：洞府扩建 [数量]（数量须为正整数）。")
+            return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
-        return
-
-    plot_count = _to_int(d.get("plot_count"), DONGFU_PLOT_COUNT)
-    if plot_count >= DONGFU_PLOT_MAX:
-        await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
 
     operation_id = _dongfu_expansion_operation_id(event, uid)
@@ -1075,25 +1352,41 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         max_plot_count=DONGFU_PLOT_MAX,
         stone_cost_per_level=20000000,
         seed_names={seed_id: conf["name"] for seed_id, conf in SEED_CONFIG.items()},
+        levels=levels,
     )
     if result.status == "deed_insufficient":
-        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
+        await handle_send(bot, event, f"扩建至{result.current_count}块灵田需要【洞府地契】x{result.deed_cost}。可通过地图探索获得。")
         return
     if result.status == "stone_insufficient":
-        await handle_send(bot, event, f"扩建至{result.previous_count + 1}块灵田需要{number_to(result.stone_cost)}灵石。")
+        await handle_send(bot, event, f"扩建至{result.current_count}块灵田需要{number_to(result.stone_cost)}灵石。")
         return
     if result.status == "max_plots":
         await handle_send(bot, event, f"洞府灵田已扩建至上限：{DONGFU_PLOT_MAX}块。")
         return
+    if result.status == "duplicate":
+        d = _get_dongfu(uid)
+        await handle_send(bot, event, f"该扩建请求已经处理，当前灵田数量为{result.current_count}块。\n{_format_plant_slots(d)}")
+        return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("洞府巡山", result))
+        await handle_send(bot, event, result_failure(
+            "洞府扩建", result,
+            subjects={
+                "stone_wallet": "灵石钱包",
+                "dongfu_status": "洞府状态",
+                "receipt": "扩建回执",
+                f"item:{DONGFU_ITEM_DEED}": "洞府地契",
+            },
+        ))
         return
     d = _get_dongfu(uid)
-    await handle_send(bot, event, f"洞府扩建成功，灵田数量提升至{result.current_count}块。\n{_format_plant_slots(d)}")
+    await handle_send(bot, event, f"洞府扩建成功，灵田数量从{result.previous_count}块提升至{result.current_count}块。\n{_format_plant_slots(d)}")
 
 
 @visit_friend.handle(parameterless=[Cooldown(cd_time=0, stamina_cost=VISIT_STAMINA, stamina_operation_prefix="dongfu:visit")])
-@guard_command("拜访洞府")
+@guard_command("拜访洞府", known_rejections=(
+    "dongfu_visit_stone_write_rejected", "dongfu_visit_stone_projection_mismatch",
+    "dongfu_visit_receipt_write_rejected", "dongfu_visit_receipt_projection_mismatch",
+), subjects=_visit_failure_subjects)
 async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     bot, _ = await assign_bot(bot=bot, event=event)
     ok, user_info, m = check_user(event)
@@ -1132,7 +1425,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         gain=requested_gain,
     )
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("拜访洞府", result))
+        await handle_send(bot, event, result_failure(
+            "拜访洞府", result, subjects={"receipt": "拜访奖励回执"}
+        ))
         return
     replay = "（该请求已处理）" if result.status == "duplicate" else ""
     await handle_send(bot, event, f"你拜访了【{tname}】的洞府（{td.get('node_name')}），获得灵石{number_to(result.gain)}。{replay}")
@@ -1148,6 +1443,29 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         return
 
     uid = str(user_info["user_id"])
+    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
+    operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
+    receipt = dongfu_application.operation_receipt("array", operation_id) if event_message_id else None
+    if receipt is not None:
+        parts = str(receipt.get("payload") or "").split("|")
+        try:
+            receipt_level = int(receipt["level"])
+            valid_receipt = (
+                len(parts) == 6
+                and parts[0] == uid
+                and int(parts[2]) == receipt_level
+                and int(parts[4]) == DONGFU_ITEM_ARRAY_STONE
+            )
+        except (KeyError, TypeError, ValueError):
+            valid_receipt, receipt_level = False, 0
+        if not valid_receipt:
+            await handle_send(bot, event, result_failure("洞府布阵", {
+                "reason": "dongfu_array_receipt_invalid", "subject": "receipt",
+            }))
+            return
+        await handle_send(bot, event, f"该阵法升级请求已经处理，当前阵法等级：{receipt_level}。")
+        return
+
     has, d = _has_dongfu(uid)
     if not has:
         await handle_send(bot, event, "你尚未建设洞府。")
@@ -1162,8 +1480,6 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     geomancy = _get_geomancy(d)
     cost = int(3000000 * (lv + 1) * (1 - float(geomancy.get("array_discount", 0))))
     array_stone_need = max(0, next_lv - 3 - _to_int(geomancy.get("array_stone_reduce")))
-    event_message_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
-    operation_id = f"dongfu-array:{uid}:{event_message_id or runtime_ids.new_id()}"
     result = dongfu_application.array_upgrade(
         operation_id=operation_id,
         user_id=uid,
@@ -1180,7 +1496,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, f"升级至{next_lv}级阵法需要【玄铁阵石】x{array_stone_need}。可通过地图挖矿/战斗获得。")
         return
     if not result.succeeded:
-        await handle_send(bot, event, result_failure("洞府巡山", result))
+        await handle_send(bot, event, result_failure("洞府布阵", result))
         return
     item_msg = f"，玄铁阵石x{array_stone_need}" if array_stone_need > 0 else ""
     await handle_send(bot, event, f"消耗{number_to(cost)}灵石{item_msg}，洞府布阵成功，当前阵法等级：{next_lv}")
@@ -1379,6 +1695,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
 
 
     now = _now()
+    if now.tzinfo is not None:
+        now = now.astimezone(timezone.utc).replace(tzinfo=None)
     array_lv = _to_int(td.get("array_level"))
     geomancy = _get_geomancy(td)
     guarded = _to_int(td.get("patrol_guard")) > 0

@@ -2,7 +2,7 @@
 ## 用户流程
 历史命令包继续作为 transport adapter；移动、回城、交互、战斗、探索、地图委托、种子购买和建设洞府的默认路径均进入 `MapApplication`、feature repositories 或 `CombatSettlementApplication`。
 
-指定道号论道与战绩查询经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find` 只读查询单目标，不加载完整同节点列表。论道排除本人，指定战绩允许本人；无参数战绩直接查询本人。目标缺失时以同一短只读事务内的 `LIMIT 1` 存在性查询区分“无其他候选”和“有候选但无该道号”，缺文件/schema 或读取错误返回空结果，不创建数据库或执行修复。
+指定道号论道与战绩查询经 `MapApplication.nearby_target -> MapNearbyPlayersSqlQueryRepository.find` 只读查询单目标，不加载完整同节点列表。论道排除本人，指定战绩允许本人；无参数战绩直接查询本人。目标缺失时以同一短只读事务内的 `LIMIT 1` 存在性查询区分“无其他候选”和“有候选但无该道号”，不创建数据库或执行修复。`论道查看` 对目标资料和战绩读取启用严格失败模式：缺文件/SQL 读取错误返回各自具体原因并记录异常，不能伪装成目标不存在、零战绩或无回复；其他既有调用仍保留原 fail-closed 兼容行为。
 
 保留三维位置、双侧 CAST 字符串 ID 等值、地图侧输出 ID 与道号 BINARY 精确匹配。地图旧 JOIN 包含同一用户的全部 profile，因此先匹配名字，再按 map rowid 与 profile rowid 选首个命中；后一个 profile 同名仍可选中。旧顺序只保证 map rowid，新增 profile rowid 是并列顺序确定化，不清洗历史重复数据。战力继续用 Python `int(value or 0)`，不经 SQLite 整数截断；结算仍由原 application 检查当前位置和幂等回执。
 
@@ -10,7 +10,28 @@
 
 这不是跨扫描全局快照：高水位以上的追加不入流；空洞插入、rowid 复用和删除/更新按后续短读取处理。越过的是联合 pair，后续 map 行仍可读取更小的 profile rowid；已经越过的 pair 不重扫。并发变更可改变观察到的候选流，抽样保证仅针对该流。结算继续按原 CAS 拒绝位置漂移，不以读取资格代替结算检查。
 ## 命令与别名
-`地图`、`探索`、`回家`。
+`地图帮助` 列出当前消息端命令：
+
+- 查询与移动：`地图 [界名/天名]`、`我的位置`、`前往 节点名/天名/界名`、`建设洞府`、`回府`。
+- 论道：`附近道友`、`论道切磋 [道号]`、`论道查看 [道号]`。
+- 论道切磋按消息幂等；双方战绩和结算回执同事务写入。拒写/投影不符会回滚双方记录并返回具体原因，同消息可在故障解除后重试。
+- 资源：`钓鱼`、`挖矿`、`采集`，触发交互时分别使用 `收杆`、`落镐`、`采收`；`种子商店`、`购买种子 种子名 数量`。
+- 战斗与探索：`节点战斗`（别名 `试炼挑战`、`险地挑战`）、`开始探索 [分钟]`（别名 `节点探索`）、`探索结算`。
+- 委托：`地图委托`、`接取委托`、`委托完成`。洞府内操作见 `洞府帮助`。
+
+## 探索发起
+`开始探索 [分钟]` 在遗迹、情报、宫殿节点使用；省略分钟或输入非整数时取节点配置时长，低于 5 分钟的输入按 5 分钟处理。大于节点结算上限的计划时长仍保留在状态中，实际结算时由 `max_duration_min` 限制。发起前检查角色、探索节点、体力、每日探索结算额度、30 秒发起冷却和已有进行中状态；`explore_count` 在探索结算时递增，不在发起时递增。
+
+默认写链经 `MapApplication.explore_start -> MapExploreStartSqlRepository`，在同一 game/player SQLite 工作单元内扣体力、保存探索状态和冷却，并写 game 库永久回执。四个写点均核 rowcount 与实际投影，任何已知拒写或写后改写都回滚整笔并返回具体 reason/subject；故障解除后可用原消息重试。账本请求身份忽略由服务端时钟生成的开始时间和冷却截止值，避免跨秒重试变成不同请求；永久回执仍保留实际时间。意外 SQLite 异常由命令 guard 记录 traceback 并回复定位号。
+
+真实 OneBot matcher 覆盖开始/拒绝/恢复路径；QQ plain、Markdown 与 Markdown 发送失败回退用 adapter mock 验证，不代表 QQ 客户端真机联调。
+
+## 探索结算
+`探索结算`按活动开始时间生成稳定操作号。未达到一分钟时不写奖励；结算时长取实际经过、计划时长与节点上限的最小值，探索轮数至少一轮，`explore_count` 只在结算成功时递增。每日额度已满时保留活动且不冻结奖励；已有奖励快照跨日时只刷新每日 CAS 基线，不重新抽取奖励。
+
+新奖励快照通过活动状态 CAS 保存点冻结。随后 `MapExploreSettlementSqlRepository` 在 game/player SQLite 工作单元中写每日次数、清理活动状态、灵石、绑定背包物品和永久回执；每个写点核对 rowcount 与实际投影，任一点拒写或写后改写都会整笔回滚。明确拒绝保留 `reason` 与 `subject`，同活动恢复会沿用已冻结奖励；意外数据库异常由命令 guard 保留 traceback 和定位号。
+
+真实 OneBot matcher 覆盖无参结算、时长/额度边界、奖励快照及资产/回执故障恢复；QQ plain、Markdown 和失败降级通过 adapter mock 检查，未进行 QQ 客户端真机联调。
 ## Web API
 `POST /api/v1/map/{move,return_home,interactive_start,interactive_finish,combat_start,combat_settle,explore_start,explore_settle,resource_reward,mission_claim,purchase_seed,build_dongfu}`，权限 `user`。
 ## 数据模型与迁移
@@ -42,7 +63,7 @@
 ## 灰度开关、回滚和已知限制
 战斗引擎、Items/配置解析和静态地图 JSON 仍由显式旧 provider/transport adapter 提供；这不把事务 service 计入默认执行图。旧 service 仍可经 shim 导入，显式 rollback repositories 保持可用。`map.018` 只建表与补列，不改任何数值或算法；回退时应先恢复代码版本，再保留 `map.018` 已建出的表，不删除迁移数据。既有 `map.001` 至 `map.017` 同理。
 
-附近道友展示经 `await MapApplication.nearby_display -> select_nearby_display`，不再物化完整 `nearby_players` 列表或无界 `seen_ids`。展示查询按 BINARY 字符串 ID 单向 seek，每页只读取一个 ID 和首个 map/profile rowid pair，再以 expected ID 重查 public 字段；最多保留 10 个对象。稳定数据下唯一用户流保持旧语义：不足 10 人按 map rowid 顺序，超过 10 人 reservoir(k=10) 后随机排列。短只读 UoW、双高水位、连接关闭、错误丢弃和取消传播与随机论道一致；单 ID 仍可能很大，SQL 工作集/缺索引耗时/逐候选 I/O/全进程 RAM 不由页大小保证。
+附近道友展示经 `await MapApplication.nearby_display -> select_nearby_display`，不再物化完整 `nearby_players` 列表或无界 `seen_ids`。展示查询按 BINARY 字符串 ID 单向 seek，每页只读取一个 ID 和首个 map/profile rowid pair，再以 expected ID 重查 public 字段；最多保留 10 个对象。稳定数据下唯一用户流保持旧语义：不足 10 人按 map rowid 顺序，超过 10 人 reservoir(k=10) 后随机排列。短只读 UoW、双高水位和连接关闭语义不变；历史通用 selector 仍 fail-closed，真实 `附近道友` 命令对 map/profile 读取失败启用严格模式，记录原 traceback 并返回具体原因，不伪报“附近暂无”。取消仍传播；单 ID 仍可能很大，SQL 工作集/缺索引耗时/逐候选 I/O/全进程 RAM 不由页大小保证。
 
 展示使用首 map/profile pair 去重，不复用论道的重复 JOIN 权重。双高水位不是全局快照：高水位以上追加不入流，空洞/删除/更新按后续 ID seek 处理；并发变更可能减少结果或使唯一流公平性失去保证，但最终结果最多 10 人且不重复。为控制查询规模，非首重复 profile 的坏字段不会触发展示失败；首 pair 当前字段解析失败仍 fail closed。无缓存、请求期 DDL 或 migration。
 

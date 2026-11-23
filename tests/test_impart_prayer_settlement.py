@@ -107,7 +107,7 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         self.assertEqual(result.new_cards, ("B",))
         self.assertEqual(dict(result.card_counts), {"A": 3, "B": 1})
         self.assertEqual(result.item_remaining, 2)
-        self.assertEqual(self.state(), ((2, 1), {"A": 3, "B": 1}, (0.1, 0.2)))
+        self.assertEqual(self.state(), ((2, 1), {"A": 3, "B": 1}, (0.2, 0.2)))
 
     def test_replay_returns_first_batch_and_rejects_identity_conflict(self):
         first = self.settle("same")
@@ -122,7 +122,7 @@ class ImpartPrayerSettlementTests(unittest.TestCase):
         )
         self.assertEqual(duplicate.cards, first.cards)
         self.assertEqual(replay.card_counts, first.card_counts)
-        self.assertEqual(self.state(), ((2, 1), {"A": 3, "B": 1}, (0.1, 0.2)))
+        self.assertEqual(self.state(), ((2, 1), {"A": 3, "B": 1}, (0.2, 0.2)))
 
     def test_missing_item_or_user_changes_nothing(self):
         missing_item = self.service.settle(

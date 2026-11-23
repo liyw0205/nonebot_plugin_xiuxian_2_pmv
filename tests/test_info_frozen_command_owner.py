@@ -77,31 +77,35 @@ class InfoFrozenCommandOwnerTests(unittest.TestCase):
         source = (
             ROOT / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_info/user_info.py"
         ).read_text(encoding="utf-8")
-        text_handler = source[
-            source.index("async def xiuxian_message_("):
-            source.index("async def xiuxian_message_img_(")
-        ]
-        image_handler = source[source.index("async def xiuxian_message_img_("):]
-        self.assertIn(
-            "get_user_xiuxian_info(\n        user_info[\"user_id\"], user_info=user_info, equipped_title_id=title_id\n    )",
-            text_handler,
-        )
-        self.assertIn(
-            "get_user_xiuxian_info(\n        user_info['user_id'], user_info=user_info, equipped_title_id=title_id\n    )",
-            image_handler,
-        )
+        tree = ast.parse(source)
+        handlers = {node.name: node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)}
+        for handler, expected_keywords in (
+            (handlers["xiuxian_message_"], {"user_info": "user_info", "equipped_title_id": "title_id",
+                                             "impart_provider": "_profile_impart_data"}),
+            (handlers["xiuxian_message_img_"], {"user_info": "user_info", "equipped_title_id": "title_id"}),
+        ):
+            calls = [node for node in ast.walk(handler)
+                     if isinstance(node, ast.Call) and ast.unparse(node.func) == "get_user_xiuxian_info"]
+            self.assertEqual(len(calls), 1)
+            self.assertEqual([ast.unparse(arg) for arg in calls[0].args], ["user_info['user_id']"])
+            self.assertEqual({kw.arg: ast.unparse(kw.value) for kw in calls[0].keywords}, expected_keywords)
         self.assertIn("get_user_profile(user_id)", source)
-        self.assertIn("get_player_attributes(\n        user_id,", source)
+        attribute_calls = [node for node in ast.walk(tree)
+                           if isinstance(node, ast.Call) and ast.unparse(node.func) == "get_player_attributes"]
+        self.assertEqual(len(attribute_calls), 1)
+        self.assertEqual([ast.unparse(arg) for arg in attribute_calls[0].args], ["user_id"])
+        self.assertEqual([(kw.arg, ast.unparse(kw.value)) for kw in attribute_calls[0].keywords],
+                         [(None, "attribute_providers")])
         self.assertIn("update_last_check_info_time(user_id)", source)
         self.assertIn("get_equipped_title_display(user_id)", source)
         self.assertIn("equipped_title_id=title_id", source)
         for legacy_reader in (
             "_sql_message().get_exp_rank(",
             "_sql_message().get_root_rate(",
-            "UserBuffDate(user_id)",
+            "UserBuffDate(user_id, initialize_missing=False)",
             "load_partner(user_id)",
             "load_mentor(user_id)",
-            "NatalTreasure(user_id)",
+            "NatalTreasure.read_existing_data(user_id)",
         ):
             self.assertIn(legacy_reader, source)
 

@@ -13,6 +13,12 @@ from .accessory_preset_domain import (
 )
 
 
+class _PresetWriteRejected(Exception):
+    def __init__(self, reason: str, subject: str):
+        self.reason = reason
+        self.subject = subject
+
+
 class AccessoryPresetSqlRepository:
     """Persist one accessory preset and its operation receipt atomically."""
 
@@ -48,6 +54,17 @@ class AccessoryPresetSqlRepository:
             )
             for slot in SLOTS
         }
+
+    @classmethod
+    def _state_matches(
+        cls, row: dict[str, Any] | None, expected: dict[str, Any], column: str,
+    ) -> bool:
+        if row is None or any(row[key] != value for key, value in expected.items() if key != column):
+            return False
+        try:
+            return cls._json(json.loads(row[column])) == cls._json(json.loads(expected[column]))
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _column(preset_idx: int) -> str:
@@ -106,87 +123,133 @@ class AccessoryPresetSqlRepository:
             "expected_preset": expected_preset,
         }
         payload_json = self._json(payload)
-        with AttachedDatabaseUnitOfWork(
-            self.game_database,
-            attachments={"player_data": self.player_database},
-            immediate=True,
-        ) as uow:
-            previous = uow.query_one(
-                "SELECT action,payload,result_json FROM accessory_transaction_operations "
-                "WHERE operation_id=?",
-                (operation_id,),
-            )
-            if previous is not None:
-                if str(previous["action"]) != "save_preset" or str(previous["payload"]) != payload_json:
-                    return AccessoryPresetChange("state_changed", "save_preset", user_id, reason="operation_conflict")
-                return self._result("duplicate", str(previous["result_json"]))
-
-            columns = {
-                str(item[1])
-                for item in uow.execute("PRAGMA player_data.table_info(player_accessory)").fetchall()
-            }
-            if column not in columns:
-                return AccessoryPresetChange("schema_missing", "save_preset", user_id)
-
-            row = uow.query_one(
-                f"SELECT equipped,bag,{column} FROM player_data.player_accessory WHERE user_id=?",
-                (user_id,),
-            )
-            if row is None:
-                current_equipped = {}
-                current_preset = normalize_preset({})
-                current_bag: list[Any] = []
-            else:
-                current_equipped = self._decode(row["equipped"], dict)
-                current_preset = normalize_preset(self._decode(row[column], dict))
-                current_bag = self._decode(row["bag"], list)
-            current_equipped = self._normalize_equipped(current_equipped)
-            if (
-                self._json(current_equipped) != self._json(expected_equipped)
-                or self._json(current_preset) != self._json(expected_preset)
-            ):
-                return AccessoryPresetChange("state_changed", "save_preset", user_id, reason="accessory_equipped_changed" if self._json(current_equipped) != self._json(expected_equipped) else "accessory_preset_changed")
-            if self._json(self._preset_from_equipped(current_equipped)) != self._json(preset):
-                return AccessoryPresetChange("invalid_plan", "save_preset", user_id)
-
-            had_old = any(current_preset.values())
-            if row is None:
-                uow.execute(
-                    f"INSERT INTO player_data.player_accessory(user_id,equipped,bag,{column}) "
-                    "VALUES(?,?,?,?)",
-                    (
-                        user_id,
-                        json.dumps(current_equipped, ensure_ascii=False),
-                        json.dumps(current_bag, ensure_ascii=False),
-                        json.dumps(preset, ensure_ascii=False),
-                    ),
+        subject = f"preset:{preset_idx}"
+        try:
+            with AttachedDatabaseUnitOfWork(
+                self.game_database,
+                attachments={"player_data": self.player_database},
+                immediate=True,
+            ) as uow:
+                previous = uow.query_one(
+                    "SELECT action,payload,result_json FROM accessory_transaction_operations "
+                    "WHERE operation_id=?",
+                    (operation_id,),
                 )
-            else:
-                uow.execute(
-                    f"UPDATE player_data.player_accessory SET {column}=? WHERE user_id=?",
-                    (json.dumps(preset, ensure_ascii=False), user_id),
-                )
-            details = {
-                "preset_idx": preset_idx,
-                "preset": preset,
-                "had_old": had_old,
-            }
-            result_json = self._json(
-                {
-                    "action": "save_preset",
-                    "user_id": user_id,
-                    "affected": 1,
-                    "stone_delta": 0,
-                    "accessory": None,
-                    "details": details,
+                if previous is not None:
+                    if str(previous["action"]) != "save_preset" or str(previous["payload"]) != payload_json:
+                        return AccessoryPresetChange(
+                            "state_changed", "save_preset", user_id,
+                            reason="operation_conflict", subject=subject,
+                        )
+                    return self._result("duplicate", str(previous["result_json"]))
+
+                columns = {
+                    str(item[1])
+                    for item in uow.execute("PRAGMA player_data.table_info(player_accessory)").fetchall()
                 }
+                if column not in columns:
+                    return AccessoryPresetChange("schema_missing", "save_preset", user_id)
+
+                row = uow.query_one(
+                    "SELECT * FROM player_data.player_accessory WHERE user_id=?",
+                    (user_id,),
+                )
+                if row is None:
+                    current_equipped = {}
+                    current_preset = normalize_preset({})
+                    current_bag: list[Any] = []
+                else:
+                    current_equipped = self._decode(row["equipped"], dict)
+                    current_preset = normalize_preset(self._decode(row[column], dict))
+                    current_bag = self._decode(row["bag"], list)
+                current_equipped = self._normalize_equipped(current_equipped)
+                if (
+                    self._json(current_equipped) != self._json(expected_equipped)
+                    or self._json(current_preset) != self._json(expected_preset)
+                ):
+                    return AccessoryPresetChange(
+                        "state_changed", "save_preset", user_id,
+                        reason="accessory_equipped_changed"
+                        if self._json(current_equipped) != self._json(expected_equipped)
+                        else "accessory_preset_changed",
+                        subject=subject,
+                    )
+                if self._json(self._preset_from_equipped(current_equipped)) != self._json(preset):
+                    return AccessoryPresetChange("invalid_plan", "save_preset", user_id, subject=subject)
+
+                had_old = any(current_preset.values())
+                expected_state = dict(row) if row is not None else {
+                    "user_id": user_id,
+                    "equipped": json.dumps(current_equipped, ensure_ascii=False),
+                    "bag": json.dumps(current_bag, ensure_ascii=False),
+                }
+                expected_state[column] = json.dumps(preset, ensure_ascii=False)
+                if row is None:
+                    write = uow.execute(
+                        f"INSERT INTO player_data.player_accessory(user_id,equipped,bag,{column}) "
+                        "VALUES(?,?,?,?)",
+                        (
+                            user_id,
+                            expected_state["equipped"],
+                            expected_state["bag"],
+                            expected_state[column],
+                        ),
+                    )
+                else:
+                    write = uow.execute(
+                        f"UPDATE player_data.player_accessory SET {column}=? WHERE user_id=?",
+                        (expected_state[column], user_id),
+                    )
+                if write.rowcount != 1:
+                    raise _PresetWriteRejected("accessory_preset_state_write_rejected", subject)
+                state_row = uow.query_one(
+                    "SELECT * FROM player_data.player_accessory WHERE user_id=?",
+                    (user_id,),
+                )
+                if not self._state_matches(state_row, expected_state, column):
+                    raise _PresetWriteRejected("accessory_preset_state_projection_mismatch", subject)
+
+                details = {
+                    "preset_idx": preset_idx,
+                    "preset": preset,
+                    "had_old": had_old,
+                }
+                result_json = self._json(
+                    {
+                        "action": "save_preset",
+                        "user_id": user_id,
+                        "affected": 1,
+                        "stone_delta": 0,
+                        "accessory": None,
+                        "details": details,
+                    }
+                )
+                receipt = uow.execute(
+                    "INSERT INTO accessory_transaction_operations "
+                    "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
+                    (operation_id, "save_preset", payload_json, result_json),
+                )
+                if receipt.rowcount != 1:
+                    raise _PresetWriteRejected("accessory_preset_receipt_write_rejected", subject)
+                if uow.query_one(
+                    "SELECT action,payload,result_json FROM accessory_transaction_operations "
+                    "WHERE operation_id=?",
+                    (operation_id,),
+                ) != {"action": "save_preset", "payload": payload_json, "result_json": result_json}:
+                    raise _PresetWriteRejected("accessory_preset_receipt_projection_mismatch", subject)
+                state_row = uow.query_one(
+                    "SELECT * FROM player_data.player_accessory WHERE user_id=?",
+                    (user_id,),
+                )
+                if not self._state_matches(state_row, expected_state, column):
+                    raise _PresetWriteRejected("accessory_preset_state_projection_mismatch", subject)
+                return AccessoryPresetChange(
+                    "applied", "save_preset", user_id, 1, details=details, subject=subject,
+                )
+        except _PresetWriteRejected as exc:
+            return AccessoryPresetChange(
+                "failed", "save_preset", user_id, reason=exc.reason, subject=exc.subject,
             )
-            uow.execute(
-                "INSERT INTO accessory_transaction_operations "
-                "(operation_id,action,payload,result_json) VALUES(?,?,?,?)",
-                (operation_id, "save_preset", payload_json, result_json),
-            )
-            return AccessoryPresetChange("applied", "save_preset", user_id, 1, details=details)
 
 
 __all__ = ["AccessoryPresetSqlRepository"]

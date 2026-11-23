@@ -58,6 +58,24 @@ class FusionService:
         self._lock = lock or RLock()
 
     @staticmethod
+    def _back_projection(conn, user_id: str, item_id: int, has_bind: bool):
+        columns = "COALESCE(goods_num, 0), goods_name, goods_type"
+        if has_bind:
+            columns = "COALESCE(goods_num, 0), COALESCE(bind_num, 0), goods_name, goods_type"
+        row = conn.execute(
+            f"SELECT {columns} FROM back WHERE user_id=%s AND goods_id=%s",
+            (user_id, item_id),
+        ).fetchone()
+        if row is None:
+            return None
+        if has_bind:
+            return (
+                int(as_int_like(row[0])), int(as_int_like(row[1])),
+                str(row[2] or ""), str(row[3] or ""),
+            )
+        return int(as_int_like(row[0])), None, str(row[1] or ""), str(row[2] or "")
+
+    @staticmethod
     def _apply_payload(user_id, stone_cost, materials, target_id, protection_item_id) -> str:
         # Request identity only — roll outcome (successful/protected) is stored separately.
         return json.dumps(
@@ -148,6 +166,14 @@ class FusionService:
                     conn.rollback()
                     return FusionResult("user_missing", successful, False)
 
+                stone_before = as_int_like(user[0])
+                columns = set(conn.column_names("back"))
+                has_bind = "bind_num" in columns
+                target_before = (
+                    self._back_projection(conn, user_id, target_id, has_bind)
+                    if successful else None
+                )
+
                 protected = False
                 if not successful and protection_item_id is not None:
                     row = conn.execute(
@@ -163,18 +189,26 @@ class FusionService:
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        raise DomainError("fusion_protection_write_rejected", "fusion write count mismatch")
+                        raise DomainError(
+                            "fusion_protection_write_rejected", "fusion write count mismatch",
+                            {"subject": f"item:{protection_item_id}"},
+                        )
+                    saved_protection = self._back_projection(conn, user_id, protection_item_id, has_bind)
+                    if saved_protection is None or saved_protection[0] != int(row[0]) - 1:
+                        raise DomainError(
+                            "fusion_protection_projection_mismatch", "fusion protection projection mismatch",
+                            {"subject": f"item:{protection_item_id}"},
+                        )
                 else:
                     # 0 灵石配方（如追捕令）不扣灵石；负灵石也不应拦零成本合成
                     current_stone = as_int_like(user[0])
                     if stone_cost > 0 and current_stone < stone_cost:
                         conn.rollback()
                         return FusionResult("stone_insufficient", successful, False)
-                    columns = set(conn.column_names("back"))
-                    has_bind = "bind_num" in columns
                     for item_id, quantity in materials.items():
                         row = conn.execute(
-                            "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
+                            "SELECT COALESCE(goods_num, 0)" + (", COALESCE(bind_num, 0)" if has_bind else "")
+                            + " FROM back WHERE user_id=%s AND goods_id=%s",
                             (user_id, item_id),
                         ).fetchone()
                         total = 0 if row is None else int(row[0] or 0)
@@ -192,7 +226,18 @@ class FusionService:
                         )
                         if charged.rowcount != 1:
                             conn.rollback()
-                            raise DomainError("stone_write_rejected", "fusion write count mismatch")
+                            raise DomainError(
+                                "fusion_stone_write_rejected", "fusion write count mismatch",
+                                {"subject": "stone_wallet"},
+                            )
+                        saved_stone = conn.execute(
+                            "SELECT COALESCE(stone,0) FROM user_xiuxian WHERE user_id=%s", (user_id,),
+                        ).fetchone()
+                        if saved_stone is None or as_int_like(saved_stone[0]) != stone_before - stone_cost:
+                            raise DomainError(
+                                "fusion_stone_projection_mismatch", "fusion stone projection mismatch",
+                                {"subject": "stone_wallet"},
+                            )
                     for item_id, quantity in materials.items():
                         reserve = max(0, int(reserved.get(item_id, 0)))
                         if has_bind:
@@ -213,11 +258,24 @@ class FusionService:
                             )
                         if consumed.rowcount != 1:
                             conn.rollback()
-                            raise DomainError("fusion_material_write_rejected", "fusion write count mismatch")
+                            raise DomainError(
+                                "fusion_material_write_rejected", "fusion write count mismatch",
+                                {"subject": f"item:{item_id}"},
+                            )
+                        saved_material = self._back_projection(conn, user_id, item_id, has_bind)
+                        expected_goods = total - quantity
+                        expected_bind = min(int(row[1]), expected_goods) if has_bind else None
+                        if saved_material is None or saved_material[0] != expected_goods or (
+                            has_bind and saved_material[1] != expected_bind
+                        ):
+                            raise DomainError(
+                                "fusion_material_projection_mismatch", "fusion material projection mismatch",
+                                {"subject": f"item:{item_id}"},
+                            )
 
                 if successful:
-                    if "bind_num" in set(conn.column_names("back")):
-                        conn.execute(
+                    if has_bind:
+                        granted = conn.execute(
                             "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, bind_num) "
                             "VALUES (%s, %s, %s, %s, 1, 1) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
                             "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
@@ -226,18 +284,53 @@ class FusionService:
                             (user_id, target_id, str(target_name), str(target_type), max_goods_num, max_goods_num),
                         )
                     else:
-                        conn.execute(
+                        granted = conn.execute(
                             "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
                             "VALUES (%s, %s, %s, %s, 1) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
                             "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
                             "goods_num=MIN(COALESCE(back.goods_num, 0)+1, %s)",
                             (user_id, target_id, str(target_name), str(target_type), max_goods_num),
                         )
-                conn.execute(
+                    if granted.rowcount != 1:
+                        raise DomainError(
+                            "fusion_reward_write_rejected", "fusion reward write count mismatch",
+                            {"subject": f"item:{target_id}"},
+                        )
+                    previous_goods = target_before[0] if target_before else 0
+                    consumed_from_target = materials.get(target_id, 0) if not protected else 0
+                    expected_goods = min(max_goods_num, previous_goods - consumed_from_target + 1)
+                    expected_bind = None
+                    if has_bind:
+                        previous_bind = target_before[1] if target_before else 0
+                        base_bind = min(previous_bind, previous_goods - consumed_from_target)
+                        expected_bind = min(max_goods_num, base_bind + 1)
+                    saved_reward = self._back_projection(conn, user_id, target_id, has_bind)
+                    if saved_reward != (expected_goods, expected_bind, str(target_name), str(target_type)):
+                        raise DomainError(
+                            "fusion_reward_projection_mismatch", "fusion reward projection mismatch",
+                            {"subject": f"item:{target_id}"},
+                        )
+                receipt = conn.execute(
                     "INSERT INTO fusion_operations (operation_id, payload, successful, protected) "
                     "VALUES (%s, %s, %s, %s)",
                     (operation_id, payload, int(successful), int(protected)),
                 )
+                if receipt.rowcount != 1:
+                    raise DomainError(
+                        "fusion_receipt_write_rejected", "fusion receipt write count mismatch",
+                        {"subject": "receipt"},
+                    )
+                saved_receipt = conn.execute(
+                    "SELECT payload, successful, protected FROM fusion_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                if saved_receipt is None or (
+                    str(saved_receipt[0]), int(saved_receipt[1]), int(saved_receipt[2])
+                ) != (payload, int(successful), int(protected)):
+                    raise DomainError(
+                        "fusion_receipt_projection_mismatch", "fusion receipt projection mismatch",
+                        {"subject": "receipt"},
+                    )
                 conn.commit()
                 return FusionResult("applied", successful, protected)
             except Exception:
@@ -302,6 +395,7 @@ class FusionService:
 
                 successful_count = sum(outcomes)
                 failed_count = len(outcomes) - successful_count
+                stone_before = as_int_like(user[0])
                 protection_available = 0
                 if protection_item_id is not None and failed_count:
                     protection = conn.execute(
@@ -323,23 +417,23 @@ class FusionService:
                     return FusionBatchResult("stone_insufficient", 0, 0, 0)
                 columns = set(conn.column_names("back"))
                 has_bind = "bind_num" in columns
+                material_before = {}
                 for item_id, quantity in total_materials.items():
                     row = conn.execute(
-                        "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
+                        "SELECT COALESCE(goods_num, 0)" + (", COALESCE(bind_num, 0)" if has_bind else "")
+                        + " FROM back WHERE user_id=%s AND goods_id=%s",
                         (user_id, item_id),
                     ).fetchone()
                     total = 0 if row is None else int(row[0] or 0)
+                    material_before[item_id] = (total, int(row[1]) if has_bind and row is not None else None)
                     # 合成可用绑定材料；仅预留已装备件数
                     reserve = max(0, int(reserved.get(item_id, 0)))
                     if total - reserve < quantity:
                         conn.rollback()
                         return FusionBatchResult("item_insufficient", 0, 0, 0)
 
-                target = conn.execute(
-                    "SELECT COALESCE(goods_num, 0) FROM back WHERE user_id=%s AND goods_id=%s",
-                    (user_id, target_id),
-                ).fetchone()
-                current_target = 0 if target is None else int(target[0])
+                target_before = self._back_projection(conn, user_id, target_id, has_bind)
+                current_target = target_before[0] if target_before else 0
                 capacity = min(max_goods_num, target_limit or max_goods_num)
                 if current_target + successful_count > capacity:
                     conn.rollback()
@@ -354,7 +448,18 @@ class FusionService:
                     )
                     if charged.rowcount != 1:
                         conn.rollback()
-                        raise DomainError("stone_write_rejected", "fusion write count mismatch")
+                        raise DomainError(
+                            "fusion_stone_write_rejected", "fusion write count mismatch",
+                            {"subject": "stone_wallet"},
+                        )
+                    saved_stone = conn.execute(
+                        "SELECT COALESCE(stone,0) FROM user_xiuxian WHERE user_id=%s", (user_id,),
+                    ).fetchone()
+                    if saved_stone is None or as_int_like(saved_stone[0]) != stone_before - total_stone:
+                        raise DomainError(
+                            "fusion_stone_projection_mismatch", "fusion stone projection mismatch",
+                            {"subject": "stone_wallet"},
+                        )
                 for item_id, quantity in total_materials.items():
                     reserve = max(0, int(reserved.get(item_id, 0)))
                     if has_bind:
@@ -374,7 +479,21 @@ class FusionService:
                         )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        raise DomainError("fusion_material_write_rejected", "fusion write count mismatch")
+                        raise DomainError(
+                            "fusion_material_write_rejected", "fusion write count mismatch",
+                            {"subject": f"item:{item_id}"},
+                        )
+                    before_goods, before_bind = material_before[item_id]
+                    expected_goods = before_goods - quantity
+                    expected_bind = min(before_bind, expected_goods) if has_bind else None
+                    saved_material = self._back_projection(conn, user_id, item_id, has_bind)
+                    if saved_material is None or saved_material[0] != expected_goods or (
+                        has_bind and saved_material[1] != expected_bind
+                    ):
+                        raise DomainError(
+                            "fusion_material_projection_mismatch", "fusion material projection mismatch",
+                            {"subject": f"item:{item_id}"},
+                        )
                 if protected_count:
                     consumed = conn.execute(
                         "UPDATE back SET goods_num=goods_num-%s WHERE user_id=%s AND goods_id=%s "
@@ -383,11 +502,20 @@ class FusionService:
                     )
                     if consumed.rowcount != 1:
                         conn.rollback()
-                        raise DomainError("fusion_protection_write_rejected", "fusion write count mismatch")
+                        raise DomainError(
+                            "fusion_protection_write_rejected", "fusion write count mismatch",
+                            {"subject": f"item:{protection_item_id}"},
+                        )
+                    saved_protection = self._back_projection(conn, user_id, protection_item_id, has_bind)
+                    if saved_protection is None or saved_protection[0] != protection_available - protected_count:
+                        raise DomainError(
+                            "fusion_protection_projection_mismatch", "fusion protection projection mismatch",
+                            {"subject": f"item:{protection_item_id}"},
+                        )
 
                 if successful_count:
                     if "bind_num" in columns:
-                        conn.execute(
+                        granted = conn.execute(
                             "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num, bind_num) "
                             "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
                             "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
@@ -396,19 +524,58 @@ class FusionService:
                             (user_id, target_id, target_name, target_type, successful_count, successful_count),
                         )
                     else:
-                        conn.execute(
+                        granted = conn.execute(
                             "INSERT INTO back (user_id, goods_id, goods_name, goods_type, goods_num) "
                             "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (user_id, goods_id) DO UPDATE SET "
                             "goods_name=EXCLUDED.goods_name, goods_type=EXCLUDED.goods_type, "
                             "goods_num=COALESCE(back.goods_num, 0)+EXCLUDED.goods_num",
                             (user_id, target_id, target_name, target_type, successful_count),
                         )
-                conn.execute(
+                    if granted.rowcount != 1:
+                        raise DomainError(
+                            "fusion_reward_write_rejected", "fusion reward write count mismatch",
+                            {"subject": f"item:{target_id}"},
+                        )
+                    consumed_target_material = total_materials.get(target_id, 0)
+                    consumed_target_protection = protected_count if target_id == protection_item_id else 0
+                    expected_goods = (
+                        current_target - consumed_target_material - consumed_target_protection + successful_count
+                    )
+                    expected_bind = None
+                    if has_bind:
+                        previous_bind = target_before[1] if target_before else 0
+                        base_bind = min(previous_bind, current_target - consumed_target_material)
+                        expected_bind = min(max_goods_num, base_bind + successful_count)
+                    saved_reward = self._back_projection(conn, user_id, target_id, has_bind)
+                    if saved_reward != (expected_goods, expected_bind, target_name, target_type):
+                        raise DomainError(
+                            "fusion_reward_projection_mismatch", "fusion reward projection mismatch",
+                            {"subject": f"item:{target_id}"},
+                        )
+                receipt = conn.execute(
                     "INSERT INTO fusion_batch_operations "
                     "(operation_id, payload, outcomes, successful_count, failed_count, protected_count) "
                     "VALUES (%s, %s, %s, %s, %s, %s)",
                     (operation_id, payload, json.dumps(outcomes), successful_count, failed_count, protected_count),
                 )
+                if receipt.rowcount != 1:
+                    raise DomainError(
+                        "fusion_receipt_write_rejected", "fusion batch receipt write count mismatch",
+                        {"subject": "receipt"},
+                    )
+                saved_receipt = conn.execute(
+                    "SELECT payload, outcomes, successful_count, failed_count, protected_count "
+                    "FROM fusion_batch_operations WHERE operation_id=%s",
+                    (operation_id,),
+                ).fetchone()
+                expected_receipt = (
+                    payload, json.dumps(outcomes), successful_count, failed_count, protected_count,
+                )
+                if saved_receipt is None or tuple(saved_receipt) != expected_receipt:
+                    raise DomainError(
+                        "fusion_receipt_projection_mismatch", "fusion batch receipt projection mismatch",
+                        {"subject": "receipt"},
+                    )
                 conn.commit()
                 return FusionBatchResult("applied", successful_count, failed_count, protected_count)
             except Exception:

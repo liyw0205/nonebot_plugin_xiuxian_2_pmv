@@ -8,6 +8,7 @@ nonebot.init()
 
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_fusion import parse_fusion_args
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_fusion.fusion_service import FusionService
+from nonebot_plugin_xiuxian_2.core.errors import DomainError
 from tests.test_db_backend import db_backend
 
 
@@ -27,6 +28,7 @@ class FusionBatchTransactionTests(unittest.TestCase):
             conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)", ("user", 1, "material", "装备", 10, 1))
             conn.execute("INSERT INTO back VALUES (%s, %s, %s, %s, %s, %s)", ("user", 20006, "protection", "道具", 2, 0))
         self.service = FusionService(self.database)
+        self.service.get_batch_result("schema-probe")
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -69,11 +71,50 @@ class FusionBatchTransactionTests(unittest.TestCase):
 
     def test_operation_record_failure_rolls_back_every_change(self) -> None:
         with db_backend.transaction(self.database) as conn:
-            conn.execute("CREATE TABLE fusion_batch_operations (operation_id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcomes TEXT NOT NULL, successful_count INTEGER NOT NULL, failed_count INTEGER NOT NULL, protected_count INTEGER NOT NULL)")
             conn.execute("CREATE TRIGGER fail_fusion_batch BEFORE INSERT ON fusion_batch_operations BEGIN SELECT RAISE(ABORT, 'failed'); END")
         with self.assertRaises(db_backend.IntegrityError):
             self.apply("rollback")
         self.assertEqual(self.state(), (200, {1: (10, 1), 20006: (2, 0)}))
+
+    def test_ignored_batch_receipt_rolls_back_and_can_retry(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_batch_receipt BEFORE INSERT ON fusion_batch_operations "
+                "BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("receipt-ignore")
+        self.assertEqual(raised.exception.code, "fusion_receipt_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "receipt")
+        self.assertEqual(self.state(), (200, {1: (10, 1), 20006: (2, 0)}))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM fusion_batch_operations").fetchone()[0], 0,
+            )
+
+        with db_backend.transaction(self.database) as conn:
+            conn.execute("DROP TRIGGER ignore_fusion_batch_receipt")
+        result = self.apply("receipt-ignore")
+        replay = self.apply("receipt-ignore", outcomes=(False, False, True, True))
+        self.assertEqual((result.status, replay.status), ("applied", "duplicate"))
+        self.assertEqual((replay.successful_count, replay.failed_count, replay.protected_count), (1, 3, 2))
+        self.assertEqual(self.state(), (140, {1: (6, 1), 2: (1, 1), 20006: (0, 0)}))
+
+    def test_ignored_batch_reward_write_rolls_back_with_item_subject(self) -> None:
+        with db_backend.transaction(self.database) as conn:
+            conn.execute(
+                "CREATE TRIGGER ignore_fusion_batch_reward BEFORE INSERT ON back "
+                "WHEN NEW.goods_id=2 BEGIN SELECT RAISE(IGNORE); END"
+            )
+        with self.assertRaises(DomainError) as raised:
+            self.apply("reward-ignore")
+        self.assertEqual(raised.exception.code, "fusion_reward_write_rejected")
+        self.assertEqual(raised.exception.details["subject"], "item:2")
+        self.assertEqual(self.state(), (200, {1: (10, 1), 20006: (2, 0)}))
+        with db_backend.connection(self.database) as conn:
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM fusion_batch_operations").fetchone()[0], 0,
+            )
 
 
 if __name__ == "__main__":

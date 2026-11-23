@@ -34,9 +34,9 @@ class ImpartParameterDiagnosticsTests(unittest.TestCase):
                 result.stdout + result.stderr + json.dumps(failures, ensure_ascii=False),
             )
             statuses = {row["status"] for row in payload["results"]}
-            self.assertEqual(payload["summary"], {"pass": 20}, result.stdout)
+            self.assertEqual(payload["summary"], {"pass": 21}, result.stdout)
             self.assertEqual(statuses, {"pass"})
-            self.assertEqual(payload["outcomes"], {"success": 8, "rejection": 12})
+            self.assertEqual(payload["outcomes"], {"success": 9, "rejection": 12})
 
 
 if __name__ == "__main__":

@@ -45,6 +45,11 @@ class TrainingApplication(MigratedFeatureApplication):
             raise RuntimeError("training state requires the player database")
         return self.state_application.get(user_id)
 
+    def read_state(self, user_id: str) -> dict[str, Any]:
+        if self.state_application is None:
+            raise RuntimeError("training state requires the player database")
+        return self.state_application.read(user_id)
+
     def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return self.repository.leaderboard(field, limit=limit)
 

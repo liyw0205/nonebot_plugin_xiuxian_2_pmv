@@ -8,7 +8,7 @@
 """
 from ..on_compat import on_command
 from nonebot.log import logger
-from ..command_guard import result_failure
+from ..command_guard import guard_command, result_failure
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 
@@ -33,6 +33,8 @@ from .title_data import (
     get_title_condition_snapshot,
 )
 from ...paths import get_paths
+from ...core.player_reasons import reason_text
+from ...core.errors import DomainError
 from ...features.title.application import TitleApplication, TitleGrantTargetApplication
 from ...features.title.eligibility import TitleEligibilityApplication
 from .title_transaction_service import TitleTransactionService
@@ -112,8 +114,22 @@ def _unlock_titles_from_event(event, user_id: str):
         title_ids=title_ids,
     )
     if not result.succeeded:
-        return [], expected, snapshot
+        reason = getattr(result, "reason", "") or result.status
+        raise DomainError(reason, reason, {"reason": reason, "subject": getattr(result, "subject", "") or getattr(result, "title_id", "")})
     return unlockable, [*expected, *title_ids], snapshot
+
+
+_UNLOCK_REJECTIONS = tuple(f"title_batch_unlock_{step}_{failure}" for step in ("state", "receipt")
+                           for failure in ("write_rejected", "projection_mismatch")) + (
+    "title_batch_unlock_ledger_projection_mismatch", "title_unlocked_changed", "operation_conflict",
+)
+_GRANT_REJECTIONS = tuple(f"title_grant_{step}_{failure}" for step in ("state", "receipt", "ledger")
+                          for failure in ("write_rejected", "projection_mismatch"))
+
+
+def _unlock_failure_subjects(exc):
+    subject = str(exc.details.get("subject", ""))
+    return {subject: f"称号【{subject}】"} if subject else {}
 
 # ===== 注册命令 =====
 title_list_cmd = on_command("我的称号", aliases={"称号列表", "查看称号"}, priority=5, block=True)
@@ -167,6 +183,7 @@ def _format_achievement_record(record: dict) -> str:
 
 
 @title_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("我的称号", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看我的称号（分页）"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -243,6 +260,7 @@ async def title_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 
 @title_equip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("装备称号")
 async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """装备称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -268,6 +286,9 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
     prior = title_application.get_result(operation_id)
     title_data = get_title_by_id(title_id) or {}
     if prior is not None and prior.succeeded:
+        if str(prior.title_id) != str(title_id):
+            await handle_send(bot, event, "本次称号请求与已处理记录冲突，请重新操作。")
+            await title_equip_cmd.finish()
         await handle_send(
             bot, event,
             f"成功装备称号【{title_data.get('name', prior.title_id or title_id)}】！\n"
@@ -290,12 +311,16 @@ async def title_equip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         "title_locked": "你还未解锁该称号！",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status) or result_failure("装备称号", result)
+    subject = getattr(result, "subject", "")
+    result_msg = messages.get(result.status) or result_failure(
+        "装备称号", result, subjects={subject: f"称号 {subject}"} if subject else None,
+    )
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="卸下", v2="卸下称号", k3="存档", v3="我的修仙信息")
     await title_equip_cmd.finish()
 
 
 @title_unequip_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("卸下称号")
 async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """卸下称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -327,12 +352,16 @@ async def title_unequip_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         "not_equipped": "你当前没有装备任何称号！",
         "operation_conflict": "本次称号请求与已处理记录冲突，请重新操作。",
     }
-    result_msg = messages.get(result.status) or result_failure("卸下称号", result)
+    subject = getattr(result, "subject", "")
+    result_msg = messages.get(result.status) or result_failure(
+        "卸下称号", result, subjects={subject: f"称号 {subject}"} if subject else None,
+    )
     await handle_send(bot, event, result_msg, md_type="修仙", k1="称号", v1="我的称号", k2="装备", v2="装备称号", k3="存档", v3="我的修仙信息")
     await title_unequip_cmd.finish()
 
 
 @title_check_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("检查称号", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """手动检查可解锁称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -357,6 +386,7 @@ async def title_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 
 
 @achievement_list_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("我的成就", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """查看称号成就进度"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -408,6 +438,7 @@ async def achievement_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
 
 
 @achievement_check_cmd.handle(parameterless=[Cooldown(cd_time=3)])
+@guard_command("检查成就", known_rejections=_UNLOCK_REJECTIONS, subjects=_unlock_failure_subjects)
 async def achievement_check_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """手动检查成就称号"""
     bot, _ = await assign_bot(bot=bot, event=event)
@@ -468,6 +499,7 @@ async def title_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
 
 
 @title_grant_cmd.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("赠送称号", known_rejections=_GRANT_REJECTIONS, subjects=_unlock_failure_subjects)
 async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
     """
     赠送称号
@@ -514,37 +546,87 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         def _work():
             scanned = 0
             success_count = 0
-            repeat_or_fail = 0
+            repeated_count = 0
+            failures = []
+            batch_error = None
             try:
-                for uid in snapshot.iter_user_ids():
-                    scanned += 1
-                    try:
-                        unlocked = get_user_unlocked_titles(uid)
-                        result = _run_title_action(
-                            "grant",
-                            _title_operation_id(event, f"grant-{title_id_local}", uid),
-                            uid,
-                            expected_unlocked=unlocked,
-                            title_id=title_id_local,
-                        )
-                        if result.status in {"applied", "duplicate"}:
-                            success_count += 1
-                        else:
-                            repeat_or_fail += 1
-                    except Exception:
-                        repeat_or_fail += 1
-                return scanned, success_count, repeat_or_fail
+                try:
+                    for uid in snapshot.iter_user_ids():
+                        scanned += 1
+                        operation_id = _title_operation_id(event, f"grant-{title_id_local}", uid)
+                        try:
+                            unlocked = get_user_unlocked_titles(uid)
+                            result = _run_title_action(
+                                "grant",
+                                operation_id,
+                                uid,
+                                expected_unlocked=unlocked,
+                                title_id=title_id_local,
+                            )
+                            if result.status in {"applied", "duplicate"}:
+                                success_count += 1
+                            elif result.status == "already_unlocked":
+                                repeated_count += 1
+                            else:
+                                reason = str(getattr(result, "reason", "") or result.status or "unknown")
+                                subject = str(getattr(result, "subject", "") or getattr(result, "title_id", "") or title_id_local)
+                                message = reason_text(reason) or "本目标未完成，请联系管理员核对。"
+                                logger.warning(
+                                    f"全服称号赠送目标未完成 operation_id={operation_id} "
+                                    f"target_id={uid} subject={subject} reason={reason}"
+                                )
+                                failures.append({"user_id": uid, "subject": subject,
+                                                 "reason": reason, "message": message})
+                        except Exception as exc:
+                            from ..command_guard import report_exception
+
+                            detail = report_exception(
+                                "全服赠送称号", exc, phase="后台单目标处理", event=event,
+                            )
+                            logger.error(
+                                f"全服称号赠送目标异常 operation_id={operation_id} "
+                                f"target_id={uid} title_id={title_id_local} detail={detail}"
+                            )
+                            failures.append({"user_id": uid, "subject": title_id_local,
+                                             "reason": "internal_error", "message": detail})
+                except Exception as exc:
+                    from ..command_guard import report_exception
+
+                    batch_error = {
+                        "reason": "internal_error",
+                        "message": report_exception(
+                            "全服赠送称号", exc, phase="后台名单读取", event=event,
+                        ),
+                    }
+                return {"scanned": scanned, "total": snapshot.count,
+                        "success": success_count, "repeated": repeated_count,
+                        "failures": failures, "batch_error": batch_error}
             finally:
                 snapshot.close()
 
         def _done(pair):
-            scanned, success_count, repeat_or_fail = pair
-            if not scanned:
+            scanned = pair["scanned"]
+            if not scanned and pair["batch_error"] is None:
                 return "当前没有可赠送的用户"
-            return (
-                f"全服赠送称号【{title_name_local}】完成："
-                f"成功{success_count}，重复/失败{repeat_or_fail}"
-            )
+            failures = pair["failures"]
+            batch_error = pair["batch_error"]
+            failed_count = len(failures) + int(batch_error is not None)
+            state = "部分中断" if batch_error else "处理结束"
+            summary = (f"全服赠送称号【{title_name_local}】{state}：已处理{scanned}/{pair['total']}，"
+                       f"成功{pair['success']}，重复{pair['repeated']}，失败{failed_count}")
+            if failures:
+                details = [
+                    f"玩家{failure['user_id']} / 称号{failure['subject']}：{failure['message']}"
+                    f"（reason={failure['reason']}）"
+                    for failure in failures[:5]
+                ]
+                if len(failures) > len(details):
+                    details.append(f"其余 {len(failures) - len(details)} 个失败请查看后台日志。")
+                summary += "\n失败明细：\n" + "\n".join(details)
+            if batch_error:
+                summary += ("\n后台名单处理未完成：" + batch_error["message"]
+                            + f"（reason={batch_error['reason']}）")
+            return summary
 
         from ..xiuxian_utils.bg_jobs import spawn_admin_job
 
@@ -597,10 +679,14 @@ async def title_grant_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
             "already_unlocked": f"用户已拥有称号【{title_name}】",
             "operation_conflict": "本次赠送请求与已处理记录冲突",
         }
-        await handle_send(bot, event, result_failure("发放或回收称号", result, messages=messages))
+        await handle_send(bot, event, result_failure(
+            "发放或回收称号", result, messages=messages,
+            subjects={title_id: f"称号【{title_name}】"},
+        ))
 
 
 @title_refresh_cmd.handle(parameterless=[Cooldown(cd_time=30)])
+@guard_command("刷新称号", known_rejections=("title_data_missing", "title_data_invalid"))
 async def title_refresh_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """刷新称号数据缓存"""
     bot, _ = await assign_bot(bot=bot, event=event)

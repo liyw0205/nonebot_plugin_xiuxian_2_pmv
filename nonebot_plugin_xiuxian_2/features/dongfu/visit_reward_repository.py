@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from ...core.errors import DomainError
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from ...core.errors import DomainError
+from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import operation_databases_ready, operation_schema_ready
 
@@ -18,6 +19,28 @@ class DongfuVisitRewardResult:
 
 class DongfuVisitRewardSqlRepository:
     def __init__(self,game_database:str|Path,player_database:str|Path): self.game_database,self.player_database=str(game_database),str(player_database)
+
+    @staticmethod
+    def _reject(suffix, subject):
+        reason = 'dongfu_visit_' + suffix
+        raise DomainError(reason, reason, {'reason': reason, 'subject': subject})
+
+    @classmethod
+    def _verify_wallet(cls, uow, visitor_id, expected):
+        row = uow.query_one('SELECT * FROM user_xiuxian WHERE user_id=?', (visitor_id,))
+        if row is not None:
+            row['stone'] = require_exact_integer(row['stone'], field='stone', subject='visitor')
+        if row is None or row != expected:
+            cls._reject('stone_projection_mismatch', 'stone_wallet')
+
+    @classmethod
+    def _verify_receipt(cls, uow, operation_id, expected):
+        row = uow.query_one(
+            'SELECT payload,gain FROM dongfu_visit_reward_operations WHERE operation_id=?',
+            (operation_id,),
+        )
+        if row is None or row != expected:
+            cls._reject('receipt_projection_mismatch', 'receipt')
 
     @staticmethod
     def _receipt(payload,stored_gain):
@@ -43,9 +66,34 @@ class DongfuVisitRewardSqlRepository:
             old=uow.query_one('SELECT payload,gain FROM dongfu_visit_reward_operations WHERE operation_id=?',(operation_id,))
             if old is not None:
                 receipt=self._receipt(old['payload'],old['gain'])
-                return DongfuVisitRewardResult('duplicate',receipt[2]) if receipt is not None and receipt[:2]==(visitor_id,target_id) else DongfuVisitRewardResult('state_changed', reason='receipt_corrupt' if receipt is None else 'operation_conflict')
+                if receipt is not None and receipt[:2] == (visitor_id, target_id):
+                    return DongfuVisitRewardResult('duplicate', receipt[2])
+                reason = 'receipt_corrupt' if receipt is None else 'operation_conflict'
+                return DongfuVisitRewardResult('state_changed', reason=reason, subject='receipt')
             if uow.query_one('SELECT 1 FROM user_xiuxian WHERE user_id=?',(visitor_id,)) is None: return DongfuVisitRewardResult('user_missing')
             visitor=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(visitor_id,)); target=uow.query_one('SELECT built FROM player_data.dongfu_status WHERE user_id=?',(target_id,))
             if visitor is None or int(visitor['built'] or 0)!=1 or target is None or int(target['built'] or 0)!=1: return DongfuVisitRewardResult('dongfu_changed', reason='dongfu_missing', subject='visitor' if visitor is None or int(visitor['built'] or 0)!=1 else 'target')
-            if uow.execute('UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,\'stone\',\'actor\')) WHERE user_id=?',(gain,visitor_id)).rowcount!=1: raise DomainError("stone_write_rejected", 'visit reward write count mismatch')
-            uow.execute('INSERT INTO dongfu_visit_reward_operations(operation_id,payload,gain) VALUES(?,?,?)',(operation_id,payload,gain)); return DongfuVisitRewardResult('rewarded',gain)
+            user = uow.query_one('SELECT * FROM user_xiuxian WHERE user_id=?', (visitor_id,))
+            expected_user = dict(user)
+            expected_user['stone'] = require_exact_integer(
+                expected_user['stone'], field='stone', subject='visitor'
+            ) + gain
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_add(COALESCE(stone,0),?,'stone','visitor')) WHERE user_id=?",
+                (gain, visitor_id),
+            )
+            if changed.rowcount != 1:
+                self._reject('stone_write_rejected', 'stone_wallet')
+            self._verify_wallet(uow, visitor_id, expected_user)
+
+            expected_receipt = {'payload': payload, 'gain': gain}
+            changed = uow.execute(
+                'INSERT INTO dongfu_visit_reward_operations(operation_id,payload,gain) VALUES(?,?,?)',
+                (operation_id, payload, gain),
+            )
+            if changed.rowcount != 1:
+                self._reject('receipt_write_rejected', 'receipt')
+            self._verify_receipt(uow, operation_id, expected_receipt)
+            # Receipt triggers may alter the wallet after its first verification.
+            self._verify_wallet(uow, visitor_id, expected_user)
+            return DongfuVisitRewardResult('rewarded',gain)

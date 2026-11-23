@@ -23,6 +23,10 @@ class TrainingRepository(ServicePort):
         self.database = str(database)
         self.player_database = str(player_database) if player_database is not None else None
         self.clock = clock or SystemClock()
+        # A known purchase write rejection rolls back the business transaction
+        # after the application ledger reservation; the same request must be
+        # able to resume once the storage fault is cleared.
+        self.retry_started_actions = frozenset({"purchase"})
         self._event_repository = None
         self._event_context_repository = None
         self._leaderboard_repository = None

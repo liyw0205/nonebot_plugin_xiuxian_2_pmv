@@ -33,6 +33,7 @@ from ..xiuxian_utils.utils import (
     log_message
 )
 from .impart_uitls import (
+    format_impart_percent,
     get_image_representation,
     get_impart_card_description,
     get_star_rating,
@@ -753,17 +754,17 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 **传承总属性**
 ---
 攻击提升
-> {int(impart_data_draw["impart_atk_per"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_atk_per"])}
 气血提升
-> {int(impart_data_draw["impart_hp_per"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_hp_per"])}
 真元提升
-> {int(impart_data_draw["impart_mp_per"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_mp_per"])}
 会心提升
-> {int(impart_data_draw["impart_know_per"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_know_per"])}
 会心伤害提升
-> {int(impart_data_draw["impart_burst_per"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_burst_per"])}
 闭关经验提升
-> {int(impart_data_draw["impart_exp_up"] * 100)}%
+> {format_impart_percent(impart_data_draw["impart_exp_up"])}
 炼丹收获数量提升
 > {impart_data_draw["impart_mix_per"]}颗
 灵田收取数量提升
@@ -771,7 +772,7 @@ async def impart_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
 每日双修次数提升
 > {impart_data_draw["impart_two_exp"]}次
 boss战攻击提升
-> {int(impart_data_draw["boss_atk"] * 100)}%
+> {format_impart_percent(impart_data_draw["boss_atk"])}
 
 思恋结晶
 > {impart_data_draw["stone_num"]}颗"""

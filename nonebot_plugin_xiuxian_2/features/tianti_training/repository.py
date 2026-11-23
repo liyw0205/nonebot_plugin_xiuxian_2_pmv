@@ -292,6 +292,36 @@ def _sect_bonus(level: int) -> float:
     return _get_sect_fairyland_bonus(level)
 
 
+def _json_document(raw: Any) -> Any:
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _profile_projection_matches(row: Mapping[str, Any], fields: Sequence[str], expected: Mapping[str, Any]) -> bool:
+    for field in fields:
+        actual = row[field]
+        value = expected[field]
+        if isinstance(value, (list, dict)):
+            actual = _json_document(actual)
+        elif isinstance(value, bool):
+            actual = bool(actual)
+        elif isinstance(value, int) and actual is not None:
+            try:
+                actual = int(actual)
+            except (TypeError, ValueError, OverflowError):
+                return False
+        elif isinstance(value, float) and actual is not None:
+            try:
+                actual = float(actual)
+            except (TypeError, ValueError, OverflowError):
+                return False
+        if actual != value:
+            return False
+    return True
+
+
 class TiantiTrainingRepository(Protocol):
     def train(self, operation_id: str, user_id: str, requested_stone: int) -> Any: ...
 
@@ -361,12 +391,99 @@ class StoneTrainingSqlRepository:
             decision = decide_stone_training(old_hp=int(data["tianti_hp"]), requested_stone=requested_stone, hp_cap=cap)
             if decision.status == "at_cap":
                 return StoneTrainingPersistenceResult("at_cap", user_id, requested_stone, 0, 0, int(data["tianti_hp"]))
+            expected_stone = as_int_like(user["stone"]) - decision.stone_cost
             charged = uow.execute("UPDATE user_xiuxian SET stone=xiuxian_int_store(xiuxian_int_sub(COALESCE(stone,0),?,'stone','actor')) WHERE user_id=? AND xiuxian_int_cmp(COALESCE(stone,0),?,1,'stone','actor')>=0", (decision.stone_cost, user_id, decision.stone_cost))
             if charged.rowcount != 1:
-                raise DomainError("stone_write_rejected", "tianti training debit was not saved")
+                raise DomainError(
+                    "tianti_stone_wallet_write_rejected",
+                    "tianti training debit was not saved",
+                    {"reason": "tianti_stone_wallet_write_rejected", "subject": "stone_wallet"},
+                )
+            saved_wallet = uow.query_one(
+                "SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,)
+            )
+            if saved_wallet is None or as_int_like(saved_wallet["stone"]) != expected_stone:
+                raise DomainError(
+                    "tianti_stone_wallet_projection_mismatch",
+                    "tianti training wallet projection did not match",
+                    {"reason": "tianti_stone_wallet_projection_mismatch", "subject": "stone_wallet"},
+                )
             data["tianti_hp"] = decision.new_hp
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
-            uow.execute("INSERT INTO tianti_stone_training_operations(operation_id,user_id,requested_stone,stone_cost,hp_gain,new_hp) VALUES(?,?,?,?,?,?)", (operation_id, user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp))
+            saved_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_stone_profile_write_rejected",
+                    "tianti training profile row was not saved",
+                    {"reason": "tianti_stone_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_stone_profile_projection_mismatch",
+                    "tianti training profile projection did not match",
+                    {"reason": "tianti_stone_profile_projection_mismatch", "subject": "player_profile"},
+                )
+            receipt_insert = uow.execute(
+                "INSERT INTO tianti_stone_training_operations "
+                "(operation_id,user_id,requested_stone,stone_cost,hp_gain,new_hp) "
+                "VALUES(?,?,?,?,?,?)",
+                (operation_id, user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp),
+            )
+            if receipt_insert.rowcount != 1:
+                raise DomainError(
+                    "tianti_stone_receipt_write_rejected",
+                    "tianti training receipt was not saved",
+                    {"reason": "tianti_stone_receipt_write_rejected", "subject": "receipt"},
+                )
+            expected_receipt = (
+                user_id,
+                requested_stone,
+                decision.stone_cost,
+                decision.hp_gain,
+                decision.new_hp,
+            )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,requested_stone,stone_cost,hp_gain,new_hp "
+                "FROM tianti_stone_training_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            try:
+                actual_receipt = (
+                    str(saved_receipt["user_id"]),
+                    int(saved_receipt["requested_stone"]),
+                    int(saved_receipt["stone_cost"]),
+                    int(saved_receipt["hp_gain"]),
+                    int(saved_receipt["new_hp"]),
+                ) if saved_receipt is not None else None
+            except (TypeError, ValueError, OverflowError):
+                actual_receipt = None
+            if actual_receipt != expected_receipt:
+                raise DomainError(
+                    "tianti_stone_receipt_projection_mismatch",
+                    "tianti training receipt projection did not match",
+                    {"reason": "tianti_stone_receipt_projection_mismatch", "subject": "receipt"},
+                )
+
+            final_wallet = uow.query_one(
+                "SELECT stone FROM user_xiuxian WHERE user_id=?", (user_id,)
+            )
+            final_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if final_wallet is None or as_int_like(final_wallet["stone"]) != expected_stone:
+                raise DomainError(
+                    "tianti_stone_wallet_projection_mismatch",
+                    "tianti training wallet projection did not match",
+                    {"reason": "tianti_stone_wallet_projection_mismatch", "subject": "stone_wallet"},
+                )
+            if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+                raise DomainError(
+                    "tianti_stone_profile_projection_mismatch",
+                    "tianti training profile projection did not match",
+                    {"reason": "tianti_stone_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return StoneTrainingPersistenceResult("trained", user_id, requested_stone, decision.stone_cost, decision.hp_gain, decision.new_hp)
 
 
@@ -405,9 +522,20 @@ class TiantiMedicineBathSqlRepository:
             if current_bath is not None:
                 return MedicineBathPersistenceResult("bath_active", user_id)
             insufficient = []
+            stock_states: dict[int, tuple[int, int]] = {}
             for item in plan:
-                stock = uow.query_one("SELECT COALESCE(goods_num, 0) AS goods_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item["item_id"]))
+                stock = uow.query_one(
+                    "SELECT COALESCE(goods_num, 0) AS goods_num, "
+                    "COALESCE(bind_num, 0) AS bind_num FROM back "
+                    "WHERE user_id=? AND goods_id=?",
+                    (user_id, item["item_id"]),
+                )
                 have = int(stock["goods_num"]) if stock else 0
+                if stock is not None:
+                    stock_states[item["item_id"]] = (
+                        have,
+                        int(stock["bind_num"] or 0),
+                    )
                 if have < item["amount"]:
                     insufficient.append({**item, "have": have})
             if insufficient:
@@ -431,10 +559,98 @@ class TiantiMedicineBathSqlRepository:
             for item in plan:
                 changed = uow.execute("UPDATE back SET goods_num=goods_num-?, bind_num=MIN(COALESCE(bind_num,0), goods_num-?) WHERE user_id=? AND goods_id=? AND goods_num>=?", (item["amount"], item["amount"], user_id, item["item_id"], item["amount"]))
                 if changed.rowcount != 1:
-                    raise DomainError("item_write_rejected", "medicine bath material debit was not saved")
+                    raise DomainError(
+                        "tianti_bath_item_write_rejected",
+                        "medicine bath material debit was not saved",
+                        {"reason": "tianti_bath_item_write_rejected", "subject": "source"},
+                    )
+                old_goods, old_bind = stock_states[item["item_id"]]
+                expected_goods = old_goods - item["amount"]
+                expected_bind = min(old_bind, expected_goods)
+                saved_stock = uow.query_one(
+                    "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item["item_id"]),
+                )
+                if saved_stock is None or (
+                    int(saved_stock["goods_num"] or 0),
+                    int(saved_stock["bind_num"] or 0),
+                ) != (expected_goods, expected_bind):
+                    raise DomainError(
+                        "tianti_bath_item_projection_mismatch",
+                        "medicine bath material projection did not match",
+                        {"reason": "tianti_bath_item_projection_mismatch", "subject": "source"},
+                    )
+                stock_states[item["item_id"]] = (expected_goods, expected_bind)
             upsert_tianti_profile(uow, user_id, fields, data, database_alias="player_data")
+            saved_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_bath_profile_write_rejected",
+                    "medicine bath profile row was not saved",
+                    {"reason": "tianti_bath_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_bath_profile_projection_mismatch",
+                    "medicine bath profile projection did not match",
+                    {"reason": "tianti_bath_profile_projection_mismatch", "subject": "player_profile"},
+                )
             payload = {"consumed": list(plan), "effect": float(effect), "bath_name": bath_name, "end_time": data["medicine_end_time"], "settlement": settlement}
-            uow.execute("INSERT INTO tianti_medicine_bath_operations(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)", (operation_id, user_id, json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False), json.dumps(payload, ensure_ascii=False, default=str)))
+            request_json = json.dumps({"plan": list(plan), "effect": effect}, ensure_ascii=False)
+            result_json = json.dumps(payload, ensure_ascii=False, default=str)
+            receipt = uow.execute(
+                "INSERT INTO tianti_medicine_bath_operations"
+                "(operation_id,user_id,request_json,result_json) VALUES(?,?,?,?)",
+                (operation_id, user_id, request_json, result_json),
+            )
+            if receipt.rowcount != 1:
+                raise DomainError(
+                    "tianti_bath_receipt_write_rejected",
+                    "medicine bath receipt was not saved",
+                    {"reason": "tianti_bath_receipt_write_rejected", "subject": "receipt"},
+                )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,request_json,result_json "
+                "FROM tianti_medicine_bath_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            if saved_receipt is None or (
+                str(saved_receipt["user_id"]) != user_id
+                or _json_document(saved_receipt["request_json"]) != _json_document(request_json)
+                or _json_document(saved_receipt["result_json"]) != _json_document(result_json)
+            ):
+                raise DomainError(
+                    "tianti_bath_receipt_projection_mismatch",
+                    "medicine bath receipt projection did not match",
+                    {"reason": "tianti_bath_receipt_projection_mismatch", "subject": "receipt"},
+                )
+            for item_id, expected_stock in stock_states.items():
+                saved_stock = uow.query_one(
+                    "SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?",
+                    (user_id, item_id),
+                )
+                if saved_stock is None or (
+                    int(saved_stock["goods_num"] or 0),
+                    int(saved_stock["bind_num"] or 0),
+                ) != expected_stock:
+                    raise DomainError(
+                        "tianti_bath_item_projection_mismatch",
+                        "medicine bath final inventory projection did not match",
+                        {"reason": "tianti_bath_item_projection_mismatch", "subject": "source"},
+                    )
+            saved_profile = uow.query_one(
+                "SELECT * FROM player_data.tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None or not _profile_projection_matches(
+                saved_profile, fields, data
+            ):
+                raise DomainError(
+                    "tianti_bath_profile_projection_mismatch",
+                    "medicine bath final profile projection did not match",
+                    {"reason": "tianti_bath_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return MedicineBathPersistenceResult("applied", user_id, tuple(plan), float(effect), bath_name, data["medicine_end_time"], settlement)
 
 
@@ -558,8 +774,96 @@ class TiantiBreakthroughSqlRepository:
             if decision.status != "completed":
                 return BreakthroughPersistenceResult(decision.status, user_id, old_level, old_level, 0, decision.new_hp, False)
             data["tianti_level"], data["tianti_hp"] = decision.new_level, decision.new_hp
-            upsert_tianti_profile(uow, user_id, fields, data)
-            uow.execute("INSERT INTO tianti_breakthrough_operations(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) VALUES(?,?,?,?,?,?,?,?,?)", (operation_id, user_id, int(cultivation_rank), int(bool(roll_success)), decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, int(decision.new_level != decision.old_level)))
+            profile_write = upsert_tianti_profile(uow, user_id, fields, data)
+            if profile_write != 1:
+                raise DomainError(
+                    "tianti_breakthrough_profile_write_rejected",
+                    "tianti breakthrough profile write was rejected",
+                    {"reason": "tianti_breakthrough_profile_write_rejected", "subject": "player_profile"},
+                )
+            saved_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_breakthrough_profile_write_rejected",
+                    "tianti breakthrough profile row was not saved",
+                    {"reason": "tianti_breakthrough_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_breakthrough_profile_projection_mismatch",
+                    "tianti breakthrough profile projection did not match",
+                    {"reason": "tianti_breakthrough_profile_projection_mismatch", "subject": "player_profile"},
+                )
+
+            success = decision.new_level != decision.old_level
+            receipt_insert = uow.execute(
+                "INSERT INTO tianti_breakthrough_operations "
+                "(operation_id,user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (
+                    operation_id,
+                    user_id,
+                    int(cultivation_rank),
+                    int(bool(roll_success)),
+                    decision.old_level,
+                    decision.new_level,
+                    decision.hp_cost,
+                    decision.new_hp,
+                    int(success),
+                ),
+            )
+            if receipt_insert.rowcount != 1:
+                raise DomainError(
+                    "tianti_breakthrough_receipt_write_rejected",
+                    "tianti breakthrough receipt was not saved",
+                    {"reason": "tianti_breakthrough_receipt_write_rejected", "subject": "receipt"},
+                )
+            expected_receipt = (
+                user_id,
+                int(cultivation_rank),
+                int(bool(roll_success)),
+                decision.old_level,
+                decision.new_level,
+                decision.hp_cost,
+                decision.new_hp,
+                int(success),
+            )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,cultivation_rank,roll_success,old_level,new_level,hp_cost,new_hp,success "
+                "FROM tianti_breakthrough_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            try:
+                actual_receipt = (
+                    str(saved_receipt["user_id"]),
+                    int(saved_receipt["cultivation_rank"]),
+                    int(saved_receipt["roll_success"]),
+                    str(saved_receipt["old_level"]),
+                    str(saved_receipt["new_level"]),
+                    int(saved_receipt["hp_cost"]),
+                    int(saved_receipt["new_hp"]),
+                    int(saved_receipt["success"]),
+                ) if saved_receipt is not None else None
+            except (TypeError, ValueError, OverflowError):
+                actual_receipt = None
+            if actual_receipt != expected_receipt:
+                raise DomainError(
+                    "tianti_breakthrough_receipt_projection_mismatch",
+                    "tianti breakthrough receipt projection did not match",
+                    {"reason": "tianti_breakthrough_receipt_projection_mismatch", "subject": "receipt"},
+                )
+
+            final_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+                raise DomainError(
+                    "tianti_breakthrough_profile_projection_mismatch",
+                    "tianti breakthrough profile projection did not match",
+                    {"reason": "tianti_breakthrough_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return BreakthroughPersistenceResult("completed", user_id, decision.old_level, decision.new_level, decision.hp_cost, decision.new_hp, decision.new_level != decision.old_level)
 
 
@@ -606,9 +910,92 @@ class TiantiQiaoxueSqlRepository:
             data["tianti_hp"] = old_hp - hp_cost
             data["opened_qiaoxue"] = opened + [chosen["name"]]
             data["opened_qiaoxue_detail"] = detail
-            upsert_tianti_profile(uow, user_id, fields, data)
+            profile_write = upsert_tianti_profile(uow, user_id, fields, data)
+            if profile_write != 1:
+                raise DomainError(
+                    "tianti_qiaoxue_profile_write_rejected",
+                    "tianti qiaoxue profile write was rejected",
+                    {"reason": "tianti_qiaoxue_profile_write_rejected", "subject": "player_profile"},
+                )
+            saved_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if saved_profile is None:
+                raise DomainError(
+                    "tianti_qiaoxue_profile_write_rejected",
+                    "tianti qiaoxue profile row was not saved",
+                    {"reason": "tianti_qiaoxue_profile_write_rejected", "subject": "player_profile"},
+                )
+            if not _profile_projection_matches(saved_profile, fields, data):
+                raise DomainError(
+                    "tianti_qiaoxue_profile_projection_mismatch",
+                    "tianti qiaoxue profile projection did not match",
+                    {"reason": "tianti_qiaoxue_profile_projection_mismatch", "subject": "player_profile"},
+                )
+
             new_count = opened_count + 1
-            uow.execute("INSERT INTO tianti_qiaoxue_operations(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) VALUES(?,?,?,?,?,?,?,?)", (operation_id, user_id, roll, json.dumps(chosen, ensure_ascii=False), hp_cost, data["tianti_hp"], new_count, unlock_limit))
+            receipt_insert = uow.execute(
+                "INSERT INTO tianti_qiaoxue_operations "
+                "(operation_id,user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    operation_id,
+                    user_id,
+                    roll,
+                    json.dumps(chosen, ensure_ascii=False),
+                    hp_cost,
+                    data["tianti_hp"],
+                    new_count,
+                    unlock_limit,
+                ),
+            )
+            if receipt_insert.rowcount != 1:
+                raise DomainError(
+                    "tianti_qiaoxue_receipt_write_rejected",
+                    "tianti qiaoxue receipt was not saved",
+                    {"reason": "tianti_qiaoxue_receipt_write_rejected", "subject": "receipt"},
+                )
+            expected_receipt = (
+                user_id,
+                roll,
+                chosen,
+                hp_cost,
+                data["tianti_hp"],
+                new_count,
+                unlock_limit,
+            )
+            saved_receipt = uow.query_one(
+                "SELECT user_id,roll,qiaoxue_json,hp_cost,new_hp,opened_count,unlock_limit "
+                "FROM tianti_qiaoxue_operations WHERE operation_id=?",
+                (operation_id,),
+            )
+            try:
+                actual_receipt = (
+                    str(saved_receipt["user_id"]),
+                    int(saved_receipt["roll"]),
+                    _json_document(saved_receipt["qiaoxue_json"]),
+                    int(saved_receipt["hp_cost"]),
+                    int(saved_receipt["new_hp"]),
+                    int(saved_receipt["opened_count"]),
+                    int(saved_receipt["unlock_limit"]),
+                ) if saved_receipt is not None else None
+            except (TypeError, ValueError, OverflowError):
+                actual_receipt = None
+            if actual_receipt != expected_receipt:
+                raise DomainError(
+                    "tianti_qiaoxue_receipt_projection_mismatch",
+                    "tianti qiaoxue receipt projection did not match",
+                    {"reason": "tianti_qiaoxue_receipt_projection_mismatch", "subject": "receipt"},
+                )
+            final_profile = uow.query_one(
+                "SELECT * FROM tianti_info WHERE user_id=?", (user_id,)
+            )
+            if final_profile is None or not _profile_projection_matches(final_profile, fields, data):
+                raise DomainError(
+                    "tianti_qiaoxue_profile_projection_mismatch",
+                    "tianti qiaoxue profile projection did not match",
+                    {"reason": "tianti_qiaoxue_profile_projection_mismatch", "subject": "player_profile"},
+                )
             return QiaoxuePersistenceResult("opened", user_id, chosen, hp_cost, int(data["tianti_hp"]), new_count, unlock_limit)
 
     def open_qiaoxue(self, operation_id: str, user_id: str, roll: int) -> Any:
