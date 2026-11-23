@@ -4014,7 +4014,8 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "CREATE TABLE" not in map_display_repository
                 and "ALTER TABLE" not in map_display_repository
                 and "await asyncio.sleep(0)" in map_display_query
-                and "except MapCandidateReadError:\n        return []" in map_display_query
+                and "raise_on_error: bool = False" in map_display_query
+                and "except MapCandidateReadError:\n        if raise_on_error:\n            raise\n        return []" in map_display_query
             ),
             "nearby_display_fair_sample_and_legacy_small_order": (
                 "random_source.randint(1, eligible_count)" in map_display_query

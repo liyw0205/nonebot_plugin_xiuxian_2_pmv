@@ -10,6 +10,7 @@ class FusionRepository(ServicePort):
     def __init__(self, database: str | Path) -> None:
         super().__init__("fusion", "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_fusion")
         self.database = str(database)
+        self.retry_started_actions = frozenset({"apply", "apply_batch"})
 
     def execute(self, operation_id: str, user_id: str, action: str, payload: dict):
         if str(action).casefold() == "apply_batch":

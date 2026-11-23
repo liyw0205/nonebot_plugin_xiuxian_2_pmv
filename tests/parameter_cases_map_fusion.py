@@ -458,3 +458,76 @@ def register(case):
         text = await probe.command("强行合成", f"强行合成 {item['name']} 0")
         assert backpack(probe) == before and "正整数" in text, text
         probe.evidence.update(assets_unchanged=True)
+
+    @case("fusion-receipt-ignore-recovery", "强行合成", "天罪", "真实固定成功配方及所需材料",
+          "业务回执拒写时完整回滚并明确失败，解除故障后同消息恢复且不重复结算",
+          group="fusion-write-recovery", outcome="recovery")
+    async def fusion_receipt_ignore_recovery(probe):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_fusion as module
+        from nonebot_plugin_xiuxian_2.core.player_reasons import reason_text
+        from nonebot_plugin_xiuxian_2.features.fusion.migrations import apply_fusion_operations
+        from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+
+        game = probe.context.paths.game_db
+        with DatabaseUnitOfWork(game) as uow:
+            apply_fusion_operations(uow)
+        item_id, item = module._items().get_data_by_item_name("天罪")
+        recipe = item["fusion"]
+        assert int(item_id) == 7084 and int(recipe["need_stone"]) == 0
+        probe.player(level=recipe["need_rank"], exp=0, stone=0)
+        for material_id, amount in recipe["need_item"].items():
+            probe.grant_item(int(material_id), int(amount))
+        before = (
+            balances(probe),
+            backpack(probe),
+            probe.rows(game, "SELECT * FROM fusion_operations ORDER BY operation_id"),
+        )
+        probe.seed(
+            game,
+            "CREATE TRIGGER reject_fusion_receipt BEFORE INSERT ON fusion_operations "
+            "BEGIN SELECT RAISE(IGNORE); END",
+        )
+        text = await probe.command(
+            "强行合成", "强行合成 天罪 1", number=971001, allow_exception=True,
+        )
+        after = (
+            balances(probe),
+            backpack(probe),
+            probe.rows(game, "SELECT * FROM fusion_operations ORDER BY operation_id"),
+        )
+        probe.evidence.update(reply=text, business_before=before, business_after=after,
+                              operation_id="force-fusion:971001:900001")
+        assert after == before, (text, before, after)
+        assert reason_text("fusion_receipt_write_rejected") in text, text
+        ledger = probe.rows(
+            game,
+            "SELECT status FROM operation_ledger WHERE operation_id=? AND action='fusion.apply'",
+            ("force-fusion:971001:900001",),
+        )
+        assert ledger == [("started",)], ledger
+
+        probe.seed(game, "DROP TRIGGER reject_fusion_receipt")
+        recovered = await probe.command("强行合成", "强行合成 天罪 1", number=971001)
+        saved = (
+            balances(probe),
+            backpack(probe),
+            probe.rows(game, "SELECT * FROM fusion_operations ORDER BY operation_id"),
+        )
+        replay = await probe.command("强行合成", "强行合成 天罪 1", number=971001)
+        assert "成功合成" in recovered and "成功合成" in replay, (recovered, replay)
+        assert saved == (
+            balances(probe),
+            backpack(probe),
+            probe.rows(game, "SELECT * FROM fusion_operations ORDER BY operation_id"),
+        )
+        assert probe.rows(game,
+                          "SELECT successful,protected FROM fusion_operations WHERE operation_id=?",
+                          ("force-fusion:971001:900001",)) == [(1, 0)]
+        assert probe.rows(
+            game,
+            "SELECT status FROM operation_ledger WHERE operation_id=? AND action='fusion.apply'",
+            ("force-fusion:971001:900001",),
+        ) == [("applied",)]
+        with DatabaseUnitOfWork(game, read_only=True) as uow:
+            assert uow.query_one("PRAGMA integrity_check")["integrity_check"] == "ok"
+        probe.evidence.update(recovered=True, replay_unchanged=True)
