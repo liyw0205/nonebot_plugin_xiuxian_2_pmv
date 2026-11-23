@@ -23,6 +23,14 @@ def weekly_manager():
     return SECT_WEEKLY_GOALS, sect_weekly_goal_manager
 
 
+def task_week_key(task):
+    from datetime import date
+
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.periods import get_weekly_key
+
+    return get_weekly_key(date.fromisoformat(str(task["period"])))
+
+
 def complete_goals(probe, sect_id, definitions=None):
     goals, manager = weekly_manager()
     for goal in definitions or goals:
@@ -197,7 +205,7 @@ def register(case):
                 assert task and task["任务名称"] == stone_task and task["status"] == "accepted", (task, accepted)
 
                 goals, manager = weekly_manager()
-                week_key = manager.current_week_key()
+                week_key = task_week_key(task)
                 manager.list_goals(task["sect_id"], week_key)
                 diligence = next(goal for goal in goals if goal.key == "sect_diligence")
                 game = state.database
@@ -322,7 +330,7 @@ def register(case):
                 assert task and task["任务名称"] == hp_task and task["status"] == "accepted", (task, accepted)
 
                 goals, manager = weekly_manager()
-                week_key = manager.current_week_key()
+                week_key = task_week_key(task)
                 manager.list_goals(task["sect_id"], week_key)
                 before = probe.rows(
                     state.database,
@@ -456,7 +464,7 @@ def register(case):
                 assert task and task["任务名称"] == hp_task and task["status"] == "accepted", (task, accepted)
 
                 goals, manager = weekly_manager()
-                week_key = manager.current_week_key()
+                week_key = task_week_key(task)
                 manager.list_goals(task["sect_id"], week_key)
                 before = probe.rows(
                     state.database,
