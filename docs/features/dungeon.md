@@ -7,7 +7,7 @@
 ## 命令与别名
 
 - `副本兑换`：兑换副本商店物品。
-- `探索副本`：创建并结算一次探索操作。
+- `探索副本`（别名 `副本探索`、`挑战副本`）：冻结本次输入，执行并结算一次探索操作。
 - `创建队伍 [队伍名]`（别名 `新建队伍`）：仅群聊可创建，空名称使用道号加“的队伍”。
 
 ## Web API
@@ -76,17 +76,21 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关后保留旧命令和数据格式。探索的战斗规则、队伍管理和奖励计算尚未移入新 domain，待后续发布周期完成迁移。
+关闭开关后保留旧命令和数据格式。`DungeonExploreExecutionApplication` 组合 `DungeonExplorePlanApplication`、encounter 与 reward 业务，首次 resolve 从已持久化 intent 构造计划，prepared 恢复直接结算既有计划；遭遇选择、怪物模板/属性生成、战斗编排、结果映射和奖励分配由 feature 承担。NoneBot matcher 只组装首次 intent、调用 execution application 并投递已持久化回复。已有战斗引擎通过输入/输出端口调用，不复制战斗算法。旧 `DungeonManager` 的遭遇和怪物方法保留为兼容 facade；境界换算、等级 power 与物品目录通过现有数据端口读取。
+
+intent 保存三个用途隔离的确定性随机 seed、模板、队伍、成员资源、战斗属性、库存与修正系数。intent 阶段重试只从持久快照生成计划；不会重新读取队伍/属性/背包，也不会重抽遭遇。计划进入 `prepared` 后重试直接结算该计划。准备或结算前发现副本状态、队伍、玩家资源或奖励物品快照已变化时，保存具体拒绝并保持资产不变；已完成请求重放原回复且不重复战斗或发奖。奖励路径要求提供冻结背包快照，不允许读取 live 背包补值。
+
+现有边界仍包括 Web 认证主体绑定、全局 legacy 门禁和正式运行数据 migration/restore/P7 证据。旧 writer 不维护 `.009` 投影；回滚发生旧写后再回默认入口，必须停机受控重建/核验投影。历史跨队重叠未清洗，当前按最小 team_id 单行选择。
 
 当前未完成边界：Web 认证主体绑定、全局 legacy 门禁和正式运行数据 migration/restore/P7 证据。intent Web route 已补齐 manifest 声明，运行时 guard 保持不变。legacy reader/mapping 仍保留兼容实现，但默认 handler 未证明可达，不重复迁移死 helper。旧 writer 不维护 `.009` 投影；回滚发生旧写后再回默认入口，必须停机受控重建/核验投影。历史跨队重叠未清洗，当前按最小 team_id 单行选择。
 
 ## 适配器差异
 
-命令适配器只组装探索快照；成员资料由 `PlayerProfileApplication` 读取，CD 与背包由 `DungeonExploreSnapshotApplication` 的只读 repository 批量读取，缺 schema 时 fail closed；Web 适配器只解析 DTO。领域 application 不依赖 NoneBot 或 Flask，探索快照 repository 是明确的 SQLite 读取边界。
+命令适配器首次读取成员资料由 `PlayerProfileApplication` 处理，CD 与背包由 `DungeonExploreSnapshotApplication` 的只读 repository 批量读取，缺 schema 时 fail closed；该结果先写入 intent。`DungeonExploreExecutionApplication.resolve` 只从 intent 构造首次计划，`resume_prepared` 直接结算持久化的既有计划；`DungeonExplorePlanApplication` 通过显式端口调用遭遇、战斗和奖励规则，持久化计划由 `DungeonApplication`/repository 准备与结算。Web 适配器仍只解析 DTO。领域 application 不依赖 NoneBot、Flask 或具体数据库驱动，探索快照 repository 是明确的 SQLite 读取边界。
 
 ## 测试与手工验收
 
-覆盖准备、结算、重放、快照冲突和库存拒绝；`tests/test_dungeon_explore_web_boundary.py` 通过隔离 Flask client 验证五项路由声明、注入拒绝 resolver、缺失/错误/跨会话 CSRF、幂等键优先和真实仓储 identity 冲突不泄露。不以注入权限测试宣称默认认证策略已加强。
+覆盖遭遇类型、普通怪与 BOSS 胜负、奖励、冻结 intent/prepared 恢复、队伍/属性/背包变化、回执冲突和库存拒绝；真实 OneBot matcher 使用隔离 game/player SQLite，QQ plain、Markdown 和失败降级仅由适配器 mock 覆盖，不代表真机验证。`tests/test_dungeon_explore_web_boundary.py` 通过隔离 Flask client 验证五项路由声明、注入拒绝 resolver、缺失/错误/跨会话 CSRF、幂等键优先和真实仓储 identity 冲突不泄露。不以注入权限测试宣称默认认证策略已加强。
 
 ## Manifest 清单
 - `command: 我的副本记录`

@@ -16,6 +16,8 @@ import pytest
     "dungeon-explore-receipt-recovery", "dungeon-explore-stage-recovery", "dungeon-explore-item-recovery",
     "dungeon-explore-manager-isolation", "dungeon-explore-team-recovery", "dungeon-explore-rejection-contracts",
     "dungeon-explore-abort-reply", "dungeon-explore-capacity", "dungeon-explore-real-battles",
+    "dungeon-explore-intent-recovery", "dungeon-explore-intent-inventory-recovery",
+    "dungeon-explore-intent-team-recovery", "dungeon-explore-nothing-encounter", "dungeon-explore-battle-win",
 ])
 def test_real_exploration_dispatch(case_key):
     with tempfile.TemporaryDirectory() as directory:

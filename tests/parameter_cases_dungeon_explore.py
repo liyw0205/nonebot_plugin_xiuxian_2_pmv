@@ -123,6 +123,187 @@ def register(case):
         integrity(probe)
         probe.evidence.update(integrity_check="ok")
 
+    @case("dungeon-explore-intent-recovery", "探索副本", "冻结输入写入后、结算计划持久化前恢复",
+          "真实普通怪遭遇，准备计划时SQLite ABORT后只改变玩家境界", "同消息用已冻结境界与战斗属性继续结算，不读取新资料或重新抽取",
+          group="dungeon-explore-parameters")
+    async def intent_recovery_uses_frozen_profile(probe):
+        game = probe.context.paths.game_db
+        with live_manager() as (module, manager):
+            ready(probe, module, manager)
+            profile = module._sql_message().get_user_info_with_id("900001")
+            original_level = str(profile["level"])
+            number = resource_encounter_number(
+                module, manager, original_level, int(profile["exp"]), start=987000, kind="monster"
+            )
+            operation = f"dungeon-explore:{number}:900001"
+            probe.seed(
+                game,
+                "CREATE TRIGGER exploration_intent_recovery_fault BEFORE UPDATE ON dungeon_explore_operations "
+                "WHEN NEW.phase='prepared' BEGIN SELECT RAISE(ABORT,'isolated plan persistence failure'); END",
+            )
+            try:
+                failed = await probe.command("探索副本", number=number, allow_exception=True)
+                row = probe.rows(
+                    game,
+                    "SELECT phase,intent_json FROM dungeon_explore_operations WHERE operation_id=?",
+                    (operation,),
+                )
+                assert row and row[0][0] == "intent", row
+                assert "内部异常" in failed and "获得" not in failed, failed
+            finally:
+                probe.seed(game, "DROP TRIGGER exploration_intent_recovery_fault")
+
+            probe.player(level="化神境初期")
+            original_battle = module.pve_fight
+            captured_battle_inputs = {}
+
+            async def capture_battle_inputs(*args, **kwargs):
+                captured_battle_inputs.update(
+                    json.loads(json.dumps(kwargs["player_data_by_id"], ensure_ascii=True))
+                )
+                return await original_battle(*args, **kwargs)
+
+            with patch.object(module, "pve_fight", side_effect=capture_battle_inputs) as battle:
+                resumed = await probe.command("副本探索", number=number)
+            battle.assert_awaited_once()
+            receipt = probe.rows(
+                game,
+                "SELECT phase,result_status,intent_json,prepared_json,result_json "
+                "FROM dungeon_explore_operations WHERE operation_id=?",
+                (operation,),
+            )[0]
+            assert "当前：第2层" in resumed, resumed
+            assert receipt[:2] == ("completed", "applied"), receipt[:2]
+            frozen_intent = json.loads(receipt[2])
+            frozen_plan = json.loads(receipt[3])
+            assert frozen_intent["members"][0]["level"] == original_level
+            assert frozen_plan["members"][0]["level"] == original_level
+            frozen_battle_data = {
+                member_id: entry["attributes"]
+                for member_id, entry in frozen_intent["battle_inputs"]["players"].items()
+            }
+            assert captured_battle_inputs == frozen_battle_data
+            assert frozen_plan["resolved"]["kind"] == "monster"
+            assert json.loads(receipt[4])["message"].replace("\r", "\n") in resumed.replace("\r", "\n")
+            committed = database_projection(probe)
+            assert await probe.command("挑战副本", number=number) == resumed
+            assert database_projection(probe) == committed
+        integrity(probe)
+        probe.evidence.update(
+            original_level=original_level,
+            changed_level="化神境初期",
+            frozen_intent_used=True,
+            recovered=True,
+            replay_zero_writes=True,
+            integrity_check="ok",
+        )
+
+    @case("dungeon-explore-intent-inventory-recovery", "探索副本", "冻结宝物库存后库存变化再恢复",
+          "真实掉落遭遇，计划保存ABORT后增加实际背包数量", "计划仍引用冻结库存，变更按具体原因拒绝且不再发奖",
+          group="dungeon-explore-parameters")
+    async def intent_inventory_recovery(probe):
+        game, player = probe.context.paths.game_db, probe.context.paths.player_db
+        with live_manager() as (module, manager):
+            ready(probe, module, manager)
+            probe.player(level="筑基境初期")
+            profile = module._sql_message().get_user_info_with_id("900001")
+            number = resource_encounter_number(
+                module, manager, profile["level"], int(profile["exp"]), start=987600, kind="treasure"
+            )
+            operation = f"dungeon-explore:{number}:900001"
+            resolution = object.__new__(type(manager))
+            resolution.__dict__.update(manager.__dict__)
+            resolution.sync_current_dungeon = lambda: None
+            event = resolution.trigger_event(
+                profile["level"], int(profile["exp"]),
+                random_source=module._dungeon_explore_random_source(operation, "encounter"),
+            )
+            item_id = int(event["drop_items"])
+            probe.seed(game, "DELETE FROM back WHERE user_id='900001' AND goods_id=?", (item_id,))
+            probe.seed(
+                game,
+                "CREATE TRIGGER exploration_intent_inventory_fault BEFORE UPDATE ON dungeon_explore_operations "
+                "WHEN NEW.phase='prepared' BEGIN SELECT RAISE(ABORT,'isolated frozen inventory failure'); END",
+            )
+            try:
+                failed = await probe.command("探索副本", number=number, allow_exception=True)
+                row = probe.rows(game, "SELECT phase,intent_json FROM dungeon_explore_operations WHERE operation_id=?", (operation,))
+                assert row and row[0][0] == "intent", row
+                assert "内部异常" in failed and "当前：第2层" not in failed, failed
+            finally:
+                probe.seed(game, "DROP TRIGGER exploration_intent_inventory_fault")
+            frozen = json.loads(row[0][1])
+            expected_counts = frozen["inventory"]["900001"].get(str(item_id), {"goods_num": 0, "bind_num": 0})
+            assert expected_counts == {"goods_num": 0, "bind_num": 0}, expected_counts
+            probe.grant_item(item_id, quantity=1)
+            before_recovery = assets(probe)
+            reply = await probe.command("副本探索", number=number)
+            record = probe.rows(game, "SELECT phase,result_status,prepared_json,result_json FROM dungeon_explore_operations WHERE operation_id=?", (operation,))[0]
+            plan = json.loads(record[2])
+            assert record[:2] == ("completed", "state_changed"), record[:2]
+            planned_item = plan["members"][0]["items"][0]
+            assert planned_item["id"] == item_id and planned_item["expected_num"] == 0
+            rejection = json.loads(record[3])
+            assert rejection["reason"] == "item_changed" and rejection["subject"] == "900001", rejection
+            assert assets(probe) == before_recovery
+            assert probe.rows(game, "SELECT goods_num,bind_num FROM back WHERE user_id='900001' AND goods_id=?", (item_id,)) == [(1, 0)]
+            committed = database_projection(probe)
+            assert await probe.command("挑战副本", number=number) == reply
+            assert database_projection(probe) == committed
+        integrity(probe)
+        probe.evidence.update(item_id=item_id, frozen_expected=expected_counts, reply=reply,
+                              no_second_grant=True, replay_zero_writes=True, integrity_check="ok")
+
+    @case("dungeon-explore-intent-team-recovery", "探索副本", "冻结队伍后成员离队再恢复",
+          "真实两人队伍与非战斗遭遇，计划保存ABORT后成员真实离队", "结算计划继续使用冻结成员，按队伍变化拒绝并不扣资源",
+          group="dungeon-explore-parameters")
+    async def intent_team_recovery(probe):
+        game, player = probe.context.paths.game_db, probe.context.paths.player_db
+        with live_manager() as (module, manager):
+            ready(probe, module, manager)
+            probe.player(uid="900002", hp=50000, mp=10000, exp=100000)
+            manager.get_player_status("900002")
+            module.get_players_attributes("900002", None)
+            assert "创建成功" in await probe.command("创建队伍", "创建队伍 冻结队伍", number=989700)
+            assert "发送组队邀请" in await probe.command("邀请组队", "邀请组队 诊断对手", number=989701)
+            assert "成功加入队伍" in await probe.command("同意组队", actor="900002", number=989702)
+            profile = module._sql_message().get_user_info_with_id("900001")
+            number = resource_encounter_number(
+                module, manager, profile["level"], int(profile["exp"]), start=989800, kind="spirit_stone"
+            )
+            operation = f"dungeon-explore:{number}:900001"
+            probe.seed(
+                game,
+                "CREATE TRIGGER exploration_intent_team_fault BEFORE UPDATE ON dungeon_explore_operations "
+                "WHEN NEW.phase='prepared' BEGIN SELECT RAISE(ABORT,'isolated frozen team failure'); END",
+            )
+            try:
+                failed = await probe.command("探索副本", number=number, allow_exception=True)
+                row = probe.rows(game, "SELECT phase,intent_json FROM dungeon_explore_operations WHERE operation_id=?", (operation,))
+                assert row and row[0][0] == "intent", row
+                assert "内部异常" in failed and "获得" not in failed, failed
+            finally:
+                probe.seed(game, "DROP TRIGGER exploration_intent_team_fault")
+            intent = json.loads(row[0][1])
+            assert intent["team"]["members"] == ["900001", "900002"]
+            assert "你已离开队伍" in await probe.command("离开队伍", actor="900002", number=989703)
+            before_recovery = assets(probe)
+            reply = await probe.command("副本探索", number=number)
+            result = probe.rows(game, "SELECT phase,result_status,prepared_json,result_json FROM dungeon_explore_operations WHERE operation_id=?", (operation,))[0]
+            plan = json.loads(result[2])
+            assert result[:2] == ("completed", "team_changed"), result[:2]
+            assert [member["user_id"] for member in plan["members"]] == ["900001", "900002"]
+            assert plan["team"] == intent["team"]
+            assert "队伍已解散或成员变动" in json.loads(result[3])["message"]
+            assert assets(probe) == before_recovery
+            committed = database_projection(probe)
+            assert await probe.command("挑战副本", number=number) == reply
+            assert database_projection(probe) == committed
+        integrity(probe)
+        probe.evidence.update(frozen_members=intent["team"]["members"], reply=reply,
+                              team_change_reason="team_changed", replay_zero_writes=True,
+                              integrity_check="ok")
+
     @case("dungeon-explore-item-recovery", "探索副本", "真实宝物遭遇，新增/已有奖励物品拒写、改写及回执末步改写物品",
           "真实掉落生成与隔离背包，不替换奖励引擎", "具体物品原因/主体、全部资产回滚，原计划恢复只发一次",
           group="dungeon-explore-parameters")
@@ -465,3 +646,81 @@ def register(case):
                                            hp=member["final_hp"], mp=member["final_mp"], reward=won, replay_zero_writes=True)
         integrity(probe)
         probe.evidence.update(real_battle_engine=True, integrity_check="ok")
+
+    @case("dungeon-explore-nothing-encounter", "探索副本", "已发布模板的无事发生遭遇",
+          "真实matcher、随机遭遇选择与隔离双库", "遭遇类型/战报/进度一致，重放不重复推进或写入",
+          group="dungeon-explore-parameters")
+    async def nothing_encounter(probe):
+        game, player = probe.context.paths.game_db, probe.context.paths.player_db
+        with live_manager() as (module, manager):
+            ready(probe, module, manager)
+            profile = module._sql_message().get_user_info_with_id("900001")
+            number = resource_encounter_number(
+                module, manager, profile["level"], int(profile["exp"]), start=997000, kind="nothing"
+            )
+            operation = f"dungeon-explore:{number}:900001"
+            before = assets(probe)
+            reply = await probe.command("探索副本", number=number)
+            row = probe.rows(game, "SELECT phase,prepared_json,result_json FROM dungeon_explore_operations WHERE operation_id=?",
+                             (operation,))[0]
+            plan, response = json.loads(row[1]), json.loads(row[2])
+            assert row[0] == "completed" and plan["resolved"]["kind"] == "nothing", row
+            assert not response["battle_messages"] and "当前：第2层" in response["message"]
+            assert response["message"].replace("\r", "\n") in reply.replace("\r", "\n")
+            after = assets(probe)
+            assert after != before
+            committed = database_projection(probe)
+            assert await probe.command("副本探索", number=number) == reply
+            assert database_projection(probe) == committed
+        integrity(probe)
+        probe.evidence.update(reply=reply, resolved="nothing", replay_zero_writes=True, integrity_check="ok")
+
+    @case("dungeon-explore-battle-win", "探索副本", "真实战斗引擎胜利与奖励结算",
+          "真实遭遇选择/战斗引擎/奖励应用与隔离双库；仅将生成敌人属性压至测试值",
+          "战斗胜者、奖励分配、资源/进度/回执与玩家回复一致，成功重放不再战斗",
+          group="dungeon-explore-parameters")
+    async def battle_win(probe):
+        game, player = probe.context.paths.game_db, probe.context.paths.player_db
+        with live_manager() as (module, manager):
+            ready(probe, module, manager)
+            probe.player(hp=50000, mp=10000, exp=100000)
+            profile = module._sql_message().get_user_info_with_id("900001")
+            number = resource_encounter_number(
+                module, manager, profile["level"], int(profile["exp"]), start=998000, kind="monster"
+            )
+            operation = f"dungeon-explore:{number}:900001"
+            create_monster = module.DungeonManager.creating_monsters
+
+            def weak_enemy(self, user_level, user_exp, monsters_info, monster_type="minion", *, random_source=None):
+                monster = create_monster(
+                    self, user_level, user_exp, monsters_info, monster_type, random_source=random_source
+                )
+                monster.update({"气血": 1, "总血量": 1, "真元": 10, "攻击": 1, "skills": []})
+                return monster
+
+            with patch.object(module.DungeonManager, "creating_monsters", new=weak_enemy), \
+                    patch.object(module, "pve_fight", wraps=module.pve_fight) as battle, \
+                    patch.object(module, "build_battle_rewards", wraps=module.build_battle_rewards) as rewards:
+                reply = await probe.command("探索副本", number=number)
+            battle.assert_awaited_once()
+            rewards.assert_called_once()
+            row = probe.rows(game, "SELECT phase,prepared_json,result_json,current_layer,dungeon_status FROM dungeon_explore_operations WHERE operation_id=?",
+                             (operation,))[0]
+            plan, response = json.loads(row[1]), json.loads(row[2])
+            assert row[0] == "completed" and plan["resolved"]["winner"] == 0, row
+            assert plan["resolved"]["kind"] == "monster" and plan["advance"]
+            member = plan["members"][0]
+            assert member["stone_delta"] > 0 or member["exp_delta"] > 0 or member["items"]
+            assert "击败敌人" in response["message"] and "当前：第2层" in reply, reply
+            assert probe.rows(game, "SELECT stone,exp,hp,mp FROM user_xiuxian WHERE user_id='900001'") == [(
+                member["expected"]["stone"] + member["stone_delta"],
+                member["expected"]["exp"] + member["exp_delta"],
+                member["final_hp"], member["final_mp"],
+            )]
+            assert probe.rows(player, "SELECT current_layer,dungeon_status FROM player_dungeon_status WHERE user_id='900001'") == [(1, "exploring")]
+            committed = database_projection(probe)
+            with patch.object(module, "pve_fight", side_effect=AssertionError("replay must not fight again")):
+                assert await probe.command("挑战副本", number=number) == reply
+            assert database_projection(probe) == committed
+        integrity(probe)
+        probe.evidence.update(reply=reply, winner=0, rewards_called=1, replay_zero_writes=True, integrity_check="ok")

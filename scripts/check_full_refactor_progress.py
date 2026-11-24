@@ -1522,6 +1522,9 @@ def _slice_status() -> dict[str, dict[str, object]]:
     dungeon_reset_repository = (PACKAGE / "features" / "dungeon" / "reset_repository.py").read_text(encoding="utf-8")
     dungeon_application = (PACKAGE / "features" / "dungeon" / "application.py").read_text(encoding="utf-8")
     dungeon_manager = (PACKAGE / "xiuxian" / "xiuxian_dungeon" / "dungeon_manager.py").read_text(encoding="utf-8")
+    dungeon_explore_resolution = (PACKAGE / "features" / "dungeon" / "explore_resolution.py").read_text(encoding="utf-8")
+    dungeon_explore_encounters = (PACKAGE / "features" / "dungeon" / "explore_encounters.py").read_text(encoding="utf-8")
+    dungeon_explore_rewards = (PACKAGE / "features" / "dungeon" / "explore_rewards.py").read_text(encoding="utf-8")
     dungeon_progress_read = dungeon_manager[
         dungeon_manager.index("    def get_dungeon_progress("):
         dungeon_manager.index("    def get_player_status(")
@@ -3690,12 +3693,31 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "legacy_dungeon_reward import DungeonRewardResult, DungeonRewardService" in dungeon_transaction_shim
             ),
             "explore_settlement_application_owned": (
-                all(
-                    f"dungeon_application.{method}(" in dungeon_facade
-                    for method in ("replay", "prepare_intent", "prepare_resolution", "settle", "resolve_rejection")
-                )
+                "dungeon_application.replay(" in dungeon_facade
+                and "dungeon_application.prepare_intent(" in dungeon_facade
+                and "dungeon_application.resolve_rejection(" in dungeon_facade
+                and "_dungeon_explore_execution_application(bot).resolve(" in dungeon_facade
+                and "_dungeon_explore_execution_application(bot).resume_prepared(" in dungeon_facade
+                and "class DungeonExploreExecutionApplication" in dungeon_application
+                and "self.planner.build(" in dungeon_application
+                and "self.storage.prepare_resolution(" in dungeon_application
+                and "self.storage.settle(" in dungeon_application
+                and "self.storage.resolve_rejection(" in dungeon_application
                 and "_dungeon_explore_operation_service" not in dungeon_facade
                 and "DungeonExploreOperationResult" not in dungeon_facade
+            ),
+            "explore_resolution_encounter_and_reward_rules_feature_owned": (
+                "class DungeonExplorePlanApplication" in dungeon_explore_resolution
+                and "def build_event_encounter(" in dungeon_explore_encounters
+                and "def build_boss_encounter(" in dungeon_explore_encounters
+                and "def create_monster(" in dungeon_explore_encounters
+                and "def generate_drop_item(" in dungeon_explore_encounters
+                and "def build_battle_rewards(" in dungeon_explore_rewards
+                and "def trigger_event(" in dungeon_manager
+                and "return build_event_encounter(" in dungeon_manager
+                and "return build_boss_encounter(" in dungeon_manager
+                and "return _create_monster(" in dungeon_manager
+                and "self._sql_message().goods_num(" not in dungeon_facade
             ),
             "reset_application_owned": "self.dungeon_application = DungeonApplication(" in dungeon_manager and "self._reset_application().reset(" in dungeon_manager and "self.reset_service.reset(" not in dungeon_manager,
             "reset_clock_injected": (
@@ -3832,12 +3854,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "_player_data_manager().get_fields(self.GLOBAL_USER_ID" not in dungeon_manager
             ),
             "explore_random_sources_operation_scoped": (
-                "def _dungeon_explore_random_source(" in dungeon_facade
-                and "DUNGEON_EXPLORE_RNG_VERSION" in dungeon_facade
-                and 'random_source=encounter_rng' in dungeon_facade
-                and 'random_source=battle_rng' in dungeon_facade
+                "def dungeon_explore_random_source(" in dungeon_explore_resolution
+                and "DUNGEON_EXPLORE_RNG_VERSION" in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "encounter")' in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "battle")' in dungeon_explore_resolution
+                and 'dungeon_explore_rng(intent, "reward")' in dungeon_explore_resolution
+                and 'random_source=encounter_rng' in dungeon_explore_resolution
+                and 'random_source=battle_rng' in dungeon_explore_resolution
+                and 'random_source=reward_rng' in dungeon_explore_resolution
                 and "def trigger_event(self, user_level, user_exp, *, random_source=None)" in dungeon_manager
-                and "rng.choices(candidates, weights=weights, k=1)[0]" in dungeon_manager
+                and "random_source.choices(candidates, weights=candidate_weights, k=1)[0]" in dungeon_explore_encounters
                 and "async def pve_fight(" in dungeon_player_fight
                 and "_battle_random_source = ContextVar" in dungeon_player_fight
                 and "generate_boss_buff(m, random_source=random_source)" in dungeon_player_fight
@@ -3849,10 +3875,10 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def prepare_resolution(" in dungeon_repository
                 and '== "intent"' in dungeon_repository
                 and '"intent_json"' in dungeon_repository
-                and "player_data_by_id=frozen_battle_data" in dungeon_facade
-                and "resolution_manager.current_dungeon" in dungeon_facade
-                and "_frozen_explore_seed" in dungeon_facade
-                and "inventory_snapshot=frozen_inventory" in dungeon_facade
+                and "player_data_by_id=battle_data" in dungeon_explore_resolution
+                and "self.encounter_factory(dungeon)" in dungeon_explore_resolution
+                and "dungeon_explore_rng(intent" in dungeon_explore_resolution
+                and "inventory_snapshot=frozen_inventory" in dungeon_explore_resolution
             ),
             "session_schema_missing_fails_closed": (
                 "def _columns(" in dungeon_repository

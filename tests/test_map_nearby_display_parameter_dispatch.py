@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -13,33 +8,17 @@ import nonebot
 nonebot.init()
 
 
-def test_registered_nearby_display_parameters_and_sqlite_read_recovery():
-    with tempfile.TemporaryDirectory(prefix="xiuxian-map-nearby-display-") as directory:
-        report = Path(directory) / "report.json"
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "tests.parameter_probe",
-                "--minimal-map",
-                "--group",
-                "map-nearby-display",
-                "--report",
-                str(report),
-            ],
-            cwd=Path(__file__).resolve().parents[1],
-            text=True,
-            capture_output=True,
-            timeout=180,
-        )
-        payload = json.loads(report.read_text(encoding="utf-8")) if report.exists() else {}
-        failures = [row for row in payload.get("results", []) if row["status"] != "pass"]
-        assert result.returncode == 0, (
-            result.stdout + result.stderr
-            + json.dumps(failures, ensure_ascii=False, indent=2)
-        )
-        assert payload.get("summary") == {"pass": 3}, result.stdout
-        assert payload["outcomes"] == {"success": 1, "rejection": 1, "recovery": 1}
+def test_registered_nearby_display_parameters_and_sqlite_read_recovery(map_parameter_probe_results):
+    rows = [
+        row for row in map_parameter_probe_results["results"]
+        if row["group"] == "map-nearby-display"
+    ]
+    assert {row["key"] for row in rows} == {
+        "map-nearby-display-sampling-readonly",
+        "map-nearby-display-empty-and-unregistered",
+        "map-nearby-display-read-recovery",
+    }
+    assert sorted(row["outcome"] for row in rows) == ["recovery", "rejection", "success"]
 
 
 def test_nearby_display_read_failure_reason_reaches_onebot_qq_plain_markdown_and_fallback():
