@@ -12,6 +12,7 @@ from tests.command_probe import install_boundary, inventory, isolate_source, mak
 
 ROUTES = (
     ("修仙帮助", "修仙帮助"),
+    ("修行记录帮助", "修行记录帮助"),
     ("副本帮助", "副本帮助"),
     ("我的修仙信息", "我的修仙信息"),
     ("修仙改名", "修仙改名"),

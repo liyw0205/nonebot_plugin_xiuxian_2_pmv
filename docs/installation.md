@@ -1,19 +1,20 @@
 # 安装、更新与 QQ 连接
 
-## 发布资产和下载回退
+## 版本与下载
 
-发布 tag 固定为 `vMAJOR.MINOR.PATCH`，资产固定为 `project.tar.gz`。安装器默认使用
-`https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest/download/project.tar.gz`；
-可通过 `XIUXIAN_RELEASE_TAG=vX.Y.Z` 固定版本。加速源仅使用测速通过的
-`gh-proxy.com`、`ghfast.top`、`ghproxy.vip`、`gh-proxy.org`，每次下载都会验证 tar.gz
-目录；代理失败后回退官方 GitHub 直连，全部失败则停止，不覆盖数据目录。当前已核实
-远端正式 Release 为 `v1.3.0`，其资产名为 `project.tar.gz`。
+安装器默认下载最新正式版，资产名为 `project.tar.gz`；如需固定版本，可设置
+`XIUXIAN_RELEASE_TAG=vX.Y.Z`。下载时会尝试测速通过的加速源，并校验归档；加速源不可用时
+回退至 GitHub 直连，全部下载失败则停止，不覆盖数据目录。最新正式版为 `v1.3.21`。
+
+安装器下载地址：
+`https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest/download/project.tar.gz`。
+可用的加速源包括 `gh-proxy.com`、`ghfast.top`、`ghproxy.vip` 和 `gh-proxy.org`。
 
 新部署优先使用一键脚本。项目使用本地 SQLite，无需单独安装数据库服务。
 
 ## Docker
 
-Docker 发布采用低频 base 分片和高频 plugin 单包：
+Docker 安装包包含基础运行环境和最新版插件：
 
 ```text
 manifest.json
@@ -86,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 xiu2 update
 ```
 
-Release workflow 会把仓库打成 `project.tar.gz`，但部署更新只替换插件、数据和依赖文件，不会更新服务器上单独保存的安装脚本。Linux 管理命令 `xiu2 update` 每次会下载 `main` 上的最新安装器；手动运行本地 `bash /root/install.sh update` 则仍使用该文件的旧版本。若保留本地脚本，更新前需从上述官方 raw-main 地址重新下载；也可直接使用 `curl | bash -s -- update`。
+安装脚本与插件包分开更新。Linux 管理命令 `xiu2 update` 会自动下载最新安装器；如果直接运行已保存的 `bash /root/install.sh update`，请先从上方地址更新该脚本，也可直接使用 `curl | bash -s -- update`。
 
 常用管理命令：
 
@@ -104,7 +105,7 @@ xiu2 update-deps
 xiu2 format [log_file]
 ```
 
-Linux / Termux 安装器统一接受 `--source-mode release|source`、`--source PATH`、`--mirror auto|direct|accelerated|custom`、`--target PATH` 和 `--venv PATH`。自定义镜像前缀使用 `--mirror-url URL`。Linux 安装/运行默认虚拟环境为 `/root/myenv`；`XIUXIAN_VENV_PATH` 可覆盖默认，命令行 `--venv PATH` 优先于环境变量。Termux 默认仍为 `$HOME/myenv`，不使用 Linux 共享路径。本机开发测试使用 `/home/nonebot-shared-venv/bin/python`，不改变安装运行环境。例如：
+Linux / Termux 安装器统一接受 `--source-mode release|source`、`--source PATH`、`--mirror auto|direct|accelerated|custom`、`--target PATH` 和 `--venv PATH`。自定义镜像前缀使用 `--mirror-url URL`。Linux 安装/运行默认虚拟环境为 `/root/myenv`；`XIUXIAN_VENV_PATH` 可覆盖默认，命令行 `--venv PATH` 优先于环境变量。Termux 默认仍为 `$HOME/myenv`，不使用 Linux 共享路径。例如：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.sh \
@@ -154,7 +155,7 @@ xiu2 update-deps
 termux-wake-lock
 ```
 
-Termux 的 `xiu2 update` 每次会下载 `main` 上的最新安装器。本机保存的 `install_termux.sh` 不会随插件 Release 更新；手动运行前请从上方官方 raw-main 地址重新下载。
+Termux 的 `xiu2 update` 会自动下载最新安装器。本机保存的 `install_termux.sh` 不会随插件包更新；手动运行前请从上方地址重新下载最新版脚本。
 
 若使用 proot 容器，进入容器后使用 Linux 安装脚本，不要在容器中执行原生 Termux 脚本。
 
@@ -164,7 +165,7 @@ Termux 的 `xiu2 update` 每次会下载 `main` 上的最新安装器。本机�
 
 https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install.bat
 
-Windows 更新时请重新下载该 raw-main 地址的最新 `install.bat` 再运行。已保存的批处理文件不会由 `project.tar.gz` 自动更新。
+Windows 更新时请从上方地址重新下载最新版 `install.bat` 再运行。已保存的批处理文件不会由 `project.tar.gz` 自动更新。
 
 需要 Python 3.11、Git 和可用的 NoneBot 环境。详细配置格式见 [配置与环境变量](configuration.md)。
 

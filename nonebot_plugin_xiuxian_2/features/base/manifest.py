@@ -5,6 +5,7 @@ FEATURE = FeatureManifest(
     key="base", title="修炼与基础资产", owner="gameplay",
     commands=(
         CommandSpec("修炼", aliases=("突破",), permission="user"),
+        CommandSpec("修行记录帮助", permission="user"),
         CommandSpec("我的灵石流水", aliases=("灵石流水", "灵石收支"), permission="user"),
         CommandSpec("我的资产总览", aliases=("资产总览", "我的资产"), permission="user"),
         CommandSpec("我的突破统计", aliases=("突破统计", "突破记录"), permission="user"),

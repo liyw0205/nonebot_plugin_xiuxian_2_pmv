@@ -217,6 +217,7 @@ sign_in = on_command(
 hongyun = on_command("鸿运", aliases={"查看中奖", "奖池查询"}, priority=5, block=True)
 sign_in_statistics = on_command("我的签到统计", aliases={"签到统计", "签到记录"}, priority=7, block=True)
 help_in = on_command("修仙帮助", aliases={"修仙菜单"}, priority=12, block=True)
+cultivation_records_help = on_command("修行记录帮助", priority=12, block=True)
 rank = on_command("排行榜", aliases={"修仙排行榜", "灵石排行榜", "战力排行榜", "境界排行榜", "宗门排行榜", "轮回排行榜"},
                   priority=7, block=True)
 season_rank = on_command("赛季榜", aliases={"赛季排行榜", "赛季排行", "赛季信息"}, priority=7, block=True)
@@ -1043,28 +1044,7 @@ async def handle_lottery(user_info: dict, operation_id: str):
 
     return format_lottery_result(settled, number_to)
 
-@help_in.handle(parameterless=[Cooldown(cd_time=0)])
-async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
-    """修仙帮助"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-
-    keyword = args.extract_plain_text().strip() if args else ""
-    if keyword:
-        # 有参数时走关键词检索，不返回整页菜单。
-        payload = search_help_commands(keyword)
-        await handle_send(
-            bot,
-            event,
-            format_help_search(payload),
-            md_type="修仙",
-            k1="帮助",
-            v1="修仙帮助",
-            k2="存档",
-            v2="我的修仙信息",
-        )
-        await help_in.finish()
-
-    msg = """**修仙帮助**
+__base_help__ = """**修仙帮助**
 ---
 > 发送 `修仙帮助 关键词` 可直接检索命令，例如 `修仙帮助 签到`
 **基础指令**
@@ -1107,30 +1087,8 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 境界帮助 / 品阶帮助 / 灵根帮助
 
 **流水与总览**
-- 我的灵石流水
-> 近7天灵石收支与主要来源去向
-- 我的赠送流水
-> 近7天送出与收到的灵石、主要对象与最近记录
-- 修行周报
-> 近7天修为、灵石、贡献、物品收支与活跃天数
-- 我的资产总览
-> 灵石、灵庄、宗门、背包与竞技场一览
-- 我的竞技场战绩
-> 近7天挑战胜负与积分变化
-- 我的通天塔记录
-> 近7天爬塔胜负、层数与奖励
-- 我的宗门任务记录
-> 近7天宗门任务消耗与奖励
-- 我的副本记录
-> 近7天副本探索层数与结果摘要
-- 我的洞府收获记录
-> 近7天收获物品与数量
-- 我的历练记录
-> 近7天事件、资源变化与奖励
-- 我的签到统计
-> 累计签到次数与本月签到天数
-- 我的突破统计
-> 突破次数、成功率与累计损失修为
+- 修行记录帮助
+> 查看修为、资产、往来流水与近期战绩
 
 **功能入口**
 - 背包帮助 / 饰品帮助 / 称号帮助
@@ -1142,6 +1100,30 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
 - 宠物帮助 / 本命法宝帮助
 - 传承帮助 / 虚神界帮助 / 前尘帮助
 """.strip()
+
+
+@help_in.handle(parameterless=[Cooldown(cd_time=0)])
+async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Message = CommandArg()):
+    """修仙帮助"""
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+
+    keyword = args.extract_plain_text().strip() if args else ""
+    if keyword:
+        # 有参数时走关键词检索，不返回整页菜单。
+        payload = search_help_commands(keyword)
+        await handle_send(
+            bot,
+            event,
+            format_help_search(payload),
+            md_type="修仙",
+            k1="帮助",
+            v1="修仙帮助",
+            k2="存档",
+            v2="我的修仙信息",
+        )
+        await help_in.finish()
+
+    msg = __base_help__
 
     await send_help_message(
         bot,
@@ -1158,6 +1140,55 @@ async def help_in_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, arg
         button_id=XiuConfig().button_id2,
     )
     await help_in.finish()
+
+
+__cultivation_records_help__ = """**修行记录帮助**
+---
+**修为与资产**
+- 修行周报
+> 近7天修为、灵石、贡献、物品收支与活跃天数
+- 我的资产总览
+> 灵石、灵庄、宗门、背包与竞技场一览
+- 我的签到统计
+> 累计签到次数与本月签到天数
+- 我的突破统计
+> 突破次数、成功率与累计损失修为
+
+**往来流水**
+- 我的灵石流水
+> 近7天灵石收支与主要来源去向
+- 我的赠送流水
+> 近7天送出与收到的灵石、主要对象与最近记录
+
+**玩法记录**
+- 我的竞技场战绩
+> 近7天挑战胜负与积分变化
+- 我的通天塔记录
+> 近7天爬塔胜负、层数与奖励
+- 我的宗门任务记录
+> 近7天宗门任务消耗与奖励
+- 我的副本记录
+> 近7天副本探索层数与结果摘要
+- 我的洞府收获记录
+> 近7天收获物品与数量
+- 我的历练记录
+> 近7天事件、资源变化与奖励
+""".strip()
+
+
+@cultivation_records_help.handle(parameterless=[Cooldown(cd_time=0)])
+async def cultivation_records_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    bot, send_group_id = await assign_bot(bot=bot, event=event)
+    await send_help_message(
+        bot,
+        event,
+        __cultivation_records_help__,
+        k1="修仙帮助",
+        v1="修仙帮助",
+        k2="我的修仙信息",
+        v2="我的修仙信息",
+    )
+    await cultivation_records_help.finish()
 
 @level_help.handle(parameterless=[Cooldown(cd_time=0)])
 async def level_help_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):

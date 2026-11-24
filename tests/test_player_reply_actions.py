@@ -101,6 +101,114 @@ async def _send_as_qq(operation):
 
 
 class PlayerReplyActionPayloadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cultivation_records_entry_and_subhelp_reach_qq_payload(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_base as base
+
+        async def send_main(bot, event):
+            await utils.send_help_message(
+                bot,
+                event,
+                base.__base_help__,
+                k1="存档",
+                v1="我的修仙信息",
+                k2="关系",
+                v2="关系帮助",
+                k3="背包",
+                v3="背包帮助",
+                k4="地图",
+                v4="地图帮助",
+            )
+
+        main_payload = await _send_as_qq(send_main)
+        main_markdown, main_links, main_buttons = _actions_from_payload(main_payload)
+        self.assertIn("[修行记录帮助](mqqapi://aio/inlinecmd?", main_markdown)
+        self.assertIn("修行记录帮助", main_links)
+        self.assertIn("我的修仙信息", main_links)
+        self.assertIn("查看修为、资产、往来流水与近期战绩", main_markdown)
+        self.assertNotIn("我的灵石流水", main_markdown)
+        self.assertEqual([], main_buttons)
+        main_commands = main_links + [command for _, command in main_buttons]
+        self.assertEqual(len(main_commands), len(set(main_commands)))
+
+        async def send_detail(bot, event):
+            await utils.send_help_message(
+                bot,
+                event,
+                base.__cultivation_records_help__,
+                k1="修仙帮助",
+                v1="修仙帮助",
+                k2="我的修仙信息",
+                v2="我的修仙信息",
+            )
+
+        detail_payload = await _send_as_qq(send_detail)
+        detail_markdown, detail_links, detail_buttons = _actions_from_payload(detail_payload)
+        self.assertIn("[我的灵石流水](mqqapi://aio/inlinecmd?", detail_markdown)
+        self.assertIn("[我的历练记录](mqqapi://aio/inlinecmd?", detail_markdown)
+        self.assertEqual(
+            {
+                "修行周报",
+                "我的资产总览",
+                "我的签到统计",
+                "我的突破统计",
+                "我的灵石流水",
+                "我的赠送流水",
+                "我的竞技场战绩",
+                "我的通天塔记录",
+                "我的宗门任务记录",
+                "我的副本记录",
+                "我的洞府收获记录",
+                "我的历练记录",
+            },
+            set(detail_links),
+        )
+        self.assertIn("近7天修为、灵石、贡献、物品收支与活跃天数", detail_markdown)
+        self.assertEqual(
+            [("修仙帮助", "修仙帮助"), ("我的修仙信息", "我的修仙信息")],
+            detail_buttons,
+        )
+        detail_commands = detail_links + [command for _, command in detail_buttons]
+        self.assertEqual(len(detail_commands), len(set(detail_commands)))
+
+    async def test_cultivation_records_help_keeps_readable_onebot_fallback(self):
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_base as base
+
+        sent = AsyncMock()
+        bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: "OneBot V11"))
+        event = SimpleNamespace(message_id="records-fallback", get_user_id=lambda: "900001")
+
+        class _XiuConfig:
+            def __init__(self, *args, **kwargs):
+                self.markdown_status = True
+                self.markdown_id = ""
+                self.markdown_id2 = ""
+                self.markdown_button_status = True
+                self.button_id2 = ""
+                self.message_optimization = False
+                self.at_sender = False
+                self.img = False
+
+        with (
+            patch.object(utils, "XiuConfig", _XiuConfig),
+            patch.object(utils, "get_chat_scene", return_value="group"),
+            patch.object(utils, "_send_event_message", sent),
+        ):
+            await utils.send_help_message(
+                bot,
+                event,
+                base.__cultivation_records_help__,
+                k1="修仙帮助",
+                v1="修仙帮助",
+            )
+
+        sent.assert_awaited_once()
+        text = str(sent.await_args.kwargs["message"])
+        self.assertIn("修行周报", text)
+        self.assertIn("我的灵石流水", text)
+        self.assertIn("近7天灵石收支与主要来源去向", text)
+        self.assertIn("我的历练记录", text)
+        self.assertNotIn("mqqapi://aio/inlinecmd", text)
+
     async def test_help_entry_link_wins_over_same_target_quick_button(self):
         async def send(bot, event):
             await utils.send_help_message(
