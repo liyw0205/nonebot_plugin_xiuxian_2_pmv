@@ -114,7 +114,7 @@ def _create_numeric_rank_key_index(
     if column_name.lower() not in available:
         return
 
-    expression = f"xiuxian_int_sort_key({db_backend.quote_ident(column_name)})"
+    expression = f"xiuxian_int_sort_key_compact({db_backend.quote_ident(column_name)})"
     try:
         conn.execute(
             f"""
@@ -157,13 +157,13 @@ def _ensure_core_indexes(conn):
     )
     _create_numeric_rank_key_index(
         conn,
-        "idx_user_xiuxian_exp_rank_key",
+        "idx_user_xiuxian_exp_rank_key_v2",
         "user_xiuxian",
         "exp",
     )
     _create_numeric_rank_key_index(
         conn,
-        "idx_user_xiuxian_stone_rank_key",
+        "idx_user_xiuxian_stone_rank_key_v2",
         "user_xiuxian",
         "stone",
     )
@@ -236,6 +236,22 @@ def _migration_20260717_0001_dedupe_user_xiuxian(conn):
             )
 
 
+def _migration_20261125_0001_compact_numeric_rank_keys(conn):
+    """Rebuild rank indexes after switching their arbitrary-integer key encoding."""
+    if not conn.table_exists("user_xiuxian"):
+        return
+
+    for column in ("exp", "stone"):
+        old_index = f"idx_user_xiuxian_{column}_rank_key"
+        conn.execute(f"DROP INDEX IF EXISTS {db_backend.quote_ident(old_index)}")
+        _create_numeric_rank_key_index(
+            conn,
+            f"idx_user_xiuxian_{column}_rank_key_v2",
+            "user_xiuxian",
+            column,
+        )
+
+
 def _migration_20260707_0001_runtime_marker(conn):
     """建立迁移基线；实际热点索引由 _ensure_core_indexes 幂等维护。"""
     _ensure_core_indexes(conn)
@@ -244,6 +260,7 @@ def _migration_20260707_0001_runtime_marker(conn):
 CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20260707_0001_runtime_marker", _migration_20260707_0001_runtime_marker),
     ("20260717_0001_dedupe_user_xiuxian", _migration_20260717_0001_dedupe_user_xiuxian),
+    ("20261125_0001_compact_numeric_rank_keys", _migration_20261125_0001_compact_numeric_rank_keys),
 ]
 
 

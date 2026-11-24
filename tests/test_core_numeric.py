@@ -96,6 +96,7 @@ class CoreNumericTests(unittest.TestCase):
         self.assertEqual([index + 1 for index in expected_desc], [row[0] for row in descending])
         self.assertEqual(sqlite_int_sort_key("1e3"), sqlite_int_sort_key("1000"))
         self.assertEqual(sqlite_int_sort_key(None), None)
+        self.assertLess(len(sqlite_int_sort_key(10**500)), len(str(10**500)) + 5)
 
     def test_sql_integer_aggregation_normalizes_each_storage_value(self):
         with sqlite3.connect(':memory:') as conn:

@@ -103,10 +103,9 @@ async def get_user_xiuxian_info(
     user_name = user_info['user_name']
 
     user_num = user_info['id']
-    rank = _sql_message().get_exp_rank(user_id)
+    rank = _sql_message().get_exp_and_stone_ranks(user_id)
     user_rank = int(rank[0])
-    stone = _sql_message().get_stone_rank(user_id)
-    user_stone = int(stone[0])
+    user_stone = int(rank[1])
 
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"

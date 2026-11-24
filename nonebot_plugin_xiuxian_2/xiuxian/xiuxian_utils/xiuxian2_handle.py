@@ -1436,7 +1436,7 @@ class XiuxianDateManage:
     def _get_numeric_rank(self, user_id, column):
         if column not in {"exp", "stone"}:
             raise ValueError(f"unsupported numeric rank column: {column}")
-        value = f'xiuxian_int_sort_key("{column}")'
+        value = f'xiuxian_int_sort_key_compact("{column}")'
         sql = f"""
             WITH target AS (
                 SELECT {value} AS value
@@ -1466,6 +1466,45 @@ class XiuxianDateManage:
     def get_stone_rank(self, user_id):
         """灵石排行"""
         return XiuxianDateManage._get_numeric_rank(self, user_id, "stone")
+
+    def get_exp_and_stone_ranks(self, user_id):
+        """Read both personal numeric ranks with one database round-trip."""
+        exp_value = 'xiuxian_int_sort_key_compact("exp")'
+        stone_value = 'xiuxian_int_sort_key_compact("stone")'
+        sql = f"""
+            WITH target AS (
+                SELECT {exp_value} AS exp_value, {stone_value} AS stone_value
+                FROM user_xiuxian
+                WHERE user_id=%s
+            )
+            SELECT
+                CASE
+                    WHEN target.exp_value IS NULL THEN 1 + (
+                        SELECT COUNT(DISTINCT {exp_value})
+                        FROM user_xiuxian
+                        WHERE {exp_value} IS NOT NULL
+                    )
+                    ELSE 1 + (
+                        SELECT COUNT(DISTINCT {exp_value})
+                        FROM user_xiuxian
+                        WHERE {exp_value} > target.exp_value
+                    )
+                END AS exp_rank,
+                CASE
+                    WHEN target.stone_value IS NULL THEN 1 + (
+                        SELECT COUNT(DISTINCT {stone_value})
+                        FROM user_xiuxian
+                        WHERE {stone_value} IS NOT NULL
+                    )
+                    ELSE 1 + (
+                        SELECT COUNT(DISTINCT {stone_value})
+                        FROM user_xiuxian
+                        WHERE {stone_value} > target.stone_value
+                    )
+                END AS stone_rank
+            FROM target
+        """
+        return self._read_query(sql, (user_id,), one=True)
 
     def get_ls_rank(self):
         """灵石排行榜"""

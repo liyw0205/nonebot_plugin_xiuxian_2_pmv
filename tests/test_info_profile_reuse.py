@@ -38,8 +38,7 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             "mppractice": 3,
         }
         manager = Mock()
-        manager.get_exp_rank.return_value = (1,)
-        manager.get_stone_rank.return_value = (2,)
+        manager.get_exp_and_stone_ranks.return_value = (1, 2)
         manager.get_root_rate.return_value = 1
         manager.get_level_power.return_value = 1000
 
