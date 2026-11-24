@@ -202,18 +202,20 @@ async def prepare(*, seed: bool = True, minimal_map: bool = False):
             game.conn.commit()
         return context, (game, player, trade, impart)
 
-    from nonebot_plugin_xiuxian_2.plugin import startup
+    from nonebot_plugin_xiuxian_2.plugin import install_driver_hooks, startup
 
+    driver = nonebot.get_driver()
+    install_driver_hooks(driver)
     state, _, context, lifecycle = await startup(context)
     if state.error:
         raise AssertionError(state.error)
     # Migrated matcher closures resolve the same runtime context as driver startup.
-    hook = nonebot.get_driver()._xiuxian_refactored_lifecycle_hooks[0]
+    hook = driver._xiuxian_refactored_lifecycle_hooks[0]
     closure = inspect.getclosurevars(hook).nonlocals
     closure["holder"].update(context=context, lifecycle=lifecycle)
     from nonebot_plugin_xiuxian_2.adapters.nonebot.commands import register_migrated_matchers
 
-    register_migrated_matchers(nonebot.get_driver(), closure["holder"])
+    register_migrated_matchers(driver, closure["holder"])
     if seed:
         for uid, name in (("900001", "诊断道友"), ("900002", "诊断对手"), ("900003", "诊断管理")):
             game.create_user(uid, "金", "天灵根", 1000, "2026-11-11 00:00:00", name)

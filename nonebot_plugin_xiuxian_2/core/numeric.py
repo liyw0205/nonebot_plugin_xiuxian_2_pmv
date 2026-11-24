@@ -148,6 +148,7 @@ def register_numeric_functions(connection: Any) -> NumericFunctionState:
     connection.create_function("xiuxian_int_cmp", 5, state.track(sqlite_int_compare), deterministic=True)
     connection.create_function("xiuxian_int_text", 1, sqlite_int_text, deterministic=True)
     connection.create_function("xiuxian_int_text", 3, state.track(sqlite_int_text), deterministic=True)
+    connection.create_function("xiuxian_int_sort_key", 1, sqlite_int_sort_key, deterministic=True)
     connection.create_function("xiuxian_int_add", 2, _sqlite_int_add, deterministic=True)
     connection.create_function("xiuxian_int_sub", 2, _sqlite_int_sub, deterministic=True)
     connection.create_function("xiuxian_int_store", 1, _sqlite_int_store, deterministic=True)
@@ -188,6 +189,21 @@ def sqlite_int_text(value: Any, field: str = "", subject: str = "actor") -> str 
     the existing int(REAL) semantics. NULL retains SQLite's usual sort order.
     """
     return None if value is None else str(require_exact_integer(value, field=field, subject=subject) if field else as_int_like(value))
+
+
+def sqlite_int_sort_key(value: Any) -> bytes | None:
+    """Encode an arbitrary integer so SQLite's byte ordering matches integer ordering."""
+    if value is None:
+        return None
+    number = as_int_like(value)
+    magnitude = str(abs(number)).encode("ascii")
+    # SQLite's maximum value length is below the four-byte magnitude limit.
+    length = len(magnitude).to_bytes(4, "big")
+    if number < 0:
+        return b"\x00" + bytes(255 - byte for byte in length) + bytes(
+            255 - byte for byte in magnitude
+        )
+    return b"\x01" + length + magnitude
 
 
 def _legacy_crystal_value(value: Any, storage_type: Any) -> int | None:

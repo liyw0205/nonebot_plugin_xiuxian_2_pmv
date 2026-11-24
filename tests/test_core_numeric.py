@@ -9,6 +9,7 @@ from nonebot_plugin_xiuxian_2.core.numeric import (
     normalize_sect_row,
     normalize_user_row,
     register_numeric_functions,
+    sqlite_int_sort_key,
 )
 
 
@@ -45,6 +46,56 @@ class CoreNumericTests(unittest.TestCase):
             rows = conn.execute('SELECT value,dense_rank() OVER (ORDER BY xiuxian_int_text(value) COLLATE xiuxian_integer DESC) FROM numbers ORDER BY xiuxian_int_text(value) COLLATE xiuxian_integer DESC,rowid').fetchall()
         self.assertEqual([str(int(1e29) + 1), 1e29, str(int(1e29)), '9e0', -2, '-1e3', '-100000000000000000001', None], [row[0] for row in rows])
         self.assertEqual([1, 2, 2, 3, 4, 5, 6, 7], [row[1] for row in rows])
+
+    def test_binary_sort_key_matches_integer_order_for_arbitrary_sizes(self):
+        huge = 10**500
+        values = [
+            None,
+            "-1e3",
+            "-1000",
+            str(-huge - 1),
+            str(-huge),
+            "-2",
+            "not-an-integer",
+            "0",
+            "1e3",
+            "1000",
+            str(huge),
+            str(huge + 1),
+        ]
+        with sqlite3.connect(":memory:") as conn:
+            register_numeric_functions(conn)
+            conn.execute("CREATE TABLE numbers(value)")
+            conn.executemany("INSERT INTO numbers VALUES(?)", [(value,) for value in values])
+            ascending = conn.execute(
+                "SELECT rowid FROM numbers "
+                "ORDER BY xiuxian_int_sort_key(value) ASC, rowid ASC"
+            ).fetchall()
+            descending = conn.execute(
+                "SELECT rowid FROM numbers "
+                "ORDER BY xiuxian_int_sort_key(value) DESC, rowid ASC"
+            ).fetchall()
+
+        expected_asc = sorted(
+            range(len(values)),
+            key=lambda index: (
+                values[index] is not None,
+                as_int_like(values[index]),
+                index,
+            ),
+        )
+        expected_desc = sorted(
+            range(len(values)),
+            key=lambda index: (
+                values[index] is None,
+                -as_int_like(values[index]),
+                index,
+            ),
+        )
+        self.assertEqual([index + 1 for index in expected_asc], [row[0] for row in ascending])
+        self.assertEqual([index + 1 for index in expected_desc], [row[0] for row in descending])
+        self.assertEqual(sqlite_int_sort_key("1e3"), sqlite_int_sort_key("1000"))
+        self.assertEqual(sqlite_int_sort_key(None), None)
 
     def test_sql_integer_aggregation_normalizes_each_storage_value(self):
         with sqlite3.connect(':memory:') as conn:

@@ -100,6 +100,35 @@ def _create_numeric_rank_index(
         )
 
 
+def _create_numeric_rank_key_index(
+    conn,
+    index_name: str,
+    table_name: str,
+    column_name: str,
+):
+    """Index arbitrary-integer keys for fast range counts in personal ranks."""
+    if not conn.table_exists(table_name):
+        return
+
+    available = {name.lower() for name in conn.column_names(table_name)}
+    if column_name.lower() not in available:
+        return
+
+    expression = f"xiuxian_int_sort_key({db_backend.quote_ident(column_name)})"
+    try:
+        conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS {db_backend.quote_ident(index_name)}
+            ON {db_backend.quote_ident(table_name)} ({expression})
+            """
+        )
+    except Exception as exc:
+        logger.warning(
+            f"[xiuxian-db] 跳过数值排行键索引 {index_name}："
+            f"table={table_name}, column={column_name}, error={exc}"
+        )
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -123,6 +152,18 @@ def _ensure_core_indexes(conn):
     _create_numeric_rank_index(
         conn,
         "idx_user_xiuxian_stone_numeric_rank",
+        "user_xiuxian",
+        "stone",
+    )
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_exp_rank_key",
+        "user_xiuxian",
+        "exp",
+    )
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_stone_rank_key",
         "user_xiuxian",
         "stone",
     )

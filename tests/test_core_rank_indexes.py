@@ -60,6 +60,20 @@ class CoreRankIndexTests(unittest.TestCase):
         self.assertFalse(any("USE TEMP B-TREE FOR ORDER BY" in item for item in exp_plan))
         self.assertFalse(any("USE TEMP B-TREE FOR ORDER BY" in item for item in stone_plan))
 
+        key_rank_sql = (
+            "WITH target AS (SELECT xiuxian_int_sort_key(exp) AS value "
+            "FROM user_xiuxian WHERE user_id=%s) "
+            "SELECT 1 + COUNT(DISTINCT xiuxian_int_sort_key(exp)) "
+            "FROM user_xiuxian, target "
+            "WHERE xiuxian_int_sort_key(exp) > target.value"
+        )
+        key_plan = self._plan(key_rank_sql, "viewer")
+        self.assertTrue(any("idx_user_xiuxian_exp_rank_key" in item for item in key_plan))
+        stone_key_plan = self._plan(key_rank_sql.replace("exp", "stone"), "viewer")
+        self.assertTrue(
+            any("idx_user_xiuxian_stone_rank_key" in item for item in stone_key_plan)
+        )
+
         with db_backend.connection(self.database) as conn:
             handle = type("RankHandle", (), {})()
             handle._read_query = lambda sql, params=None, **kwargs: tuple(
@@ -88,15 +102,15 @@ class CoreRankIndexTests(unittest.TestCase):
                 str(row[3])
                 for row in conn.execute(
                     "EXPLAIN QUERY PLAN "
-                    "WITH target AS (SELECT xiuxian_int_text(\"exp\") COLLATE xiuxian_integer AS value "
+                    "WITH target AS (SELECT xiuxian_int_sort_key(\"exp\") AS value "
                     "FROM user_xiuxian WHERE user_id=%s) "
-                    "SELECT 1 + COUNT(DISTINCT xiuxian_int_text(\"exp\") COLLATE xiuxian_integer) "
+                    "SELECT 1 + COUNT(DISTINCT xiuxian_int_sort_key(\"exp\")) "
                     "FROM user_xiuxian, target "
-                    "WHERE xiuxian_int_text(\"exp\") COLLATE xiuxian_integer > target.value",
+                    "WHERE xiuxian_int_sort_key(\"exp\") > target.value",
                     ("viewer",),
                 ).fetchall()
             ]
-        self.assertTrue(any("idx_user_xiuxian_exp_numeric_rank" in item for item in plan))
+        self.assertTrue(any("idx_user_xiuxian_exp_rank_key" in item for item in plan))
 
     def test_legacy_non_numeric_text_does_not_block_index_migration(self):
         run_core_migrations(self.database)
@@ -110,6 +124,8 @@ class CoreRankIndexTests(unittest.TestCase):
             }
         self.assertIn("idx_user_xiuxian_exp_numeric_rank", indexes)
         self.assertIn("idx_user_xiuxian_stone_numeric_rank", indexes)
+        self.assertIn("idx_user_xiuxian_exp_rank_key", indexes)
+        self.assertIn("idx_user_xiuxian_stone_rank_key", indexes)
 
 
 if __name__ == "__main__":

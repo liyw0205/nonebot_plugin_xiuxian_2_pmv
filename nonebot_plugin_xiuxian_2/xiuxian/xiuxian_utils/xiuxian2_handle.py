@@ -1436,7 +1436,7 @@ class XiuxianDateManage:
     def _get_numeric_rank(self, user_id, column):
         if column not in {"exp", "stone"}:
             raise ValueError(f"unsupported numeric rank column: {column}")
-        value = f'xiuxian_int_text("{column}") COLLATE xiuxian_integer'
+        value = f'xiuxian_int_sort_key("{column}")'
         sql = f"""
             WITH target AS (
                 SELECT {value} AS value

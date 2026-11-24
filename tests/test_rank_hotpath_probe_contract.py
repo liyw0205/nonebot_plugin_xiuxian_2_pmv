@@ -17,6 +17,11 @@ class RankHotpathProbeContractTests(unittest.TestCase):
         self.assertIn(".rank-hotpath-source", source)
         self.assertIn(".rank-hotpath-temp", probe)
 
+    def test_command_probe_installs_hooks_before_reusing_matcher_holder(self):
+        source = (ROOT / "tests/command_probe.py").read_text(encoding="utf-8")
+        self.assertIn("install_driver_hooks(driver)", source)
+        self.assertIn("driver._xiuxian_refactored_lifecycle_hooks[0]", source)
+
     def test_validation_keeps_only_supported_comparisons(self):
         probe = (ROOT / "scripts/rank_hotpath_probe.py").read_text(encoding="utf-8")
         runner = (ROOT / "scripts/run_rank_hotpath_validation.sh").read_text(encoding="utf-8")
@@ -28,7 +33,10 @@ class RankHotpathProbeContractTests(unittest.TestCase):
         self.assertIn("config-profile", runner)
         self.assertIn("base-profile", runner)
         self.assertIn("state-profile", runner)
+        self.assertIn("rank-key FIXTURE", runner)
         self.assertIn("flock -w 600", runner)
+        self.assertIn("--rank-key-compare", probe)
+        self.assertIn("key_exp_rank", probe)
         self.assertNotIn("dual-rank", probe)
         self.assertNotIn("dual-rank", runner)
 
