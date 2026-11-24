@@ -76,7 +76,7 @@
 
 ## 灰度开关、回滚和已知限制
 
-关闭开关后保留旧命令和数据格式。探索遭遇选择、怪物模板/属性生成、战斗编排、结果映射和奖励分配由 `features/dungeon` 的 resolution/encounter/reward application 承担；NoneBot matcher 只组装首次 intent、调用 application 并投递已持久化回复。已有战斗引擎通过输入/输出端口调用，不复制战斗算法。旧 `DungeonManager` 的遭遇和怪物方法保留为兼容 facade；境界换算、等级 power 与物品目录通过现有数据端口读取。
+关闭开关后保留旧命令和数据格式。`DungeonExploreExecutionApplication` 组合 `DungeonExplorePlanApplication`、encounter 与 reward 业务，首次 resolve 从已持久化 intent 构造计划，prepared 恢复直接结算既有计划；遭遇选择、怪物模板/属性生成、战斗编排、结果映射和奖励分配由 feature 承担。NoneBot matcher 只组装首次 intent、调用 execution application 并投递已持久化回复。已有战斗引擎通过输入/输出端口调用，不复制战斗算法。旧 `DungeonManager` 的遭遇和怪物方法保留为兼容 facade；境界换算、等级 power 与物品目录通过现有数据端口读取。
 
 intent 保存三个用途隔离的确定性随机 seed、模板、队伍、成员资源、战斗属性、库存与修正系数。intent 阶段重试只从持久快照生成计划；不会重新读取队伍/属性/背包，也不会重抽遭遇。计划进入 `prepared` 后重试直接结算该计划。准备或结算前发现副本状态、队伍、玩家资源或奖励物品快照已变化时，保存具体拒绝并保持资产不变；已完成请求重放原回复且不重复战斗或发奖。奖励路径要求提供冻结背包快照，不允许读取 live 背包补值。
 
@@ -86,7 +86,7 @@ intent 保存三个用途隔离的确定性随机 seed、模板、队伍、成�
 
 ## 适配器差异
 
-命令适配器首次读取成员资料由 `PlayerProfileApplication` 处理，CD 与背包由 `DungeonExploreSnapshotApplication` 的只读 repository 批量读取，缺 schema 时 fail closed；该结果先写入 intent。`DungeonExplorePlanApplication` 只接受 intent，遭遇、战斗、奖励与回复映射通过显式端口完成；Web 适配器仍只解析 DTO。领域 application 不依赖 NoneBot、Flask 或具体数据库驱动，探索快照 repository 是明确的 SQLite 读取边界。
+命令适配器首次读取成员资料由 `PlayerProfileApplication` 处理，CD 与背包由 `DungeonExploreSnapshotApplication` 的只读 repository 批量读取，缺 schema 时 fail closed；该结果先写入 intent。`DungeonExploreExecutionApplication.resolve` 只从 intent 构造首次计划，`resume_prepared` 直接结算持久化的既有计划；`DungeonExplorePlanApplication` 通过显式端口调用遭遇、战斗和奖励规则，持久化计划由 `DungeonApplication`/repository 准备与结算。Web 适配器仍只解析 DTO。领域 application 不依赖 NoneBot、Flask 或具体数据库驱动，探索快照 repository 是明确的 SQLite 读取边界。
 
 ## 测试与手工验收
 
