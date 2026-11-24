@@ -95,6 +95,7 @@ def registered_commands() -> tuple[set[str], set[str]]:
 # 三条已补齐的命令 → (所属帮助块文本, 身份)
 HELP_BLOCKS = {
     "修仙帮助": slice_between(BASE_SRC, "**修仙帮助**"),
+    "修行记录帮助": slice_between(BASE_SRC, '__cultivation_records_help__ = """'),
     "宗门帮助": slice_between(SECT_SRC, '__sect_help__ = f"""'),
     "背包帮助": slice_between(BACK_SRC, "**背包帮助**"),
     "仙肆帮助": slice_between(TRADE_HELP_SRC, "**仙肆帮助（全服交易）**"),
@@ -102,10 +103,18 @@ HELP_BLOCKS = {
 }
 
 EXPECTED = {
-    "我的灵石流水": "修仙帮助",
-    "我的资产总览": "修仙帮助",
-    "我的签到统计": "修仙帮助",
-    "我的突破统计": "修仙帮助",
+    "我的灵石流水": "修行记录帮助",
+    "我的资产总览": "修行记录帮助",
+    "我的签到统计": "修行记录帮助",
+    "我的突破统计": "修行记录帮助",
+    "我的赠送流水": "修行记录帮助",
+    "修行周报": "修行记录帮助",
+    "我的竞技场战绩": "修行记录帮助",
+    "我的通天塔记录": "修行记录帮助",
+    "我的宗门任务记录": "修行记录帮助",
+    "我的副本记录": "修行记录帮助",
+    "我的洞府收获记录": "修行记录帮助",
+    "我的历练记录": "修行记录帮助",
     "我的宗门贡献流水": "宗门帮助",
     "我的物品流水": "背包帮助",
     "仙肆关注": "仙肆帮助",
@@ -163,6 +172,9 @@ class HelpDiscoverabilityTests(unittest.TestCase):
         self.assertIn("**福利**", HELP_BLOCKS["宗门帮助"])
         self.assertIn("**查看**", HELP_BLOCKS["背包帮助"])
         self.assertIn("**使用与整理**", HELP_BLOCKS["背包帮助"])
+        self.assertIn("**修为与资产**", HELP_BLOCKS["修行记录帮助"])
+        self.assertIn("**往来流水**", HELP_BLOCKS["修行记录帮助"])
+        self.assertIn("**玩法记录**", HELP_BLOCKS["修行记录帮助"])
 
     def test_existing_entries_are_not_removed(self) -> None:
         # 抽样固定既有条目，确保只追加、没有顺手删改。
@@ -172,11 +184,20 @@ class HelpDiscoverabilityTests(unittest.TestCase):
         self.assertIn("宗门周常", HELP_BLOCKS["宗门帮助"])
         self.assertIn("我的背包 [页码]", HELP_BLOCKS["背包帮助"])
         self.assertIn("快速对比 [物品1] [物品2]", HELP_BLOCKS["背包帮助"])
+        self.assertIn("修行记录帮助", HELP_BLOCKS["修仙帮助"])
+
+    def test_main_help_summarizes_personal_reports(self) -> None:
+        main_help = HELP_BLOCKS["修仙帮助"]
+        self.assertIn("- 修行记录帮助", main_help)
+        for command in EXPECTED:
+            if EXPECTED[command] == "修行记录帮助":
+                self.assertNotIn(f"- {command}", main_help)
 
     def test_help_buttons_unchanged(self) -> None:
         """快捷按钮是既有合同，本切片不该动它们。"""
         self.assertIn('k1="存档",', BASE_SRC)
         self.assertIn("v1=\"我的修仙信息\"", BASE_SRC)
+        self.assertIn('on_command("修行记录帮助"', BASE_SRC)
         self.assertIn('k1="背包", v1="我的背包",', BACK_SRC)
         self.assertIn("button_id=XiuConfig().button_id2", SECT_SRC)
 

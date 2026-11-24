@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_p
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh | bash
 ```
 
-Docker 发布采用 base 分片 + plugin 单包；日常更新通常只下载 plugin：
+Docker 更新支持自动判断、仅更新插件或完整更新：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scripts/install_docker.sh \
@@ -53,15 +53,12 @@ https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scr
 
 完整安装、更新和 NapCat 连接说明见 [安装文档](docs/installation.md)。
 
-### 发布资产与下载回退
+### 安装包下载
 
-正式发布只使用 `vMAJOR.MINOR.PATCH` tag，GitHub Release 必须提供唯一资产
-`project.tar.gz`。安装器默认读取 `releases/latest/download/project.tar.gz`；需要固定
-版本时设置 `XIUXIAN_RELEASE_TAG=vX.Y.Z`。代理只用于下载加速，并按测速结果尝试
-`gh-proxy.com`、`ghfast.top`、`ghproxy.vip`、`gh-proxy.org`，代理下载结果必须是可列目录
-的 tar.gz；代理失败后必定回退 GitHub 直连。代理和直连都失败时安装停止，不改运行数据。
-已核实存在的正式 Release 包括 `v1.3.0`；安装器默认使用最新正式 Release，不存在的 tag 或缺失 `project.tar.gz` 不应
-被当作可安装版本。
+安装器默认下载最新正式版，资产名为 `project.tar.gz`。如需固定版本，设置
+`XIUXIAN_RELEASE_TAG=vX.Y.Z`。下载时会尝试测速通过的加速源（`gh-proxy.com`、
+`ghfast.top`、`ghproxy.vip`、`gh-proxy.org`），校验归档后再安装；加速源不可用时回退
+GitHub 直连。两种方式都失败时安装会停止，不会修改运行数据。最新正式版为 `v1.3.21`。
 
 ## 最小配置
 
@@ -172,7 +169,7 @@ data/xiuxian/
 
 启动时会按根目录 `requirements.txt` 检查缺失依赖。Linux 安装/运行默认使用
 `/root/myenv`；可用 `XIUXIAN_VENV_PATH` 或安装器的 `--venv PATH` 覆盖（`--venv`
-优先）。本机开发测试使用共享解释器 `/home/nonebot-shared-venv/bin/python`。手动更新：
+优先）。手动更新：
 
 ```bash
 source "${XIUXIAN_VENV_PATH:-/root/myenv}/bin/activate"

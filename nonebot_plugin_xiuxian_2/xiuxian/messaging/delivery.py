@@ -31,33 +31,45 @@ _INLINE_COMMAND_LINK_RE = re.compile(
 )
 
 
-def _strip_keyboard_duplicate_links(
+def _command_target(command: Any) -> str:
+    return str(command or "").strip()
+
+
+def _deduplicate_message_actions(
     markdown: str,
     rows: list[list[tuple[str, str]]],
-) -> str:
-    """Remove a full inline-command row when the same actions are keyboard buttons."""
-    targets = {(str(label), str(command)) for row in rows for label, command in row}
-    if not targets:
-        return markdown
+) -> tuple[str, list[list[tuple[str, str]]]]:
+    """Keep each command target once, preferring contextual Markdown links."""
+    seen: set[str] = set()
 
     lines: list[str] = []
     for line in str(markdown or " ").split("\r"):
-        matches = list(_INLINE_COMMAND_LINK_RE.finditer(line))
-        if not matches:
-            lines.append(line)
-            continue
-        pairs = []
-        for match in matches:
+        def keep_first(match: re.Match[str]) -> str:
             command = parse_qs(match.group(2), keep_blank_values=True).get("command", [""])[0]
-            pairs.append((match.group(1), command))
-        if pairs and all(pair in targets for pair in pairs):
-            remainder = _INLINE_COMMAND_LINK_RE.sub("", line)
-            remainder = remainder.replace("|", "").replace("---", "").strip()
-            if not remainder:
-                continue
-        lines.append(line)
+            target = _command_target(command)
+            if not target:
+                return match.group(0)
+            if target in seen:
+                return match.group(1)
+            seen.add(target)
+            return match.group(0)
 
-    return "\r".join(lines).strip("\r") or " "
+        lines.append(_INLINE_COMMAND_LINK_RE.sub(keep_first, line))
+
+    unique_rows: list[list[tuple[str, str]]] = []
+    for row in rows:
+        unique_row = []
+        for label, command in row:
+            target = _command_target(command)
+            if target and target in seen:
+                continue
+            if target:
+                seen.add(target)
+            unique_row.append((label, command))
+        if unique_row:
+            unique_rows.append(unique_row)
+
+    return "\r".join(lines).strip("\r") or " ", unique_rows
 
 
 class MessageDeliveryService:
@@ -336,8 +348,10 @@ class MessageDeliveryService:
             from ..adapter_compat import MessageSegment
 
             rows = keyboard_rows or []
-            if rows and capabilities.keyboard:
-                markdown = _strip_keyboard_duplicate_links(markdown or " ", rows)
+            markdown, rows = _deduplicate_message_actions(
+                markdown or " ", rows if capabilities.keyboard else []
+            )
+            if rows:
                 message = MessageSegment.markdown_keyboard(bot, markdown, rows)
             else:
                 message = MessageSegment.markdown(

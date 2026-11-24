@@ -293,7 +293,7 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
             include_reference=False,
         )
 
-    async def test_keyboard_removes_duplicate_inline_command_row(self) -> None:
+    async def test_keyboard_duplicate_targets_preserve_inline_links_without_buttons(self) -> None:
         service = MessageDeliveryService()
         bot = SimpleNamespace(self_id="bot-1")
         event = object()
@@ -312,6 +312,10 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
                 "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown_keyboard",
                 return_value=markdown_segment,
             ) as build_segment,
+            patch(
+                "nonebot_plugin_xiuxian_2.xiuxian.adapter_compat.MessageSegment.markdown",
+                return_value=markdown_segment,
+            ) as build_markdown,
             patch.object(
                 service,
                 "reply",
@@ -326,7 +330,8 @@ class DeliveryServiceTests(unittest.IsolatedAsyncioTestCase):
                 keyboard_rows=[[('查看', '我的背包 2'), ('下一页', '下一页')]],
             )
 
-        self.assertEqual("详情", build_segment.call_args.args[1])
+        build_segment.assert_not_called()
+        build_markdown.assert_called_once_with(bot, markdown, "")
 
     async def test_keyboard_build_failure_falls_back_to_plain_text(self) -> None:
         registry = QQCapabilityRegistry({"bot-1": {"keyboard": True}})
