@@ -1469,14 +1469,8 @@ async def handle_send2(bot, event, msg: str):
             await _send_event_message(bot=bot, event=event, message=msg)
 
 def generate_page_param(page_list: list) -> dict:
+    buttons, page_tail = _page_action_pairs(page_list)
     values = []
-    buttons = []
-
-    # 先收集所有按钮对
-    i = 0
-    while i + 1 < len(page_list):
-        buttons.append((page_list[i], page_list[i+1]))
-        i += 2
 
     # 最多取 9 组（18个参数）
     MAX_BUTTON_PAIRS = 9
@@ -1499,37 +1493,15 @@ def generate_page_param(page_list: list) -> dict:
 
     # 永远把页码文字放在最后（即使被截断了也要显示）
     if len(page_list) % 2 == 1:
-        values.append(generate_command(page_list[-1]))
+        values.append(generate_command(page_tail))
 
     result = {"key": "t2", "values": values}
     
     return result
 
-def build_native_page_text(page_list: list[str]) -> str:
-    # page_list: [k1,v1,k2,v2,...,page_text]
-    pairs = []
+def _page_action_pairs(page_list: list[str]) -> tuple[list[tuple[str, str]], str]:
+    """Drop a next-page action when a numbered list is already on its last page."""
     page_tail = ""
-    n = len(page_list)
-
-    if n % 2 == 1:
-        page_tail = page_list[-1]
-        n -= 1
-
-    for i in range(0, min(n, 18), 2):  # 最多9个按钮=18项
-        k = page_list[i]
-        v = quote(page_list[i + 1], safe="")
-        pairs.append(f"[{k}](mqqapi://aio/inlinecmd?command={v}&enter=false&reply=false)")
-
-    text = " | ".join(pairs)
-    if page_tail:
-        text += f"\r{page_tail}"
-    return text
-
-def build_native_page_rows(page_list: list[str]) -> tuple[list[list[tuple[str, str]]], str]:
-    page_tail = ""
-    if not page_list:
-        return [], page_tail
-
     n = len(page_list)
     if n % 2 == 1:
         page_tail = str(page_list[-1])
@@ -1539,6 +1511,27 @@ def build_native_page_rows(page_list: list[str]) -> tuple[list[list[tuple[str, s
         (str(page_list[i]), str(page_list[i + 1]))
         for i in range(0, min(n, 18), 2)
     ]
+    match = re.fullmatch(r"\s*(\d+)\s*/\s*(\d+)\s*", page_tail)
+    if match and int(match.group(1)) >= int(match.group(2)):
+        buttons = [pair for pair in buttons if pair[0] not in {"翻页", "下一页"}]
+    return buttons, page_tail
+
+
+def build_native_page_text(page_list: list[str]) -> str:
+    # page_list: [k1,v1,k2,v2,...,page_text]
+    buttons, page_tail = _page_action_pairs(page_list)
+    links = []
+    for label, command in buttons:
+        encoded = quote(command, safe="")
+        links.append(f"[{label}](mqqapi://aio/inlinecmd?command={encoded}&enter=false&reply=false)")
+
+    text = " | ".join(links)
+    if page_tail:
+        text += f"\r{page_tail}"
+    return text
+
+def build_native_page_rows(page_list: list[str]) -> tuple[list[list[tuple[str, str]]], str]:
+    buttons, page_tail = _page_action_pairs(page_list)
     return _build_keyboard_rows(buttons), page_tail
 
 def _extract_markdown_keyboard_buttons(md_text: str) -> tuple[str, list[list[tuple[str, str]]]]:
