@@ -449,6 +449,12 @@
     },
     {
       "aliases": [],
+      "feature": "base",
+      "name": "修行记录帮助",
+      "permission": "user"
+    },
+    {
+      "aliases": [],
       "feature": "compensation",
       "name": "兑换",
       "permission": "user"

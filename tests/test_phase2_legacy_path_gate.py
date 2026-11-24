@@ -852,8 +852,10 @@ class Phase2LegacyPathGateTests(unittest.TestCase):
         # membership file and its hash remain untouched.
         # Directed collect conversion adds one declared compatibility command;
         # the frozen membership file and its hash remain unchanged.
-        self.assertEqual(report["default_legacy_command_count"], 661)
-        self.assertEqual(report["default_legacy_command_backlog_count"], 347)
+        # The cultivation-record subhelp adds one legacy help matcher, moving
+        # the derived counts 661->662 and 347->348 without changing membership.
+        self.assertEqual(report["default_legacy_command_count"], 662)
+        self.assertEqual(report["default_legacy_command_backlog_count"], 348)
         scope_path = Path(__file__).resolve().parents[1] / "docs/refactor_phase2_legacy_paths.json"
         scope = json.loads(scope_path.read_text(encoding="utf-8"))
         inventory_drift_count = sum(len(entries) for entries in report["source_inventory_added"].values())
