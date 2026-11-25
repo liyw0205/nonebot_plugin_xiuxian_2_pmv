@@ -9,7 +9,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...core.numeric import as_int_like
-from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
+from ..base.public_display_snapshot import shared_display_snapshot
 from .claim_receipt_view import ActivityClaimReceiptView
 from .sign_history_view import ActivitySignDayView
 
@@ -506,19 +506,23 @@ class ActivityReadModelSqlRepository:
         return result
 
     def boss_rank(self, activity_key: str, limit: int = 10) -> list[dict[str, Any]]:
+        return self.boss_rank_snapshot(activity_key, limit)["rows"]
+
+    def boss_rank_snapshot(
+        self, activity_key: str, limit: int = 10
+    ) -> dict[str, Any]:
         if not self.database.is_file():
-            return []
+            return {"rows": [], "as_of": ""}
         activity_key = str(activity_key).strip()
         limit = max(0, min(int(limit), 100))
         if not activity_key or limit == 0:
-            return []
-        key = shared_snapshot_key(self.database, "activity-boss-rank-v1", activity_key, limit)
-        return process_read_cache.get_or_load(
-            key,
-            database_path=self.database,
-            ttl=60 * 60,
+            return {"rows": [], "as_of": ""}
+        return shared_display_snapshot(
+            self.database,
+            "activity-boss-rank-v1",
+            activity_key,
+            limit,
             loader=lambda: self._load_boss_rank(activity_key, limit),
-            snapshot=True,
         )
 
     def _load_boss_rank(self, activity_key: str, limit: int) -> list[dict[str, Any]]:
@@ -617,33 +621,55 @@ class ActivityReadModelSqlRepository:
         self, source: str, activity_key: str, limit: int = 10
     ) -> list[dict[str, Any]]:
         """Top-N rows for one configured rank board (empty when unavailable)."""
+        return self.board_rank_snapshot(source, activity_key, limit)["rows"]
+
+    def board_rank_snapshot(
+        self, source: str, activity_key: str, limit: int = 10
+    ) -> dict[str, Any]:
+        """Bounded display rows; personal standing and claims remain live."""
         source = str(source or "").strip()
         limit = max(0, min(int(limit), 100))
         if limit == 0:
-            return []
+            return {"rows": [], "as_of": ""}
         if source == "sign":
-            return [
-                {
-                    "user_id": str(row.get("user_id") or ""),
-                    "value": max(0, int(row.get("sign_days") or 0)),
-                    "user_name": str(row.get("user_name") or ""),
-                }
-                for row in self._load_sign_rank(limit)
-            ]
+            return shared_display_snapshot(
+                self.database,
+                "activity-rank-sign-v1",
+                limit,
+                loader=lambda: [
+                    {
+                        "user_id": str(row.get("user_id") or ""),
+                        "value": max(0, int(row.get("sign_days") or 0)),
+                        "user_name": str(row.get("user_name") or ""),
+                    }
+                    for row in self._load_sign_rank(limit)
+                ],
+            )
         if source == "boss":
-            return [
-                {
-                    "user_id": str(row.get("user_id") or ""),
-                    "value": max(0, int(row.get("total_damage") or 0)),
-                    "user_name": str(row.get("user_name") or ""),
-                }
-                for row in self._load_boss_rank(str(activity_key), limit)
-            ]
+            snapshot = self.boss_rank_snapshot(str(activity_key), limit)
+            return {
+                **snapshot,
+                "rows": [
+                    {
+                        "user_id": str(row.get("user_id") or ""),
+                        "value": max(0, int(row.get("total_damage") or 0)),
+                        "user_name": str(row.get("user_name") or ""),
+                    }
+                    for row in snapshot["rows"]
+                ],
+            }
         spec = self._BOARD_RANK_SQL.get(source)
         key = str(activity_key).strip()
         if spec is None or not key or not self.database.is_file():
-            return []
-        return self._load_board_rank(source, key, limit, spec)
+            return {"rows": [], "as_of": ""}
+        return shared_display_snapshot(
+            self.database,
+            "activity-rank-board-v1",
+            source,
+            key,
+            limit,
+            loader=lambda: self._load_board_rank(source, key, limit, spec),
+        )
 
     def _load_board_rank(
         self, source: str, key: str, limit: int, spec
@@ -790,6 +816,97 @@ class ActivityReadModelSqlRepository:
                 return 0
             row = uow.query_one(total_sql, (key,))
         return max(0, int((row or {}).get("total") or 0))
+
+    def board_standing(
+        self, source: str, activity_key: str, user_id: str
+    ) -> tuple[int, int, int]:
+        """Return the current (rank, total, value), combining sign reads."""
+        source = str(source or "").strip()
+        key = str(activity_key).strip()
+        uid = str(user_id or "").strip()
+        if not self.database.is_file():
+            return 0, 0, 0
+        if not uid:
+            return 0, self.board_total(source, key), 0
+        if source == "sign":
+            sql = """
+                WITH viewer AS (SELECT ? AS user_id),
+                target AS (
+                    SELECT viewer.user_id AS own_id,
+                           COALESCE((SELECT sign_days FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),0) AS own_days,
+                           COALESCE((SELECT total_sign_days FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),0) AS own_total,
+                           COALESCE((SELECT last_sign_date FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),'') AS own_last
+                    FROM viewer
+                ),
+                rows AS (
+                    SELECT target.own_id,target.own_days,target.own_total,target.own_last,
+                           activity_user.user_id,activity_user.sign_days,
+                           activity_user.total_sign_days,activity_user.last_sign_date
+                    FROM activity_user CROSS JOIN target
+                ),
+                counts AS (
+                    SELECT COUNT(CASE WHEN sign_days>0 THEN 1 END) AS total,
+                           COUNT(CASE WHEN own_days>0 AND (
+                               sign_days>own_days
+                               OR (sign_days=own_days AND total_sign_days>own_total)
+                               OR (sign_days=own_days AND total_sign_days=own_total
+                                   AND last_sign_date<own_last)
+                               OR (sign_days=own_days AND total_sign_days=own_total
+                                   AND last_sign_date=own_last AND user_id<own_id)
+                           ) THEN 1 END) AS better
+                    FROM rows
+                )
+                SELECT target.own_days AS value,
+                       counts.total,counts.better FROM counts
+                CROSS JOIN target
+            """
+            try:
+                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                    row = uow.query_one(sql, (uid,))
+            except (OSError, sqlite3.Error):
+                return 0, 0, 0
+            value = max(0, int((row or {}).get("value") or 0))
+            total = max(0, int((row or {}).get("total") or 0))
+            better = max(0, int((row or {}).get("better") or 0))
+            return (better + 1 if value > 0 else 0), total, value
+        if source == "boss" and key:
+            sql = """
+                WITH viewer AS (SELECT ? AS user_id),
+                target AS (
+                    SELECT viewer.user_id AS own_id,
+                           COALESCE((SELECT total_damage FROM activity_boss_damage
+                                     WHERE activity_key=? AND user_id=viewer.user_id
+                                     ORDER BY rowid ASC LIMIT 1),0) AS own_damage
+                    FROM viewer
+                ),
+                rows AS (
+                    SELECT target.own_id,target.own_damage,
+                           damage.user_id,damage.total_damage
+                    FROM activity_boss_damage AS damage CROSS JOIN target
+                    WHERE damage.activity_key=?
+                ),
+                counts AS (
+                    SELECT COUNT(CASE WHEN total_damage>0 THEN 1 END) AS total,
+                           COUNT(CASE WHEN own_damage>0 AND (
+                               total_damage>own_damage
+                               OR (total_damage=own_damage AND user_id<own_id)
+                           ) THEN 1 END) AS better
+                    FROM rows
+                )
+                SELECT target.own_damage AS value,counts.total,counts.better
+                FROM counts CROSS JOIN target
+            """
+            try:
+                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                    row = uow.query_one(sql, (uid, key, key))
+            except (OSError, sqlite3.Error):
+                return 0, 0, 0
+            value = max(0, int((row or {}).get("value") or 0))
+            total = max(0, int((row or {}).get("total") or 0))
+            better = max(0, int((row or {}).get("better") or 0))
+            return (better + 1 if value > 0 else 0), total, value
+        rank, value = self.board_position(source, key, uid)
+        return rank, self.board_total(source, key), value
 
     def overview_snapshot(
         self,

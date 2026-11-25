@@ -22,6 +22,9 @@ class BossIntegralApplication:
     def top_integrals(self, limit: int = 50) -> list[tuple[str, int]]:
         return self.repository.top_integrals(limit)
 
+    def top_integrals_snapshot(self, limit: int = 50) -> dict:
+        return self.repository.top_integrals_snapshot(limit)
+
     def integral_rank(self, user_id: str):
         return self.repository.integral_rank(user_id)
 

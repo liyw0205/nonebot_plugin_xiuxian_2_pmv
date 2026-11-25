@@ -59,6 +59,7 @@ from .boss_limit import (
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.public_display_snapshot import display_snapshot_freshness
 from ...features.base.shop_limit import shop_limit_line
 from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
@@ -1656,7 +1657,8 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_rank.finish()
 
-    ranked_integral = boss_integral_application.top_integrals(50)
+    snapshot = boss_integral_application.top_integrals_snapshot(50)
+    ranked_integral = snapshot["rows"]
     viewer_id = str(user_info["user_id"])
     user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranked_integral])
     
@@ -1671,6 +1673,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         unit="点",
         number=number_to,
     )
+    rank_msg += "\n" + display_snapshot_freshness(snapshot)
     
     await handle_send(bot, event, rank_msg)
     await boss_integral_rank.finish()

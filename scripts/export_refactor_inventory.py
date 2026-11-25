@@ -117,6 +117,12 @@ _TABLE_RE = re.compile(
     r"(?:[A-Za-z_][A-Za-z0-9_]*\.)?[`\"']?([A-Za-z_][A-Za-z0-9_]*)[`\"']?(?=\s+(?:AS\s+[A-Za-z_][A-Za-z0-9_]*\s+)?SET\b)",
     re.IGNORECASE,
 )
+_CTE_RE = re.compile(
+    r"(?:\bWITH\s+(?:RECURSIVE\s+)?|,\s*)"
+    r"([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+"
+    r"(?:(?:NOT\s+)?MATERIALIZED\s*)?\(",
+    re.IGNORECASE,
+)
 
 
 def _database_tables() -> list[str]:
@@ -137,11 +143,15 @@ def _database_tables() -> list[str]:
         # must not become table names when source changes.
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+                cte_names = {
+                    match.group(1).lower()
+                    for match in _CTE_RE.finditer(node.value)
+                }
                 tables.update(
                     group.lower()
                     for match in _TABLE_RE.finditer(node.value)
                     for group in match.groups()
-                    if group is not None
+                    if group is not None and group.lower() not in cte_names
                 )
     return sorted(tables)
 

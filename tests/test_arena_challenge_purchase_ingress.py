@@ -4,7 +4,7 @@ import asyncio
 import sqlite3
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -45,7 +45,17 @@ class ArenaChallengePurchaseIngressTests(unittest.TestCase):
     def test_registered_command_preserves_reason_and_recovers_after_receipt_rejection(self):
         arena_module = __import__("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_arena", fromlist=["arena_buy_challenge"])
         registered = next(handler for handler in arena_module.arena_buy_challenge.handlers if handler.call is arena_module.arena_buy_challenge_)
-        application = ArenaApplication(self.game, self.player, repository=ArenaChallengePurchaseSqlRepository(self.game, self.player))
+        clock = SimpleNamespace(
+            now=lambda: datetime.combine(
+                date.fromisoformat(self.today), datetime.min.time(), tzinfo=timezone.utc
+            )
+        )
+        repository = ArenaChallengePurchaseSqlRepository(
+            self.game, self.player, clock=clock
+        )
+        application = ArenaApplication(
+            self.game, self.player, repository=repository, clock=clock
+        )
         bot = SimpleNamespace(self_id="bot")
         event = SimpleNamespace(message_id="purchase-message", get_user_id=lambda: "u")
         replies = []

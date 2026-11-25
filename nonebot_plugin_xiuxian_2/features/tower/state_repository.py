@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.public_display_snapshot import shared_display_snapshot
 from ..base.ranking_position import PersonalRank
 
 
@@ -258,6 +259,18 @@ class TowerStateRepository:
             )
         return [(str(row["user_id"]), as_int_like(row["value"])) for row in rows]
 
+    def ranking_snapshot(self, field: str, limit: int = 50) -> dict[str, Any]:
+        if field not in {"current_floor", "score"}:
+            raise ValueError("unsupported tower ranking field")
+        limit = min(50, max(0, int(limit)))
+        return shared_display_snapshot(
+            self.player_database,
+            "tower-rank-v1",
+            field,
+            limit,
+            loader=lambda: self.ranking(field, limit),
+        )
+
     def rank_of(self, user_id: str, field: str = "current_floor") -> PersonalRank:
         """本人通天塔名次：并列名次 + 有记录人数 + 本人数值。"""
         if field not in {"current_floor", "score"}:
@@ -272,28 +285,20 @@ class TowerStateRepository:
             if not {"user_id", field} <= columns:
                 return PersonalRank()
             row = uow.query_one(
-                f'SELECT COALESCE("{field}",0) AS value '
-                "FROM tower WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                f'WITH target AS (SELECT COALESCE((SELECT "{field}" FROM tower '
+                "WHERE user_id=? ORDER BY rowid ASC LIMIT 1),0) AS value) "
+                f'SELECT target.value AS value, '
+                f'COUNT(CASE WHEN xiuxian_int_cmp(COALESCE(t."{field}",0),0)>0 THEN 1 END) AS total, '
+                f'COUNT(CASE WHEN target.value>0 AND '
+                f'xiuxian_int_cmp(COALESCE(t."{field}",0),target.value)>0 THEN 1 END) AS better '
+                "FROM tower AS t CROSS JOIN target",
                 (user_id,),
             )
-            value = as_int_like(row["value"]) if row is not None else 0
-            total = int(
-                (uow.query_one(
-                    f'SELECT COUNT(*) AS n FROM tower '
-                    f'WHERE xiuxian_int_cmp(COALESCE("{field}",0),0)>0'
-                ) or {"n": 0})["n"]
-                or 0
-            )
-            if value <= 0:
-                return PersonalRank(0, total, 0)
-            better = int(
-                (uow.query_one(
-                    f'SELECT COUNT(*) AS n FROM tower '
-                    f'WHERE xiuxian_int_cmp(COALESCE("{field}",0),?)>0',
-                    (value,),
-                ) or {"n": 0})["n"]
-                or 0
-            )
+        value = as_int_like((row or {}).get("value"))
+        total = int((row or {}).get("total") or 0)
+        better = int((row or {}).get("better") or 0)
+        if value <= 0:
+            return PersonalRank(0, total, 0)
         return PersonalRank(better + 1, total, value)
 
 

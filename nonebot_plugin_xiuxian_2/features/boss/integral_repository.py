@@ -7,6 +7,7 @@ from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.ranking_position import PersonalRank
+from ..base.public_display_snapshot import shared_display_snapshot
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,20 @@ class BossIntegralSqlRepository:
             )
         return [(str(row["user_id"]), as_int_like(row["integral"])) for row in rows]
 
+    def top_integrals_snapshot(
+        self, limit: int = MAX_RANKED_USERS
+    ) -> dict[str, Any]:
+        try:
+            normalized_limit = max(0, min(int(limit), self.MAX_RANKED_USERS))
+        except (TypeError, ValueError, OverflowError):
+            normalized_limit = 0
+        return shared_display_snapshot(
+            self.database,
+            "boss-integral-rank-v1",
+            normalized_limit,
+            loader=lambda: self.top_integrals(normalized_limit),
+        )
+
     def integral_rank(self, user_id: str) -> PersonalRank:
         """本人世界积分名次：并列名次 + 有分人数 + 本人积分。"""
         user_id = str(user_id).strip()
@@ -97,26 +112,20 @@ class BossIntegralSqlRepository:
             if not self._ready(uow):
                 return PersonalRank()
             row = uow.query_one(
-                "SELECT COALESCE(integral,0) AS value "
-                "FROM boss_limit WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
+                f"WITH ranked AS MATERIALIZED ({deduped}), "
+                "target AS (SELECT COALESCE((SELECT value FROM ranked WHERE user_id=?),0) AS value) "
+                "SELECT target.value AS value, "
+                "COALESCE(SUM(CASE WHEN xiuxian_int_cmp(ranked.value,0)>0 THEN 1 ELSE 0 END),0) AS total, "
+                "COALESCE(SUM(CASE WHEN target.value>0 AND "
+                "xiuxian_int_cmp(ranked.value,target.value)>0 THEN 1 ELSE 0 END),0) AS better "
+                "FROM ranked CROSS JOIN target",
                 (user_id,),
             )
-            value = as_int_like(row["value"]) if row is not None else 0
-            total = int(
-                (uow.query_one(
-                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,0)>0"
-                ) or {"n": 0})["n"]
-                or 0
-            )
-            if value <= 0:
-                return PersonalRank(0, total, 0)
-            better = int(
-                (uow.query_one(
-                    f"SELECT COUNT(*) AS n FROM ({deduped}) WHERE xiuxian_int_cmp(value,?)>0",
-                    (value,),
-                ) or {"n": 0})["n"]
-                or 0
-            )
+        value = as_int_like((row or {}).get("value"))
+        total = int((row or {}).get("total") or 0)
+        better = int((row or {}).get("better") or 0)
+        if value <= 0:
+            return PersonalRank(0, total, 0)
         return PersonalRank(better + 1, total, value)
 
     def get_integral(self, user_id: str) -> BossIntegralSnapshot:

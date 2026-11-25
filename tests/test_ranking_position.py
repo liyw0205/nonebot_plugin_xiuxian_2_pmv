@@ -10,6 +10,7 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state
 from nonebot_plugin_xiuxian_2.features.arena.state_application import ArenaStateApplication
@@ -138,6 +139,36 @@ class BossIntegralRankTests(_TempDatabaseTestCase):
         rank = repository.integral_rank("u2")
         self.assertEqual((1, 2, 120), (rank.rank, rank.total, rank.value))
 
+    def test_public_snapshot_is_stale_by_design_but_personal_rank_is_live(self):
+        from nonebot_plugin_xiuxian_2.features.base.public_display_snapshot import (
+            display_snapshot_freshness,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        database = self._boss_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO boss_limit(user_id,integral) VALUES(?,?)",
+                (("leader", 100), ("viewer", 50)),
+            )
+        repository = BossIntegralSqlRepository(database)
+        first = repository.top_integrals_snapshot(2)
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE boss_limit SET integral=120 WHERE user_id='viewer'")
+
+        cached = repository.top_integrals_snapshot(2)
+        self.assertEqual(first, cached)
+        self.assertEqual(1, repository.integral_rank("viewer").rank)
+        self.assertIn("最长缓存 60 分钟", display_snapshot_freshness(cached))
+        self.assertIn("个人名次与资格按实时数据计算", display_snapshot_freshness(cached))
+
+        process_read_cache.invalidate_snapshot_database(database)
+        self.assertEqual("viewer", repository.top_integrals_snapshot(2)["rows"][0][0])
+
 
     def test_ties_share_a_rank_and_out_of_page_players_still_get_theirs(self):
         database = self._boss_database()
@@ -227,6 +258,31 @@ class TowerRankTests(_TempDatabaseTestCase):
             uow.execute("UPDATE tower SET current_floor=15 WHERE user_id='u2'")
         self.assertEqual("u2", application.ranking("current_floor", 2)[0][0])
         self.assertEqual(1, application.rank_of("u2", "current_floor").rank)
+
+    def test_public_snapshot_does_not_replace_the_live_viewer_rank(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        database = self._tower_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO tower(user_id,current_floor,score) VALUES(?,?,?)",
+                (("leader", 20, 100), ("viewer", 10, 50)),
+            )
+        application = TowerStateApplication(database)
+        first = application.ranking_snapshot("current_floor", 2)
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE tower SET current_floor=25 WHERE user_id='viewer'")
+
+        self.assertEqual(first, application.ranking_snapshot("current_floor", 2))
+        self.assertEqual(1, application.rank_of("viewer", "current_floor").rank)
+        process_read_cache.invalidate_snapshot_database(database)
+        self.assertEqual(
+            "viewer", application.ranking_snapshot("current_floor", 2)["rows"][0][0]
+        )
 
     def test_both_fields_rank_independently_with_ties(self):
         database = self._tower_database()
@@ -345,6 +401,34 @@ class TrainingRankTests(_TempDatabaseTestCase):
         self.assertEqual("新道号", refreshed[0]["user_name"])
         self.assertEqual(1, repository.rank_of("points", "u2").rank)
 
+    def test_public_snapshot_tracks_both_databases_and_personal_rank_stays_live(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        game, player = self._training_databases()
+        with DatabaseUnitOfWork(game) as uow:
+            uow.execute("INSERT INTO user_xiuxian(user_id,user_name) VALUES('u','旧名')")
+        with DatabaseUnitOfWork(player) as uow:
+            uow.execute("INSERT INTO training(user_id,points,completed) VALUES('u',10,1)")
+            uow.execute("INSERT INTO training(user_id,points,completed) VALUES('v',20,2)")
+        repository = TrainingLeaderboardSqlRepository(game, player)
+        first = repository.top_snapshot("points")
+
+        with DatabaseUnitOfWork(game) as uow:
+            uow.execute("UPDATE user_xiuxian SET user_name='新名' WHERE user_id='u'")
+        with DatabaseUnitOfWork(player) as uow:
+            uow.execute("UPDATE training SET points=30 WHERE user_id='u'")
+
+        self.assertEqual(first, repository.top_snapshot("points"))
+        self.assertEqual(1, repository.rank_of("points", "u").rank)
+        process_read_cache.invalidate_snapshot_database(player)
+        refreshed = repository.top_snapshot("points")
+        self.assertEqual("新名", refreshed["rows"][0]["user_name"])
+        self.assertEqual("u", refreshed["rows"][0]["user_id"])
+
     def test_both_fields_rank_independently_with_ties(self):
         game, player = self._training_databases()
         with DatabaseUnitOfWork(player) as uow:
@@ -385,6 +469,61 @@ class TrainingRankTests(_TempDatabaseTestCase):
         self.assertTrue(player.is_file())
 
 
+class RankQueryCompositionTests(_TempDatabaseTestCase):
+    def _track_query_one(self, callback):
+        statements = []
+        original = DatabaseUnitOfWork.query_one
+
+        def tracked(uow, sql, params=()):
+            statements.append(str(sql))
+            return original(uow, sql, params)
+
+        with patch.object(DatabaseUnitOfWork, "query_one", tracked):
+            callback()
+        return statements
+
+    def test_live_personal_standings_use_one_aggregate_query(self):
+        boss_database = self.root / "boss.db"
+        with DatabaseUnitOfWork(boss_database) as uow:
+            apply_boss_player_schema(uow)
+            uow.executemany(
+                "INSERT INTO boss_limit(user_id,integral) VALUES(?,?)",
+                (("leader", 100), ("viewer", 50)),
+            )
+        boss_queries = self._track_query_one(
+            lambda: BossIntegralSqlRepository(boss_database).integral_rank("viewer")
+        )
+        self.assertEqual(1, sum("WITH ranked AS MATERIALIZED" in sql for sql in boss_queries))
+
+        tower_database = self.root / "tower.db"
+        with DatabaseUnitOfWork(tower_database) as uow:
+            apply_tower_state(uow)
+            uow.executemany(
+                "INSERT INTO tower(user_id,current_floor,score) VALUES(?,?,?)",
+                (("leader", 20, 100), ("viewer", 10, 50)),
+            )
+        tower_queries = self._track_query_one(
+            lambda: TowerStateRepository(tower_database).rank_of("viewer")
+        )
+        self.assertEqual(1, len(tower_queries))
+        self.assertIn(" AS better ", tower_queries[0])
+        self.assertIn(" AS total", tower_queries[0])
+
+        game, player = self._training_databases()
+        with DatabaseUnitOfWork(player) as uow:
+            uow.executemany(
+                "INSERT INTO training(user_id,points,completed) VALUES(?,?,?)",
+                (("leader", 100, 10), ("viewer", 50, 5)),
+            )
+        training_queries = self._track_query_one(
+            lambda: TrainingLeaderboardSqlRepository(game, player).rank_of(
+                "points", "viewer"
+            )
+        )
+        self.assertEqual(1, len(training_queries))
+        self.assertIn("WITH ranked AS MATERIALIZED", training_queries[0])
+
+
 class RankingViewWiringTests(unittest.TestCase):
     CASES = (
         ("xiuxian/xiuxian_boss/__init__.py", "boss_integral_rank_", "世界BOSS积分排行榜"),
@@ -411,6 +550,8 @@ class RankingViewWiringTests(unittest.TestCase):
 
         self.assertIn("第{index}位 | ", body)
         self.assertIn("enumerate(rows, start=1)", body)
+        self.assertIn("training_application.leaderboard_snapshot(field, limit=50)", body)
+        self.assertIn("display_snapshot_freshness(snapshot)", body)
         self.assertIn("if viewer_id:", body, "无 viewer 时必须保持旧输出（可被旧调用方复用）")
 
     def test_handlers_pass_the_session_user_into_the_personal_line(self):
@@ -423,20 +564,20 @@ class RankingViewWiringTests(unittest.TestCase):
         self.assertIn("viewer_id = str(event.get_user_id())", arena)
 
     def test_views_keep_their_existing_top_slice_calls(self):
-        self.assertIn(
-            "boss_integral_application.top_integrals(50)",
-            _read("xiuxian/xiuxian_boss/__init__.py"),
-        )
+        boss = _read("xiuxian/xiuxian_boss/__init__.py")
+        self.assertIn("boss_integral_application.top_integrals_snapshot(50)", boss)
+        self.assertIn("boss_integral_application.integral_rank(viewer_id)", boss)
         tower = _read("xiuxian/xiuxian_tower/__init__.py")
-        self.assertIn('tower_limit.ranking("current_floor")', tower)
-        self.assertIn('tower_limit.ranking("score")', tower)
+        self.assertIn('tower_limit.ranking_snapshot("current_floor")', tower)
+        self.assertIn('tower_limit.ranking_snapshot("score")', tower)
+        self.assertIn('tower_limit.rank_of(viewer_id, "current_floor")', tower)
+        self.assertIn('tower_limit.rank_of(viewer_id, "score")', tower)
         self.assertIn(
             "arena_limit.get_arena_ranking(limit=10)", _read("xiuxian/xiuxian_arena/__init__.py")
         )
-        self.assertIn(
-            "training_application.leaderboard(field, limit=50)",
-            _read("xiuxian/xiuxian_training/__init__.py"),
-        )
+        training = _read("xiuxian/xiuxian_training/__init__.py")
+        self.assertIn("training_application.leaderboard_snapshot(field, limit=50)", training)
+        self.assertIn("training_application.rank_of(field, viewer_id)", training)
 
     def test_fanout_rank_views_batch_display_profile_reads(self):
         cases = (

@@ -281,7 +281,11 @@ class ActivityRankTests(unittest.TestCase):
         self.assertEqual(repository.board_rank("nope", "spring", 10), [])
         self.assertEqual(repository.board_rank("points", "spring", 0), [])
 
-    def test_personalized_board_rows_and_viewer_position_stay_live(self) -> None:
+    def test_public_board_rows_are_snapshots_but_viewer_position_stays_live(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
         database = self._database(with_names=True)
         self._seed_points(database, [("u1", 100, 100), ("u2", 80, 80)])
         repository = ActivityReadModelSqlRepository(database)
@@ -294,9 +298,70 @@ class ActivityRankTests(unittest.TestCase):
             uow.execute(
                 "UPDATE activity_point_balance SET total_points=120 WHERE user_id='u2'"
             )
+        self.assertEqual(first, repository.board_rank("points", "spring", 2))
+        self.assertEqual((1, 120), repository.board_position("points", "spring", "u2"))
+        app = ActivityReadModelApplication(
+            database,
+            config_loader=lambda: _config(
+                {
+                    "boards": [
+                        {"key": "points", "label": "积分榜", "source": "points", "limit": 2}
+                    ],
+                    "rewards": [
+                        {
+                            "board": "points",
+                            "rank_min": 1,
+                            "rank_max": 1,
+                            "key": "top1",
+                            "name": "榜首",
+                            "reward": "灵石x1000",
+                        }
+                    ],
+                }
+            ),
+            clock=SimpleNamespace(now=lambda: NOW),
+        )
+        live_text = app.rank_board_text("u1", "积分榜")
+        self.assertIn("我的名次：第 2 名 / 共 2 人", live_text)
+        self.assertIn("当前名次没有可领取的排行奖励", live_text)
+        process_read_cache.invalidate_snapshot_database(database)
         refreshed = repository.board_rank("points", "spring", 2)
         self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
-        self.assertEqual((1, 120), repository.board_position("points", "spring", "u2"))
+
+    def test_cached_public_rows_are_labeled_while_sign_standing_is_one_live_read(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        database = self._database(with_names=True)
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO activity_user"
+                "(user_id,sign_days,total_sign_days,last_sign_date) VALUES(?,?,?,?)",
+                (("u1", 3, 8, "2026-10-02"), ("u2", 2, 7, "2026-10-03")),
+            )
+        repository = ActivityReadModelSqlRepository(database)
+        first = repository.board_rank_snapshot("sign", "spring", 10)
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute(
+                "UPDATE activity_user SET sign_days=4 WHERE user_id='u2'"
+            )
+
+        self.assertEqual(first, repository.board_rank_snapshot("sign", "spring", 10))
+        self.assertEqual((2, 2, 3), repository.board_standing("sign", "spring", "u1"))
+        config = _config(
+            {"boards": [{"key": "sign", "label": "签到榜", "source": "sign", "limit": 10}]}
+        )
+        text = ActivityReadModelApplication(
+            database,
+            config_loader=lambda: config,
+            clock=SimpleNamespace(now=lambda: NOW),
+        ).rank_board_text("u1", "签到榜")
+        self.assertIn("公共榜单快照截至", text)
+        self.assertIn("我的名次：第 2 名 / 共 2 人", text)
 
     # --- 阶段四：结算与领取 ---------------------------------------------
 

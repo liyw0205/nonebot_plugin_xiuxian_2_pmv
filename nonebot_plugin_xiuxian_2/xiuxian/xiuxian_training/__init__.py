@@ -29,6 +29,7 @@ from ...features.base.keyword_page import (
     parse_page_arg,
 )
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.public_display_snapshot import display_snapshot_freshness
 from ...features.base.shop_limit import shop_limit_line
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.clock import SystemClock
@@ -496,11 +497,13 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 def _training_rank_message(field: str, title: str, *, viewer_id: str = "") -> str:
-    rows = training_application.leaderboard(field, limit=50)
+    snapshot = training_application.leaderboard_snapshot(field, limit=50)
+    rows = snapshot["rows"]
     message = f"【{title}】\n" + "".join(
         f"第{index}位 | {row['user_name']} | {number_to(row['value'])}\n"
         for index, row in enumerate(rows, start=1)
     )
+    message += display_snapshot_freshness(snapshot) + "\n"
     if viewer_id:
         message += personal_rank_line(
             training_application.rank_of(field, viewer_id),

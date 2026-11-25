@@ -104,6 +104,9 @@ class TrainingRepository(ServicePort):
     def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return self._leaderboard().top(field, limit=limit)
 
+    def leaderboard_snapshot(self, field: str, *, limit: int = 50) -> dict[str, Any]:
+        return self._leaderboard().top_snapshot(field, limit=limit)
+
     def rank_of(self, field: str, user_id: str):
         return self._leaderboard().rank_of(field, user_id)
 

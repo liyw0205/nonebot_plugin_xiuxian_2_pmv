@@ -11,6 +11,12 @@ from scripts.export_refactor_inventory import ROOT, build_inventory
 
 
 class RefactorInventoryTests(unittest.TestCase):
+    @classmethod
+    def _current_inventory(cls):
+        if "_inventory_cache" not in cls.__dict__:
+            cls._inventory_cache = build_inventory()
+        return cls._inventory_cache
+
     def test_table_inventory_ignores_python_imports_comments_and_docstrings(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -29,6 +35,7 @@ class RefactorInventoryTests(unittest.TestCase):
                 '    quoted_read = \'SELECT * FROM "quoted_read" WHERE id=1\'\n'
                 '    quoted_insert = \'INSERT INTO main."quoted_insert" (id) VALUES(1)\'\n'
                 '    quoted_update = \'UPDATE OR IGNORE main."quoted_update" SET id=1\'\n'
+                '    cte = "WITH viewer AS (SELECT id FROM actual_table), counts AS (SELECT COUNT(*) FROM viewer) SELECT * FROM counts JOIN actual_table ON 1=1"\n'
                 '    return f"SELECT * FROM actual_table JOIN second_table ON 1=1 WHERE id={1}"\n',
                 encoding="utf-8",
             )
@@ -41,10 +48,10 @@ class RefactorInventoryTests(unittest.TestCase):
     def test_checked_in_inventory_matches_source(self) -> None:
         path = ROOT / "docs" / "refactor_inventory.json"
         checked_in = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(checked_in, build_inventory())
+        self.assertEqual(checked_in, self._current_inventory())
 
     def test_inventory_records_required_p0_surfaces(self) -> None:
-        inventory = build_inventory()
+        inventory = self._current_inventory()
         for section in (
             "commands",
             "routes",

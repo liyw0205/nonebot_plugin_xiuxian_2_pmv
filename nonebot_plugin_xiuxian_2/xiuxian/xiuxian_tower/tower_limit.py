@@ -48,6 +48,10 @@ class TowerLimit:
         state_application = self._state_application_override or _state_application()
         return state_application.ranking(field, limit)
 
+    def ranking_snapshot(self, field: str, limit: int = 50):
+        state_application = self._state_application_override or _state_application()
+        return state_application.ranking_snapshot(field, limit)
+
     def rank_of(self, user_id, field: str = "current_floor"):
         state_application = self._state_application_override or _state_application()
         return state_application.rank_of(user_id, field)

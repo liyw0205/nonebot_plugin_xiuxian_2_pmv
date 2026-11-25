@@ -186,11 +186,12 @@ class BossRankPerActivityTests(unittest.TestCase):
                 )
             self.assertEqual(first, repository.boss_rank("boss_a", 10))
             self.assertEqual((1, 200), repository.board_position("boss", "boss_a", "u2"))
-            self.assertEqual("u2", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
+            self.assertEqual("u1", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
 
             process_read_cache.invalidate_snapshot_database(self.database)
             refreshed = repository.boss_rank("boss_a", 10)
             self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+            self.assertEqual("u2", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
         finally:
             process_read_cache.clear()
 
