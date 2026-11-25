@@ -16,10 +16,11 @@ class PartnerFacadeLazyReaderTests(unittest.TestCase):
         self.assertNotIn("sql_message = XiuxianDateManage()", source)
         self.assertIn("_player_data_manager_instance = None", source)
         self.assertIn("def _player_data_manager(", source)
-        self.assertNotIn("player_data_manager = PlayerDataManager()", source)
+        self.assertIn("player_data_manager = _LazyPlayerDataManager()", source)
         self.assertIn("_player_data_manager().get_fields(", source)
-        self.assertIn("_player_data_manager().get_all_records(", source)
-        self.assertIn("_player_data_manager().get_all_field_data(", source)
+        self.assertIn("player_data = _player_data_manager()", source)
+        self.assertIn("player_data.get_fields_by_ids(", source)
+        self.assertIn("player_data.get_all_field_data(", source)
         self.assertIn("bind_partner_storage(", source)
 
 

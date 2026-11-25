@@ -191,7 +191,12 @@ class LegacyNumericReadModelsTests(unittest.TestCase):
                 rows = cursor.fetchall()
                 results = [dict(zip([col[0] for col in cursor.description], row)) if dict_row else tuple(row) for row in rows]
                 return (results[0] if results else None) if one else results
-            handle = SimpleNamespace(_read_query=read, _conn_lock=RLock(), conn=conn)
+            handle = SimpleNamespace(
+                _read_query=read,
+                _conn_lock=RLock(),
+                conn=conn,
+                database_path=self.game,
+            )
             for method in ('stone_top', 'power_top', 'get_ls_rank', 'realm_top'):
                 with self.subTest(method=method):
                     rows = getattr(XiuxianDateManage, method)(handle)
@@ -210,7 +215,9 @@ class LegacyNumericReadModelsTests(unittest.TestCase):
             conn.execute('CREATE TABLE xiuxian_impart(user_id TEXT,impart_lv INTEGER,stone_num TEXT)')
             conn.executemany('INSERT INTO xiuxian_impart VALUES(%s,10,%s)', [('small','900'), ('science','1e3'), ('large','100000000000000000001'), ('larger','100000000000000000002')])
         with db_backend.connection(self.game) as conn:
-            rows = XIUXIAN_IMPART_BUFF.get_impart_rank(SimpleNamespace(conn=conn, _conn_lock=RLock()))
+            rows = XIUXIAN_IMPART_BUFF._load_impart_rank(
+                SimpleNamespace(conn=conn, _conn_lock=RLock())
+            )
         self.assertEqual(['larger', 'large', 'science', 'small'], [r['user_id'] for r in rows])
 
     def test_season_rank_uses_numeric_order_and_exact_rank_parameters(self):
