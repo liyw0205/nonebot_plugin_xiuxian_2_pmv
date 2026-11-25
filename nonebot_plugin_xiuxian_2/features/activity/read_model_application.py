@@ -1364,12 +1364,15 @@ class ActivityReadModelApplication:
             lines.append(reason)
         activity_key = _activity_config_key(config)
         uid = str(user_id or "")
+        standings = self.repository.board_standings(
+            tuple(str(board.get("source") or "") for board in boards),
+            activity_key,
+            uid,
+        )
         for board in boards:
             source = str(board.get("source") or "")
             label = str(board.get("label") or board.get("key") or source)
-            position, total, value = self.repository.board_standing(
-                source, activity_key, uid
-            )
+            position, total, value = standings.get(source, (0, 0, 0))
             lines.append(
                 f"{label}：{position_text(position, total)}（{value_text(source, value)}）"
             )

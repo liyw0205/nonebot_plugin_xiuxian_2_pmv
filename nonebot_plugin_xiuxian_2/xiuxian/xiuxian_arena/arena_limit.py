@@ -110,6 +110,10 @@ class ArenaLimit:
         state_application = self._state_application()
         return state_application.ranking(limit)
 
+    def get_arena_ranking_with_rank(self, limit, user_id):
+        state_application = self._state_application()
+        return state_application.ranking_with_rank(limit, user_id)
+
     def rank_of(self, user_id):
         state_application = self._state_application()
         return state_application.rank_of(user_id)

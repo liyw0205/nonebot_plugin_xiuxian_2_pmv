@@ -2485,10 +2485,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "if not result.succeeded:" in tower_reset_admin
             ),
             "ranking_application_owned": (
-                'tower_limit.ranking_snapshot("current_floor")' in tower_facade
-                and 'tower_limit.ranking_snapshot("score")' in tower_facade
-                and "def ranking_snapshot(" in tower_state_application
-                and "def ranking_snapshot(" in tower_state_repository
+                "tower_limit.ranking_snapshot_with_rank(viewer_id, 'current_floor')"
+                in output_function(tower_facade, "tower_rank_")
+                and "tower_limit.ranking_snapshot_with_rank(viewer_id, 'score')"
+                in output_function(tower_facade, "tower_integral_rank_")
+                and "def ranking_snapshot_with_rank(" in tower_state_application
+                and "def ranking_snapshot_with_rank(" in tower_state_repository
+                and "return state_application.ranking_snapshot_with_rank(user_id, field, limit)"
+                in tower_limit
             ),
             "ranking_query_bounded_and_stable": (
                 'field not in {"current_floor", "score"}' in tower_state_repository

@@ -267,12 +267,15 @@ class ActivityAdminDataTests(unittest.TestCase):
         process_read_cache.clear()
         try:
             repository = ActivityReadModelSqlRepository(self.database)
-            self.assertEqual(["user-0001"], [
-                row["user_id"] for row in repository.boss_rank("boss", 10)
-            ])
-            self.application.reset("activity", "boss")
-            self.assertEqual([], repository.boss_rank("boss", 10))
-            self.assertEqual(2, process_read_cache.stats()["misses"])
+            with patch.object(
+                repository, "_load_boss_rank", wraps=repository._load_boss_rank
+            ) as load_board:
+                self.assertEqual(["user-0001"], [
+                    row["user_id"] for row in repository.boss_rank("boss", 10)
+                ])
+                self.application.reset("activity", "boss")
+                self.assertEqual([], repository.boss_rank("boss", 10))
+            self.assertEqual(2, load_board.call_count)
         finally:
             process_read_cache.clear()
 

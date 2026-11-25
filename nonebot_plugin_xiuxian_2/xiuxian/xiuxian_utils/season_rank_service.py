@@ -102,12 +102,30 @@ def ensure_season_rank_table() -> bool:
     Returns ``False`` when the message database has not been migrated, so the
     callers degrade to "no rank data" instead of creating the table themselves.
     """
-    with _sql_message().lock:
-        return message_store.table_ready(
-            _sql_message().conn,
-            "season_rank",
-            message_store.SEASON_RANK_COLUMNS,
+    manager = _sql_message()
+    with manager.lock:
+        database = getattr(manager, "database_path", None)
+        if database is None:
+            return message_store.table_ready(
+                manager.conn,
+                "season_rank",
+                message_store.SEASON_RANK_COLUMNS,
+            )
+        version_row = manager.conn.execute("PRAGMA schema_version").fetchone()
+        schema_version = int(version_row[0]) if version_row is not None else -1
+        key = shared_snapshot_key(
+            database, "season-rank-schema-v1", schema_version
         )
+        columns = process_read_cache.get_or_load(
+            key,
+            database_path=database,
+            ttl=60 * 60,
+            snapshot=True,
+            loader=lambda: message_store.table_columns(manager.conn, "season_rank"),
+        )
+    return bool(columns) and all(
+        name.casefold() in columns for name in message_store.SEASON_RANK_COLUMNS
+    )
 
 
 def _build_rank_identity(

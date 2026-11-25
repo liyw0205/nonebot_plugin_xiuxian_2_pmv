@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from nonebot_plugin_xiuxian_2.features.arena import state_repository as arena_state_repository
 from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state
 from nonebot_plugin_xiuxian_2.features.arena.state_application import ArenaStateApplication
 from nonebot_plugin_xiuxian_2.features.arena.state_repository import ArenaStateRepository
@@ -273,12 +274,41 @@ class TowerRankTests(_TempDatabaseTestCase):
                 (("leader", 20, 100), ("viewer", 10, 50)),
             )
         application = TowerStateApplication(database)
-        first = application.ranking_snapshot("current_floor", 2)
+        original_execute = DatabaseUnitOfWork.execute
+        schema_probes = []
+
+        def count_schema_probes(uow, sql, params=()):
+            if 'table_info("tower")' in sql:
+                schema_probes.append(sql)
+            return original_execute(uow, sql, params)
+
+        with patch.object(
+            DatabaseUnitOfWork,
+            "execute",
+            autospec=True,
+            side_effect=count_schema_probes,
+        ):
+            first, first_rank = application.ranking_snapshot_with_rank(
+                "viewer", "current_floor", 2
+            )
+        self.assertEqual(1, len(schema_probes))
+        self.assertEqual(PersonalRank(2, 2, 10), first_rank)
         with DatabaseUnitOfWork(database) as uow:
             uow.execute("UPDATE tower SET current_floor=25 WHERE user_id='viewer'")
 
-        self.assertEqual(first, application.ranking_snapshot("current_floor", 2))
-        self.assertEqual(1, application.rank_of("viewer", "current_floor").rank)
+        schema_probes.clear()
+        with patch.object(
+            DatabaseUnitOfWork,
+            "execute",
+            autospec=True,
+            side_effect=count_schema_probes,
+        ):
+            cached, live_rank = application.ranking_snapshot_with_rank(
+                "viewer", "current_floor", 2
+            )
+        self.assertEqual(0, len(schema_probes))
+        self.assertEqual(first, cached)
+        self.assertEqual(PersonalRank(1, 2, 25), live_rank)
         process_read_cache.invalidate_snapshot_database(database)
         self.assertEqual(
             "viewer", application.ranking_snapshot("current_floor", 2)["rows"][0][0]
@@ -337,6 +367,67 @@ class ArenaRankTests(_TempDatabaseTestCase):
         self.assertEqual("u2", application.ranking(2)[0][0])
         self.assertEqual(1, application.rank_of("u2").rank)
 
+    def test_top_slice_and_exact_viewer_rank_share_one_schema_snapshot(self):
+        database = self._arena_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO arena(user_id,score) VALUES(?,?)",
+                (("leader", 3200), ("tie-a", 1900), ("tie-b", 1900), ("viewer", 1200)),
+            )
+        application = ArenaStateApplication(database)
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.arena.state_repository.table_ready",
+            wraps=arena_state_repository.table_ready,
+        ) as schema_check:
+            rows, rank = application.ranking_with_rank(2, "viewer")
+
+        self.assertEqual(["leader", "tie-a"], [user_id for user_id, _score in rows])
+        self.assertEqual(PersonalRank(4, 4, 1200), rank)
+        schema_check.assert_called_once()
+
+    def test_combined_snapshot_load_shares_schema_read_and_keeps_viewer_rank_live(self):
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        database = self._boss_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO boss_limit(user_id,integral) VALUES(?,?)",
+                (("leader", 100), ("viewer", 50)),
+            )
+        repository = BossIntegralSqlRepository(database)
+
+        with (
+            patch.object(repository, "_ready", wraps=repository._ready) as ready,
+            patch.object(
+                repository, "_top_integrals_in_uow",
+                wraps=repository._top_integrals_in_uow,
+            ) as read_top,
+        ):
+            first, first_rank = repository.top_integrals_snapshot_with_rank(2, "viewer")
+        self.assertEqual(1, ready.call_count)
+        read_top.assert_called_once()
+        self.assertEqual((2, 2, 50), (first_rank.rank, first_rank.total, first_rank.value))
+
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE boss_limit SET integral=120 WHERE user_id='viewer'")
+        with (
+            patch.object(repository, "_ready", wraps=repository._ready) as ready,
+            patch.object(
+                repository, "_top_integrals_in_uow",
+                wraps=repository._top_integrals_in_uow,
+            ) as read_top,
+        ):
+            cached, live_rank = repository.top_integrals_snapshot_with_rank(2, "viewer")
+
+        self.assertEqual(1, ready.call_count)
+        self.assertEqual(first, cached)
+        self.assertEqual((1, 2, 120), (live_rank.rank, live_rank.total, live_rank.value))
+        read_top.assert_not_called()
+
     def test_ties_share_a_rank_and_out_of_page_player_still_gets_theirs(self):
         database = self._arena_database()
         with DatabaseUnitOfWork(database) as uow:
@@ -347,9 +438,12 @@ class ArenaRankTests(_TempDatabaseTestCase):
 
         entry = ArenaStateRepository(database).rank_of("viewer")
         tied = ArenaStateRepository(database).rank_of("tie-b")
+        rows, combined_entry = ArenaStateRepository(database).ranking_with_rank(2, "viewer")
 
         self.assertEqual((entry.rank, entry.total, entry.value), (4, 4, 1200))
         self.assertEqual((tied.rank, tied.total, tied.value), (2, 4, 1900))
+        self.assertEqual(["leader", "tie-a"], [user_id for user_id, _score in rows])
+        self.assertEqual(entry, combined_entry)
 
     def test_zero_score_has_no_rank_but_still_counts_the_rated_field(self):
         database = self._arena_database()
@@ -550,7 +644,9 @@ class RankingViewWiringTests(unittest.TestCase):
 
         self.assertIn("第{index}位 | ", body)
         self.assertIn("enumerate(rows, start=1)", body)
-        self.assertIn("training_application.leaderboard_snapshot(field, limit=50)", body)
+        self.assertIn(
+            "training_application.leaderboard_snapshot_with_rank(", body
+        )
         self.assertIn("display_snapshot_freshness(snapshot)", body)
         self.assertIn("if viewer_id:", body, "无 viewer 时必须保持旧输出（可被旧调用方复用）")
 
@@ -565,19 +661,17 @@ class RankingViewWiringTests(unittest.TestCase):
 
     def test_views_keep_their_existing_top_slice_calls(self):
         boss = _read("xiuxian/xiuxian_boss/__init__.py")
-        self.assertIn("boss_integral_application.top_integrals_snapshot(50)", boss)
-        self.assertIn("boss_integral_application.integral_rank(viewer_id)", boss)
+        self.assertIn("boss_integral_application.top_integrals_snapshot_with_rank(", boss)
         tower = _read("xiuxian/xiuxian_tower/__init__.py")
-        self.assertIn('tower_limit.ranking_snapshot("current_floor")', tower)
-        self.assertIn('tower_limit.ranking_snapshot("score")', tower)
-        self.assertIn('tower_limit.rank_of(viewer_id, "current_floor")', tower)
-        self.assertIn('tower_limit.rank_of(viewer_id, "score")', tower)
+        self.assertIn('tower_limit.ranking_snapshot_with_rank(\n        viewer_id, "current_floor"', tower)
+        self.assertIn('tower_limit.ranking_snapshot_with_rank(viewer_id, "score")', tower)
         self.assertIn(
-            "arena_limit.get_arena_ranking(limit=10)", _read("xiuxian/xiuxian_arena/__init__.py")
+            "arena_limit.get_arena_ranking_with_rank(",
+            _read("xiuxian/xiuxian_arena/__init__.py"),
         )
         training = _read("xiuxian/xiuxian_training/__init__.py")
         self.assertIn("training_application.leaderboard_snapshot(field, limit=50)", training)
-        self.assertIn("training_application.rank_of(field, viewer_id)", training)
+        self.assertIn("training_application.leaderboard_snapshot_with_rank(", training)
 
     def test_fanout_rank_views_batch_display_profile_reads(self):
         cases = (
@@ -632,6 +726,7 @@ class RankingViewWiringTests(unittest.TestCase):
 
         self.assertIn("def rank_of(self, user_id):", source)
         self.assertIn("return state_application.rank_of(user_id)", source)
+        self.assertIn("return state_application.ranking_with_rank(limit, user_id)", source)
 
     def test_tower_facade_delegates_rank_of_to_the_feature_application(self):
         source = _read("xiuxian/xiuxian_tower/tower_limit.py")

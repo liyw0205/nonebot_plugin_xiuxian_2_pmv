@@ -1479,7 +1479,58 @@ class XiuxianDateManage:
         return XiuxianDateManage._get_numeric_rank(self, user_id, "stone")
 
     def get_exp_and_stone_ranks(self, user_id):
-        """Read both personal numeric ranks with one database round-trip."""
+        """Read exact current personal ranks, reusing only an unchanged score set."""
+        user_id = str(user_id)
+        if not hasattr(self, "database_path") or not hasattr(
+            self, "_repository_read_connection"
+        ):
+            return XiuxianDateManage._read_exp_and_stone_ranks(self, user_id)
+
+        with self._repository_read_connection() as conn:
+            conn.execute("BEGIN")
+            try:
+                try:
+                    state = conn.execute(
+                        "SELECT generation FROM xiuxian_numeric_rank_generation "
+                        "WHERE singleton=1"
+                    ).fetchone()
+                except db_backend.OperationalError as exc:
+                    if "no such table: xiuxian_numeric_rank_generation" not in str(exc).lower():
+                        raise
+                    return XiuxianDateManage._read_exp_and_stone_ranks(
+                        self, user_id, connection=conn
+                    )
+
+                if state is None:
+                    return XiuxianDateManage._read_exp_and_stone_ranks(
+                        self, user_id, connection=conn
+                    )
+                key = shared_snapshot_key(
+                    self.database_path,
+                    "exact-numeric-personal-rank-v1",
+                    user_id,
+                    int(state[0]),
+                )
+
+                def load_ranks():
+                    row = XiuxianDateManage._read_exp_and_stone_ranks(
+                        self, user_id, connection=conn
+                    )
+                    return None if row is None else tuple(row)
+
+                return process_read_cache.get_or_load(
+                    key,
+                    database_path=self.database_path,
+                    ttl=60 * 60,
+                    # The generation and exact rank share this SQLite read snapshot.
+                    snapshot=True,
+                    loader=load_ranks,
+                )
+            finally:
+                conn.rollback()
+
+    def _read_exp_and_stone_ranks(self, user_id, *, connection=None):
+        """Compute both exact ranks from their ordered indexes on a cache miss."""
         exp_value = 'xiuxian_int_sort_key_compact("exp")'
         stone_value = 'xiuxian_int_sort_key_compact("stone")'
         sql = f"""
@@ -1515,7 +1566,9 @@ class XiuxianDateManage:
                 END AS stone_rank
             FROM target
         """
-        return self._read_query(sql, (user_id,), one=True)
+        if connection is None:
+            return self._read_query(sql, (user_id,), one=True)
+        return connection.execute(sql, (user_id,)).fetchone()
 
     def get_ls_rank(self):
         """灵石排行榜"""

@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import nonebot
 
@@ -173,11 +174,13 @@ class BossRankPerActivityTests(unittest.TestCase):
         process_read_cache.clear()
         repository = ActivityReadModelSqlRepository(self.database)
         try:
-            first = repository.boss_rank("boss_a", 10)
-            self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
-            self.assertEqual(first, repository.boss_rank("boss_a", 10))
-            self.assertEqual(1, process_read_cache.stats()["misses"])
-            self.assertEqual(1, process_read_cache.stats()["hits"])
+            with patch.object(
+                repository, "_load_boss_rank", wraps=repository._load_boss_rank
+            ) as load_board:
+                first = repository.boss_rank("boss_a", 10)
+                self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+                self.assertEqual(first, repository.boss_rank("boss_a", 10))
+            load_board.assert_called_once_with("boss_a", 10)
 
             with DatabaseUnitOfWork(self.database, immediate=True) as uow:
                 uow.execute(

@@ -460,8 +460,10 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     """竞技场排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    ranking = arena_limit.get_arena_ranking(limit=10)
     viewer_id = str(event.get_user_id())
+    ranking, viewer_rank = arena_limit.get_arena_ranking_with_rank(
+        limit=10, user_id=viewer_id
+    )
     user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
     
     msg = "🏆 【竞技场排行榜】🏆\n"
@@ -475,7 +477,7 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
             msg += f"{icon} {user_names[user_id_key]} - {score}分 ({arena_limit.calculate_rank(score)})\n"
     
     msg += personal_rank_line(
-        arena_limit.rank_of(viewer_id),
+        viewer_rank,
         label="竞技场积分",
         unit="分",
         number=number_to,

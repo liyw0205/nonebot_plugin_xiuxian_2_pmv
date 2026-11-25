@@ -9,6 +9,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...core.numeric import as_int_like
+from ..base.schema_catalog import sqlite_table_names
 from ..base.public_display_snapshot import shared_display_snapshot
 from .claim_receipt_view import ActivityClaimReceiptView
 from .sign_history_view import ActivitySignDayView
@@ -22,12 +23,7 @@ class ActivityReadModelSqlRepository:
 
     @staticmethod
     def _table_names(uow: DatabaseUnitOfWork) -> set[str]:
-        return {
-            str(row["name"])
-            for row in uow.query_all(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
-        }
+        return set(sqlite_table_names(uow, uow.database))
 
     @classmethod
     def _assert_tables(cls, uow: DatabaseUnitOfWork, required: set[str]) -> set[str]:
@@ -820,14 +816,43 @@ class ActivityReadModelSqlRepository:
     def board_standing(
         self, source: str, activity_key: str, user_id: str
     ) -> tuple[int, int, int]:
-        """Return the current (rank, total, value), combining sign reads."""
+        """Return the current (rank, total, value) in one read transaction."""
         source = str(source or "").strip()
+        return self.board_standings((source,), activity_key, user_id).get(
+            source, (0, 0, 0)
+        )
+
+    def board_standings(
+        self, sources: Sequence[str], activity_key: str, user_id: str
+    ) -> dict[str, tuple[int, int, int]]:
+        """Read configured personal board positions from one consistent snapshot."""
+        normalized = tuple(dict.fromkeys(str(source or "").strip() for source in sources))
+        if not normalized:
+            return {}
+        if not self.database.is_file():
+            return {source: (0, 0, 0) for source in normalized}
+
         key = str(activity_key).strip()
         uid = str(user_id or "").strip()
-        if not self.database.is_file():
-            return 0, 0, 0
-        if not uid:
-            return 0, self.board_total(source, key), 0
+        needs_table_catalog = any(source not in {"sign", "boss"} for source in normalized)
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            tables = self._table_names(uow) if needs_table_catalog else set()
+            return {
+                source: self._board_standing_in_uow(
+                    uow, source, key, uid, tables=tables
+                )
+                for source in normalized
+            }
+
+    def _board_standing_in_uow(
+        self,
+        uow: DatabaseUnitOfWork,
+        source: str,
+        key: str,
+        uid: str,
+        *,
+        tables: set[str],
+    ) -> tuple[int, int, int]:
         if source == "sign":
             sql = """
                 WITH viewer AS (SELECT ? AS user_id),
@@ -861,14 +886,16 @@ class ActivityReadModelSqlRepository:
                 CROSS JOIN target
             """
             try:
-                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                    row = uow.query_one(sql, (uid,))
+                row = uow.query_one(sql, (uid,))
             except (OSError, sqlite3.Error):
                 return 0, 0, 0
-            value = max(0, int((row or {}).get("value") or 0))
             total = max(0, int((row or {}).get("total") or 0))
+            if not uid:
+                return 0, total, 0
+            value = max(0, int((row or {}).get("value") or 0))
             better = max(0, int((row or {}).get("better") or 0))
             return (better + 1 if value > 0 else 0), total, value
+
         if source == "boss" and key:
             sql = """
                 WITH viewer AS (SELECT ? AS user_id),
@@ -897,16 +924,79 @@ class ActivityReadModelSqlRepository:
                 FROM counts CROSS JOIN target
             """
             try:
-                with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                    row = uow.query_one(sql, (uid, key, key))
+                row = uow.query_one(sql, (uid, key, key))
             except (OSError, sqlite3.Error):
                 return 0, 0, 0
+            total = max(0, int((row or {}).get("total") or 0))
+            if not uid:
+                return 0, total, 0
             value = max(0, int((row or {}).get("value") or 0))
+            better = max(0, int((row or {}).get("better") or 0))
+            return (better + 1 if value > 0 else 0), total, value
+
+        spec = self._BOARD_POSITION_SQL.get(source)
+        if spec is None or not key:
+            return 0, 0, 0
+        table, self_sql, _better_sql, total_sql = spec
+        if table not in tables:
+            return 0, 0, 0
+        if not uid:
+            row = uow.query_one(total_sql, (key,))
+            return 0, max(0, int((row or {}).get("total") or 0)), 0
+
+        if source == "collect":
+            row = uow.query_one(
+                "WITH balances AS ("
+                "SELECT user_id,xiuxian_int_sum(count) AS value "
+                "FROM activity_collect_inventory WHERE activity_key=? "
+                "GROUP BY user_id "
+                "HAVING xiuxian_int_cmp(xiuxian_int_sum(count),0)>0"
+                "), target AS ("
+                "SELECT COALESCE((SELECT value FROM balances WHERE user_id=?),0) AS value"
+                ") SELECT target.value,"
+                "COUNT(CASE WHEN balances.value IS NOT NULL THEN 1 END) AS total,"
+                "COUNT(CASE WHEN xiuxian_int_cmp(balances.value,target.value)>0 "
+                "OR (xiuxian_int_cmp(balances.value,target.value)=0 AND balances.user_id<?) "
+                "THEN 1 END) AS better "
+                "FROM target LEFT JOIN balances ON 1=1 GROUP BY target.value",
+                (key, uid, uid),
+            )
+            value = max(0, as_int_like((row or {}).get("value")))
             total = max(0, int((row or {}).get("total") or 0))
             better = max(0, int((row or {}).get("better") or 0))
             return (better + 1 if value > 0 else 0), total, value
-        rank, value = self.board_position(source, key, uid)
-        return rank, self.board_total(source, key), value
+
+        mine = uow.query_one(self_sql, (key, uid))
+        value = max(0, as_int_like((mine or {}).get("value")))
+        tie = max(0, as_int_like((mine or {}).get("tie")))
+        if source == "points":
+            counts = uow.query_one(
+                "WITH eligible AS ("
+                "SELECT user_id,total_points,points FROM activity_point_balance "
+                "WHERE activity_key=? AND xiuxian_int_cmp(total_points,0,1,'activity_points','actor')>0"
+                ") SELECT COUNT(*) AS total,COUNT(CASE WHEN "
+                "xiuxian_int_cmp(total_points,?,1,'activity_points','actor')>0 "
+                "OR (xiuxian_int_cmp(total_points,?,1,'activity_points','actor')=0 "
+                "AND xiuxian_int_cmp(points,?,1,'activity_points','actor')>0) "
+                "OR (xiuxian_int_cmp(total_points,?,1,'activity_points','actor')=0 "
+                "AND xiuxian_int_cmp(points,?,1,'activity_points','actor')=0 "
+                "AND user_id<?) THEN 1 END) AS better FROM eligible",
+                (key, value, value, tie, value, tie, uid),
+            )
+        else:
+            counts = uow.query_one(
+                "WITH eligible AS ("
+                "SELECT user_id,level,total_exp FROM activity_pass_balance "
+                "WHERE activity_key=? AND level>0"
+                ") SELECT COUNT(*) AS total,COUNT(CASE WHEN level>? "
+                "OR (level=? AND total_exp>?) "
+                "OR (level=? AND total_exp=? AND user_id<?) "
+                "THEN 1 END) AS better FROM eligible",
+                (key, value, value, tie, value, tie, uid),
+            )
+        total = max(0, int((counts or {}).get("total") or 0))
+        better = max(0, int((counts or {}).get("better") or 0))
+        return (better + 1 if value > 0 else 0), total, value
 
     def overview_snapshot(
         self,

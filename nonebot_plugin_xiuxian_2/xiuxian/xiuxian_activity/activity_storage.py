@@ -5,6 +5,7 @@ from pathlib import Path
 from nonebot.log import logger
 from ...paths import get_paths
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...features.base.schema_catalog import sqlite_table_names
 
 from ..xiuxian_utils import db_backend
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
@@ -84,17 +85,9 @@ def init_db(conn=None):
     }
     if conn is None:
         with DatabaseUnitOfWork(DB_PATH, read_only=True) as uow:
-            existing = {
-                str(row["name"])
-                for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")
-            }
+            existing = sqlite_table_names(uow, DB_PATH)
     else:
-        existing = {
-            str(row["name"] if hasattr(row, "keys") else row[0])
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
+        existing = sqlite_table_names(conn, DB_PATH)
     missing = sorted(required - existing)
     if missing:
         raise RuntimeError(f"activity_state.001 schema_missing: {', '.join(missing)}")

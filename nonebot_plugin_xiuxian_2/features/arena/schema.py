@@ -20,6 +20,7 @@ from typing import Mapping
 
 from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.schema_catalog import sqlite_table_columns
 
 
 SCHEMA_MISSING = "schema_missing"
@@ -76,8 +77,10 @@ class ArenaSchemaMissing(DomainError):
 
 def columns(uow: DatabaseUnitOfWork, table: str, *, prefix: str = "") -> frozenset[str]:
     """Return the live column set of ``table`` (empty when the table is absent)."""
-    rows = uow.query_all(f'PRAGMA {prefix}table_info("{table}")')
-    return frozenset(str(row["name"]).casefold() for row in rows)
+    if prefix:
+        rows = uow.query_all(f'PRAGMA {prefix}table_info("{table}")')
+        return frozenset(str(row["name"]).casefold() for row in rows)
+    return sqlite_table_columns(uow, uow.database, table)
 
 
 def table_ready(

@@ -1657,9 +1657,11 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_rank.finish()
 
-    snapshot = boss_integral_application.top_integrals_snapshot(50)
-    ranked_integral = snapshot["rows"]
     viewer_id = str(user_info["user_id"])
+    snapshot, viewer_rank = boss_integral_application.top_integrals_snapshot_with_rank(
+        50, viewer_id
+    )
+    ranked_integral = snapshot["rows"]
     user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranked_integral])
     
     # 生成排行榜
@@ -1668,7 +1670,7 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         user_name = user_names.get(str(user_id))
         rank_msg += f"第{i}位 | {user_name or user_id} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        boss_integral_application.integral_rank(viewer_id),
+        viewer_rank,
         label="世界积分",
         unit="点",
         number=number_to,

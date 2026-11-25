@@ -497,16 +497,22 @@ async def training_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMe
 
 
 def _training_rank_message(field: str, title: str, *, viewer_id: str = "") -> str:
-    snapshot = training_application.leaderboard_snapshot(field, limit=50)
+    if viewer_id:
+        snapshot, viewer_rank = training_application.leaderboard_snapshot_with_rank(
+            field, viewer_id, limit=50
+        )
+    else:
+        snapshot = training_application.leaderboard_snapshot(field, limit=50)
+        viewer_rank = None
     rows = snapshot["rows"]
     message = f"【{title}】\n" + "".join(
         f"第{index}位 | {row['user_name']} | {number_to(row['value'])}\n"
         for index, row in enumerate(rows, start=1)
     )
     message += display_snapshot_freshness(snapshot) + "\n"
-    if viewer_id:
+    if viewer_rank is not None:
         message += personal_rank_line(
-            training_application.rank_of(field, viewer_id),
+            viewer_rank,
             label="历练完成次数" if field == "completed" else "历练积分",
             unit="次" if field == "completed" else "点",
             number=number_to,

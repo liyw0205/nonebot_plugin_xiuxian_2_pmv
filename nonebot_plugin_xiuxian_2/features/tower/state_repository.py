@@ -8,8 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
-from ..base.public_display_snapshot import shared_display_snapshot
+from ..base.public_display_snapshot import (
+    shared_display_snapshot,
+    shared_display_snapshot_with_live_value,
+)
 from ..base.ranking_position import PersonalRank
+from ..base.schema_catalog import sqlite_table_columns
 
 
 TOWER_FIELDS = ("current_floor", "max_floor", "score", "weekly_purchases")
@@ -247,9 +251,7 @@ class TowerStateRepository:
         if limit == 0 or not Path(self.player_database).is_file():
             return []
         with DatabaseUnitOfWork(self.player_database) as uow:
-            columns = {
-                str(row["name"]) for row in uow.query_all("PRAGMA table_info(tower)")
-            }
+            columns = sqlite_table_columns(uow, self.player_database, "tower")
             if not {"user_id", field} <= columns:
                 return []
             rows = uow.query_all(
@@ -271,6 +273,43 @@ class TowerStateRepository:
             loader=lambda: self.ranking(field, limit),
         )
 
+    def ranking_snapshot_with_rank(
+        self, user_id: str, field: str = "current_floor", limit: int = 50
+    ) -> tuple[dict[str, Any], PersonalRank]:
+        """Share a cold display read with the exact rank, but never cache that rank."""
+        if field not in {"current_floor", "score"}:
+            raise ValueError("unsupported tower ranking field")
+        normalized_limit = min(50, max(0, int(limit)))
+        user_id = str(user_id).strip()
+        if not user_id:
+            return self.ranking_snapshot(field, normalized_limit), PersonalRank()
+
+        return shared_display_snapshot_with_live_value(
+            self.player_database,
+            "tower-rank-v1",
+            field,
+            normalized_limit,
+            loader=lambda: self._ranking_and_rank(field, normalized_limit, user_id),
+            read_live=lambda: self.rank_of(user_id, field),
+        )
+
+    def _ranking_and_rank(
+        self, field: str, limit: int, user_id: str
+    ) -> tuple[list[tuple[str, int]], PersonalRank]:
+        if not Path(self.player_database).is_file():
+            return [], PersonalRank()
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            columns = sqlite_table_columns(uow, self.player_database, "tower")
+            if not {"user_id", field} <= columns:
+                return [], PersonalRank()
+            rows = uow.query_all(
+                f'SELECT user_id,COALESCE("{field}",0) AS value '
+                f'FROM tower ORDER BY xiuxian_int_text(COALESCE("{field}",0)) COLLATE xiuxian_integer DESC,user_id ASC LIMIT ?',
+                (limit,),
+            )
+            rank = self._rank_in_uow(uow, user_id, field)
+        return [(str(row["user_id"]), as_int_like(row["value"])) for row in rows], rank
+
     def rank_of(self, user_id: str, field: str = "current_floor") -> PersonalRank:
         """本人通天塔名次：并列名次 + 有记录人数 + 本人数值。"""
         if field not in {"current_floor", "score"}:
@@ -279,21 +318,25 @@ class TowerStateRepository:
         if not user_id or not Path(self.player_database).is_file():
             return PersonalRank()
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
-            columns = {
-                str(row["name"]) for row in uow.query_all("PRAGMA table_info(tower)")
-            }
+            columns = sqlite_table_columns(uow, self.player_database, "tower")
             if not {"user_id", field} <= columns:
                 return PersonalRank()
-            row = uow.query_one(
-                f'WITH target AS (SELECT COALESCE((SELECT "{field}" FROM tower '
-                "WHERE user_id=? ORDER BY rowid ASC LIMIT 1),0) AS value) "
-                f'SELECT target.value AS value, '
-                f'COUNT(CASE WHEN xiuxian_int_cmp(COALESCE(t."{field}",0),0)>0 THEN 1 END) AS total, '
-                f'COUNT(CASE WHEN target.value>0 AND '
-                f'xiuxian_int_cmp(COALESCE(t."{field}",0),target.value)>0 THEN 1 END) AS better '
-                "FROM tower AS t CROSS JOIN target",
-                (user_id,),
-            )
+            return self._rank_in_uow(uow, user_id, field)
+
+    @staticmethod
+    def _rank_in_uow(
+        uow: DatabaseUnitOfWork, user_id: str, field: str
+    ) -> PersonalRank:
+        row = uow.query_one(
+            f'WITH target AS (SELECT COALESCE((SELECT "{field}" FROM tower '
+            "WHERE user_id=? ORDER BY rowid ASC LIMIT 1),0) AS value) "
+            f'SELECT target.value AS value, '
+            f'COUNT(CASE WHEN xiuxian_int_cmp(COALESCE(t."{field}",0),0)>0 THEN 1 END) AS total, '
+            f'COUNT(CASE WHEN target.value>0 AND '
+            f'xiuxian_int_cmp(COALESCE(t."{field}",0),target.value)>0 THEN 1 END) AS better '
+            "FROM tower AS t CROSS JOIN target",
+            (user_id,),
+        )
         value = as_int_like((row or {}).get("value"))
         total = int((row or {}).get("total") or 0)
         better = int((row or {}).get("better") or 0)

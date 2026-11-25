@@ -531,13 +531,15 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 生成排行榜
     rank_msg = "【通天塔排行榜】\n"
     viewer_id = str(user_info["user_id"])
-    snapshot = tower_limit.ranking_snapshot("current_floor")
+    snapshot, viewer_rank = tower_limit.ranking_snapshot_with_rank(
+        viewer_id, "current_floor"
+    )
     ranking = snapshot["rows"]
     user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
     for i, (user_id, integral) in enumerate(ranking, start=1):
         rank_msg += f"第{i}位 | {user_names[str(user_id)]} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        tower_limit.rank_of(viewer_id, "current_floor"),
+        viewer_rank,
         label="通天塔层数",
         unit="层",
         number=number_to,
@@ -559,13 +561,13 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 生成排行榜
     rank_msg = "【通天塔积分排行榜】\n"
     viewer_id = str(user_info["user_id"])
-    snapshot = tower_limit.ranking_snapshot("score")
+    snapshot, viewer_rank = tower_limit.ranking_snapshot_with_rank(viewer_id, "score")
     ranking = snapshot["rows"]
     user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
     for i, (user_id, integral) in enumerate(ranking, start=1):
         rank_msg += f"第{i}位 | {user_names[str(user_id)]} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        tower_limit.rank_of(viewer_id, "score"),
+        viewer_rank,
         label="通天塔积分",
         unit="点",
         number=number_to,

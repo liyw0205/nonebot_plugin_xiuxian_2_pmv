@@ -190,6 +190,40 @@ def _create_public_rank_indexes(conn) -> None:
     _create_root_rank_index(conn)
 
 
+def _create_numeric_rank_generation(conn) -> None:
+    """Track score-set changes so cached exact personal ranks stay current."""
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"user_id", "exp", "stone"}.issubset(available):
+        return
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS xiuxian_numeric_rank_generation ("
+        "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+        "generation INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO xiuxian_numeric_rank_generation(singleton,generation) "
+        "VALUES(1,0)"
+    )
+    for operation, condition in (
+        ("insert", ""),
+        ("delete", ""),
+        (
+            "update",
+            " WHEN NEW.user_id IS NOT OLD.user_id "
+            "OR NEW.exp IS NOT OLD.exp OR NEW.stone IS NOT OLD.stone",
+        ),
+    ):
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS xiuxian_numeric_rank_generation_{operation} "
+            f"AFTER {operation.upper()} ON user_xiuxian{condition} "
+            "BEGIN UPDATE xiuxian_numeric_rank_generation "
+            "SET generation=generation+1 WHERE singleton=1; END"
+        )
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -326,6 +360,7 @@ CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20261125_0001_compact_numeric_rank_keys", _migration_20261125_0001_compact_numeric_rank_keys),
     ("20261125_0002_realm_rank_index", _create_realm_rank_index),
     ("20261125_0003_public_rank_indexes", _create_public_rank_indexes),
+    ("20261126_0001_exact_numeric_rank_generation", _create_numeric_rank_generation),
 ]
 
 

@@ -1128,7 +1128,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     try:
         user_id = user_info['user_id']
-        user_msg = _sql_message().get_user_info_with_id(user_id) or user_info
+        user_msg = user_info
         user_buff_data = UserBuffDate(user_id)
         level_name = user_msg.get('level') or user_info.get('level') or '未知'
         leveluprate = as_int_like(user_msg.get('level_up_rate', 0))
@@ -1140,7 +1140,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         realm_rate = jsondata.level_data()[user_info['level']]["spend"]
         blessed = 0.0
         try:
-            blessed = float(UserBuffDate(user_id).BuffInfo.get('blessed_spot') or 0) * 0.5
+            blessed = float(user_buff_data.BuffInfo.get('blessed_spot') or 0) * 0.5
         except Exception:
             blessed = 0.0
         levels = OtherSet().level

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,45 @@ from tests.test_db_backend import db_backend
 
 
 class SeasonRankSnapshotCacheTests(unittest.TestCase):
+    def test_schema_columns_are_cached_until_sqlite_schema_changes(self):
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "message.db"
+            connection = db_backend.connect(database)
+            self.addCleanup(connection.close)
+            with db_backend.transaction(database) as writer:
+                writer.execute(
+                    "CREATE TABLE season_rank(rank_key TEXT,mode TEXT,period_key TEXT,"
+                    "rank_type TEXT,user_id TEXT,sect_id INTEGER,score TEXT,extra TEXT,"
+                    "updated_at TEXT)"
+                )
+            statements = []
+            connection._raw.set_trace_callback(statements.append)
+            manager = SimpleNamespace(
+                database_path=database,
+                conn=connection,
+                lock=threading.RLock(),
+            )
+
+            with patch.object(season_rank_service, "_sql_message", return_value=manager):
+                self.assertTrue(season_rank_service.ensure_season_rank_table())
+                self.assertTrue(season_rank_service.ensure_season_rank_table())
+                self.assertEqual(
+                    1,
+                    sum('table_info("season_rank")' in sql for sql in statements),
+                )
+
+                with db_backend.transaction(database) as writer:
+                    writer.execute("DROP TABLE season_rank")
+                    writer.execute("CREATE TABLE season_rank(rank_key TEXT)")
+                self.assertFalse(season_rank_service.ensure_season_rank_table())
+
+            self.assertEqual(
+                2,
+                sum('table_info("season_rank")' in sql for sql in statements),
+            )
+
     def test_public_period_snapshot_is_shared_but_personal_rank_stays_live(self):
         process_read_cache.clear()
         self.addCleanup(process_read_cache.clear)

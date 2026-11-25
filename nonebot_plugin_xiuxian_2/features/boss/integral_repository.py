@@ -7,7 +7,11 @@ from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.ranking_position import PersonalRank
-from ..base.public_display_snapshot import shared_display_snapshot
+from ..base.public_display_snapshot import (
+    shared_display_snapshot,
+    shared_display_snapshot_with_live_value,
+)
+from ..base.schema_catalog import sqlite_table_columns
 
 
 @dataclass(frozen=True)
@@ -44,15 +48,7 @@ class BossIntegralSqlRepository:
 
     @staticmethod
     def _ready(uow: DatabaseUnitOfWork) -> bool:
-        table = uow.query_one(
-            "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='boss_limit'"
-        )
-        if table is None:
-            return False
-        columns = {
-            str(row["name"]).casefold()
-            for row in uow.query_all('PRAGMA table_info("boss_limit")')
-        }
+        columns = sqlite_table_columns(uow, uow.database, "boss_limit")
         return {"user_id", "integral"}.issubset(columns)
 
     def top_integrals(self, limit: int = MAX_RANKED_USERS) -> list[tuple[str, int]]:
@@ -66,18 +62,24 @@ class BossIntegralSqlRepository:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             if not self._ready(uow):
                 return []
-            rows = uow.query_all(
-                "SELECT entry.user_id AS user_id,"
-                "COALESCE(entry.integral,0) AS integral "
-                "FROM boss_limit AS entry "
-                "WHERE entry.user_id IS NOT NULL "
-                "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
-                "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
-                "WHERE candidate.user_id=entry.user_id) "
-                "ORDER BY xiuxian_int_text(COALESCE(entry.integral,0)) COLLATE xiuxian_integer DESC,entry.rowid ASC "
-                "LIMIT ?",
-                (limit,),
-            )
+            return self._top_integrals_in_uow(uow, limit)
+
+    @staticmethod
+    def _top_integrals_in_uow(
+        uow: DatabaseUnitOfWork, limit: int
+    ) -> list[tuple[str, int]]:
+        rows = uow.query_all(
+            "SELECT entry.user_id AS user_id,"
+            "COALESCE(entry.integral,0) AS integral "
+            "FROM boss_limit AS entry "
+            "WHERE entry.user_id IS NOT NULL "
+            "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
+            "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
+            "WHERE candidate.user_id=entry.user_id) "
+            "ORDER BY xiuxian_int_text(COALESCE(entry.integral,0)) COLLATE xiuxian_integer DESC,entry.rowid ASC "
+            "LIMIT ?",
+            (limit,),
+        )
         return [(str(row["user_id"]), as_int_like(row["integral"])) for row in rows]
 
     def top_integrals_snapshot(
@@ -94,11 +96,52 @@ class BossIntegralSqlRepository:
             loader=lambda: self.top_integrals(normalized_limit),
         )
 
+    def top_integrals_snapshot_with_rank(
+        self, limit: int, user_id: str
+    ) -> tuple[dict[str, Any], PersonalRank]:
+        """Share the cold display read, but calculate the viewer rank live on hits."""
+        try:
+            normalized_limit = max(0, min(int(limit), self.MAX_RANKED_USERS))
+        except (TypeError, ValueError, OverflowError):
+            normalized_limit = 0
+        normalized_user_id = str(user_id).strip()
+        if not normalized_user_id:
+            return self.top_integrals_snapshot(normalized_limit), PersonalRank()
+
+        def load_top_and_rank():
+            if not self.database.is_file():
+                return [], PersonalRank()
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                if not self._ready(uow):
+                    return [], PersonalRank()
+                rows = self._top_integrals_in_uow(uow, normalized_limit)
+                rank = self._integral_rank_in_uow(
+                    uow, normalized_user_id
+                )
+                return rows, rank
+
+        return shared_display_snapshot_with_live_value(
+            self.database,
+            "boss-integral-rank-v1",
+            normalized_limit,
+            loader=load_top_and_rank,
+            read_live=lambda: self.integral_rank(normalized_user_id),
+        )
+
     def integral_rank(self, user_id: str) -> PersonalRank:
         """本人世界积分名次：并列名次 + 有分人数 + 本人积分。"""
         user_id = str(user_id).strip()
         if not user_id or not self.database.is_file():
             return PersonalRank()
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._ready(uow):
+                return PersonalRank()
+            return self._integral_rank_in_uow(uow, user_id)
+
+    @staticmethod
+    def _integral_rank_in_uow(
+        uow: DatabaseUnitOfWork, user_id: str
+    ) -> PersonalRank:
         deduped = (
             "SELECT entry.user_id AS user_id,"
             "COALESCE(entry.integral,0) AS value "
@@ -108,19 +151,16 @@ class BossIntegralSqlRepository:
             "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
             "WHERE candidate.user_id=entry.user_id)"
         )
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._ready(uow):
-                return PersonalRank()
-            row = uow.query_one(
-                f"WITH ranked AS MATERIALIZED ({deduped}), "
-                "target AS (SELECT COALESCE((SELECT value FROM ranked WHERE user_id=?),0) AS value) "
-                "SELECT target.value AS value, "
-                "COALESCE(SUM(CASE WHEN xiuxian_int_cmp(ranked.value,0)>0 THEN 1 ELSE 0 END),0) AS total, "
-                "COALESCE(SUM(CASE WHEN target.value>0 AND "
-                "xiuxian_int_cmp(ranked.value,target.value)>0 THEN 1 ELSE 0 END),0) AS better "
-                "FROM ranked CROSS JOIN target",
-                (user_id,),
-            )
+        row = uow.query_one(
+            f"WITH ranked AS MATERIALIZED ({deduped}), "
+            "target AS (SELECT COALESCE((SELECT value FROM ranked WHERE user_id=?),0) AS value) "
+            "SELECT target.value AS value, "
+            "COALESCE(SUM(CASE WHEN xiuxian_int_cmp(ranked.value,0)>0 THEN 1 ELSE 0 END),0) AS total, "
+            "COALESCE(SUM(CASE WHEN target.value>0 AND "
+            "xiuxian_int_cmp(ranked.value,target.value)>0 THEN 1 ELSE 0 END),0) AS better "
+            "FROM ranked CROSS JOIN target",
+            (user_id,),
+        )
         value = as_int_like((row or {}).get("value"))
         total = int((row or {}).get("total") or 0)
         better = int((row or {}).get("better") or 0)

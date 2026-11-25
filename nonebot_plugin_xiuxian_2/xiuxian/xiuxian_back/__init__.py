@@ -2116,8 +2116,10 @@ def _build_main_backpack_sections_for_md(user_id: str):
                 "name": gname,
                 "goods_type": b.get("goods_type", ""),
                 "count": 0,
-                "bind": 0
+                "bind": 0,
             }
+            if "state" in b:
+                merged[key]["state"] = b["state"]
         merged[key]["count"] += int(b.get("goods_num", 0))
         merged[key]["bind"] += int(b.get("bind_num", 0))
 
@@ -2136,7 +2138,11 @@ def _build_main_backpack_sections_for_md(user_id: str):
             lv = item_info.get("level", "")
             if it in ["法器", "防具"]:
                 row["_sort_idx"] = _rank_idx(lv, EQUIPMENT_RANK_ORDER)
-                row["_is_equipped"] = check_equipment_use_msg(user_id, row["goods_id"])
+                row["_is_equipped"] = check_equipment_use_msg(
+                    user_id,
+                    row["goods_id"],
+                    back_item=row if "state" in row else None,
+                )
                 row["is_equipped"] = row["_is_equipped"]
                 if row["_is_equipped"]:
                     equip_map[it]["已装备"].append(row)

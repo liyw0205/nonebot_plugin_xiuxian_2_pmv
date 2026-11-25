@@ -73,6 +73,74 @@ class ActivityReadModelTests(unittest.TestCase):
         self.assertIn("奖励：暂无奖励", text)
         self.assertNotIn("待补", text)
 
+    def test_table_catalog_snapshot_reuses_reads_and_tracks_schema_version(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+            ActivityReadModelSqlRepository,
+        )
+        from nonebot_plugin_xiuxian_2.features.base.schema_catalog import (
+            sqlite_table_names,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        repository = ActivityReadModelSqlRepository(self.database)
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            first = repository._table_names(uow)
+            second = sqlite_table_names(uow, self.database)
+
+        self.assertEqual(first, set(second))
+        self.assertIn("activity_user", first)
+        self.assertEqual(1, process_read_cache.stats()["misses"])
+        self.assertEqual(1, process_read_cache.stats()["hits"])
+
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute("CREATE TABLE activity_catalog_probe(id INTEGER)")
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            updated = sqlite_table_names(uow, self.database)
+
+        self.assertIn("activity_catalog_probe", updated)
+        self.assertEqual(2, process_read_cache.stats()["misses"])
+
+    def test_table_column_snapshot_reuses_reads_and_tracks_schema_version(self) -> None:
+        from nonebot_plugin_xiuxian_2.features.base.schema_catalog import (
+            sqlite_table_columns,
+        )
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        statements = []
+        original_execute = DatabaseUnitOfWork.execute
+
+        def capture_execute(uow, sql, params=()):
+            statements.append(sql)
+            return original_execute(uow, sql, params)
+
+        with patch.object(DatabaseUnitOfWork, "execute", capture_execute):
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                first = sqlite_table_columns(uow, self.database, "activity_user")
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                second = sqlite_table_columns(uow, self.database, "activity_user")
+
+        self.assertIn("user_id", first)
+        self.assertEqual(first, second)
+        self.assertEqual(
+            1,
+            sum('table_info("activity_user")' in sql for sql in statements),
+        )
+
+        with DatabaseUnitOfWork(self.database) as uow:
+            uow.execute("ALTER TABLE activity_user ADD COLUMN schema_probe TEXT")
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            updated = sqlite_table_columns(uow, self.database, "activity_user")
+
+        self.assertIn("schema_probe", updated)
+
     def test_overview_reuses_one_connection_and_batched_user_progress(self) -> None:
         statements = []
         connections = []
