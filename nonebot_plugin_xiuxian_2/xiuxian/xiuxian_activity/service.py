@@ -1818,6 +1818,10 @@ def reset_activity_data(scope: str, activity_key: str | None = None) -> str:
         if target_scope not in {"sign", "activity", "gameplay", "task", "tasks", "pass", "activity_pass", "all"}:
             raise ValueError("清理范围无效")
         conn.commit()
+        if target_scope in {"activity", "gameplay", "all"}:
+            from ..xiuxian_utils.shared_read_cache import process_read_cache
+
+            process_read_cache.invalidate_snapshot_database(DB_PATH)
         return f"已清理活动数据，影响记录 {deleted} 条"
     except Exception:
         conn.rollback()

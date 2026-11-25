@@ -30,6 +30,9 @@ from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
     ActivityReadModelSqlRepository,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+    process_read_cache,
+)
 from nonebot_plugin_xiuxian_2.features.activity.migrations import (
     apply_activity_state_schema,
 )
@@ -164,6 +167,32 @@ class BossRankPerActivityTests(unittest.TestCase):
         application = self._application(bosses)
         text = application.activity_center_text("u1")
         self.assertIn("活动首领领奖 排行", text)
+
+    def test_public_boss_board_is_a_process_snapshot_but_rank_decisions_stay_live(self) -> None:
+        self._seed_damage([("boss_a", "u1", 100), ("boss_a", "u2", 90)])
+        process_read_cache.clear()
+        repository = ActivityReadModelSqlRepository(self.database)
+        try:
+            first = repository.boss_rank("boss_a", 10)
+            self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+            self.assertEqual(first, repository.boss_rank("boss_a", 10))
+            self.assertEqual(1, process_read_cache.stats()["misses"])
+            self.assertEqual(1, process_read_cache.stats()["hits"])
+
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                uow.execute(
+                    "UPDATE activity_boss_damage SET total_damage=200 WHERE activity_key=? AND user_id=?",
+                    ("boss_a", "u2"),
+                )
+            self.assertEqual(first, repository.boss_rank("boss_a", 10))
+            self.assertEqual((1, 200), repository.board_position("boss", "boss_a", "u2"))
+            self.assertEqual("u2", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
+
+            process_read_cache.invalidate_snapshot_database(self.database)
+            refreshed = repository.boss_rank("boss_a", 10)
+            self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+        finally:
+            process_read_cache.clear()
 
 
 if __name__ == "__main__":

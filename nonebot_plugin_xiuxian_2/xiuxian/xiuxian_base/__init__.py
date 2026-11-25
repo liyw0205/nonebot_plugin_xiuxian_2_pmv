@@ -558,21 +558,10 @@ def _get_sect_weekly_rank_fallback(limit: int = 5):
         return None
 
     week_key = get_current_season("weekly").key
-    return _sql_message()._read_query(
-        """
-        SELECT
-            g.sect_id,
-            COALESCE(s.sect_name, g.sect_id) AS sect_name,
-            SUM(g.progress) AS total_progress
-        FROM sect_weekly_goal AS g
-        LEFT JOIN sects AS s ON s.sect_id = g.sect_id
-        WHERE g.week_key = %s
-        GROUP BY g.sect_id, s.sect_name
-        ORDER BY total_progress DESC
-        LIMIT %s
-        """,
-        (week_key, max(1, min(int(limit or 5), 50))),
-        dict_row=True,
+    from ..xiuxian_sect.sect_weekly import sect_weekly_goal_manager
+
+    return sect_weekly_goal_manager.weekly_rank(
+        max(1, min(int(limit or 5), 50)), week_key
     )
 
 
@@ -1555,7 +1544,9 @@ async def assets_overview_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await assets_overview.finish()
 
     # 只使用登录会话里的 user_id；不接受任何参数指定他人资产。
-    payload = assets_overview_application.overview(str(user_info["user_id"]))
+    payload = assets_overview_application.overview(
+        str(user_info["user_id"]), profile=user_info
+    )
     text = format_assets_overview(payload, format_number=number_to)
     await handle_send(
         bot,

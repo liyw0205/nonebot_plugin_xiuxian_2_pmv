@@ -17,10 +17,21 @@ from tests.test_db_backend import db_backend
 _package = ModuleType("nonebot_plugin_xiuxian_2._cache_tests.field_lists")
 _package.__path__ = []
 _package.db_backend = db_backend
+_cache_module = ModuleType(f"{_package.__name__}.shared_read_cache")
+_invalidate_snapshot_database = Mock()
+_cache_module.process_read_cache = SimpleNamespace(
+    invalidate_snapshot_database=_invalidate_snapshot_database
+)
 _path = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_utils/player_data_manager.py"
 _spec = importlib.util.spec_from_file_location(f"{_package.__name__}.manager", _path)
 module = importlib.util.module_from_spec(_spec)
-with patch.dict(sys.modules, {_package.__name__: _package}):
+with patch.dict(
+    sys.modules,
+    {
+        _package.__name__: _package,
+        f"{_package.__name__}.shared_read_cache": _cache_module,
+    },
+):
     _spec.loader.exec_module(module)
 
 
@@ -50,6 +61,34 @@ def query(manager, kind, *, table="scores", ttl=10):
     if kind == "fields":
         return manager.get_all_field_data(table, "points", cache_ttl=ttl)
     return manager.list_users_by_fields(table, {"built": 1}, cache_ttl=ttl)
+
+
+def test_get_all_fields_projects_requested_columns_without_decoding_wide_rows(tmp_path):
+    database = tmp_path / "projected-player.db"
+    with db_backend.transaction(database) as connection:
+        connection.execute(
+            "CREATE TABLE mentor(user_id TEXT PRIMARY KEY,mentor_id TEXT,"
+            "apprentice_ids TEXT,mentor_history TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO mentor VALUES(%s,%s,%s,%s)",
+            ("mentor", None, '["apprentice"]', '[{"large":"unused"}]'),
+        )
+
+    manager = object.__new__(module.PlayerDataManager)
+    manager._conn_lock = threading.RLock()
+    manager._ensured_tables = set()
+    manager._ensured_fields = set()
+    manager.database_path = database
+    manager.conn = db_backend.connect(database, check_same_thread=False)
+    try:
+        rows = manager.get_all_fields("mentor", ("mentor_id", "apprentice_ids"))
+    finally:
+        manager.conn.close()
+
+    assert rows == [
+        {"user_id": "mentor", "mentor_id": None, "apprentice_ids": ["apprentice"]}
+    ]
 
 
 def assert_accounting(manager):
@@ -282,6 +321,7 @@ def test_table_field_and_global_invalidation_preserve_accounting(cache_manager):
 
 @pytest.mark.parametrize("action", ("close", "reconnect", "failed_reconnect"))
 def test_connection_lifecycle_releases_only_field_list_cache(cache_manager, monkeypatch, action):
+    _invalidate_snapshot_database.reset_mock()
     manager, _ = cache_manager
     old_connection = manager.conn
     manager.other_cache = {"preserve": "business-state"}
@@ -298,6 +338,10 @@ def test_connection_lifecycle_releases_only_field_list_cache(cache_manager, monk
     assert manager.other_cache == {"preserve": "business-state"}
     assert manager._field_list_cache == {}
     assert manager._field_list_cache_charged_bytes == 0
+    if action == "reconnect":
+        _invalidate_snapshot_database.assert_called_once_with(manager.database_path)
+    else:
+        _invalidate_snapshot_database.assert_not_called()
     assert not manager.database_path.exists()
     assert_accounting(manager)
 
@@ -348,5 +392,29 @@ def test_real_sqlite_writes_and_reconnect_do_not_replay_stale_cache(tmp_path, mo
         assert manager._field_list_cache == {}
         assert manager._field_list_cache_charged_bytes == 0
         assert manager.get_all_field_data("scores", "points") == [("u", {"score": [2]})]
+    finally:
+        manager.close()
+
+
+def test_get_fields_by_ids_batches_requested_relationship_rows(tmp_path, monkeypatch):
+    class IsolatedManager(module.PlayerDataManager):
+        _instance = {}
+        _has_init = {}
+
+    monkeypatch.setattr(module, "DATABASE", tmp_path)
+    manager = IsolatedManager()
+    try:
+        manager.update_or_write_data("u1", "partner", "affection", 125)
+        manager.update_or_write_data("u1", "partner", "partner_id", "u2")
+        manager.update_or_write_data("u2", "partner", "mentor_id", "u1")
+        rows = manager.get_fields_by_ids("partner", ["u1", "u2", "u1"], ("partner_id",))
+        assert rows == {
+            "u1": {"user_id": "u1", "partner_id": "u2"},
+            "u2": {"user_id": "u2", "partner_id": None},
+        }
+        assert manager.get_all_field_data("partner", "affection") == [
+            ("u1", 125),
+            ("u2", None),
+        ]
     finally:
         manager.close()

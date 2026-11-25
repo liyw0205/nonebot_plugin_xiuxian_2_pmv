@@ -967,7 +967,6 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
 
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     boss_damage_bonus = float(final_attr.get("boss_damage_bonus", 0) * 100)
 
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0

@@ -19,10 +19,16 @@ from nonebot_plugin_xiuxian_2.features.activity.migrations import (
     apply_activity_state_schema,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
+    ActivityReadModelSqlRepository,
+)
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import (
     activity_config,
     activity_rules,
     service,
+)
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+    process_read_cache,
 )
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import app
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_web import activity as web_activity
@@ -256,6 +262,19 @@ class ActivityAdminDataTests(unittest.TestCase):
             self.application.reset("activity", "")
         with self.assertRaisesRegex(ValueError, "清理范围无效"):
             self.application.reset("unknown", "")
+
+    def test_activity_reset_invalidates_public_boss_snapshot_after_commit(self) -> None:
+        process_read_cache.clear()
+        try:
+            repository = ActivityReadModelSqlRepository(self.database)
+            self.assertEqual(["user-0001"], [
+                row["user_id"] for row in repository.boss_rank("boss", 10)
+            ])
+            self.application.reset("activity", "boss")
+            self.assertEqual([], repository.boss_rank("boss", 10))
+            self.assertEqual(2, process_read_cache.stats()["misses"])
+        finally:
+            process_read_cache.clear()
 
     def test_overview_uses_one_read_only_snapshot_and_does_not_create_database(self) -> None:
         units = []

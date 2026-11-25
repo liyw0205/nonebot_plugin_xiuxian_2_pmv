@@ -12,6 +12,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
+from .shared_read_cache import process_read_cache
 from ...core.errors import DomainError
 from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param
 
@@ -434,6 +435,74 @@ class PlayerDataManager:
                 results.append(record)
             return results
 
+    def get_all_fields(self, table_name, fields) -> list[dict]:
+        """Read only the requested columns for every row in a table."""
+        self._ensure_table_exists(table_name)
+        requested = list(dict.fromkeys(str(field) for field in fields if str(field)))
+        with self._conn_lock:
+            available = {
+                str(name).casefold(): str(name)
+                for name in self.conn.column_names(table_name)
+            }
+            columns = [
+                available[field.casefold()]
+                for field in requested
+                if field.casefold() in available
+            ]
+            if "user_id" in available and all(
+                column.casefold() != "user_id" for column in columns
+            ):
+                columns.insert(0, available["user_id"])
+            if not columns:
+                return []
+            cursor = self._get_cursor()
+            cursor.execute(
+                f"SELECT {', '.join(self._quote_ident(column) for column in columns)} "
+                f"FROM {self._quote_ident(table_name)}"
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    column: _decode_field(table_name, column, value)
+                    for column, value in zip(columns, row)
+                }
+                for row in rows
+            ]
+
+    def get_fields_by_ids(self, table_name, user_ids, fields) -> dict[str, dict]:
+        """Read selected fields for a bounded set of users in batched queries."""
+        self._ensure_table_exists(table_name)
+        selected_fields = list(dict.fromkeys(str(field) for field in fields if str(field)))
+        for field in selected_fields:
+            self._ensure_field_exists(table_name, field)
+        ids = list(dict.fromkeys(str(user_id) for user_id in user_ids if user_id is not None))
+        if not ids:
+            return {}
+
+        result: dict[str, dict] = {}
+        field_sql = [self._quote_ident("user_id"), *(self._quote_ident(field) for field in selected_fields)]
+        for offset in range(0, len(ids), 400):
+            batch = ids[offset : offset + 400]
+            placeholders = ",".join(["%s"] * len(batch))
+            with self._conn_lock:
+                cursor = self._get_cursor()
+                cursor.execute(
+                    f"SELECT {', '.join(field_sql)} FROM {self._quote_ident(table_name)} "
+                    f"WHERE user_id IN ({placeholders})",
+                    tuple(batch),
+                )
+                rows = cursor.fetchall()
+                columns = [column[0] for column in cursor.description]
+            for row in rows:
+                record = {
+                    column: _decode_field(table_name, column, value)
+                    for column, value in zip(columns, row)
+                }
+                user_id = str(record.get("user_id") or "")
+                if user_id:
+                    result.setdefault(user_id, record)
+        return result
+
     def delete_record(self, user_id, table_name):
         """
         删除指定 user_id 在指定表中的记录
@@ -669,4 +738,5 @@ class PlayerDataManager:
             self.conn = db_backend.connect(self.database_path, check_same_thread=False)
             self._ensured_tables.clear()
             self._ensured_fields.clear()
+            process_read_cache.invalidate_snapshot_database(self.database_path)
             logger.opt(colors=True).info(f"<green>player数据库已重连！</green>")

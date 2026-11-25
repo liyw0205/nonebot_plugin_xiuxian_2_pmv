@@ -7,6 +7,7 @@ from pathlib import Path
 
 from ....core.errors import DomainError
 from ....infrastructure.database import DatabaseUnitOfWork
+from ....xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
 from ..migrations import (
     apply_sect_task_settlement_operations,
     apply_sect_task_weekly_event_status,
@@ -134,6 +135,22 @@ class SectWeeklyProgressRepositoryTests(unittest.TestCase):
         rows = self.repository.weekly_rank(1, "2026-W39")
         self.assertEqual(1, len(rows))
         self.assertEqual((2, "赤霄宗", 11), (rows[0]["sect_id"], rows[0]["sect_name"], rows[0]["total_progress"]))
+
+    def test_weekly_public_snapshot_is_shared_and_period_keyed(self):
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        self.repository.record_progress(1, "2026-W39", "u", 1, self.goals, "first")
+        first = self.repository.weekly_rank(10, "2026-W39")
+        self.repository.record_progress(1, "2026-W39", "u", 4, self.goals, "second")
+
+        self.assertEqual(first, self.repository.weekly_rank(10, "2026-W39"))
+        self.assertEqual([], self.repository.weekly_rank(10, "2026-W40"))
+        self.assertEqual(1, process_read_cache.stats()["hits"])
+
+        process_read_cache.invalidate_snapshot_database(self.database)
+        refreshed = self.repository.weekly_rank(10, "2026-W39")
+        self.assertNotEqual(first, refreshed)
+        self.assertEqual(8, refreshed[0]["total_progress"])
 
     def test_missing_schema_fails_without_creating_tables(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -18,6 +18,7 @@ import ast
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import nonebot
@@ -129,6 +130,66 @@ class AssetsOverviewTests(unittest.TestCase):
             self.assertEqual(payload["arena_rank"], "白银")
             self.assertEqual(payload["arena_score"], 1520)
             self.assertEqual(payload["arena_honor"], 3300)
+
+    def test_profile_snapshot_reuses_main_values_only_for_same_user(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = self.build(temp)
+            application = PlayerAssetsOverviewApplication(str(game), str(player))
+            queries = []
+            original_query_one = DatabaseUnitOfWork.query_one
+
+            def capture_query_one(uow, sql, params=()):
+                queries.append(sql)
+                return original_query_one(uow, sql, params)
+
+            with patch.object(DatabaseUnitOfWork, "query_one", capture_query_one):
+                payload = application.overview(
+                    "u1",
+                    profile={
+                        "user_id": "u1",
+                        "stone": "123456",
+                        "sect_id": 7,
+                        "sect_contribution": 8800,
+                    },
+                )
+            self.assertTrue(payload["found"])
+            self.assertEqual(payload["stone"], 123456)
+            self.assertEqual(payload["sect_contribution"], 8800)
+            self.assertFalse(any("FROM user_xiuxian" in sql for sql in queries))
+
+            mismatched = application.overview(
+                "u1", profile={"user_id": "u2", "stone": "999999", "sect_id": None}
+            )
+            self.assertEqual(mismatched["stone"], 123456)
+            self.assertEqual(mismatched["sect_name"], "青云宗")
+
+    def test_schema_metadata_cache_tracks_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = self.build(temp)
+            application = PlayerAssetsOverviewApplication(str(game), str(player))
+            self.assertEqual(application.overview("u1")["bank_saved"], 500000)
+            with DatabaseUnitOfWork(str(game), immediate=True) as uow:
+                uow.execute("DROP TABLE bank_accounts")
+            payload = application.overview("u1")
+            self.assertIsNone(payload["bank_saved"])
+            self.assertNotIn("灵庄存款", format_assets_overview(payload, format_number=_fmt))
+
+    def test_schema_metadata_cache_skips_repeated_table_probes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = self.build(temp)
+            application = PlayerAssetsOverviewApplication(str(game), str(player))
+            application.overview("u1")
+            queries = []
+            original_query_all = DatabaseUnitOfWork.query_all
+
+            def capture_query_all(uow, sql, params=()):
+                queries.append(sql)
+                return original_query_all(uow, sql, params)
+
+            with patch.object(DatabaseUnitOfWork, "query_all", capture_query_all):
+                application.overview("u1")
+            self.assertFalse(any("sqlite_master" in sql for sql in queries))
+            self.assertFalse(any("table_info" in sql for sql in queries))
 
     def test_full_render_contains_every_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -315,7 +376,8 @@ class AssetsOverviewTests(unittest.TestCase):
                         handler = node
         self.assertIsNotNone(handler, "assets_overview handler must be registered")
         body = ast.get_source_segment(source, handler) or ""
-        self.assertIn('overview(str(user_info["user_id"]))', body)
+        self.assertIn('str(user_info["user_id"])', body)
+        self.assertIn("profile=user_info", body)
         self.assertIn("format_assets_overview(", body)
         # 安全：不得把命令参数里的 user_id 传给应用。
         self.assertNotIn("extract_plain_text", body)

@@ -14,6 +14,7 @@ from ..xiuxian_utils.utils import (
     check_user, handle_send, send_msg_handler, log_message, number_to, send_help_message
 )
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage
+from ..xiuxian_utils.shared_read_cache import process_read_cache
 from .past_life_limit import past_life_limit
 from .past_life_events import past_life_engine
 from .transaction_service import PastLifeResetService
@@ -266,15 +267,9 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await past_rank_cmd.finish()
 
-    all_scores = past_life_limit.get_all_field_data("best_score")
+    ranking = past_life_limit.public_rank_snapshot(30)
 
-    sorted_scores = sorted(
-        [(uid, score) for uid, score in all_scores if isinstance(score, (int, float)) and score > 0],
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    if not sorted_scores:
+    if not ranking["has_scores"]:
         msg = "暂无前尘排行数据！快去开启你的前世回忆吧！"
         await handle_send(bot, event, msg)
         await past_rank_cmd.finish()
@@ -282,13 +277,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     rank_msg = "【前尘排行榜】\n"
     rank_msg += "排名 | 道号 | 前世评分 | 最佳结局\n"
 
-    for i, (uid, score) in enumerate(sorted_scores[:30], 1):
-        u_info = _sql_message().get_user_info_with_id(uid)
-        if not u_info:
-            continue
-        u_state = past_life_limit.get_user_state(uid)
-        best_ending = u_state.get("best_ending", "未知")
-        rank_msg += f"第{i}位 | {u_info['user_name']} | {score}分 | {best_ending}\n"
+    for i, user_name, score, best_ending in ranking["rows"]:
+        rank_msg += f"第{i}位 | {user_name} | {score}分 | {best_ending}\n"
 
     await handle_send(bot, event, rank_msg)
     await past_rank_cmd.finish()
@@ -362,6 +352,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
             )
             return
         mode = "（已清空历史）" if clear_history else "（保留历史）"
+        if clear_history:
+            process_read_cache.invalidate_snapshot_database(_paths.player_db)
         await handle_send(
             bot,
             event,
@@ -404,6 +396,8 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         )
         await handle_send(bot, event, message)
         return
+    if clear_history:
+        process_read_cache.invalidate_snapshot_database(_paths.player_db)
     mode = "（已清空历史）" if clear_history else "（保留历史）"
     msg = f"已重置 {target_user['user_name']} 的前尘状态 {mode}"
     if result.status == "duplicate":

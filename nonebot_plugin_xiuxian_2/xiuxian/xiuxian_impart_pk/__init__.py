@@ -282,13 +282,12 @@ async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         30:"虚神本源"
     }
     
-    v_impart_top = xiuxian_impart.get_impart_rank()
+    v_impart_top = xiuxian_impart.get_impart_rank_display()
     msg = f"\n✨虚神界等级排行榜TOP50✨\n"
     num = 0
     for i in v_impart_top:
         num += 1
-        user_info = _sql_message().get_user_info_with_id(i['user_id'])
-        user_name = user_info['user_name'] if user_info else "未知修士"
+        user_name = i.get("user_name", "未知修士")
         impart_name = impart_level.get(i['impart_lv'], "未知秘境")
         msg += f"第{num}位  {user_name}\n现位于：{impart_name}（LV {i['impart_lv']}）\n"
         if num == 50:
@@ -319,10 +318,12 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     list_msg = []
     win_num = "win_num"
     pk_num = "pk_num"
+    user_names = _sql_message().get_user_names_by_ids(xu_list)
+    user_data_by_id = {str(user_id): impart_pk.find_user_data(user_id) for user_id in xu_list}
     for x in range(len(xu_list)):
-        user_data = impart_pk.find_user_data(xu_list[x])
+        user_data = user_data_by_id.get(str(xu_list[x]))
         if user_data:
-            name = _sql_message().get_user_info_with_id(xu_list[x])['user_name']
+            name = user_names[str(xu_list[x])]
             msg = ""
             msg += f"编号：{user_data['number']}\n"
             msg += f"道友：{name}\n"

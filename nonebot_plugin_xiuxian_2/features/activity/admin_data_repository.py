@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
 
 
 _ACTIVITY_STATE_TABLES = frozenset(
@@ -471,6 +472,8 @@ class ActivityAdminDataSqlRepository:
                     else:
                         cursor = uow.execute(f"DELETE FROM {table}")
                     deleted += max(0, cursor.rowcount)
+        if target_scope in {"activity", "gameplay", "all"}:
+            process_read_cache.invalidate_snapshot_database(self.database)
         return deleted
 
     def adjust_points(self, activity_key: str, user_id: str, amount: int, timestamp: str) -> dict[str, int]:

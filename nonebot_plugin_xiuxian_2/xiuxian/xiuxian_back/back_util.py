@@ -339,11 +339,15 @@ def get_no_use_equipment_sql(user_id, goods_id):
     return sql_list, item_type
 
 
-def check_equipment_use_msg(user_id, goods_id):
+def check_equipment_use_msg(user_id, goods_id, *, back_item=None):
     """
     检测装备是否已用
     """
-    user_back = _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
+    user_back = (
+        back_item
+        if back_item is not None
+        else _sql_message().get_item_by_good_id_and_user_id(user_id, goods_id)
+    )
     if not user_back:
         return False
     state = int(user_back.get('state', 0) or 0)
@@ -386,7 +390,9 @@ def get_user_main_back_msg(user_id):
         item_info = items.get_data_by_item_id(user_back['goods_id'])
         
         if user_back['goods_type'] == "装备":
-            is_equipped = check_equipment_use_msg(user_id, user_back['goods_id'])
+            is_equipped = check_equipment_use_msg(
+                user_id, user_back['goods_id'], back_item=user_back
+            )
             equip_data = {
                 'id': user_back['goods_id'],
                 'name': item_info['name'],
@@ -509,7 +515,9 @@ def get_user_equipment_msg(user_id):
     for user_back in user_backs:
         if user_back['goods_type'] == "装备":
             item_info = items.get_data_by_item_id(user_back['goods_id'])
-            is_equipped = check_equipment_use_msg(user_id, user_back['goods_id'])
+            is_equipped = check_equipment_use_msg(
+                user_id, user_back['goods_id'], back_item=user_back
+            )
             equip_data = {
                 'id': user_back['goods_id'],
                 'info': item_info,

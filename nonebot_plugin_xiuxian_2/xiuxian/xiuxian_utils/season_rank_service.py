@@ -17,6 +17,7 @@ from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
 from ...infrastructure.database import DatabaseUnitOfWork, message_store
 from ...core.numeric import as_int_like
+from .shared_read_cache import process_read_cache, shared_snapshot_key
 
 _sql_message_instance = None
 
@@ -283,31 +284,48 @@ def get_top_season_rank(
 
     rank_key, _, _ = _build_rank_identity(rank_type_text, mode, now)
     limit_value = max(1, min(_to_int(limit, 10), 100))
-    rows = _sql_message()._read_query(
-        """
-        SELECT
-            r.rank_key,
-            r.mode,
-            r.period_key,
-            r.rank_type,
-            r.user_id,
-            r.sect_id,
-            r.score,
-            r.extra,
-            r.updated_at,
-            COALESCE(u.user_name, r.user_id) AS user_name,
-            COALESCE(s.sect_name, CAST(r.sect_id AS TEXT)) AS sect_name
-        FROM season_rank AS r
-        LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
-        LEFT JOIN sects AS s ON s.sect_id = r.sect_id AND r.sect_id <> 0
-        WHERE r.rank_key = %s
-        ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
-        LIMIT %s
-        """,
-        (rank_key, limit_value),
-        dict_row=True,
+    manager = _sql_message()
+
+    def load_rows():
+        rows = manager._read_query(
+            """
+            SELECT
+                r.rank_key,
+                r.mode,
+                r.period_key,
+                r.rank_type,
+                r.user_id,
+                r.sect_id,
+                r.score,
+                r.extra,
+                r.updated_at,
+                COALESCE(u.user_name, r.user_id) AS user_name,
+                COALESCE(s.sect_name, CAST(r.sect_id AS TEXT)) AS sect_name
+            FROM season_rank AS r
+            LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
+            LEFT JOIN sects AS s ON s.sect_id = r.sect_id AND r.sect_id <> 0
+            WHERE r.rank_key = %s
+            ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
+            LIMIT %s
+            """,
+            (rank_key, limit_value),
+            dict_row=True,
+        )
+        return _hydrate_rank_rows(rows)
+
+    database = getattr(manager, "database_path", None)
+    if database is None:
+        return load_rows()
+    key = shared_snapshot_key(
+        database, "season-rank-v1", rank_key, limit_value
     )
-    return _hydrate_rank_rows(rows)
+    return process_read_cache.get_or_load(
+        key,
+        database_path=database,
+        ttl=60 * 60,
+        loader=load_rows,
+        snapshot=True,
+    )
 
 
 def get_user_season_rank(

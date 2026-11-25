@@ -1658,12 +1658,12 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
 
     ranked_integral = boss_integral_application.top_integrals(50)
     viewer_id = str(user_info["user_id"])
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranked_integral])
     
     # 生成排行榜
     rank_msg = "【世界BOSS积分排行榜】\n"
     for i, (user_id, integral) in enumerate(ranked_integral, start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        user_name = user_info.get("user_name") if user_info else None
+        user_name = user_names.get(str(user_id))
         rank_msg += f"第{i}位 | {user_name or user_id} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
         boss_integral_application.integral_rank(viewer_id),

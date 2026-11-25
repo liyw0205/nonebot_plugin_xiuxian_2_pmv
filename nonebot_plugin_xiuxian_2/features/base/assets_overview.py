@@ -13,6 +13,7 @@ from __future__ import annotations
 from ...core.numeric import as_int_like
 
 from pathlib import Path
+from threading import RLock
 from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork
@@ -28,27 +29,69 @@ def _int(value: Any) -> int:
 class PlayerAssetsOverviewApplication:
     """Compose one player's assets from the existing per-feature tables."""
 
+    _SCHEMA_TABLES = {
+        "main": ("user_xiuxian", "sects", "bank_accounts", "back"),
+        "player_data": ("arena",),
+    }
+
     def __init__(self, game_database: str | Path, player_database: str | Path) -> None:
         self.game_database = str(game_database)
         self.player_database = str(player_database)
+        self._schema_cache: dict[
+            tuple[str, str, int, int, int], dict[str, frozenset[str]]
+        ] = {}
+        self._schema_cache_lock = RLock()
 
     # -- schema probing ---------------------------------------------------
-    @staticmethod
-    def _table_exists(uow: DatabaseUnitOfWork, schema: str, table: str) -> bool:
-        row = uow.query_one(
-            f"SELECT 1 AS present FROM {schema}.sqlite_master WHERE type='table' AND name=?",
-            (table,),
-        )
-        return row is not None
+    def _schema(self, uow: DatabaseUnitOfWork, schema: str, database: str | Path):
+        version_row = uow.query_one(f"PRAGMA {schema}.schema_version")
+        schema_version = int(version_row["schema_version"]) if version_row else -1
+        try:
+            stat = Path(database).stat()
+            identity = (stat.st_dev, stat.st_ino)
+        except OSError:
+            identity = (0, 0)
+        database_key = str(Path(database).resolve())
+        key = (database_key, schema, schema_version, *identity)
+        with self._schema_cache_lock:
+            cached = self._schema_cache.get(key)
+            if cached is not None:
+                return cached
 
-    @staticmethod
-    def _columns(uow: DatabaseUnitOfWork, schema: str, table: str) -> set[str]:
-        return {
+        tables = self._SCHEMA_TABLES[schema]
+        placeholders = ",".join("?" for _ in tables)
+        present = {
             str(row["name"])
-            for row in uow.query_all(f'PRAGMA {schema}.table_info("{table}")')
+            for row in uow.query_all(
+                f"SELECT name FROM {schema}.sqlite_master "
+                f"WHERE type='table' AND name IN ({placeholders})",
+                tables,
+            )
         }
+        metadata = {
+            table: frozenset(
+                str(row["name"])
+                for row in uow.query_all(f'PRAGMA {schema}.table_info("{table}")')
+            )
+            for table in tables
+            if table in present
+        }
+        with self._schema_cache_lock:
+            self._schema_cache = {
+                cache_key: value
+                for cache_key, value in self._schema_cache.items()
+                if cache_key[:2] != key[:2]
+            }
+            self._schema_cache[key] = metadata
+        return metadata
 
-    def _read_game(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any]:
+    def _read_game(
+        self,
+        uow: DatabaseUnitOfWork,
+        user_id: str,
+        schema: Mapping[str, frozenset[str]],
+        profile: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "found": False,
             "stone": None,
@@ -60,27 +103,42 @@ class PlayerAssetsOverviewApplication:
             "bag_items": None,
         }
         # 角色主表：缺失/缺行即「未找到角色」。
-        if not self._table_exists(uow, "main", "user_xiuxian"):
-            return result
-        columns = self._columns(uow, "main", "user_xiuxian")
+        columns = schema.get("user_xiuxian", frozenset())
         if "user_id" not in columns or "stone" not in columns:
             return result
-        row = uow.query_one(
-            "SELECT stone, sect_id FROM user_xiuxian WHERE user_id=?",
-            (user_id,),
-        ) if "sect_id" in columns else uow.query_one(
-            "SELECT stone, NULL AS sect_id FROM user_xiuxian WHERE user_id=?",
-            (user_id,),
+        use_profile = (
+            profile is not None
+            and str(profile.get("user_id", "")) == user_id
+            and "stone" in profile
+            and ("sect_id" not in columns or "sect_id" in profile)
+            and (
+                "sect_contribution" not in columns
+                or "sect_contribution" in profile
+            )
         )
+        if use_profile:
+            row = profile
+        else:
+            sect_id_sql = "sect_id" if "sect_id" in columns else "NULL AS sect_id"
+            contribution_sql = (
+                "sect_contribution"
+                if "sect_contribution" in columns
+                else "NULL AS sect_contribution"
+            )
+            row = uow.query_one(
+                f"SELECT stone, {sect_id_sql}, {contribution_sql} "
+                "FROM user_xiuxian WHERE user_id=?",
+                (user_id,),
+            )
         if row is None:
             return result
         result["found"] = True
         result["stone"] = _int(row["stone"])
 
         # 宗门归属与贡献
-        sect_id = row["sect_id"]
-        if sect_id not in (None, "", 0) and self._table_exists(uow, "main", "sects"):
-            sect_columns = self._columns(uow, "main", "sects")
+        sect_id = row.get("sect_id") if "sect_id" in columns else None
+        if sect_id not in (None, "", 0):
+            sect_columns = schema.get("sects", frozenset())
             if {"sect_id", "sect_name"} <= sect_columns:
                 sect = uow.query_one(
                     "SELECT sect_name FROM sects WHERE sect_id=?", (_int(sect_id),)
@@ -88,53 +146,47 @@ class PlayerAssetsOverviewApplication:
                 if sect is not None and str(sect["sect_name"] or "").strip():
                     result["sect_name"] = str(sect["sect_name"]).strip()
                     if "sect_contribution" in columns:
-                        contribution = uow.query_one(
-                            "SELECT sect_contribution FROM user_xiuxian WHERE user_id=?",
-                            (user_id,),
-                        )
                         result["sect_contribution"] = _int(
-                            (contribution or {}).get("sect_contribution")
+                            row.get("sect_contribution")
                         )
 
         # 灵庄存款
-        if self._table_exists(uow, "main", "bank_accounts"):
-            bank_columns = self._columns(uow, "main", "bank_accounts")
-            if {"user_id", "saved_stone"} <= bank_columns:
-                level_sql = "bank_level" if "bank_level" in bank_columns else "NULL AS bank_level"
-                bank = uow.query_one(
-                    f"SELECT saved_stone,{level_sql} FROM bank_accounts WHERE user_id=?",
-                    (user_id,),
-                )
-                if bank is not None:
-                    result["bank_saved"] = _int(bank["saved_stone"])
-                    result["bank_level"] = str(bank["bank_level"] or "").strip() or None
+        bank_columns = schema.get("bank_accounts", frozenset())
+        if {"user_id", "saved_stone"} <= bank_columns:
+            level_sql = "bank_level" if "bank_level" in bank_columns else "NULL AS bank_level"
+            bank = uow.query_one(
+                f"SELECT saved_stone,{level_sql} FROM bank_accounts WHERE user_id=?",
+                (user_id,),
+            )
+            if bank is not None:
+                result["bank_saved"] = _int(bank["saved_stone"])
+                result["bank_level"] = str(bank["bank_level"] or "").strip() or None
 
         # 背包规模
-        if self._table_exists(uow, "main", "back"):
-            back_columns = self._columns(uow, "main", "back")
-            if {"user_id", "goods_id"} <= back_columns:
-                quantity = (
-                    "COALESCE(SUM(goods_num),0)" if "goods_num" in back_columns else "0"
-                )
-                bag = uow.query_one(
-                    f"SELECT COUNT(*) AS kinds,{quantity} AS items FROM back "
-                    "WHERE user_id=? AND COALESCE(goods_num,0)>0",
-                    (user_id,),
-                )
-                if bag is not None and _int(bag["kinds"]) > 0:
-                    result["bag_kinds"] = _int(bag["kinds"])
-                    result["bag_items"] = _int(bag["items"])
+        back_columns = schema.get("back", frozenset())
+        if {"user_id", "goods_id"} <= back_columns:
+            quantity = (
+                "COALESCE(SUM(goods_num),0)" if "goods_num" in back_columns else "0"
+            )
+            bag = uow.query_one(
+                f"SELECT COUNT(*) AS kinds,{quantity} AS items FROM back "
+                "WHERE user_id=? AND COALESCE(goods_num,0)>0",
+                (user_id,),
+            )
+            if bag is not None and _int(bag["kinds"]) > 0:
+                result["bag_kinds"] = _int(bag["kinds"])
+                result["bag_items"] = _int(bag["items"])
         return result
 
-    def _read_player(self, uow: DatabaseUnitOfWork, user_id: str) -> dict[str, Any]:
+    def _read_player(
+        self, uow: DatabaseUnitOfWork, user_id: str, schema: Mapping[str, frozenset[str]]
+    ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "arena_rank": None,
             "arena_score": None,
             "arena_honor": None,
         }
-        if not self._table_exists(uow, "player_data", "arena"):
-            return result
-        columns = self._columns(uow, "player_data", "arena")
+        columns = schema.get("arena", frozenset())
         if "user_id" not in columns:
             return result
         selected = ", ".join(
@@ -154,7 +206,9 @@ class PlayerAssetsOverviewApplication:
         return result
 
     # -- public -----------------------------------------------------------
-    def overview(self, user_id: str) -> dict[str, Any]:
+    def overview(
+        self, user_id: str, *, profile: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
         user_id = str(user_id or "").strip()
         payload: dict[str, Any] = {
             "found": False,
@@ -178,10 +232,12 @@ class PlayerAssetsOverviewApplication:
                     attached = True
                 except Exception:
                     attached = False
-                payload.update(self._read_game(uow, user_id))
+                game_schema = self._schema(uow, "main", self.game_database)
+                payload.update(self._read_game(uow, user_id, game_schema, profile))
                 if attached and payload["found"]:
                     try:
-                        payload.update(self._read_player(uow, user_id))
+                        player_schema = self._schema(uow, "player_data", self.player_database)
+                        payload.update(self._read_player(uow, user_id, player_schema))
                     except Exception:
                         # 竞技场段不可读时只省略该段。
                         pass

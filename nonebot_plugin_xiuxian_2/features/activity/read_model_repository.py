@@ -9,6 +9,7 @@ from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...core.numeric import as_int_like
+from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 from .claim_receipt_view import ActivityClaimReceiptView
 from .sign_history_view import ActivitySignDayView
 
@@ -220,6 +221,9 @@ class ActivityReadModelSqlRepository:
         limit = max(0, min(int(limit), 100))
         if limit == 0:
             return []
+        return self._load_sign_rank(limit)
+
+    def _load_sign_rank(self, limit: int) -> list[dict[str, Any]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_tables(uow, {"activity_user", "user_xiuxian"})
             rows = uow.query_all(
@@ -508,6 +512,16 @@ class ActivityReadModelSqlRepository:
         limit = max(0, min(int(limit), 100))
         if not activity_key or limit == 0:
             return []
+        key = shared_snapshot_key(self.database, "activity-boss-rank-v1", activity_key, limit)
+        return process_read_cache.get_or_load(
+            key,
+            database_path=self.database,
+            ttl=60 * 60,
+            loader=lambda: self._load_boss_rank(activity_key, limit),
+            snapshot=True,
+        )
+
+    def _load_boss_rank(self, activity_key: str, limit: int) -> list[dict[str, Any]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             tables = self._assert_tables(uow, {"activity_boss_damage"})
             if "user_xiuxian" in tables:
@@ -614,7 +628,7 @@ class ActivityReadModelSqlRepository:
                     "value": max(0, int(row.get("sign_days") or 0)),
                     "user_name": str(row.get("user_name") or ""),
                 }
-                for row in self.sign_rank(limit)
+                for row in self._load_sign_rank(limit)
             ]
         if source == "boss":
             return [
@@ -623,12 +637,17 @@ class ActivityReadModelSqlRepository:
                     "value": max(0, int(row.get("total_damage") or 0)),
                     "user_name": str(row.get("user_name") or ""),
                 }
-                for row in self.boss_rank(str(activity_key), limit)
+                for row in self._load_boss_rank(str(activity_key), limit)
             ]
         spec = self._BOARD_RANK_SQL.get(source)
         key = str(activity_key).strip()
         if spec is None or not key or not self.database.is_file():
             return []
+        return self._load_board_rank(source, key, limit, spec)
+
+    def _load_board_rank(
+        self, source: str, key: str, limit: int, spec
+    ) -> list[dict[str, Any]]:
         table, sql = spec
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             tables = self._table_names(uow)

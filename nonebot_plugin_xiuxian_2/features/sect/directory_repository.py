@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 
 
 class SectDirectorySqlRepository:
@@ -46,6 +47,16 @@ class SectDirectorySqlRepository:
         return [(row["sect_id"], row["sect_name"], row["sect_scale"]) for row in rows]
 
     def list_combat_power_rank(self) -> list[tuple[Any, ...]]:
+        key = shared_snapshot_key(self.database, "sect-combat-power-rank-v1", 50)
+        return process_read_cache.get_or_load(
+            key,
+            database_path=self.database,
+            ttl=60 * 60,
+            loader=self._load_combat_power_rank,
+            snapshot=True,
+        )
+
+    def _load_combat_power_rank(self) -> list[tuple[Any, ...]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             rows = uow.query_all(
                 "SELECT sect_id,sect_name,combat_power FROM sects "

@@ -281,6 +281,23 @@ class ActivityRankTests(unittest.TestCase):
         self.assertEqual(repository.board_rank("nope", "spring", 10), [])
         self.assertEqual(repository.board_rank("points", "spring", 0), [])
 
+    def test_personalized_board_rows_and_viewer_position_stay_live(self) -> None:
+        database = self._database(with_names=True)
+        self._seed_points(database, [("u1", 100, 100), ("u2", 80, 80)])
+        repository = ActivityReadModelSqlRepository(database)
+
+        first = repository.board_rank("points", "spring", 2)
+        self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+        self.assertEqual(first, repository.board_rank("points", "spring", 2))
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute(
+                "UPDATE activity_point_balance SET total_points=120 WHERE user_id='u2'"
+            )
+        refreshed = repository.board_rank("points", "spring", 2)
+        self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+        self.assertEqual((1, 120), repository.board_position("points", "spring", "u2"))
+
     # --- 阶段四：结算与领取 ---------------------------------------------
 
     def test_claim_delivers_once_and_repeat_is_a_noop(self) -> None:

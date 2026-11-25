@@ -55,7 +55,7 @@ class ImpartPkFrozenCommandOwnerTests(unittest.TestCase):
             "command:impart_pk:虚神界列表": (
                 "impart_pk_list_",
                 "允许保留的兼容路径",
-                "xu_world.all_xu_world_user/impart_pk.find_user_data/_sql_message.get_user_info_with_id -> legacy-backed member projection",
+                "xu_world.all_xu_world_user/impart_pk.find_user_data/_sql_message.get_user_names_by_ids -> legacy-backed member projection",
             ),
             "command:impart_pk:虚神界对决": (
                 "impart_pk_now_",
@@ -65,7 +65,7 @@ class ImpartPkFrozenCommandOwnerTests(unittest.TestCase):
             "command:impart_pk:虚神界排行榜": (
                 "impart_top_",
                 "允许保留的兼容路径",
-                "xiuxian_impart.get_impart_rank/_sql_message.get_user_info_with_id -> legacy-backed ranking projection",
+                "xiuxian_impart.get_impart_rank_display -> shared rank/name snapshot projection",
             ),
             "command:impart_pk:虚神界闭关": (
                 "impart_pk_in_closing_",

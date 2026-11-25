@@ -462,16 +462,17 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     
     ranking = arena_limit.get_arena_ranking(limit=10)
     viewer_id = str(event.get_user_id())
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
     
     msg = "🏆 【竞技场排行榜】🏆\n"
     msg += "═" * 12 + "\n"
     
     for i, (user_id, score) in enumerate(ranking, 1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        if user_info:
+        user_id_key = str(user_id)
+        if user_id_key in user_names:
             rank_icon = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
             icon = rank_icon[i-1] if i <= 10 else f"{i}."
-            msg += f"{icon} {user_info['user_name']} - {score}分 ({arena_limit.calculate_rank(score)})\n"
+            msg += f"{icon} {user_names[user_id_key]} - {score}分 ({arena_limit.calculate_rank(score)})\n"
     
     msg += personal_rank_line(
         arena_limit.rank_of(viewer_id),

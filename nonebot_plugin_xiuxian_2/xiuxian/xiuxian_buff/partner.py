@@ -28,6 +28,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     UserBuffDate,
     XiuxianDateManage,
 )
+from ..xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 from .mentor_exp_cd import mentor_exp_cd
 from .transaction_service import MentorBindService
 from .transaction_service import MentorApplicationService
@@ -2356,48 +2357,99 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mentor_rank.finish()
 
-    all_stats = _player_data_manager().get_all_records("statistics")
-    rank_rows = []
-    for stats in all_stats:
-        user_id = str(stats.get("user_id", ""))
-        if not user_id:
-            continue
-        user_real_info = get_user_profile(user_id)
-        if not user_real_info:
-            continue
-        apprentice_count = len(get_valid_apprentices(user_id))
-        graduate_count = safe_int(stats.get("培养出师徒弟"))
-        transmission_count = safe_int(stats.get("师徒传功次数"))
-        receive_count = safe_int(stats.get("接受传功次数"))
-        score = graduate_count * 1000 + apprentice_count * 100 + transmission_count
-        if score <= 0 and apprentice_count <= 0:
-            continue
-        rank_rows.append({
-            "user_name": user_real_info["user_name"],
-            "level": user_real_info["level"],
-            "apprentice_count": apprentice_count,
-            "graduate_count": graduate_count,
-            "transmission_count": transmission_count,
-            "receive_count": receive_count,
-            "score": score,
-        })
+    player_data = _player_data_manager()
 
-    rank_rows.sort(
-        key=lambda row: (
-            row["graduate_count"],
-            row["apprentice_count"],
-            row["transmission_count"],
-            row["receive_count"],
+    def load_display_rows():
+        all_stats = player_data.get_all_fields(
+            "statistics", ("培养出师徒弟", "师徒传功次数", "接受传功次数")
+        )
+        all_mentor_rows = player_data.get_all_fields(
+            "mentor", ("mentor_id", "apprentice_ids")
+        )
+        mentor_by_id = {
+            str(row.get("user_id") or ""): row
+            for row in all_mentor_rows
+            if row.get("user_id") is not None
+        }
+        rank_rows = []
+        for stats in all_stats:
+            user_id = str(stats.get("user_id", ""))
+            if not user_id:
+                continue
+            mentor_data = mentor_by_id.get(user_id, {})
+            apprentice_ids = _normalize_id_list(mentor_data.get("apprentice_ids"))
+            apprentice_count = sum(
+                1
+                for apprentice_id in apprentice_ids
+                if apprentice_id in mentor_by_id
+                and not _is_none_like(mentor_by_id[apprentice_id].get("mentor_id"))
+                and str(mentor_by_id[apprentice_id].get("mentor_id")) == user_id
+            )
+            graduate_count = safe_int(stats.get("培养出师徒弟"))
+            transmission_count = safe_int(stats.get("师徒传功次数"))
+            receive_count = safe_int(stats.get("接受传功次数"))
+            score = graduate_count * 1000 + apprentice_count * 100 + transmission_count
+            if score <= 0 and apprentice_count <= 0:
+                continue
+            rank_rows.append({
+                "user_id": user_id,
+                "apprentice_count": apprentice_count,
+                "graduate_count": graduate_count,
+                "transmission_count": transmission_count,
+                "receive_count": receive_count,
+                "score": score,
+            })
+
+        rank_rows.sort(
+            key=lambda row: (
+                row["graduate_count"],
+                row["apprentice_count"],
+                row["transmission_count"],
+                row["receive_count"],
+            ),
+            reverse=True,
+        )
+        display_rows = []
+        for offset in range(0, len(rank_rows), 400):
+            batch = rank_rows[offset : offset + 400]
+            user_profiles = _sql_message().get_user_display_profiles_by_ids(
+                [row["user_id"] for row in batch]
+            )
+            for row in batch:
+                profile = user_profiles.get(row["user_id"])
+                if profile is None:
+                    continue
+                display_rows.append({
+                    **row,
+                    "user_name": profile["user_name"],
+                    "level": profile["level"],
+                })
+                if len(display_rows) == 20:
+                    break
+            if len(display_rows) == 20:
+                break
+        return display_rows
+
+    display_rows = process_read_cache.get_or_load(
+        shared_snapshot_key(
+            player_data.database_path,
+            "mentor-rank-display-v1",
+            20,
+            shared_snapshot_key(get_paths().game_db, "file-identity"),
         ),
-        reverse=True,
+        database_path=player_data.database_path,
+        ttl=60 * 60,
+        loader=load_display_rows,
+        snapshot=True,
+        dependency_databases=(get_paths().game_db,),
     )
 
-    if not rank_rows:
+    if not display_rows:
         await handle_send(bot, event, "暂无师徒榜数据。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
         await mentor_rank.finish()
 
     lines = ["【师徒排行榜】"]
-    for idx, row in enumerate(rank_rows[:20], start=1):
+    for idx, row in enumerate(display_rows, start=1):
         lines.append(
             f"{idx}. {row['user_name']}（{row['level']}）\n"
             f"   徒弟：{row['apprentice_count']} | 出师：{row['graduate_count']} | 传功：{row['transmission_count']}"
@@ -2697,23 +2749,58 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await partner_rank.finish()
 
-    # 获取所有用户的affection数据
-    all_user_integral = _player_data_manager().get_all_field_data("partner", "affection")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: safe_int(x[1]), reverse=True)
+    player_data = _player_data_manager()
+
+    def load_partner_rank_rows():
+        affection_rows = player_data.get_all_field_data(
+            "partner", "affection", cache_ttl=0
+        )
+        top_affection = sorted(
+            affection_rows, key=lambda row: safe_int(row[1]), reverse=True
+        )[:50]
+        partner_records = player_data.get_fields_by_ids(
+            "partner", [user_id for user_id, _ in top_affection], ("partner_id",)
+        )
+        return [
+            {
+                "user_id": str(user_id),
+                "partner_id": (partner_records.get(str(user_id)) or {}).get("partner_id"),
+                "affection": affection,
+            }
+            for user_id, affection in top_affection
+        ]
+
+    rank_rows = process_read_cache.get_or_load(
+        shared_snapshot_key(player_data.database_path, "partner-rank-display-v1", 50),
+        database_path=player_data.database_path,
+        ttl=60 * 60,
+        loader=load_partner_rank_rows,
+        snapshot=True,
+    )
+    user_profiles = _sql_message().get_user_display_profiles_by_ids(
+        [
+            value
+            for row in rank_rows
+            for value in (
+                row["user_id"],
+                row.get("partner_id"),
+            )
+            if value is not None
+        ]
+    )
     
     # 生成排行榜
     rank_lines = ["【道侣排行榜】"]
-    for i, (user_id, affection) in enumerate(sorted_integral[:50], start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        partner_id = _player_data_manager().get_field_data(str(user_id), "partner", "partner_id")
-        partner_info = _sql_message().get_user_info_with_id(partner_id)
-        if partner_info is None:
+    for i, row in enumerate(rank_rows, start=1):
+        user_id = row["user_id"]
+        partner_id = row.get("partner_id")
+        user_info = user_profiles.get(user_id)
+        partner_info = user_profiles.get(str(partner_id)) if partner_id is not None else None
+        if user_info is None or partner_info is None:
             continue
         rank_lines.append(
             f"{i}. {user_info['user_name']} & {partner_info['user_name']}\n"
-            f"   亲密度：{number_to(affection)}"
+            f"   亲密度：{number_to(row['affection'])}"
         )
     
     if len(rank_lines) == 1:

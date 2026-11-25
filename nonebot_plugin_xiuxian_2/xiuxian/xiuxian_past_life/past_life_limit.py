@@ -8,6 +8,7 @@ from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
 from ...paths import get_paths
+from ..xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 from .past_life_state import PAST_LIFE_FIELDS, new_default_state
 
 _player_data_manager_instance = None
@@ -98,6 +99,143 @@ class PastLifeLimit:
                     pass
             result.append((row["user_id"], value))
         return result
+
+    def public_rank_snapshot(self, limit: int = 30):
+        limit = max(1, min(int(limit), 30))
+        player_database = Path(get_paths().player_db)
+        game_database = Path(get_paths().game_db)
+        key = shared_snapshot_key(
+            player_database,
+            "past-life-rank-v1",
+            shared_snapshot_key(game_database, "file-identity"),
+            limit,
+        )
+
+        def load_rows():
+            if not player_database.is_file():
+                return {"has_scores": False, "rows": []}
+
+            with DatabaseUnitOfWork(player_database, read_only=True) as uow:
+                table = uow.query_one(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type='table' AND lower(name)=lower(?) LIMIT 1",
+                    (self.table_name,),
+                )
+                if table is None:
+                    return {"has_scores": False, "rows": []}
+                table_name = str(table["name"])
+                columns = {
+                    str(row["name"]).casefold(): str(row["name"])
+                    for row in uow.query_all(
+                        f"PRAGMA table_info({self._quote_identifier(table_name)})"
+                    )
+                }
+                user_column = columns.get("user_id")
+                score_column = columns.get("best_score")
+                if user_column is None or score_column is None:
+                    return {"has_scores": False, "rows": []}
+
+                scores = uow.query_all(
+                    f"SELECT {self._quote_identifier(user_column)} AS user_id, "
+                    f"{self._quote_identifier(score_column)} AS value "
+                    f"FROM {self._quote_identifier(table_name)}"
+                )
+                ordered_scores = []
+                for row in scores:
+                    value = row["value"]
+                    if isinstance(value, str):
+                        try:
+                            value = json.loads(value)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    if isinstance(value, (int, float)) and value > 0:
+                        ordered_scores.append((str(row["user_id"]), value))
+                ordered = sorted(
+                    ordered_scores, key=lambda item: item[1], reverse=True
+                )[:limit]
+                if not ordered:
+                    return {"has_scores": False, "rows": []}
+
+                user_ids = list(dict.fromkeys(user_id for user_id, _ in ordered))
+                endings: dict[str, Any] = {}
+                ending_column = columns.get("best_ending")
+                if ending_column is not None:
+                    for offset in range(0, len(user_ids), 400):
+                        batch = user_ids[offset : offset + 400]
+                        placeholders = ",".join("?" for _ in batch)
+                        state_rows = uow.query_all(
+                            f"SELECT {self._quote_identifier(user_column)} AS user_id, "
+                            f"{self._quote_identifier(ending_column)} AS best_ending "
+                            f"FROM {self._quote_identifier(table_name)} "
+                            f"WHERE {self._quote_identifier(user_column)} IN ({placeholders}) "
+                            "ORDER BY rowid ASC",
+                            tuple(batch),
+                        )
+                        for row in state_rows:
+                            user_id = str(row["user_id"])
+                            ending = row["best_ending"]
+                            if ending is None:
+                                ending = self._default_state()["best_ending"]
+                            elif isinstance(ending, str):
+                                try:
+                                    ending = json.loads(ending)
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                            endings.setdefault(user_id, ending)
+
+                names: dict[str, Any] = {}
+                if game_database.is_file():
+                    uow.attach_database(game_database, "game_data", read_only=True)
+                    game_tables = {
+                        str(row["name"]).casefold()
+                        for row in uow.query_all(
+                            "SELECT name FROM game_data.sqlite_master WHERE type='table'"
+                        )
+                    }
+                    if "user_xiuxian" in game_tables:
+                        game_columns = {
+                            str(row["name"]).casefold(): str(row["name"])
+                            for row in uow.query_all(
+                                'PRAGMA game_data.table_info("user_xiuxian")'
+                            )
+                        }
+                        game_user_column = game_columns.get("user_id")
+                        game_name_column = game_columns.get("user_name")
+                        if game_user_column and game_name_column:
+                            for offset in range(0, len(user_ids), 400):
+                                batch = user_ids[offset : offset + 400]
+                                placeholders = ",".join("?" for _ in batch)
+                                name_rows = uow.query_all(
+                                    f"SELECT {self._quote_identifier(game_user_column)} AS user_id, "
+                                    f"{self._quote_identifier(game_name_column)} AS user_name "
+                                    "FROM game_data.user_xiuxian "
+                                    f"WHERE {self._quote_identifier(game_user_column)} IN ({placeholders}) "
+                                    "ORDER BY rowid ASC",
+                                    tuple(batch),
+                                )
+                                for row in name_rows:
+                                    names.setdefault(str(row["user_id"]), row["user_name"])
+
+            rows = [
+                (
+                    index,
+                    names[user_id],
+                    score,
+                    endings.get(user_id, self._default_state()["best_ending"]),
+                )
+                for index, (user_id, score) in enumerate(ordered, 1)
+                if user_id in names
+            ]
+            return {"has_scores": bool(ordered), "rows": rows}
+
+        return process_read_cache.get_or_load(
+            key,
+            database_path=player_database,
+            ttl=60 * 60,
+            loader=load_rows,
+            snapshot=True,
+            dependency_databases=(game_database,),
+        )
 
     @staticmethod
     def _quote_identifier(name):

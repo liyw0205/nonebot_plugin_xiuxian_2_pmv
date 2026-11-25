@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from nonebot_plugin_xiuxian_2.features.arena.migrations import apply_arena_state
+from nonebot_plugin_xiuxian_2.features.arena.state_application import ArenaStateApplication
 from nonebot_plugin_xiuxian_2.features.arena.state_repository import ArenaStateRepository
 from nonebot_plugin_xiuxian_2.features.base.ranking_position import (
     PersonalRank,
@@ -22,6 +23,7 @@ from nonebot_plugin_xiuxian_2.features.boss.integral_repository import (
 )
 from nonebot_plugin_xiuxian_2.features.boss.migrations import apply_boss_player_schema
 from nonebot_plugin_xiuxian_2.features.tower.migrations import apply_tower_state
+from nonebot_plugin_xiuxian_2.features.tower.state_application import TowerStateApplication
 from nonebot_plugin_xiuxian_2.features.tower.state_repository import TowerStateRepository
 from nonebot_plugin_xiuxian_2.features.training.leaderboard_repository import (
     TrainingLeaderboardSqlRepository,
@@ -118,6 +120,25 @@ class PersonalRankLineTests(unittest.TestCase):
 
 
 class BossIntegralRankTests(_TempDatabaseTestCase):
+    def test_public_top_slice_and_personal_rank_are_both_live(self):
+        database = self._boss_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO boss_limit(user_id,integral) VALUES(?,?)",
+                (("u1", 100), ("u2", 80)),
+            )
+        repository = BossIntegralSqlRepository(database)
+
+        first = repository.top_integrals(2)
+        self.assertEqual(["u1", "u2"], [row[0] for row in first])
+        self.assertEqual(first, repository.top_integrals(2))
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE boss_limit SET integral=120 WHERE user_id='u2'")
+        self.assertEqual("u2", repository.top_integrals(2)[0][0])
+        rank = repository.integral_rank("u2")
+        self.assertEqual((1, 2, 120), (rank.rank, rank.total, rank.value))
+
+
     def test_ties_share_a_rank_and_out_of_page_players_still_get_theirs(self):
         database = self._boss_database()
         with DatabaseUnitOfWork(database) as uow:
@@ -189,6 +210,24 @@ class BossIntegralRankTests(_TempDatabaseTestCase):
 
 
 class TowerRankTests(_TempDatabaseTestCase):
+    def test_public_top_slice_is_live_with_viewer_rank(self):
+        database = self._tower_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO tower(user_id,current_floor,max_floor,score,weekly_purchases) "
+                "VALUES(?,?,0,?,'{}')",
+                (("u1", 12, 20), ("u2", 10, 30)),
+            )
+        application = TowerStateApplication(database)
+
+        first = application.ranking("current_floor", 2)
+        self.assertEqual(["u1", "u2"], [row[0] for row in first])
+        self.assertEqual(first, application.ranking("current_floor", 2))
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE tower SET current_floor=15 WHERE user_id='u2'")
+        self.assertEqual("u2", application.ranking("current_floor", 2)[0][0])
+        self.assertEqual(1, application.rank_of("u2", "current_floor").rank)
+
     def test_both_fields_rank_independently_with_ties(self):
         database = self._tower_database()
         with DatabaseUnitOfWork(database) as uow:
@@ -225,6 +264,23 @@ class TowerRankTests(_TempDatabaseTestCase):
 
 
 class ArenaRankTests(_TempDatabaseTestCase):
+    def test_public_top_slice_is_live_with_personal_rank(self):
+        database = self._arena_database()
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO arena(user_id,score) VALUES(?,?)",
+                (("u1", 100), ("u2", 80)),
+            )
+        application = ArenaStateApplication(database)
+
+        first = application.ranking(2)
+        self.assertEqual(["u1", "u2"], [row[0] for row in first])
+        self.assertEqual(first, application.ranking(2))
+        with DatabaseUnitOfWork(database) as uow:
+            uow.execute("UPDATE arena SET score=120 WHERE user_id='u2'")
+        self.assertEqual("u2", application.ranking(2)[0][0])
+        self.assertEqual(1, application.rank_of("u2").rank)
+
     def test_ties_share_a_rank_and_out_of_page_player_still_gets_theirs(self):
         database = self._arena_database()
         with DatabaseUnitOfWork(database) as uow:
@@ -263,6 +319,32 @@ class ArenaRankTests(_TempDatabaseTestCase):
 
 
 class TrainingRankTests(_TempDatabaseTestCase):
+    def test_public_top_slice_and_names_are_live_with_viewer_rank(self):
+        game, player = self._training_databases()
+        with DatabaseUnitOfWork(game) as uow:
+            uow.executemany(
+                "INSERT INTO user_xiuxian(user_id,user_name) VALUES(?,?)",
+                (("u1", "道友一"), ("u2", "道友二")),
+            )
+        with DatabaseUnitOfWork(player) as uow:
+            uow.executemany(
+                "INSERT INTO training(user_id,points,completed) VALUES(?,?,?)",
+                (("u1", 100, 5), ("u2", 80, 4)),
+            )
+        repository = TrainingLeaderboardSqlRepository(game, player)
+
+        first = repository.top("points")
+        self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+        self.assertEqual(first, repository.top("points"))
+        with DatabaseUnitOfWork(game) as uow:
+            uow.execute("UPDATE user_xiuxian SET user_name='新道号' WHERE user_id='u2'")
+        with DatabaseUnitOfWork(player) as uow:
+            uow.execute("UPDATE training SET points=120 WHERE user_id='u2'")
+        refreshed = repository.top("points")
+        self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+        self.assertEqual("新道号", refreshed[0]["user_name"])
+        self.assertEqual(1, repository.rank_of("points", "u2").rank)
+
     def test_both_fields_rank_independently_with_ties(self):
         game, player = self._training_databases()
         with DatabaseUnitOfWork(player) as uow:
@@ -355,6 +437,54 @@ class RankingViewWiringTests(unittest.TestCase):
             "training_application.leaderboard(field, limit=50)",
             _read("xiuxian/xiuxian_training/__init__.py"),
         )
+
+    def test_fanout_rank_views_batch_display_profile_reads(self):
+        cases = (
+            ("xiuxian/xiuxian_arena/__init__.py", "arena_ranking_"),
+            ("xiuxian/xiuxian_boss/__init__.py", "boss_integral_rank_"),
+            ("xiuxian/xiuxian_impart_pk/__init__.py", "impart_top_"),
+            ("xiuxian/xiuxian_impart_pk/__init__.py", "impart_pk_list_"),
+            ("xiuxian/xiuxian_tower/__init__.py", "tower_rank_"),
+            ("xiuxian/xiuxian_tower/__init__.py", "tower_integral_rank_"),
+            ("xiuxian/xiuxian_buff/partner.py", "partner_rank_"),
+        )
+        for relative, marker in cases:
+            with self.subTest(handler=marker):
+                body = _handler_body(_read(relative), marker)
+                self.assertTrue(
+                    "get_user_names_by_ids" in body
+                    or "get_user_display_profiles_by_ids" in body
+                    or "get_impart_rank_display" in body
+                )
+                self.assertNotIn("_sql_message().get_user_info_with_id(", body)
+
+        partner_source = _read("xiuxian/xiuxian_buff/partner.py")
+        mentor = _handler_body(partner_source, "mentor_rank_")
+        self.assertIn('get_all_fields(\n            "statistics"', mentor)
+        self.assertIn('get_all_fields(\n            "mentor"', mentor)
+        self.assertIn("get_user_display_profiles_by_ids", mentor)
+        self.assertIn("process_read_cache.get_or_load", mentor)
+        self.assertIn('"mentor-rank-display-v1"', mentor)
+        self.assertIn("            20,", mentor)
+        self.assertIn('get_paths().game_db', mentor)
+        self.assertIn('"file-identity"', mentor)
+        self.assertIn("ttl=60 * 60", mentor)
+        self.assertNotIn("get_valid_apprentices(", mentor)
+        self.assertNotIn("get_user_profile(", mentor)
+        self.assertLess(mentor.index("rank_rows.sort("), mentor.index("get_user_display_profiles_by_ids"))
+        self.assertIn("rank_rows[offset : offset + 400]", mentor)
+        self.assertIn("len(display_rows) == 20", mentor)
+
+        partner = _handler_body(partner_source, "partner_rank_")
+        self.assertIn('get_all_field_data(', partner)
+        self.assertIn('"affection", cache_ttl=0', partner)
+        self.assertIn("get_fields_by_ids(", partner)
+        self.assertIn('"partner", [user_id', partner)
+        self.assertIn("get_user_display_profiles_by_ids", partner)
+        self.assertIn('"partner-rank-display-v1", 50', partner)
+        self.assertIn("ttl=60 * 60", partner)
+        self.assertIn("if user_info is None or partner_info is None", partner)
+        self.assertNotIn("get_field_data(", partner)
 
     def test_arena_facade_delegates_rank_of_to_the_feature_application(self):
         source = _read("xiuxian/xiuxian_arena/arena_limit.py")

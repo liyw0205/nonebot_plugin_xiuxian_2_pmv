@@ -130,7 +130,7 @@ def test_boss_integral_rank_handler_uses_feature_read_model() -> None:
 
     assert "boss_integral_application.top_integrals(50)" in handler
     assert "player_data_manager" not in handler
-    assert 'user_info.get("user_name") if user_info else None' in handler
+    assert "get_user_names_by_ids" in handler
 
 
 def test_boss_integral_read_handlers_use_feature_snapshot() -> None:

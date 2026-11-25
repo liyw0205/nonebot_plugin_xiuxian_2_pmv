@@ -18,6 +18,7 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
+from .shared_read_cache import process_read_cache, shared_snapshot_key
 from .data_source import jsondata
 from ..xiuxian_config import XiuConfig, convert_rank
 # from .. import DRIVER
@@ -179,6 +180,7 @@ class XiuxianDateManage:
             self.conn = db_backend.connect(self.database_path, check_same_thread=False)
             self._check_data()
             self._run_core_migrations()
+            process_read_cache.invalidate_snapshot_database(self.database_path)
             logger.opt(colors=True).info(f"<green>修仙数据库已重连！</green>")
 
     def _run_core_migrations(self):
@@ -638,6 +640,7 @@ class XiuxianDateManage:
     def _commit_write(self, conn=None):
         (conn or self.conn).commit()
         self._clear_read_cache()
+        process_read_cache.invalidate_database(self.database_path)
 
     @contextmanager
     def _repository_connection(self):
@@ -819,6 +822,14 @@ class XiuxianDateManage:
     def get_user_info_with_id(self, user_id):
         """根据USER_ID获取用户信息,不获取功法加成"""
         return self.users.get_by_id(user_id)
+
+    def get_user_display_profiles_by_ids(self, user_ids):
+        """Batch the current name/realm projection used by public rankings."""
+        return self.users.get_display_profiles_by_ids(user_ids)
+
+    def get_user_names_by_ids(self, user_ids):
+        """Batch current display names for leaderboard rows without caching them."""
+        return self.users.get_names_by_ids(user_ids)
 
     def get_user_info_with_name(self, user_id):
         """根据user_name获取用户信息"""
@@ -1820,13 +1831,8 @@ class XiuxianDateManage:
         return result if result else None
 
     def get_all_user_id(self):
-        """获取全部用户id（短缓存，供地图/洞府等同节点查询复用）。"""
-        # 30s：全服 ID 列表变化不频繁；管理写路径会 _clear_read_cache
-        result = self._read_query(
-            "SELECT user_id FROM user_xiuxian",
-            cache_key=("get_all_user_id",),
-            cache_ttl=30,
-        )
+        """获取当前完整用户集；全服批量操作不能使用短时旧名单。"""
+        result = self._read_query("SELECT user_id FROM user_xiuxian")
         if result:
             return [row[0] for row in result]
         return None
@@ -1874,44 +1880,96 @@ class XiuxianDateManage:
             cur.execute(sql, (int(exp), user_id))
             self._commit_write()
 
+    @staticmethod
+    def _shared_rank_snapshot(
+        database_path,
+        view: str,
+        limit: int,
+        loader,
+        *,
+        key_parts=(),
+        dependency_databases=(),
+    ):
+        def load_cache_safe_rows():
+            rows = loader()
+            return [dict(row) if isinstance(row, dict) else tuple(row) for row in rows]
+
+        database_path = Path(database_path).resolve()
+        for _ in range(2):
+            try:
+                stat = database_path.stat()
+                identity = (stat.st_dev, stat.st_ino)
+            except OSError:
+                identity = (0, 0)
+            cache_key = shared_snapshot_key(
+                database_path, "leaderboard_snapshot_v1", view, limit, *key_parts
+            )
+            generation = process_read_cache.database_generation(database_path, snapshot=True)
+            rows = process_read_cache.get_or_load(
+                cache_key,
+                database_path=database_path,
+                ttl=60 * 60,
+                loader=load_cache_safe_rows,
+                snapshot=True,
+                dependency_databases=tuple(dependency_databases),
+            )
+            try:
+                stat = database_path.stat()
+                latest_identity = (stat.st_dev, stat.st_ino)
+            except OSError:
+                latest_identity = (0, 0)
+            if (
+                identity == latest_identity
+                and generation == process_read_cache.database_generation(database_path, snapshot=True)
+            ):
+                return rows
+        return load_cache_safe_rows()
+
     def realm_top(self):
         """境界排行"""
-        with self._conn_lock:
-            rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
+        from .db_migrations import realm_level_order_expression
 
-            sql = """SELECT user_name, level, exp FROM user_xiuxian 
-                WHERE user_name IS NOT NULL
-                ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC, (CASE level """
-
-            for level, value in sorted(rank_mapping.items(), key=lambda x: x[1], reverse=True):
-                sql += f"WHEN '{level}' THEN '{value:02}' "
-
-            sql += """ELSE level END) ASC LIMIT 50"""
-
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchall()
-            return result
+        level_order = realm_level_order_expression()
+        sql = f"""SELECT user_name, level, exp FROM user_xiuxian
+            WHERE user_name IS NOT NULL
+            ORDER BY xiuxian_int_sort_key_compact("exp") DESC,
+                     {level_order} ASC
+            LIMIT 50"""
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.database_path,
+            "realm",
+            50,
+            lambda: self._read_query(sql),
+            key_parts=(level_order,),
+        )
 
     def stone_top(self):
         """这也是灵石排行榜"""
-        sql = "SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_text(stone) COLLATE xiuxian_integer DESC LIMIT 50"
-        return self._read_query(sql)
+        sql = "SELECT user_name,stone FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_sort_key_compact(\"stone\") DESC LIMIT 50"
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.database_path, "stone", 50, lambda: self._read_query(sql)
+        )
 
     def power_top(self):
         """战力排行榜"""
-        sql = "SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_text(power) COLLATE xiuxian_integer DESC LIMIT 50"
-        return self._read_query(sql)
+        sql = 'SELECT user_name,power FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY xiuxian_int_sort_key_compact("power") DESC LIMIT 50'
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.database_path, "power", 50, lambda: self._read_query(sql)
+        )
 
     def scale_top(self):
         """宗门建设度排行榜"""
         sql = "SELECT sect_id, sect_name, sect_scale FROM sects WHERE sect_owner is NOT NULL ORDER BY xiuxian_int_text(sect_scale) COLLATE xiuxian_integer DESC"
-        return self._read_query(sql)
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.database_path, "sect-scale", 0, lambda: self._read_query(sql)
+        )
 
     def root_top(self):
         """这是轮回排行榜"""
         sql = f"SELECT user_name,root_level FROM user_xiuxian WHERE user_name is NOT NULL ORDER BY root_level DESC LIMIT 50"
-        return self._read_query(sql)
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.database_path, "root", 50, lambda: self._read_query(sql)
+        )
 
     def get_all_sects(self):
         """获取所有宗门信息"""
@@ -1945,27 +2003,17 @@ class XiuxianDateManage:
 
     def get_realm_top1_user(self):
         """获取境界第一的用户"""
-        with self._conn_lock:
-            rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank('江湖好手')[1])}
+        from .db_migrations import realm_level_order_expression
 
-            sql = """SELECT user_name, level, exp FROM user_xiuxian 
+        return self._read_query(
+            f"""SELECT user_name, level, exp FROM user_xiuxian
                 WHERE user_name IS NOT NULL
-                ORDER BY xiuxian_int_text(exp) COLLATE xiuxian_integer DESC, (CASE level """
-
-            for level, value in sorted(rank_mapping.items(), key=lambda x: x[1], reverse=True):
-                sql += f"WHEN '{level}' THEN '{value:02}' "
-
-            sql += """ELSE level END) ASC LIMIT 1"""
-
-            cur = self.conn.cursor()
-            cur.execute(sql)
-            result = cur.fetchone()
-            if result:
-                columns = [column[0] for column in cur.description]
-                top1_dict = dict(zip(columns, result))
-                return top1_dict
-            else:
-                return None
+                ORDER BY xiuxian_int_sort_key_compact("exp") DESC,
+                         {realm_level_order_expression()} ASC
+                LIMIT 1""",
+            one=True,
+            dict_row=True,
+        )
 
     def donate_update(self, sect_id, stone_num):
         """宗门捐献更新建设度及可用灵石"""
@@ -3618,6 +3666,7 @@ class XIUXIAN_IMPART_BUFF:
                 self.conn = None
             self.conn = db_backend.connect(self.db_file, check_same_thread=False)
             self._check_data()
+            process_read_cache.invalidate_snapshot_database(self.db_file)
             logger.opt(colors=True).info(f"<green>xiuxian_impart数据库已重连!</green>")
 
     def _commit_write(self, conn=None):
@@ -4057,6 +4106,9 @@ class XIUXIAN_IMPART_BUFF:
 
     def get_impart_rank(self):
         """获取虚神界等级排行榜"""
+        return self._load_impart_rank()
+
+    def _load_impart_rank(self):
         with self._conn_lock:
             crystal_column = (
                 "COALESCE(stone_num_exact,stone_num)"
@@ -4068,6 +4120,29 @@ class XIUXIAN_IMPART_BUFF:
             result = cur.fetchall()
             columns = [column[0] for column in cur.description]
             return [dict(zip(columns, row)) for row in result]
+
+    def get_impart_rank_display(self):
+        """Load the public rank and display names as one 60-minute snapshot."""
+        def load_rank():
+            ranked = self._load_impart_rank()
+            names = _sql_message().get_user_names_by_ids(
+                [row["user_id"] for row in ranked]
+            )
+            return [
+                {**row, "user_name": names.get(str(row["user_id"]), "未知修士")}
+                for row in ranked
+            ]
+
+        return XiuxianDateManage._shared_rank_snapshot(
+            self.db_file,
+            "impart-display",
+            50,
+            load_rank,
+            key_parts=(
+                shared_snapshot_key(self.database_path / "xiuxian.db", "database-identity"),
+            ),
+            dependency_databases=(self.database_path / "xiuxian.db",),
+        )
 
     def update_all_users_impart_lv(self, num, operation):
         """

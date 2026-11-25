@@ -9,6 +9,7 @@ from typing import Any
 from ...core.errors import DomainError
 from ...core.numeric import require_exact_integer
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 
 
 class SectWeeklyProgressSqlRepository:
@@ -290,6 +291,18 @@ class SectWeeklyProgressSqlRepository:
 
     def weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:
         limit, week_key = max(1, min(int(limit), 50)), str(week_key)
+        key = shared_snapshot_key(
+            self.database, "sect-weekly-rank-v1", week_key, limit
+        )
+        return process_read_cache.get_or_load(
+            key,
+            database_path=self.database,
+            ttl=60 * 60,
+            loader=lambda: self._load_weekly_rank(limit, week_key),
+            snapshot=True,
+        )
+
+    def _load_weekly_rank(self, limit: int, week_key: str) -> list[dict[str, Any]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self._assert_schema_ready(uow)
             sects = uow.query_one(

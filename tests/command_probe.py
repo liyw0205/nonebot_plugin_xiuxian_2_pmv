@@ -132,8 +132,13 @@ def install_boundary(root: Path) -> None:
                     return
         elif event == "sqlite3.connect":
             database = str(args[0])
-            if database != ":memory:" and not Path(database.removeprefix("file:").split("?", 1)[0]).resolve().is_relative_to(root):
-                deny("offline boundary: database outside fixture")
+            if database != ":memory:":
+                database_path = Path(database.removeprefix("file:").split("?", 1)[0]).resolve()
+                if not database_path.is_relative_to(root):
+                    deny(
+                        f"offline boundary: database outside fixture: "
+                        f"{database_path} (allowed root: {root})"
+                    )
         elif event in {"os.remove", "os.rmdir", "os.mkdir", "os.chmod", "os.rename"}:
             target = Path(args[0])
             if event == "os.mkdir" and target.is_dir():

@@ -88,6 +88,57 @@ class UserRepository:
             )
         )
 
+    def get_display_profiles_by_ids(self, user_ids: list[str]) -> dict[str, dict[str, Any]]:
+        ids = []
+        seen = set()
+        for user_id in user_ids:
+            if user_id is None:
+                continue
+            value = str(user_id)
+            if value and value not in seen:
+                seen.add(value)
+                ids.append(value)
+        profiles: dict[str, dict[str, Any]] = {}
+        for offset in range(0, len(ids), 400):
+            batch = ids[offset : offset + 400]
+            placeholders = ",".join(["%s"] * len(batch))
+            rows = self._read_query(
+                "SELECT user_id,user_name,level FROM user_xiuxian "
+                f"WHERE user_id IN ({placeholders}) ORDER BY rowid ASC",
+                tuple(batch),
+                dict_row=True,
+            ) or []
+            for row in rows:
+                profiles.setdefault(
+                    str(row["user_id"]),
+                    {"user_name": row.get("user_name"), "level": row.get("level")},
+                )
+        return profiles
+
+    def get_names_by_ids(self, user_ids: list[str]) -> dict[str, Any]:
+        ids = []
+        seen = set()
+        for user_id in user_ids:
+            if user_id is None:
+                continue
+            value = str(user_id)
+            if value and value not in seen:
+                seen.add(value)
+                ids.append(value)
+        names: dict[str, Any] = {}
+        for offset in range(0, len(ids), 400):
+            batch = ids[offset : offset + 400]
+            placeholders = ",".join(["%s"] * len(batch))
+            rows = self._read_query(
+                "SELECT user_id,user_name FROM user_xiuxian "
+                f"WHERE user_id IN ({placeholders}) ORDER BY rowid ASC",
+                tuple(batch),
+                dict_row=True,
+            ) or []
+            for row in rows:
+                names.setdefault(str(row["user_id"]), row.get("user_name"))
+        return names
+
     def get_with_attributes(self, user_id: str):
         normalize_user_row = _numeric_bind().normalize_user_row
 

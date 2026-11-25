@@ -129,6 +129,67 @@ def _create_numeric_rank_key_index(
         )
 
 
+def realm_level_order_expression() -> str:
+    """Keep leaderboard SQL and its composite index on the same realm ordering."""
+    from ..xiuxian_config import convert_rank
+
+    rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank("江湖好手")[1])}
+    branches = []
+    for level, value in sorted(rank_mapping.items(), key=lambda item: item[1], reverse=True):
+        escaped_level = level.replace("'", "''")
+        branches.append(f"WHEN '{escaped_level}' THEN '{value:02}'")
+    return "(CASE level " + " ".join(branches) + " ELSE level END)"
+
+
+def _create_realm_rank_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"exp", "level", "user_name"}.issubset(available):
+        return
+
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_realm_rank_v1 "
+            'ON user_xiuxian (xiuxian_int_sort_key_compact("exp") DESC, '
+            f"{realm_level_order_expression()} ASC) WHERE user_name IS NOT NULL"
+        )
+    except Exception as exc:
+        logger.warning(
+            "[xiuxian-db] 跳过境界排行索引 idx_user_xiuxian_realm_rank_v1："
+            f"table=user_xiuxian, error={exc}"
+        )
+
+
+def _create_root_rank_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"root_level", "user_name"}.issubset(available):
+        return
+
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_root_rank_v1 "
+            "ON user_xiuxian (root_level DESC) WHERE user_name IS NOT NULL"
+        )
+    except Exception as exc:
+        logger.warning(
+            "[xiuxian-db] 跳过轮回排行索引 idx_user_xiuxian_root_rank_v1："
+            f"table=user_xiuxian, error={exc}"
+        )
+
+
+def _create_public_rank_indexes(conn) -> None:
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_power_rank_key_v1",
+        "user_xiuxian",
+        "power",
+    )
+    _create_root_rank_index(conn)
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -167,6 +228,8 @@ def _ensure_core_indexes(conn):
         "user_xiuxian",
         "stone",
     )
+    _create_public_rank_indexes(conn)
+    _create_realm_rank_index(conn)
 
 
 def _ensure_user_xiuxian_unique_index(conn):
@@ -261,6 +324,8 @@ CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20260707_0001_runtime_marker", _migration_20260707_0001_runtime_marker),
     ("20260717_0001_dedupe_user_xiuxian", _migration_20260717_0001_dedupe_user_xiuxian),
     ("20261125_0001_compact_numeric_rank_keys", _migration_20261125_0001_compact_numeric_rank_keys),
+    ("20261125_0002_realm_rank_index", _create_realm_rank_index),
+    ("20261125_0003_public_rank_indexes", _create_public_rank_indexes),
 ]
 
 
