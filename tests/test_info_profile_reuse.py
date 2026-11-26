@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import ANY, Mock, patch
+from contextlib import ExitStack
+from types import SimpleNamespace
+from unittest.mock import ANY, AsyncMock, Mock, patch
 
 
 def _user_info_module():
@@ -112,6 +114,101 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
                 await user_info.get_user_xiuxian_info("u-1", user_info={"user_id": "u-2"})
 
         get_profile.assert_called_once_with("u-1")
+
+
+class InfoImageProjectionReuseTests(unittest.IsolatedAsyncioTestCase):
+    def boundaries(self, stack, *, named=True, custom=False):
+        from nonebot.exception import FinishedException
+
+        module = _user_info_module()
+        profile = {"user_id": "u-1"}
+        detail = {"称号": "Live title" if named else "无", "修为排行": "第2位"}
+        mocks = {}
+        for name, replacement in {
+            "assign_bot": AsyncMock(return_value=("bot", "group")),
+            "check_user": Mock(return_value=(True, profile, "")),
+            "get_user_equipped_title": Mock(return_value="title-1"),
+            "get_user_xiuxian_info": AsyncMock(return_value=(detail, "live text")),
+            "XiuConfig": Mock(return_value=SimpleNamespace(user_info_image=True, xiuxian_info_img=custom)),
+            "draw_user_info_img": AsyncMock(return_value=b"custom"),
+            "draw_user_info_img_with_default_bg": AsyncMock(return_value=b"default"),
+            "handle_pic_msg_send": AsyncMock(),
+            "handle_pic_send": AsyncMock(),
+        }.items():
+            mocks[name] = stack.enter_context(patch.object(module, name, replacement))
+        for matcher in (module.xiuxian_message, module.xiuxian_message_img):
+            stack.enter_context(patch.object(matcher, "finish", side_effect=FinishedException))
+        return module, mocks, profile, detail
+
+    async def test_configured_image_uses_one_strict_live_projection(self):
+        from nonebot.exception import FinishedException
+
+        for custom in (False, True):
+            with self.subTest(custom=custom), ExitStack() as stack:
+                module, mocks, profile, detail = self.boundaries(stack, custom=custom)
+                with self.assertRaises(FinishedException):
+                    await module.xiuxian_message_("bot", "event")
+                mocks["assign_bot"].assert_awaited_once()
+                mocks["check_user"].assert_called_once_with("event", raise_profile_errors=True)
+                mocks["get_user_equipped_title"].assert_called_once_with("u-1")
+                mocks["get_user_xiuxian_info"].assert_awaited_once_with(
+                    "u-1", user_info=profile, equipped_title_id="title-1",
+                    impart_provider=module._profile_impart_data,
+                )
+                renderer = "draw_user_info_img" if custom else "draw_user_info_img_with_default_bg"
+                mocks[renderer].assert_awaited_once_with("u-1", detail)
+                mocks["handle_pic_msg_send"].assert_awaited_once_with(
+                    "bot", "event", b"custom" if custom else b"default", "称号：Live title")
+                mocks["handle_pic_send"].assert_not_awaited()
+                module.xiuxian_message.finish.assert_called_once_with()
+                module.xiuxian_message_img.finish.assert_not_called()
+
+    async def test_direct_image_still_loads_once_and_uses_image_finish(self):
+        from nonebot.exception import FinishedException
+
+        with ExitStack() as stack:
+            module, mocks, profile, detail = self.boundaries(stack, named=False)
+            with self.assertRaises(FinishedException):
+                await module.xiuxian_message_img_("bot", "event")
+            mocks["check_user"].assert_called_once_with("event")
+            mocks["get_user_xiuxian_info"].assert_awaited_once_with(
+                "u-1", user_info=profile, equipped_title_id="title-1")
+            mocks["handle_pic_msg_send"].assert_not_awaited()
+            mocks["handle_pic_send"].assert_awaited_once_with("bot", "event", b"default")
+            module.xiuxian_message.finish.assert_not_called()
+            module.xiuxian_message_img.finish.assert_called_once_with()
+
+    async def test_caption_delivery_failure_falls_back_without_rereading(self):
+        from nonebot.exception import FinishedException
+
+        with ExitStack() as stack:
+            module, mocks, _, _ = self.boundaries(stack)
+            mocks["handle_pic_msg_send"].side_effect = RuntimeError("transport failure")
+            with self.assertRaises(FinishedException):
+                await module.xiuxian_message_("bot", "event")
+            mocks["get_user_xiuxian_info"].assert_awaited_once()
+            mocks["handle_pic_send"].assert_awaited_once_with("bot", "event", b"default")
+
+    async def test_configured_image_keeps_strict_impart_failure_and_sends_no_image(self):
+        from nonebot_plugin_xiuxian_2.core.errors import DomainError
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import utils
+
+        with ExitStack() as stack:
+            module, mocks, _, _ = self.boundaries(stack)
+            async def projection(actor, **kwargs):
+                return kwargs["impart_provider"](actor)
+            mocks["get_user_xiuxian_info"].side_effect = projection
+            provider = stack.enter_context(patch.object(module, "_profile_impart_data", side_effect=DomainError(
+                "profile_impart_read_failed", "failed",
+                {"reason": "profile_impart_read_failed", "subject": "player_impart"})))
+            reply = stack.enter_context(patch.object(utils, "handle_send", new=AsyncMock()))
+            await module.xiuxian_message_("bot", "event")
+            provider.assert_called_once_with("u-1")
+            reply.assert_awaited_once()
+            self.assertIn("传承", reply.call_args.args[2])
+            for name in ("draw_user_info_img", "draw_user_info_img_with_default_bg",
+                         "handle_pic_msg_send", "handle_pic_send"):
+                mocks[name].assert_not_awaited()
 
 
 class BuffProjectionReuseTests(unittest.TestCase):

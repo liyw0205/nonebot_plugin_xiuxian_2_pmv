@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
-from threading import get_ident
+from threading import RLock, current_thread, get_ident, main_thread
 from typing import Any, Mapping
 
 from ...core.numeric import adapt_sqlite_params, register_numeric_functions
@@ -55,6 +55,66 @@ class _ConnectionScope:
 _CONNECTION_SCOPE: ContextVar[_ConnectionScope | None] = ContextVar("database_uow_connection_scope", default=None)
 
 
+class ReadOnlyConnectionOwner:
+    """Retain one idle main-thread reader, never a transaction or query result.
+
+    Callers must finish each unit of work synchronously. Other threads and
+    reentrant reads use independent connections that close at their exit.
+    Use query_one/query_all for fetched results, or propagate raw cursor errors.
+    """
+
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._active = False
+        self._retain = True
+        self._idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
+
+    def _acquire(self, key: tuple[Any, ...]) -> tuple[bool, tuple[sqlite3.Connection, Any] | None]:
+        if current_thread() is not main_thread():
+            return False, None
+        self._lock.acquire()
+        if self._active:
+            self._lock.release()
+            return False, None
+        self._active, self._retain = True, True
+        try:
+            idle, self._idle = self._idle, None
+            if idle is not None:
+                previous_key, connection, numeric_functions = idle
+                try:
+                    clean = not connection.in_transaction
+                except sqlite3.ProgrammingError:
+                    clean = False
+                if previous_key == key and clean:
+                    return True, (connection, numeric_functions)
+                connection.close()
+            return True, None
+        except BaseException:
+            self._active = False
+            self._lock.release()
+            raise
+
+    def _release(self, key, connection, numeric_functions, *, reusable: bool) -> None:
+        try:
+            if reusable and self._retain:
+                self._idle = key, connection, numeric_functions
+            elif connection is not None:
+                connection.close()
+        finally:
+            self._active = False
+            self._lock.release()
+
+    def close(self) -> None:
+        """Close on the main lifecycle thread; the next read may reopen lazily."""
+        if current_thread() is not main_thread():
+            raise RuntimeError("read-only connection owner must close on the main thread")
+        with self._lock:
+            self._retain = False
+            idle, self._idle = self._idle, None
+            if idle is not None:
+                idle[1].close()
+
+
 class DatabaseUnitOfWork:
     """SQLite transaction with explicit commit/rollback semantics."""
 
@@ -68,6 +128,7 @@ class DatabaseUnitOfWork:
         foreign_keys: bool = True,
         require_exists: bool = False,
         query_only: bool = False,
+        read_owner: ReadOnlyConnectionOwner | None = None,
     ) -> None:
         self.database = Path(database)
         self.timeout = timeout
@@ -75,7 +136,14 @@ class DatabaseUnitOfWork:
         self.read_only = bool(read_only)
         self.foreign_keys = bool(foreign_keys)
         self.require_exists = bool(require_exists)
-        self.query_only = bool(query_only)
+        self.query_only = bool(query_only) or read_owner is not None
+        if read_owner is not None and not self.read_only:
+            raise ValueError("a retained reader requires read_only=True")
+        self._read_owner = read_owner
+        self._read_owner_active = False
+        self._read_owner_key: tuple[Any, ...] | None = None
+        self._read_cursors: list[sqlite3.Cursor] = []
+        self._read_failed = False
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
         self._connection_scope: _ConnectionScope | None = None
@@ -109,16 +177,47 @@ class DatabaseUnitOfWork:
                 self.foreign_keys, self.require_exists, self.query_only)
 
     def __enter__(self) -> "DatabaseUnitOfWork":
+        self._read_failed = False
+        if self._read_owner is not None:
+            self._read_owner_key = self._connection_key()
+            self._read_owner_active, borrowed = self._read_owner._acquire(self._read_owner_key)
+            try:
+                return self._enter_connection(borrowed)
+            except BaseException:
+                connection, self.connection = self.connection, None
+                if self._read_owner_active:
+                    self._read_owner_active = False
+                    self._read_owner._release(self._read_owner_key, connection, None, reusable=False)
+                elif connection is not None:
+                    connection.close()
+                raise
+        return self._enter_connection()
+
+    @property
+    def database_identity(self) -> tuple[str, int, int]:
+        """Identity bound to this reader, including the file behind its handle."""
+        path, identity, *_ = self._read_owner_key or self._connection_key()
+        if identity is None:
+            raise FileNotFoundError(f"database is unavailable: {path}")
+        return str(path), *identity
+
+    def _check_read_identity(self) -> None:
+        if self._read_owner is not None and self._read_owner_key != self._connection_key():
+            raise sqlite3.OperationalError("read-only database identity changed")
+
+    def _enter_connection(self, borrowed=None) -> "DatabaseUnitOfWork":
         scope = _CONNECTION_SCOPE.get()
-        self._connection_scope = scope if scope is not None and scope.available() else None
+        self._connection_scope = scope if self._read_owner is None and scope is not None and scope.available() else None
         self._scope_key = self._connection_key() if self._connection_scope is not None else None
         if self.require_exists and not self.read_only and not self.database.is_file():
             raise FileNotFoundError(f"database is unavailable: {self.database}")
-        borrowed = self._connection_scope.take(self._scope_key) if self._connection_scope is not None else None
+        if self._connection_scope is not None:
+            borrowed = self._connection_scope.take(self._scope_key)
         if borrowed is not None:
             self.connection, self._numeric_functions = borrowed
             try:
                 self.connection.execute("BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN")
+                self._check_read_identity()
             except Exception:
                 self.connection.close()
                 self.connection = None
@@ -157,6 +256,7 @@ class DatabaseUnitOfWork:
             )
             if self._connection_scope is not None:
                 self._scope_key = self._connection_key()
+            self._check_read_identity()
         except Exception:
             # Exceptions raised while entering a context do not trigger
             # __exit__, so close the partially initialized connection here.
@@ -195,20 +295,31 @@ class DatabaseUnitOfWork:
         connection = self.connection
         reusable = False
         try:
+            for cursor in self._read_cursors:
+                cursor.close()
+            self._read_cursors.clear()
             if exc_type is None:
                 connection.commit()
             else:
                 connection.rollback()
             for schema in tuple(self._attached_schemas):
                 connection.execute(f'DETACH DATABASE "{schema}"')
+            self._check_read_identity()
             reusable = not connection.in_transaction
         finally:
+            self._read_cursors.clear()
             self._attached_schemas.clear()
             self.connection = None
             scope, key = self._connection_scope, self._scope_key
             self._connection_scope = None
             self._scope_key = None
-            if reusable and scope is not None and key is not None:
+            if self._read_owner_active:
+                self._read_owner_active = False
+                self._read_owner._release(
+                    self._read_owner_key, connection, self._numeric_functions,
+                    reusable=reusable and exc_type is None and not self._read_failed,
+                )
+            elif reusable and scope is not None and key is not None:
                 try:
                     scope.put(key, connection, self._numeric_functions)
                 except Exception:
@@ -225,26 +336,60 @@ class DatabaseUnitOfWork:
 
     def commit(self) -> None:
         """Commit before invoking an external post-transaction effect."""
-        self._conn().commit()
+        try:
+            self._conn().commit()
+        except BaseException:
+            self._read_failed = True
+            raise
 
     def execute(self, sql: str, params: Any = ()) -> sqlite3.Cursor:
         # Central overflow guard: the raw driver aborts the whole transaction on
         # any int outside int64, so every statement binds normalized params.
-        return self._numeric_functions.run(self._conn().execute, sql, adapt_sqlite_params(params))
+        try:
+            cursor = self._numeric_functions.run(self._conn().execute, sql, adapt_sqlite_params(params))
+        except BaseException:
+            self._read_failed = True
+            raise
+        if self._read_owner is not None:
+            self._read_cursors.append(cursor)
+        return cursor
 
     def executemany(self, sql: str, params: Any) -> sqlite3.Cursor:
-        return self._numeric_functions.run(self._conn().executemany,
-            sql, (adapt_sqlite_params(row) for row in params)
-        )
+        try:
+            cursor = self._numeric_functions.run(self._conn().executemany,
+                sql, (adapt_sqlite_params(row) for row in params)
+            )
+        except BaseException:
+            self._read_failed = True
+            raise
+        if self._read_owner is not None:
+            self._read_cursors.append(cursor)
+        return cursor
 
     def query_one(self, sql: str, params: Any = ()) -> Mapping[str, Any] | None:
         cursor = self.execute(sql, params)
-        row = self._numeric_functions.run(cursor.fetchone)
-        return dict(row) if row is not None else None
+        try:
+            row = self._numeric_functions.run(cursor.fetchone)
+            return dict(row) if row is not None else None
+        except BaseException:
+            self._read_failed = True
+            raise
+        finally:
+            if self._read_owner is not None:
+                cursor.close()
+                self._read_cursors.remove(cursor)
 
     def query_all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
         cursor = self.execute(sql, params)
-        return [dict(row) for row in self._numeric_functions.run(cursor.fetchall)]
+        try:
+            return [dict(row) for row in self._numeric_functions.run(cursor.fetchall)]
+        except BaseException:
+            self._read_failed = True
+            raise
+        finally:
+            if self._read_owner is not None:
+                cursor.close()
+                self._read_cursors.remove(cursor)
 
     def attach_database(self, database: str | Path, schema: str, *, read_only: bool = False) -> None:
         """Attach a catalogued secondary database to this transaction."""
@@ -281,4 +426,4 @@ def is_database_busy(exc: BaseException) -> bool:
     )
 
 
-__all__ = ["DatabaseUnitOfWork", "is_database_busy"]
+__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "is_database_busy"]

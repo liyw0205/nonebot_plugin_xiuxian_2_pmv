@@ -1545,8 +1545,14 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         context.web_app = None
         phase_state["web"] = False
 
+    def shutdown_database() -> None:
+        from .features.admin.blackhouse_repository import AdminBlackhouseSqlRepository
+
+        AdminBlackhouseSqlRepository.close_read_connection()
+        phase_state["database"] = False
+
     lifecycle.register(LifecyclePhase.FILESYSTEM, ensure_filesystem)
-    lifecycle.register(LifecyclePhase.DATABASE, ensure_database)
+    lifecycle.register(LifecyclePhase.DATABASE, ensure_database, shutdown=shutdown_database)
     lifecycle.register(LifecyclePhase.MIGRATIONS, ensure_migrations)
     lifecycle.register(LifecyclePhase.REPOSITORIES, ensure_repositories)
     lifecycle.register(LifecyclePhase.JOBS, ensure_jobs, shutdown=shutdown_jobs)

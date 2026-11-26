@@ -1948,3 +1948,152 @@ SQL/connection/queue evidence for synchronous router/training costs; dynamic
 multiwriter ranks, broader gameplay/background, multiple processes and sustained
 50 successful/s remain unverified. Freeze any new data/load before its one
 baseline and coherent runtime batch; do not rerun this pair for nicer figures.
+
+## V8: Live Blacklist Reader And Image Projection Reuse (2026-11-26)
+
+### Scope And Controlled Pair
+
+- V7 `208d402d` / CI45772442300 completed/success. V8 targets the measured
+  common router cost: each fresh blacklist connection's first membership
+  query spent roughly3-4ms parsing/reading the schema. DDL validation was
+  already cached; this was not repeated migration work. The repository now
+  retains at most one idle main-thread read-only connection, with fresh
+  BEGIN/COMMIT and live import-marker/membership reads every time. Workers
+  and reentrant calls use independent short-lived connections. No ban,
+  balance, qualification or query-result cache was added.
+- The explicit UOW owner closes owned cursors before return and discards
+  connections on errors, file/options changes and shutdown. Existing UOWs
+  without an owner retain their previous lifecycle. DDL metadata now uses
+  a64-entry LRU keyed by resolved path, device/inode and schema version;
+  the mutable import marker stays live. Tests cover same-version file
+  replacement, replacement during a transaction, deletion, external ban/
+  unban, SQL/fetch/BEGIN/commit/rollback errors and shutdown/reopen.
+- Configured image replies previously built a strict full personal-info
+  projection, then entered the image handler and built it all again.
+  Both handlers now pass their own freshly validated projection to a shared
+  rendering/sending helper. Configured image mode removes the second check,
+  title read, exact-rank call, attribute/relationship/natal reads and timestamp
+  write, preserving the strict impart provider and command error boundary.
+  Small tests mock rendering/transport only; no image rendering/network
+  latency or real QQ delivery claim is made by the matrix below.
+- Reports in the retained fixture's `data/` directory:
+  `live-reader-before-20261126-r01.json` and
+  `live-reader-after-20261126-r01.json`, with corresponding `.phases.jsonl`.
+  Both first traffic attempts pass. New fixed observer CPU counters were
+  frozen before this baseline on clean208d402d. Driver/fixture identities,
+  ordered requests, phase specs and limits match exactly; runtime changes
+  are limited to blackhouse_repository.py, uow.py, plugin.py and user_info.py.
+  Python integer comparison confirms all business seeds match; only startup
+  `compatibility_hits.json` telemetry and the enclosing seed hash differ.
+  This is not full-byte seed equality and not a comparison with old V7 timing.
+- Reuse the populated dynamic-relation-v7 workload:512 requests/version,
+  128 profiles,112 mentor views/four aliases,112 partner views,160 actual
+  training writes.128 seeded participants/62 issuing actors; one writer
+  changes exp+100/stone-1000, crossing16 low readers, alongside32 preserved
+  REAL and32 exact BLOB actors. Retain the V7 feature populations, including
+  2560 inventories,128 mentor/partner rows each,4096 pending applications,
+  8192 activity users and32768 activity point/pass/damage rows each. These
+  four paths do not cover all674 matchers, activity commands or million-row
+  feature tables. They also do not establish multiwriter dynamic-rank behavior.
+- Every request succeeds; refusal/cooldown/exception/timeout/busy/locked and
+  per-path error rates are0. All256 reply-rank assertions/version pass using
+  actual observed snapshot generation/keys and the independent setup rank
+  oracle. Generation advances0/64/96, matching fresh receipts and exact
+  writer assets/power;127 nonwriter participant projections, all checked
+  inventory/features/relations/JSON and original DB restoration pass.
+  All128 observed display keys agree with rank keys, without claiming an
+  atomic whole-profile reply. Shared instance/DB and real matcher/DI remain;
+  requests and persistence drain before each restore, never between requests.
+
+### Same-Load Results
+
+Milliseconds, before -> after; E2E includes producer, dispatch and admission
+queueing. One ordered pair and32-96 samples/path cannot establish variance.
+
+| Phase/path | n/version | E2E p50 | E2E p95 | E2E p99 | Foreground SQL calls | SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure / profile |32|39.632 ->34.250|143.178 ->112.473|205.115 ->218.125|1829 ->1768|707.198 ->549.515|
+| Pure / mentor |48|24.198 ->19.287|69.008 ->42.233|153.017 ->165.800|1492 ->1396|602.770 ->398.092|
+| Pure / partner |48|19.076 ->14.296|41.560 ->22.989|148.782 ->146.746|1008 ->912|442.909 ->260.247|
+| Mixed / profile |64|1970.075 ->1262.476|3169.465 ->2063.067|3214.651 ->2129.437|3733 ->3603|1612.626 ->1282.013|
+| Mixed / mentor |32|1995.357 ->1287.374|3186.680 ->2057.864|3224.263 ->2100.697|994 ->930|427.739 ->279.197|
+| Mixed / partner |32|1888.803 ->1170.718|3100.615 ->2018.532|3104.708 ->2020.313|672 ->608|330.551 ->188.379|
+| Mixed / training |64|2036.015 ->1319.139|3158.237 ->2078.111|3242.193 ->2131.861|3008 ->2880|1289.248 ->1001.957|
+| Contention / profile |32|2719.359 ->2166.445|5046.694 ->4181.947|5161.801 ->4235.390|1875 ->1810|961.253 ->654.022|
+| Contention / mentor |32|2792.649 ->2144.029|5125.684 ->4241.958|5188.455 ->4313.699|994 ->930|407.273 ->272.026|
+| Contention / partner |32|2739.703 ->2109.543|5084.598 ->4201.670|5149.017 ->4212.449|672 ->608|306.334 ->189.185|
+| Contention / training |96|2819.705 ->2231.243|5131.660 ->4222.256|5208.376 ->4333.807|4512 ->4320|1893.364 ->1488.567|
+
+| Phase | Cap | Offered/s | Peak admitted | Peak handler intervals | Successful/s | E2E p95 | Queue p95 | Loop lag p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure |10|20|4 ->5|3 ->3|20.093 ->20.108|75.369 ->56.935|0.009 ->0.009|16.067 ->13.454|
+| Mixed |20|35|20 ->20|18 ->16|22.508 ->25.771|3158.237 ->2057.864|2356.889 ->1335.204|98.359 ->103.999|
+| Contention |20|50|20 ->20|16 ->18|21.452 ->23.993|5125.684 ->4201.670|4252.114 ->3412.823|116.429 ->162.425|
+
+- Game opens321/577/544 ->194/385/352:511 fewer, consistent with one retained
+  router connection across512 requests. Warm combined marker/membership
+  queries still execute127/191/191 times; their CPU479.709/718.412/713.460
+  ->2.932/6.326/6.128ms, wall486.756/743.583/724.592 ->2.157/13.252/12.511ms.
+  Remaining cold validation occurs once/phase after restore/schema changes.
+  Foreground SQL20789 ->19765; including persistence23170 ->22143 and
+  SQL wall10126.366 ->7705.010ms. Counts are API calls, not internal seeks.
+- Rank cache hits/misses22/42,0/128,0/64 unchanged; partial hits16/22/0
+  ->16/25/3. Generation-key misses persist despite `invalidations=0`.
+  No rank algorithm or generation trigger changed. Rank-worker CPU
+  27.075/121.102/77.367 ->29.683/106.636/71.037ms; mixed worker wall
+  regresses203.845 ->243.942ms. The queues are not explained by rank CPU.
+- Keep adverse observations: pure aggregate p99 rises153.017 ->165.800ms;
+  profile and mentor p99 also rise. Mixed producer p95 rises1.789 ->3.643ms.
+  Contention loop lag p99 rises157.488 ->255.923ms, dispatch p95 rises
+  101.559 ->172.976ms. Earlier mixed-load regressions remain valid. No repeat
+  was run to select better numbers, and lower E2E is not universal improvement.
+- Offered50/s and peak18 overlapping handler intervals are distinct from
+  20/50 concurrently processing requests or sustained50 successful/s. Peak
+  intervals include awaiting work and do not prove parallel Python/SQLite
+  execution. Success throughput still falls below the offered mixed rates.
+
+### Attribution, Limits And Validation
+
+- Four bounded phase/per-thread CPU buckets use exclusive thread CPU for
+  record/begin_statement/authorizer/watch, at most16 threads+overflow. Total
+  measured observer CPU823.467/1423.452/1359.748 ->717.922/1197.851/1202.845ms;
+  watcher alone598.862/974.356/936.469 ->509.000/777.419/807.044ms. MainThread
+  CPU3365.231/7537.639/8059.134 ->2660.139/6517.059/7023.171ms. Traffic process
+  CPU23.120 ->19.847s. Observer bookkeeping and clock overhead are only
+  partly measured and perturbation is uncalibrated. Authorizer CPU overlaps
+  SQL CPU: do not add them or subtract this figure from E2E to invent product
+  capacity. Remaining CPU includes application, background and unmeasured
+  harness work; resource monitoring is measurable test-side overhead.
+- Same sole1M fixture and exclusive validation lock;2 cores/1GiB AS,
+  600 CPU/1200 wall seconds, MALLOC_ARENA_MAX=2, preflight RAM>=768MiB and
+  disk>=2GiB, continuous RSS900MiB/single+total WAL256MiB abort limits.
+  RSS457.809 ->476.891MiB and sampled VmSize852.258 ->947.875MiB rise; final
+  after VmSize951.078MiB is close to the AS cap, so no load escalation here.
+  Minimum traffic RAM1653 ->1684MiB, disk5802455040 ->5793214464 bytes;
+  max single WAL15355272/total21296408 bytes unchanged, final WAL0 both.
+- Whole process wall86.453 ->83.380s, CPU73.814 ->69.807s; stage setup
+  19.654 ->21.663s, invariant checks3.841 ->3.414s and final restore
+  13.961 ->13.759s stay outside E2E. Process writes4285890560 ->4288593920
+  bytes include setup/snapshot/restore; sampled traffic writes106950656
+  ->108363776 bytes also rise. Traffic sampled reads3907584 ->3260416 bytes.
+  Do not attribute restored million-row database IO to gameplay writes.
+- 37 harness preflight tests pass5.509s; concentrated affected acceptance
+  130 tests+13 subtests pass15.81s. Independent review adds two narrow
+  in-flight replacement/fetch-failure regressions; both pass after correcting
+  the latter's expectation to the numeric UDF's existing text result.
+  Final lifecycle review also made repository close a no-op on workers, which
+  never retain readers, while main-thread shutdown still releases its owner;
+  the focused shutdown test verifies both. This shutdown-only guard was added
+  after the measured pair and was not exercised by its traffic; the request
+  paths/driver are unchanged and no matrix retry was used for this correction.
+  Compile/architecture/inventory/whitespace pass in a clean code-only checkout,
+  preserving the user's status edits and legacy JSON deletion. No old green
+  full-suite shard or serial matrix was repeated. Exact delivered SHA CI
+  remains the batch delivery gate; no main merge, release or deployment.
+
+Overall performance goal remains active. This batch validates common router
+cost reduction across four paths, not repository-wide capacity. Next selection
+should use saved synchronous profile/sect/timestamp and training transaction
+costs, explicitly separating watcher/observer overhead. Multiwriter dynamic
+ranks, broader gameplay/background, multiple processes, real image delivery
+and sustained50 successful/s remain unverified; do not rerun V8 unchanged.

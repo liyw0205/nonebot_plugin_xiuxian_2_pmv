@@ -104,6 +104,88 @@ def database_path(value):
     return Path(value).resolve()
 
 
+class ObserverCPU:
+    """Bounded, exclusive thread-CPU counters for synchronous observer hooks."""
+
+    BUCKETS = ("record", "begin_statement", "authorizer", "watch")
+    MAX_THREADS = 16
+
+    def __init__(self, clock=None):
+        self.clock = clock if clock is not None else time.thread_time_ns
+        self.local = threading.local()
+        self.lock = threading.Lock()
+        self.epoch = None
+        self.bins = []
+        self.overflow = None
+
+    def start_phase(self):
+        self.bins = []
+        self.overflow = None
+        self.epoch = object()
+
+    def end_phase(self):
+        self.epoch = None
+
+    def _thread_state(self, epoch):
+        state = getattr(self.local, "state", None)
+        if state is not None and state[0] is epoch:
+            return state
+        with self.lock:
+            if len(self.bins) < self.MAX_THREADS:
+                bucket = {"thread": threading.current_thread().name,
+                          "thread_ident": threading.get_ident(), "overflow": False,
+                          "buckets": {name: {"calls": 0, "cpu_ns": 0} for name in self.BUCKETS}}
+                self.bins.append(bucket)
+            else:
+                if self.overflow is None:
+                    self.overflow = {"thread": "overflow", "thread_ident": None, "overflow": True,
+                                     "buckets": {name: {"calls": 0, "cpu_ns": 0} for name in self.BUCKETS}}
+                bucket = self.overflow
+        state = (epoch, bucket, [])
+        self.local.state = state
+        return state
+
+    @contextmanager
+    def measure(self, bucket):
+        if bucket not in self.BUCKETS:
+            raise ValueError(f"unknown observer CPU bucket: {bucket}")
+        epoch = self.epoch
+        if epoch is None:
+            yield
+            return
+        _, thread_bin, stack = self._thread_state(epoch)
+        frame = [self.clock(), 0]
+        stack.append(frame)
+        try:
+            yield
+        finally:
+            elapsed = self.clock() - frame[0]
+            stack.pop()
+            if stack:
+                stack[-1][1] += elapsed
+            exclusive = max(0, elapsed - frame[1])
+            counter = thread_bin["buckets"][bucket]
+            if thread_bin["overflow"]:
+                with self.lock:
+                    counter["calls"] += 1
+                    counter["cpu_ns"] += exclusive
+            else:
+                counter["calls"] += 1
+                counter["cpu_ns"] += exclusive
+
+    def snapshot(self):
+        # Call only after all measured threads drain and end_phase disables hooks.
+        with self.lock:
+            bins = self.bins + ([self.overflow] if self.overflow is not None else [])
+            threads = [{**entry, "buckets": {key: dict(value) for key, value in entry["buckets"].items()}}
+                       for entry in bins]
+        totals = {name: {"calls": sum(entry["buckets"][name]["calls"] for entry in threads),
+                         "cpu_ns": sum(entry["buckets"][name]["cpu_ns"] for entry in threads)}
+                  for name in self.BUCKETS}
+        return {"clock": "time.thread_time_ns", "exclusive": True,
+                "max_thread_bins": self.MAX_THREADS + 1, "buckets": totals, "threads": threads}
+
+
 class QueryRouter:
     """Per-request routing, including work dispatched to context-aware threads."""
 
@@ -121,6 +203,7 @@ class QueryRouter:
         self.phase_active = False
         self.lock = threading.Lock()
         self.connection_serial = 0
+        self.observer_cpu = ObserverCPU()
 
     def connection_entry(self, connection):
         row = ACTIVE.get()
@@ -143,6 +226,10 @@ class QueryRouter:
         return entries[serial]
 
     def begin_statement(self, connection, sql):
+        with self.observer_cpu.measure("begin_statement"):
+            return self._begin_statement(connection, sql)
+
+    def _begin_statement(self, connection, sql):
         diagnostic = getattr(connection, "_mixed_diagnostic", None)
         if diagnostic is None:
             return
@@ -202,6 +289,10 @@ class QueryRouter:
         ended = time.perf_counter()
         cpu_start = SQL_CPU_START.get()
         cpu_ms = (time.thread_time() - cpu_start) * 1000 if cpu_start is not None else None
+        with self.observer_cpu.measure("record"):
+            return self._record(connection, sql, phase, elapsed_ms, row, ended, cpu_ms)
+
+    def _record(self, connection, sql, phase, elapsed_ms, row, ended, cpu_ms):
         with self.lock:
             if row is None:
                 if not self.phase_active:
@@ -457,10 +548,11 @@ def install_sql_timing(root):
         connection._mixed_diagnostic = diagnostic
 
         def authorize(action, first, second, database, trigger):
-            statement = SQL_DIAGNOSTIC.get()
-            if statement is not None:
-                statement["authorizer_calls"] += 1
-            return ROUTER.authorizer(action, first, second, database, trigger)
+            with ROUTER.observer_cpu.measure("authorizer"):
+                statement = SQL_DIAGNOSTIC.get()
+                if statement is not None:
+                    statement["authorizer_calls"] += 1
+                return ROUTER.authorizer(action, first, second, database, trigger)
 
         connection.set_authorizer(authorize)
         ROUTER.connections[id(connection)] = diagnostic["database"]
@@ -514,14 +606,19 @@ def write_json_stream(path, value, *, mode="x"):
 
 
 class ResourceWatch:
-    def __init__(self, data_dir, stop):
+    def __init__(self, data_dir, stop, observer_cpu=None):
         self.data_dir, self.stop = data_dir, stop
+        self.observer_cpu = observer_cpu if observer_cpu is not None else ObserverCPU()
         self.done = threading.Event()
         self.reason = None
         self.samples = []
         self.thread = threading.Thread(target=self.run, name="mixed-resource-watch", daemon=True)
 
     def run(self):
+        with self.observer_cpu.measure("watch"):
+            self._run()
+
+    def _run(self):
         while not self.done.is_set():
             try:
                 state = resource_state(self.data_dir)
@@ -674,6 +771,8 @@ async def dispatch_matcher_once(row, matcher, bot, event, state, stack):
 
 
 async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, classify):
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("mixed phase must run on MainThread for its CPU measurement")
     import nonebot
     from nonebot.adapters.onebot.v11 import Adapter, Bot
     from nonebot.log import logger
@@ -691,7 +790,7 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     semaphore = asyncio.Semaphore(concurrency)
     producer_done = asyncio.Event()
     stop = threading.Event()
-    watch = ResourceWatch(data_dir, stop)
+    watch = ResourceWatch(data_dir, stop, ROUTER.observer_cpu)
     tasks, loop_lag, phase_errors = [], [], []
     inflight, peak_inflight = 0, 0
     queue_counts = {"posted": 0, "received": 0, "admitted": 0}
@@ -704,6 +803,9 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     ROUTER.unattributed_details.clear()
     started = time.perf_counter()
     cpu_before = resource.getrusage(resource.RUSAGE_SELF)
+    main_cpu_before = time.thread_time_ns()
+    phase_thread = threading.current_thread()
+    ROUTER.observer_cpu.start_phase()
     unattributed_before = ROUTER.unattributed
 
     def gc_callback(phase, info):
@@ -886,13 +988,18 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                 except RuntimeError as exc:
                     phase_errors.append(str(exc))
                 watch.close()
+                if watch.thread.is_alive():
+                    phase_errors.append("resource watcher did not drain before observer CPU snapshot")
     finally:
         gc.callbacks.remove(gc_callback)
         ROUTER.phase_active = False
         loop.set_task_factory(previous_factory)
         logger.remove(sink)
+        ROUTER.observer_cpu.end_phase()
     finished = time.perf_counter()
     cpu_after = resource.getrusage(resource.RUSAGE_SELF)
+    main_cpu_after = time.thread_time_ns()
+    observer_cpu = ROUTER.observer_cpu.snapshot()
     for row in rows:
         recorder = row.pop("_recorder")
         row.pop("_tasks")
@@ -932,6 +1039,10 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
             "wall_s": round(finished - started, 3),
             "cpu_user_s": round(cpu_after.ru_utime - cpu_before.ru_utime, 3),
             "cpu_system_s": round(cpu_after.ru_stime - cpu_before.ru_stime, 3),
+            "main_thread_cpu_ms": round((main_cpu_after - main_cpu_before) / 1000000, 3),
+            "phase_thread": {"name": phase_thread.name, "ident": phase_thread.ident,
+                             "is_main_thread": phase_thread is threading.main_thread()},
+            "observer_cpu": observer_cpu,
             "resource_samples": watch.samples, "resource_stop_reason": watch.reason,
             "resources": {"process_peak_rss_mb": round(cpu_after.ru_maxrss / 1024, 3),
                 "minimum_available_mb": min((sample["available_mb"] for sample in watch.samples
@@ -1144,6 +1255,8 @@ async def run(args, identity):
               "sql_count_definition": "execute/executemany/executescript calls plus commit/rollback; fetch time counted separately",
               "exact_rank_operation_definition": "complete per-request SQL aggregation: count=compact COUNT(DISTINCT), seek_batch=non-EXPLAIN numeric_rank_keys CTE, plan=EXPLAIN QUERY PLAN with compact expression; statements count API execute calls, never internal seeks; total wall includes execute+fetch; CPU is null when not routed; worker SQL includes all xiuxian-exact-rank threads, independent of bounded timeline/connection diagnostics",
               "connection_diagnostic_definition": "at most 32 connections/request and first 12 statements/connection/request; stable connection ID and lifetime ordinal; raw open, UDF registration, authorizer callbacks, execute/fetch CPU and wall time; omitted touches/statements counted",
+              "observer_cpu_definition": "phase-only synchronous record/begin_statement/authorizer/watch sections use exclusive thread CPU; at most 16 distinct thread bins plus one locked overflow bin; watcher span includes its whole run but thread CPU excludes sleeping; MainThread CPU window matches phase process CPU, ends before summaries, and includes setup/drain",
+              "observer_cpu_limits": "observed sections are not total profiler overhead: collector registration/accounting, clock calls and unwrapped hooks are not fully measured; timing/bookkeeping perturbation is uncalibrated; these counters are not strict bounds on uninstrumented cost and cannot be subtracted from latency; authorizer CPU overlaps existing SQL CPU, so never add SQL CPU and observer CPU; residual process/MainThread CPU includes application, background and unmeasured harness work; diagnostic sample throughput is not a production capacity limit",
               "transaction_wait_definition": "BEGIN execution time is an upper bound including SQL execution; not a pure lock-wait timer",
               "resource_before": resource_state(data_dir)}
     try:

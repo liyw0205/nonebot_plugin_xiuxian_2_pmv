@@ -327,7 +327,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     )
 
     if XiuConfig().user_info_image:
-        await xiuxian_message_img_(bot, event)
+        await _send_user_info_image(bot, event, user_info["user_id"], detail_map)
         await xiuxian_message.finish()
 
     config = XiuConfig()
@@ -491,14 +491,20 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     detail_map, _ = await get_user_xiuxian_info(
         user_info['user_id'], user_info=user_info, equipped_title_id=title_id
     )
+    await _send_user_info_image(bot, event, user_info["user_id"], detail_map)
+    await xiuxian_message_img.finish()
+
+
+async def _send_user_info_image(bot, event, user_id, detail_map):
+    """Render the live projection already obtained by the calling handler."""
     equipped_title_name = detail_map.get("称号", "")
     if equipped_title_name == "无":
         equipped_title_name = ""
     
     if XiuConfig().xiuxian_info_img:
-        img_res = await draw_user_info_img(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img(user_id, detail_map)
     else:
-        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img_with_default_bg(user_id, detail_map)
     
     if equipped_title_name:
         sent_info_pic = False
@@ -508,7 +514,6 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         except Exception as e:
             logger.warning(f"修仙信息图片版图文发送失败，降级纯图片: {e}")
         if sent_info_pic:
-            await xiuxian_message_img.finish()
+            return
 
     await handle_pic_send(bot, event, img_res)
-    await xiuxian_message_img.finish()
