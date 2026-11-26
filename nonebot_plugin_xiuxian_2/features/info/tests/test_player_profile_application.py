@@ -35,6 +35,157 @@ class PlayerProfileReadTest(unittest.TestCase):
             self.assertEqual(profile["user_stamina"], "42")
             self.assertEqual(database.stat().st_mtime_ns, before)
 
+    def test_display_profiles_are_current_and_keep_first_row_and_empty_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT,level TEXT)"
+                )
+                connection.executemany(
+                    "INSERT INTO user_xiuxian VALUES (?,?,?)",
+                    [("u", "first", "one"), ("u", "second", "two"),
+                     ("empty", "", "three"), ("null", None, None)],
+                )
+            application = PlayerProfileApplication(database)
+            before = database.stat().st_mtime_ns
+            self.assertEqual(
+                application.get_user_display_profiles_by_ids(["u", "u", "empty", "null", "missing"]),
+                {"u": {"user_name": "first", "level": "one"},
+                 "empty": {"user_name": "", "level": "three"},
+                 "null": {"user_name": None, "level": None}},
+            )
+            self.assertEqual(database.stat().st_mtime_ns, before)
+            self.assertFalse((database.parent / "game.db-wal").exists())
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "UPDATE user_xiuxian SET user_name='updated',level='new' WHERE rowid=1"
+                )
+            self.assertEqual(
+                application.get_user_display_profiles_by_ids(["u"]),
+                {"u": {"user_name": "updated", "level": "new"}},
+            )
+
+    def test_display_profiles_batch_401_ids_in_one_read_only_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            rows = [(str(index), f"user-{index}", "one") for index in range(401)]
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT,level TEXT)"
+                )
+                connection.executemany("INSERT INTO user_xiuxian VALUES (?,?,?)", rows)
+
+            calls = []
+            entered = []
+            unit_of_work = profile_repository.DatabaseUnitOfWork
+
+            class ObservedRead(unit_of_work):
+                def __enter__(self):
+                    entered.append(self.read_only)
+                    return super().__enter__()
+
+                def query_all(self, sql, params=()):
+                    calls.append((sql, params))
+                    return super().query_all(sql, params)
+
+            with patch.object(profile_repository, "DatabaseUnitOfWork", ObservedRead):
+                profiles = PlayerProfileApplication(database).get_user_display_profiles_by_ids(
+                    [row[0] for row in rows] + ["0", None, ""]
+                )
+            self.assertEqual(len(profiles), 401)
+            self.assertEqual(entered, [True])
+            self.assertEqual([len(params) for _, params in calls], [400, 1])
+            self.assertTrue(all("ORDER BY rowid ASC" in sql for sql, _ in calls))
+
+    def test_empty_display_profiles_do_not_open_database(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "missing" / "game.db"
+            with patch.object(profile_repository, "DatabaseUnitOfWork") as unit_of_work:
+                self.assertEqual(
+                    PlayerProfileApplication(database).get_user_display_profiles_by_ids([None, ""]),
+                    {},
+                )
+            unit_of_work.assert_not_called()
+            self.assertFalse(database.parent.exists())
+
+    def test_display_profiles_ignore_unrelated_real_currency_but_full_profile_still_rejects(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT,level TEXT,stone REAL)"
+                )
+                connection.execute(
+                    "INSERT INTO user_xiuxian VALUES ('unsafe','name','realm',?)",
+                    (float(2**60),),
+                )
+            application = PlayerProfileApplication(database)
+            self.assertEqual(
+                application.get_user_display_profiles_by_ids(["unsafe"]),
+                {"unsafe": {"user_name": "name", "level": "realm"}},
+            )
+            with self.assertRaises(DomainError) as caught:
+                application.get_user_profile("unsafe", raise_errors=True)
+            self.assertEqual(caught.exception.code, "currency_precision_unavailable")
+            self.assertEqual(
+                caught.exception.details,
+                {"reason": "stone_precision_lost_real", "subject": "actor", "field": "stone"},
+            )
+
+    def test_display_profile_read_failure_keeps_cause_and_recovers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "game.db"
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE user_xiuxian (user_id TEXT,user_name TEXT,level TEXT)"
+                )
+                connection.execute("INSERT INTO user_xiuxian VALUES ('u','name','realm')")
+            unit_of_work = profile_repository.DatabaseUnitOfWork
+
+            class DenyDisplayRead(unit_of_work):
+                def __enter__(self):
+                    result = super().__enter__()
+                    self.connection.set_authorizer(
+                        lambda action, table, *_: sqlite3.SQLITE_DENY
+                        if action == sqlite3.SQLITE_READ and table == "user_xiuxian"
+                        else sqlite3.SQLITE_OK
+                    )
+                    return result
+
+            application = PlayerProfileApplication(database)
+            with patch.object(profile_repository, "DatabaseUnitOfWork", DenyDisplayRead):
+                with self.assertRaises(DomainError) as caught:
+                    application.get_user_display_profiles_by_ids(["u"])
+            self.assertEqual(caught.exception.code, "profile_read_failed")
+            self.assertEqual(
+                caught.exception.details,
+                {"reason": "profile_read_failed", "subject": "player_profile"},
+            )
+            self.assertIsInstance(caught.exception.__cause__, sqlite3.DatabaseError)
+            self.assertEqual(
+                application.get_user_display_profiles_by_ids(["u"]),
+                {"u": {"user_name": "name", "level": "realm"}},
+            )
+
+    def test_display_profiles_missing_database_or_schema_is_strict_and_never_creates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "missing" / "game.db"
+            with self.assertRaises(DomainError) as caught:
+                PlayerProfileApplication(database).get_user_display_profiles_by_ids(["u"])
+            self.assertEqual(caught.exception.code, "profile_read_failed")
+            self.assertIsInstance(caught.exception.__cause__, sqlite3.OperationalError)
+            self.assertFalse(database.parent.exists())
+
+            database = Path(directory) / "empty.db"
+            sqlite3.connect(database).close()
+            before = database.stat().st_mtime_ns
+            with self.assertRaises(DomainError):
+                PlayerProfileApplication(database).get_user_display_profiles_by_ids(["u"])
+            self.assertEqual(database.stat().st_mtime_ns, before)
+            with sqlite3.connect(database) as connection:
+                self.assertEqual(connection.execute("SELECT name FROM sqlite_master").fetchall(), [])
+
     def test_missing_database_fails_closed_without_creating_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "missing.db"

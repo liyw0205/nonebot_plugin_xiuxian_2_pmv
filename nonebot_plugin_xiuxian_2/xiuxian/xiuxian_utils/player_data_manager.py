@@ -527,15 +527,21 @@ class PlayerDataManager:
                 for row in rows
             ]
 
-    def get_fields_by_ids(self, table_name, user_ids, fields) -> dict[str, dict]:
+    def get_fields_by_ids(self, table_name, user_ids, fields, *, ensure_fields=True) -> dict[str, dict]:
         """Read selected fields for a bounded set of users in batched queries."""
-        self._ensure_table_exists(table_name)
         selected_fields = list(dict.fromkeys(str(field) for field in fields if str(field)))
-        for field in selected_fields:
-            self._ensure_field_exists(table_name, field)
+        if ensure_fields:
+            self._ensure_table_exists(table_name)
+            for field in selected_fields:
+                self._ensure_field_exists(table_name, field)
         ids = list(dict.fromkeys(str(user_id) for user_id in user_ids if user_id is not None))
         if not ids:
             return {}
+        if not ensure_fields:
+            with self._conn_lock:
+                available = {str(name).casefold() for name in self.conn.column_names(table_name)}
+            if not {"user_id", *(field.casefold() for field in selected_fields)} <= available:
+                return {}
 
         result: dict[str, dict] = {}
         field_sql = [self._quote_ident("user_id"), *(self._quote_ident(field) for field in selected_fields)]

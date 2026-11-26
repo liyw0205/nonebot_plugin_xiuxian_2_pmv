@@ -25,6 +25,7 @@ from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_mentor, load_partner
+from ..xiuxian_buff.partner_storage import get_display_apprentice_ids
 from nonebot.log import logger
 from urllib.parse import quote
 
@@ -153,12 +154,17 @@ async def get_user_xiuxian_info(
             exp_meg = f"可突破！"
 
     partner_data = load_partner(user_id)
+    mentor_data = load_mentor(user_id)
+    mentor_id = mentor_data.get("mentor_id")
+    apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+    partner_user_id = partner_data.get("partner_id")
+    relation_ids = [user for user in (partner_user_id, mentor_id) if user is not None]
+    names = _sql_message().get_user_names_by_ids(relation_ids + apprentice_ids) if relation_ids or apprentice_ids else {}
     if not partner_data or partner_data.get('partner_id') is None:
         partner_info = "无"
     else:
         partner_user_id = partner_data["partner_id"]
         affection = partner_data["affection"]
-        partner_info_data = get_user_profile(partner_user_id)
         if affection >= 10000:
             affection_level = "💖 深情厚谊"
         elif affection >= 5000:
@@ -167,24 +173,17 @@ async def get_user_xiuxian_info(
             affection_level = "💗 初识情愫"
         else:
             affection_level = "💓 缘分伊始"
-        partner_info = f"{partner_info_data['user_name']} ({affection_level})" if partner_info_data else "无"
+        partner_info = f"{names[partner_user_id]} ({affection_level})" if partner_user_id in names else "无"
 
-    mentor_data = load_mentor(user_id)
-    mentor_id = mentor_data.get("mentor_id")
     if mentor_id:
-        mentor_info_data = get_user_profile(mentor_id)
-        mentor_info = mentor_info_data["user_name"] if mentor_info_data else "数据异常"
+        mentor_info = names[mentor_id] if mentor_id in names else "数据异常"
     else:
         mentor_info = "无"
 
     apprentice_names = []
-    for apprentice_id in mentor_data.get("apprentice_ids", []):
-        apprentice_data = load_mentor(apprentice_id)
-        if str(apprentice_data.get("mentor_id")) != str(user_id):
-            continue
-        apprentice_info_data = get_user_profile(apprentice_id)
-        if apprentice_info_data:
-            apprentice_names.append(apprentice_info_data["user_name"])
+    for apprentice_id in apprentice_ids:
+        if apprentice_id in names:
+            apprentice_names.append(names[apprentice_id])
     apprentice_info = "、".join(apprentice_names[:3]) if apprentice_names else "无"
     if len(apprentice_names) > 3:
         apprentice_info += f"等{len(apprentice_names)}人"

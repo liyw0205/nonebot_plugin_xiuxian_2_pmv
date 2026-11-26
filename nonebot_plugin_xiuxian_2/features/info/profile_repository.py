@@ -59,6 +59,41 @@ class PlayerProfileSqlRepository:
             return None
         return normalize_user_row(row)
 
+    def get_user_display_profiles_by_ids(
+        self, user_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        ids = list(dict.fromkeys(
+            str(user_id) for user_id in user_ids
+            if user_id is not None and str(user_id)
+        ))
+        if not ids:
+            return {}
+
+        profiles: dict[str, dict[str, Any]] = {}
+        try:
+            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+                for offset in range(0, len(ids), 400):
+                    batch = ids[offset : offset + 400]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows = uow.query_all(
+                        "SELECT user_id,user_name,level FROM user_xiuxian "
+                        f"WHERE user_id IN ({placeholders}) ORDER BY rowid ASC",
+                        tuple(batch),
+                    )
+                    for row in rows:
+                        profiles.setdefault(
+                            str(row["user_id"]),
+                            {"user_name": row["user_name"], "level": row["level"]},
+                        )
+        except Exception as exc:
+            logger.opt(exception=exc).error("玩家展示档案读取失败 subject=player_profile")
+            raise DomainError(
+                "profile_read_failed",
+                "player display profiles could not be read",
+                {"reason": "profile_read_failed", "subject": "player_profile"},
+            ) from exc
+        return profiles
+
     @staticmethod
     def _escape_like(value: str) -> str:
         return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

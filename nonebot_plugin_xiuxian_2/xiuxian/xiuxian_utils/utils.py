@@ -127,6 +127,10 @@ def get_user_profile(user_id: int | str, *, raise_errors: bool = False):
     return _player_profile().get_user_profile(user_id)
 
 
+def get_user_display_profiles_by_ids(user_ids):
+    return _player_profile().get_user_display_profiles_by_ids(user_ids)
+
+
 def get_user_profile_by_name(user_name: str):
     return _player_profile().get_user_profile_by_name(user_name)
 

@@ -20,7 +20,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.player_fight import Player_fight
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, get_user_profile, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, get_user_profile, get_user_display_profiles_by_ids, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import (
     XIUXIAN_IMPART_BUFF,
     OtherSet,
@@ -51,6 +51,7 @@ from .transaction_service import PartnerUnbindService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
+    get_display_apprentice_ids,
     load_mentor,
     load_partner,
     save_mentor,
@@ -1421,6 +1422,7 @@ def get_affection_level(affection):
     return affection_level
 
 @my_partner.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的道侣")
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -1440,22 +1442,24 @@ async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await my_partner.finish()
     
     partner_user_id = partner_data["partner_id"]
-    partner_info = get_user_profile(partner_user_id)
+    partner_info = get_user_profile(partner_user_id, raise_errors=True)
+    if partner_info is None:
+        await handle_send(bot, event, "道侣档案不存在，无法显示道侣信息。")
+        await my_partner.finish()
     
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
     bind_at = _parse_datetime(bind_time)
     bound_days = (runtime_clock.now() - bind_at).days if bind_at is not None else 0
     affection_level = get_affection_level(affection)
-    partner_user_info = _sql_message().get_user_info_with_id(partner_user_id)
     msg = f"""**我的道侣**
 ---
 道侣
 > {partner_info['user_name']}
 境界
-> {partner_user_info['level']}
+> {partner_info['level']}
 修为
-> {number_to(partner_user_info['exp'])}
+> {number_to(partner_info['exp'])}
 
 **结契信息**
 - 绑定时间
@@ -1534,8 +1538,8 @@ def _count_pending_mentor_invites(mentor_id):
     return len(_get_pending_mentor_invites(mentor_id))
 
 
-def _cooldown_remaining(user_id, field):
-    data = load_mentor(user_id)
+def _cooldown_remaining(user_id, field, *, mentor_data=None):
+    data = load_mentor(user_id) if mentor_data is None else mentor_data
     until = _parse_datetime(data.get(field))
     if until is None:
         return 0
@@ -2231,6 +2235,7 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
 
 @my_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的师徒")
 async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, command: tuple = Command()):
     """查看师徒信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
@@ -2242,24 +2247,28 @@ async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, c
     user_id = str(user_info["user_id"])
     mentor_data = load_mentor(user_id)
     mentor_id = mentor_data.get("mentor_id")
+    apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+    profiles = get_user_display_profiles_by_ids(
+        ([mentor_id] if mentor_id else []) + apprentice_ids
+    )
 
     if mentor_id:
-        mentor_info = get_user_profile(mentor_id)
+        mentor_info = profiles.get(mentor_id)
         bind_time = mentor_data.get("bind_time") or "未知"
         mentor_line = f"{mentor_info['user_name']}（{mentor_info['level']}，拜师时间：{bind_time}）" if mentor_info else "数据异常"
     else:
         mentor_line = "无"
 
     apprentice_lines = []
-    for apprentice_id in get_valid_apprentices(user_id):
-        apprentice_info = get_user_profile(apprentice_id)
+    for apprentice_id in apprentice_ids:
+        apprentice_info = profiles.get(apprentice_id)
         if apprentice_info:
             apprentice_lines.append(f"- {apprentice_info['user_name']}（{apprentice_info['level']}）")
 
     apprentice_msg = "\n".join(apprentice_lines) if apprentice_lines else "无"
 
-    mentor_cd = _cooldown_remaining(user_id, "mentor_cd_until")
-    apprentice_cd = _cooldown_remaining(user_id, "apprentice_cd_until")
+    mentor_cd = _cooldown_remaining(user_id, "mentor_cd_until", mentor_data=mentor_data)
+    apprentice_cd = _cooldown_remaining(user_id, "apprentice_cd_until", mentor_data=mentor_data)
     cd_lines = []
     if mentor_cd > 0:
         cd_lines.append(f"收徒冷却：{_format_seconds(mentor_cd)}")

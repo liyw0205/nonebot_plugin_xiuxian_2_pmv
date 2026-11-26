@@ -584,13 +584,34 @@ def recorder_metrics(recorder):
     return metrics
 
 
+async def dispatch_matcher_once(row, matcher, bot, event, state, stack):
+    from nonebot.exception import StopPropagation
+    from nonebot.message import _check_matcher, _run_matcher
+
+    dependency_cache = {}
+    row["matcher_check_started_at"] = time.perf_counter()
+    try:
+        matched = await _check_matcher(matcher, bot, event, state, stack, dependency_cache)
+    finally:
+        row["matcher_check_completed_at"] = time.perf_counter()
+    if not matched:
+        row["blocked"].append("permission/rule rejected before handler")
+        return
+    row["handler_started_at"] = time.perf_counter()
+    try:
+        # Mirror check_and_run_matcher with one shared dependency cache.
+        await _run_matcher(matcher, bot, event, state, stack, dependency_cache)
+    except StopPropagation:
+        pass
+    finally:
+        row["handler_completed_at"] = time.perf_counter()
+
+
 async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, classify):
     import nonebot
     from nonebot.adapters.onebot.v11 import Adapter, Bot
-    from nonebot.exception import StopPropagation
     from nonebot.log import logger
     from nonebot.matcher import matchers
-    from nonebot.message import _check_matcher, check_and_run_matcher
     from nonebot.rule import TrieRule
     from nonebot_plugin_xiuxian_2.infrastructure.messaging import MessageGatewayAdapter
     from nonebot_plugin_xiuxian_2.xiuxian.on_compat import _CURRENT_EVENT
@@ -702,20 +723,8 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                 if entry["matcher"] not in matchers[entry["matcher"].priority]:
                     raise ProbeBlocked("route provider did not select the expected real matcher")
                 async with AsyncExitStack() as stack:
-                    row["matcher_check_started_at"] = time.perf_counter()
-                    matched = await _check_matcher(entry["matcher"], bot, event, state, stack, {})
-                    row["matcher_check_completed_at"] = time.perf_counter()
-                    if not matched:
-                        row["blocked"].append("permission/rule rejected before handler")
-                    else:
-                        row["handler_started_at"] = time.perf_counter()
-                        try:
-                            await asyncio.wait_for(check_and_run_matcher(
-                                entry["matcher"], bot, event, state, stack, {}), timeout=15)
-                        except StopPropagation:
-                            pass
-                        finally:
-                            row["handler_completed_at"] = time.perf_counter()
+                    await asyncio.wait_for(dispatch_matcher_once(
+                        row, entry["matcher"], bot, event, state, stack), timeout=15)
                 row["status"] = "pass"
             except asyncio.TimeoutError:
                 row["status"] = "timeout"
@@ -1009,7 +1018,14 @@ async def run(args, identity):
         "rank-gameplay-v2": "tests.mixed_rank_gameplay_fixture",
         "rank-range-v3": "tests.mixed_rank_range_fixture",
         "read-strata-v4": "tests.mixed_read_strata_fixture",
+        "relation-v5": "tests.mixed_relation_fixture",
     }[args.scenario])
+    driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
+                    ROOT / "tests/command_probe.py"]
+    driver_files.extend(Path(module.__file__) for name, module in list(sys.modules.items())
+                        if name.startswith("tests.mixed_") and getattr(module, "__file__", None))
+    driver_identity = {path.relative_to(ROOT).as_posix(): matrix._sha256(path)
+                       for path in sorted(set(driver_files))}
     specs = (fixture_support.phase_specs() if args.scenario != "legacy-v1" else [
         {"mode": mode, "concurrency": concurrency, "requests": args.requests_per_phase,
          "arrival_rate": args.arrival_rate}
@@ -1027,6 +1043,8 @@ async def run(args, identity):
     result = {"status": "running", "fixture": str(fixture), "source": identity,
               "fixture_identity": fixture_identity, "limits": matrix.MATRIX_LIMITS,
               "entry": "real matcher/provider/permission/rule/DI/handler; mock OneBot transport only",
+              "dispatch_contract": "one _check_matcher then _run_matcher; shared per-request dependency cache and exit stack; 15s covers check and run",
+              "driver_identity": driver_identity,
               "coverage": "bounded stratified mixed sample; not exhaustive of 674 matchers or background jobs",
               "phases": [], "bulk_probe": None, "preflight_only": args.preflight_only,
               "scenario": args.scenario, "frozen_phase_specs": specs,
@@ -1153,7 +1171,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

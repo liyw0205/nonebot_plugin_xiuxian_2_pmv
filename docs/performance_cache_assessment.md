@@ -1506,3 +1506,140 @@ strata do not exhaust674 matchers/41 background entries or establish sustained
 capacity. The50-arrival contention backlog, first-schema/read initialization,
 write-driven rank recomputation and broader real gameplay remain unresolved;
 freeze the next evidence-based workload before another baseline/code/after.
+
+## V5: Live Relationship Display Batch (2026-11-26)
+
+### Scope And Comparable Data
+
+- Baseline runtime is `a6ce2a7e` (CI45751014023 successful). Reports are
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+  `relation-before-20261126-r03.json` and `relation-after-20261126-r01.json`,
+  with their `.phases.jsonl` request records. This is one valid ordered pair;
+  no after retries. Earlier before-r01 stopped before requests on an incorrect
+  isolated cooldown-file assumption; before-r02 misclassified CR transport
+  line endings after160 requests. Both failures remain retained, excluded from
+  performance evidence; all160 saved replies were reclassified offline before
+  the valid baseline. Product behavior was not changed to satisfy classification.
+- Correct the driver's duplicate matcher check before freezing V5: one real
+  `_check_matcher` then `_run_matcher`, sharing the request's dependency cache
+  and exit stack; the timeout covers both. Rule/handler/resource lifecycle,
+  rejection and timeout regressions pass. Both reports have identical driver
+  hashes and dispatch contracts. Do not compare these latencies directly with
+  V4's double-check driver or revise V4's retained results.
+- The same sole1M fixture, ordered request objects, phase specs, outcome/reason,
+  rank generations and business seed manifests match using Python integers.
+  Full seed hashes differ only because startup compatibility-hit telemetry
+  JSON differs; `xiuxian/compatibility_hits.json` is a best-effort diagnostic
+  counter, not gameplay state. This exception is explicit, not full-byte seed
+  equality. Every JSON file, including that telemetry file, stays unchanged
+  during each measured phase. Original rank digest restoration passes twice.
+- Per version608 successful real matcher/DI/handler requests:128 profiles,
+  160 mentor views including all four aliases,160 partner views,160 stone
+  training writes. Transport alone is mocked. All requests in a phase share
+  one instance/database; tasks and asynchronous persistence drain before
+  phase restore. Every phase has zero refusals, exceptions, timeouts and
+  busy/locked errors; every invariant check passes.
+- Retain128 participants:64 low-score training users,32 original REAL users,
+  32 exact large-BLOB users. The REAL group is preserved but not a relationship
+  display actor/target; full profiles still enforce the precision guard.
+  There are128 mentor rows/64 links,128 partner rows/64 pairs, and4096 current
+  pending applications (128 per master). Apprentice fanout includes1/3/5/7;
+  historical over-limit display remains intact. Pending rows have fixed future
+  expiry; expired cleanup performance is not exercised. Existing feature rows
+  remain back2560/BuffInfo128/activity_user8192, point/pass/boss32768 each,
+  bank/status/arena/impart128 each, sects4. No million-row feature claim.
+- Each successful profile independently checks both exact ranks. Training
+  changes real exp+100/stone-1000/power and verifies exact receipts/ledgers,
+  inventories, no duplicates/negative balances/lost updates, relationships,
+  cooldown JSON and feature/attribute projections. High readonly ranks are
+  above the low training ceiling; mutable low-rank behavior is not proved.
+
+### Runtime Changes And Results
+
+Profile display batches live mentor backlinks and relation names; mentor
+display reuses its own relation/cooldowns and batches backlinks/name+realm;
+partner display reuses its first current full profile. Name-only projections
+do not parse unrelated currency. A missing partner profile gets an explicit
+reply; strict database failures retain their reason and recover after the
+fault clears. Batches deduplicate SQL inputs, retain output order/duplicates,
+first-row and empty-name semantics, use400-ID chunks and no new cache/DDL.
+Action eligibility, balances, rank algorithms/generations, pending expiry,
+transmission limits and writes retain their current behavior.
+
+Milliseconds before -> after. E2E includes scheduled-arrival and all queueing;
+the phases are short arrival bursts plus drain, not sustained capacity.
+
+| Phase | n; cap / arrivals per s; writes | E2E p50 | E2E p95 | E2E p99 | Success/s | Handler wall overlap | Loop p95 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure | 160;10/20;0 | 29.806 -> 26.974 | 124.369 -> 151.840 | 273.995 -> 331.316 | 20.051 -> 20.028 | 4 -> 4 | 31.645 -> 16.003 |
+| Mixed | 256;20/35;64 | 2340.509 -> 1987.819 | 4030.616 -> 3454.566 | 4163.170 -> 3720.234 | 22.621 -> 23.409 | 16 -> 16 | 93.003 -> 96.285 |
+| Same-user contention | 192;20/50;96 | 2727.841 -> 3994.002 | 5298.993 -> 6735.366 | 5404.869 -> 6835.097 | 21.022 -> 18.190 | 15 -> 15 | 115.252 -> 156.240 |
+
+All command errors are0%. SQL calls include execute/commit/rollback; summed
+SQL wall can overlap across threads. Each command's phase result is retained:
+
+| Phase / command | n | E2E p50 | E2E p95 | E2E p99 | DB calls | SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure / profile | 32 | 66.881 -> 43.497 | 169.489 -> 331.316 | 299.017 -> 544.563 | 2277 -> 1832 | 1602.513 -> 1529.161 |
+| Pure / mentor | 64 | 28.034 -> 26.925 | 94.641 -> 126.944 | 273.995 -> 180.856 | 2468 -> 2116 | 1084.137 -> 1031.960 |
+| Pure / partner | 64 | 23.308 -> 22.264 | 66.641 -> 133.034 | 223.551 -> 265.367 | 1541 -> 1474 | 813.593 -> 823.682 |
+| Mixed / profile | 64 | 2488.130 -> 2063.064 | 4074.999 -> 3596.069 | 4249.933 -> 3834.665 | 4561 -> 3665 | 11303.493 -> 11240.380 |
+| Mixed / mentor | 64 | 2236.459 -> 1984.535 | 4008.230 -> 3454.566 | 4163.170 -> 3578.178 | 2468 -> 2116 | 1145.081 -> 1087.525 |
+| Mixed / partner | 64 | 2147.615 -> 1860.163 | 3928.555 -> 3322.241 | 4077.479 -> 3467.642 | 1541 -> 1474 | 822.426 -> 910.036 |
+| Mixed / training | 64 | 2356.090 -> 1976.842 | 4030.616 -> 3443.257 | 4145.691 -> 3633.604 | 3008 -> 3008 | 1271.391 -> 1491.597 |
+| Contention / profile | 32 | 2691.742 -> 3965.637 | 5404.869 -> 6753.338 | 5412.922 -> 6835.097 | 2291 -> 1841 | 5353.470 -> 7586.569 |
+| Contention / mentor | 32 | 2716.661 -> 3998.186 | 5279.246 -> 6794.443 | 5372.116 -> 6852.216 | 1188 -> 1060 | 507.664 -> 626.246 |
+| Contention / partner | 32 | 2591.280 -> 3846.572 | 5235.600 -> 6672.273 | 5332.549 -> 6754.621 | 768 -> 738 | 399.552 -> 479.320 |
+| Contention / training | 96 | 2727.841 -> 3991.958 | 5298.993 -> 6735.366 | 5392.233 -> 6832.354 | 4512 -> 4512 | 1825.792 -> 2271.836 |
+
+- Foreground calls26623 -> 23836; including message persistence29537 ->
+  26730. Current full-profile SELECTs visible in per-request top20 fall
+  profile512 -> 128, mentor392 -> 160, partner480 -> 320; these diagnostics
+  are lower bounds when omitted. The partner reduction is one related full
+  read/request; the actor's registration read remains. Mentor's new batch
+  itself costs645.281ms/160 calls, including first-schema work; its old related
+  full profiles are removed. No claim that every removed query saves its
+  recorded wall time. Total SQL rises27413.129 -> 30580.492ms.
+- Exact-rank statements remain49/128/64 by phase. Their SQL wall rises
+  643.549/9396.859/4382.505 -> 870.332/9895.394/6780.190ms. Cache result
+  hits/misses remain15/49,0/128,0/64; partial range hits40/9/0 -> 40/4/0.
+  Generations advance0/64/96 in both fields, matching successful training.
+  Cache remains32 entries/about33KiB within1MiB; no TOP-slice substitution.
+  Per-command cache attribution and isolated generation-update CPU are not
+  measured. Write invalidation/cold exact scans remain dominant concerns.
+- Mixed queue p95 improves3247.939 -> 2521.619ms; contention worsens4482.623
+  -> 5943.190ms. Contention producer p95 is1.835 -> 2.031ms while loop/dispatch
+  p95 rises115.252/93.669 -> 156.240/121.898ms: the seconds of delay cannot be
+  attributed solely to the load producer. BEGIN p95 stays below0.046ms in
+  every phase (including SQL, an upper bound on lock wait), with no busy errors.
+  This pair proves fewer repeated reads, not universal lower latency or a
+  causal explanation for rank timing variation. Pure tails and contention
+  latency/throughput regress; do not hide them or rerun to choose better data.
+
+### Resources And Remaining Work
+
+- Exclusive validation lock;2 CPU affinity,1GiB AS,600 CPU/1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`; RAM768MiB/disk2GiB preflight and continuous
+  RSS900MiB/single+total WAL256MiB stop thresholds. Wall84.794 -> 84.647s,
+  CPU82.977 -> 86.837s, traffic CPU38.761 -> 41.932s, peak RSS399.809 ->
+  404.215MiB, sampled VmSize749.551 -> 767.680MiB. Minimum available RAM
+  1643 -> 1726MiB; disk6450626560 -> 6300491776 bytes. Max single WAL stays
+  15355272 bytes; total21279928 -> 21296408 bytes, final restored WAL zero.
+- Phase setup/restore16.425 -> 17.970s, invariants7.487 -> 3.400s, final
+  restore12.151 -> 12.585s are outside request E2E. Sampled traffic write IO
+  104587264 -> 105426944 bytes; full process writes are about4.28GB/version,
+  mostly fixture/snapshot restoration. No extra retained million-row fixture.
+- Concentrated affected acceptance:43 tests pass; two newly added fixture
+  assumptions were corrected locally and only those failures rerun. Reuse
+  previously passed26 harness/fixture tests with164 subtests; frozen drivers
+  and fixture were unchanged afterward. Compile/architecture/inventory and
+  whitespace pass in a clean code-only worktree. No unchanged full-suite shard,
+  old matrix or old mixed phase rerun; scoped delivery requires its exact-SHA CI.
+
+The repository-wide goal remains active. Four real paths are a bounded sample,
+not exhaustive coverage of674 matchers/41 background entries. Actual handler
+wall overlaps4/16/15 do not prove20 concurrent CPU work or sustained50 successful
+requests/s. Next select cold exact-rank/write-interference or first-schema
+hotspots from these saved SQL/queue/loop records, freeze a new bounded workload,
+then perform one baseline -> runtime batch -> same-load comparison. Do not
+reinterpret old regressions as resolved by this delivery.

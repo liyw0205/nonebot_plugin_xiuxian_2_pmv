@@ -1,6 +1,7 @@
 """Small deterministic contracts for the mixed-load harness, not a load run."""
 import asyncio
 from contextvars import copy_context
+from contextlib import AsyncExitStack
 import io
 import json
 from pathlib import Path
@@ -259,6 +260,80 @@ class MixedProbeHelperTests(unittest.TestCase):
         with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
             probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
                               "--requests-per-phase", "160", "--arrival-rate", ".5"])
+
+
+class MixedProbeDispatchTests(unittest.IsolatedAsyncioTestCase):
+    async def _dispatch(self, *, allowed=True, cancel=False):
+        import nonebot
+        from nonebot.adapters.onebot.v11 import Adapter, Bot
+        from nonebot.matcher import Matcher
+        from nonebot.params import Depends
+        from nonebot.rule import Rule
+        from tests.command_probe import make_event
+
+        try:
+            nonebot.get_driver()
+        except ValueError:
+            nonebot.init(log_level="ERROR")
+        calls, seen = [], []
+
+        async def resource():
+            calls.append("open")
+            try:
+                yield object()
+            finally:
+                calls.append("close")
+
+        async def rule(value=Depends(resource)):
+            calls.append("rule")
+            seen.append(value)
+            return allowed
+
+        async def handler(value=Depends(resource)):
+            calls.append("handler")
+            seen.append(value)
+            if cancel:
+                await asyncio.sleep(30)
+
+        matcher = Matcher.new(type_="message", rule=Rule(rule), handlers=[handler], block=True)
+        row = probe.request_row(request(), 1)
+        bot = Bot(Adapter(nonebot.get_driver()), "900000")
+        try:
+            async with AsyncExitStack() as stack:
+                operation = probe.dispatch_matcher_once(
+                    row, matcher, bot, make_event("profile", "900001", 1), {}, stack)
+                if cancel:
+                    with self.assertRaises(asyncio.TimeoutError):
+                        await asyncio.wait_for(operation, timeout=.05)
+                else:
+                    await operation
+                self.assertNotIn("close", calls)
+            self.assertEqual(calls[-1], "close")
+        finally:
+            matcher.destroy()
+        self.assertEqual(calls.count("rule"), 1)
+        self.assertEqual(calls.count("open"), 1)
+        self.assertLessEqual(row["matcher_check_started_at"], row["matcher_check_completed_at"])
+        return row, calls, seen
+
+    async def test_real_rule_and_handler_run_once_with_shared_dependency_lifecycle(self):
+        row, calls, seen = await self._dispatch()
+        self.assertEqual(calls, ["open", "rule", "handler", "close"])
+        self.assertIs(seen[0], seen[1])
+        self.assertEqual(row["blocked"], [])
+        self.assertLessEqual(row["matcher_check_completed_at"], row["handler_started_at"])
+        self.assertLessEqual(row["handler_started_at"], row["handler_completed_at"])
+
+    async def test_real_rule_rejection_never_runs_handler(self):
+        row, calls, _ = await self._dispatch(allowed=False)
+        self.assertEqual(calls, ["open", "rule", "close"])
+        self.assertNotIn("handler_started_at", row)
+        self.assertEqual(row["blocked"], ["permission/rule rejected before handler"])
+
+    async def test_timeout_preserves_handler_end_and_dependency_cleanup(self):
+        row, calls, _ = await self._dispatch(cancel=True)
+        self.assertEqual(calls, ["open", "rule", "handler", "close"])
+        self.assertIn("handler_completed_at", row)
 
 
 class MixedProbeOwnedTaskTests(unittest.IsolatedAsyncioTestCase):

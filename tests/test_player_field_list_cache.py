@@ -418,3 +418,41 @@ def test_get_fields_by_ids_batches_requested_relationship_rows(tmp_path, monkeyp
         ]
     finally:
         manager.close()
+
+
+def test_display_batch_is_live_chunked_and_never_initializes_schema(tmp_path):
+    database = tmp_path / "live-player.db"
+    with db_backend.transaction(database) as connection:
+        connection.execute("CREATE TABLE mentor(user_id TEXT PRIMARY KEY,mentor_id TEXT)")
+        connection.executemany("INSERT INTO mentor VALUES(%s,'m')", [(str(i),) for i in range(1, 402)])
+    manager = object.__new__(module.PlayerDataManager)
+    manager._conn_lock = threading.RLock()
+    manager.conn = db_backend.connect_readonly(database)
+    manager._ensure_table_exists = Mock(side_effect=AssertionError("unexpected DDL"))
+    manager._ensure_field_exists = Mock(side_effect=AssertionError("unexpected DDL"))
+    statements = []
+    manager.conn._raw.set_trace_callback(statements.append)
+    try:
+        assert manager.get_fields_by_ids("mentor", [], ("mentor_id",), ensure_fields=False) == {}
+        assert statements == []
+        ids = [str(i) for i in range(1, 402)] + ["1", "missing"]
+        rows = manager.get_fields_by_ids("mentor", ids, ("mentor_id",), ensure_fields=False)
+        assert len(rows) == 401
+        assert rows["1"]["mentor_id"] == "m"
+        assert len([sql for sql in statements if sql.startswith('SELECT "user_id"')]) == 2
+        assert not any(sql.startswith(("CREATE", "ALTER", "INSERT", "UPDATE")) for sql in statements)
+        with db_backend.transaction(database) as connection:
+            connection.execute("UPDATE mentor SET mentor_id='new' WHERE user_id='1'")
+        assert manager.get_fields_by_ids("mentor", ["1"], ("mentor_id",), ensure_fields=False)["1"]["mentor_id"] == "new"
+        for table, fields in (("missing", ("mentor_id",)), ("mentor", ("missing_column",))):
+            assert manager.get_fields_by_ids(table, ["1"], fields, ensure_fields=False) == {}
+        manager.conn._raw.set_authorizer(
+            lambda action, *_: db_backend.sqlite3.SQLITE_DENY
+            if action == db_backend.sqlite3.SQLITE_READ else db_backend.sqlite3.SQLITE_OK
+        )
+        with pytest.raises(db_backend.sqlite3.DatabaseError):
+            manager.get_fields_by_ids("mentor", ["1"], ("mentor_id",), ensure_fields=False)
+        manager.conn._raw.set_authorizer(None)
+        assert manager.get_fields_by_ids("mentor", ["1"], ("mentor_id",), ensure_fields=False)["1"]["mentor_id"] == "new"
+    finally:
+        manager.conn.close()
