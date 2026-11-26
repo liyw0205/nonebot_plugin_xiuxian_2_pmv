@@ -134,6 +134,9 @@ class XiuxianDateManage:
             self._run_core_migrations()
 
     def close(self):
+        from .exact_rank_reader import wait_for_exact_rank_reads
+
+        wait_for_exact_rank_reads()
         with self._conn_lock:
             if getattr(self, "conn", None):
                 self.conn.close()
@@ -155,6 +158,9 @@ class XiuxianDateManage:
 
     def reconnect(self):
         """恢复数据库文件后重建当前单例持有的 SQLite 连接。"""
+        from .exact_rank_reader import wait_for_exact_rank_reads
+
+        wait_for_exact_rank_reads()
         with self._conn_lock:
             if getattr(self, "conn", None):
                 try:
@@ -610,21 +616,26 @@ class XiuxianDateManage:
             c.execute(sql, (user_id, root, type, power, create_time, user_name, XiuConfig().max_stamina))
 
     def _borrow_fast_conn(self):
-        try:
-            return self._fast_conn_pool.get_nowait()
-        except queue.Empty:
-            pass
+        while True:
+            try:
+                return self._fast_conn_pool.get_nowait()
+            except queue.Empty:
+                pass
 
-        with self._fast_conn_lock:
-            if self._fast_conn_count < self._fast_conn_max:
-                self._fast_conn_count += 1
-                try:
-                    return db_backend.connect(self.database_path, check_same_thread=False)
-                except Exception:
-                    self._fast_conn_count -= 1
-                    raise
+            with self._fast_conn_lock:
+                if self._fast_conn_count < self._fast_conn_max:
+                    self._fast_conn_count += 1
+                    try:
+                        return db_backend.connect(self.database_path, check_same_thread=False)
+                    except Exception:
+                        self._fast_conn_count -= 1
+                        raise
 
-        return self._fast_conn_pool.get()
+            try:
+                return self._fast_conn_pool.get(timeout=.1)
+            except queue.Empty:
+                # A failed borrower may discard a connection instead of returning it.
+                continue
 
     def _return_fast_conn(self, conn, reusable: bool = True):
         if not reusable:
@@ -4939,6 +4950,9 @@ player_data_manager = _LazyManagerProxy(_player_data_manager)
 
 @register_legacy_shutdown
 async def close_db():
+    from .exact_rank_reader import drain_exact_rank_reads
+
+    await drain_exact_rank_reads()
     # 统一调用单例关闭连接
     _sql_message().close()
     XIUXIAN_IMPART_BUFF().close()

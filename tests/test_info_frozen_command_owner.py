@@ -100,7 +100,7 @@ class InfoFrozenCommandOwnerTests(unittest.TestCase):
         self.assertIn("get_equipped_title_display(user_id)", source)
         self.assertIn("equipped_title_id=title_id", source)
         for legacy_reader in (
-            "_sql_message().get_exp_and_stone_ranks(",
+            "await run_exact_rank_read(_sql_message(), user_id)",
             "_sql_message().get_root_rate(",
             "UserBuffDate(user_id, initialize_missing=False)",
             "load_partner(user_id)",

@@ -2,6 +2,7 @@
 import asyncio
 from contextvars import copy_context
 import io
+import json
 from pathlib import Path
 import queue
 import sqlite3
@@ -18,6 +19,16 @@ def request(key="profile", actor="900001"):
 
 
 class MixedProbeHelperTests(unittest.TestCase):
+    def test_report_streaming_does_not_build_a_second_full_json_string(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "report.json"
+            value = {"samples": [{"user": "synthetic", "sql_ms": 1.25}] * 100}
+            with patch.object(probe.json, "dumps", side_effect=AssertionError("full allocation")):
+                probe.write_json_stream(target, value)
+            self.assertEqual(json.loads(target.read_text()), value)
+            with self.assertRaises(FileExistsError):
+                probe.write_json_stream(target, value)
+
     def test_percentiles_expose_empty_and_small_sample_limits(self):
         self.assertIsNone(probe.percentile([], .99))
         self.assertEqual(probe.distribution([1, 2, 3, 4]),

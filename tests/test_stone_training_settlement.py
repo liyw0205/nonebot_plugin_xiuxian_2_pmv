@@ -30,6 +30,9 @@ def test_buff_stone_training_handler_uses_lazy_dual_database_service():
     assert "def _stone_training_settlement_service(" in source
     assert "get_paths().game_db, get_paths().player_db" in source
     assert "stone_training_settlement_service.settle(" not in handler
+    stone_handler = handler[:handler.index("@in_closing.handle")]
+    assert "user_mes = user_info" in stone_handler
+    assert "get_user_info_with_id(" not in stone_handler
 
 
 class StoneTrainingSettlementTests(unittest.TestCase):

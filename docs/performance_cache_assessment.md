@@ -1016,3 +1016,178 @@ This closes a bounded mixed-workload implementation/measurement batch, not the
 repository-wide performance problem. Distinct-user cold exact ranks, frequent
 dual-field gameplay updates, populated large feature tables, multi-process
 contention and sustained 50 successful requests/sec remain open evidence gaps.
+
+## Distinct-Score Ranks And Dual-Field Gameplay: 2026-11-26
+
+This follow-up keeps the overall performance goal active. The preceding
+`78549516` delivery passed exact-SHA CI `45727901853`; its results and the
+Mixed/limit10 regression above remain unchanged. This experiment uses different
+scores and actual exp-changing gameplay, so its absolute numbers must not be
+compared with the preceding equal-wallet/store workload.
+
+### Frozen Workload And Valid Reports
+
+- Runtime before: exact `785495169dba33fe0750dfba9859916201e3dab1`, tree digest
+  `012e81fee6301537426d5a20b1fc80c4823c0fca04108b8f562f419eb22816ad`.
+  Candidate runtime digest:
+  `797ab1f591bc28af23fe832ba749f68dbb6bd8819d1ad62b15188a304136731a`.
+  Candidate HEAD still names the parent; the digest identifies uncommitted code.
+- Valid raw reports under the same retained fixture's `data/`:
+  `rank-gameplay-before-20261126-r03.json` and
+  `rank-gameplay-after-20261126-r01.json`, with append-only phase journals.
+  Fixture identity, all 13 ordered request plans and seed digests match;
+  seed digest is
+  `20ec5fb24f1c249a9034c7b20b8e50f8e9c4284fb1b54375d041be5bc3f3ff60`.
+  Both restored original rank digest
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+- One shared runtime/event loop/database set per version; 128 existing users
+  have different exp and stone values, real equipment/BuffInfo and 2,560
+  backpack rows. Activity tables contain 8,192 users and 32,768 rows each in
+  point/pass/boss tables across four configured activity keys. These are the
+  selected feature populations, not million-row feature tables. Only synthetic
+  activity availability windows change; original configuration bytes restore.
+- Seven real matcher/DI/handler paths: profile, assets, state, cultivation,
+  backpack, activity rank and `灵石修炼 1000`. Training really gains 100 exp
+  and spends 1,000 stone; actor snapshots and eligibility remain live. Cold
+  stages use 128 distinct users and uncached result keys, not cold OS pages.
+  Read-mostly has 12 writes/128 calls; mixed has 64/128 or 128/256. Contention
+  targets the same training actor. Cooldowns and gameplay rules stay intact.
+- Each version: 1,920/1,920 successes, zero business/cooldown/replay refusals,
+  exceptions, timeouts, SQLite busy/locked or unknown/boundary SQL. All 13
+  phase invariants pass: exact exp/stone/power deltas, receipt/ledger identity,
+  no unsettled operations, unchanged inventory, 1M users and DB quick checks.
+  This is a seven-command stratified sample, not exhaustive coverage of 674.
+- Before r01 failed thread creation under the AS limit; before r02 reached
+  final traffic but failed full-string JSON serialization. Neither is valid
+  comparison evidence. Logs/reports remain; no successful result was replaced
+  to select a favorable number. Both valid versions start with
+  `MALLOC_ARENA_MAX=2`, retain the same AS/RSS limits, stream JSON and journal
+  drained phases. A 44-worker allocation/serialization micro-preflight passed
+  under those limits before r03. The sole additional candidate-side drain hook
+  waits for its new rank workers; measured traffic/seed/instrumentation match.
+
+### Runtime Changes
+
+- Complete live exp/stone rank reads run in two dedicated workers, with an
+  asynchronous two-slot admission bound before executor submission. ContextVar
+  propagation preserves request SQL attribution. Repeated cancellation waits
+  for real SQLite completion before releasing the slot. Drain includes waiting
+  requests; synchronous close/reconnect wait for worker completion independently
+  of the event loop, and shutdown drains first. This does not claim a global
+  cross-thread database-restore barrier; concurrent administrative replacement
+  of a database remains outside the measured workload.
+- The existing bounded 32-entry/1MiB exact score cache and live transaction
+  semantics remain. Target scores, generations and counts share one SQLite
+  read snapshot; no TOP slice or stale external profile value supplies rank.
+  A discarded read-pool connection now lets waiters recheck capacity rather
+  than wait forever. Configuring a very small shared pool can still cause
+  synchronous pool waits in other readers.
+- Stone training reuses its checked user projection. The writer rechecks the
+  current snapshot inside `BEGIN IMMEDIATE`. Exact bindings prevent exp/power
+  overflow into SQLite REAL; ordinary binary-multiplier/ROUND behavior stays
+  compatible, with integer-ratio rounding beyond the exact floating range.
+  One final joined read after receipt insertion verifies all player fields and
+  the complete receipt. IGNORE/trigger rewrites roll back, report a specific
+  reason and release only the rollback-proven unsettled reservation for retry.
+  That reservation read offsets the removed duplicate read: measured training
+  foreground calls remain 56/request. No query-count speedup is claimed there.
+
+### All Phase Results
+
+Milliseconds before -> after; every 128-call phase is one sample, and the two
+highest arrival stages have 256 calls each. E2E includes scheduled-arrival delay
+and queues. Overlap is observed handler wall-interval overlap, not CPU execution
+or the configured limit. Successful throughput includes phase queue drain.
+
+| Mode | Limit / arrivals per s | n | E2E p50 | E2E p95 | E2E p99 | Success/s | Observed overlap | Loop p95 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cold profile | 1 / 10 | 128 | 7307.093 -> 7003.560 | 13502.967 -> 13521.525 | 14067.645 -> 14096.345 | 4.765 -> 4.757 | 1 -> 1 | 197.161 -> 7.692 |
+| Cold profile | 5 / 10 | 128 | 7541.467 -> 6670.904 | 13222.382 -> 12379.013 | 13805.634 -> 12857.659 | 4.829 -> 5.008 | 5 -> 5 | 787.380 -> 19.137 |
+| Cold profile | 10 / 10 | 128 | 8146.866 -> 6779.600 | 14364.332 -> 12470.884 | 14664.036 -> 12867.703 | 4.709 -> 5.005 | 10 -> 10 | 1581.574 -> 17.504 |
+| Cold profile | 20 / 10 | 128 | 8080.109 -> 894.669 | 14087.246 -> 1553.187 | 14587.106 -> 1590.402 | 4.833 -> 9.013 | 20 -> 16 | 2128.863 -> 14.350 |
+| Read-mostly | 5 / 20 | 128 | 599.649 -> 32.038 | 899.830 -> 235.530 | 948.246 -> 329.225 | 17.615 -> 19.644 | 5 -> 3 | 193.486 -> 37.725 |
+| Read-mostly | 10 / 20 | 128 | 766.031 -> 35.536 | 1381.201 -> 240.785 | 1490.025 -> 327.483 | 16.603 -> 19.684 | 10 -> 4 | 232.927 -> 37.744 |
+| Mixed | 1 / 20 | 128 | 1248.208 -> 1110.559 | 2077.306 -> 2040.232 | 2102.934 -> 2070.906 | 15.164 -> 15.189 | 1 -> 1 | 181.608 -> 57.047 |
+| Mixed | 5 / 20 | 128 | 1187.639 -> 653.066 | 2019.818 -> 922.178 | 2073.443 -> 1061.889 | 15.342 -> 17.722 | 5 -> 5 | 221.356 -> 129.785 |
+| Mixed | 10 / 20 | 128 | 1121.330 -> 377.083 | 2100.577 -> 588.862 | 2163.522 -> 720.484 | 15.288 -> 19.510 | 10 -> 9 | 219.460 -> 117.399 |
+| Mixed | 20 / 20 | 128 | 1448.102 -> 121.274 | 2260.894 -> 405.332 | 2364.905 -> 579.822 | 15.228 -> 19.126 | 20 -> 6 | 267.023 -> 97.145 |
+| Contention | 10 / 20 | 128 | 1340.748 -> 534.314 | 2119.358 -> 891.989 | 2212.799 -> 1000.891 | 15.189 -> 17.734 | 10 -> 9 | 236.804 -> 122.301 |
+| Mixed | 20 / 35 | 256 | 4968.621 -> 3576.656 | 9030.659 -> 6245.980 | 9244.959 -> 6468.555 | 15.486 -> 18.747 | 19 -> 20 | 286.394 -> 237.901 |
+| Mixed | 20 / 50 | 256 | 6371.764 -> 5151.300 | 11651.545 -> 8644.377 | 12144.822 -> 8973.306 | 14.964 -> 18.211 | 19 -> 19 | 317.721 -> 220.899 |
+
+The 35/50 rates are offered arrivals over short 7.3/5.1-second windows, followed
+by draining. Even the observed overlap of 20 does not prove 20 simultaneous CPU
+operations. Successful throughput remains below 20/s at the highest arrivals;
+sustained 50 successful requests/s is unachieved and unverified. Cold/limit1
+p95 and p99 slightly regress. No additional run replaced these observations.
+
+### Per-Command And SQL Evidence
+
+Pooled distributions combine different arrival/queue conditions; use phase
+rows above for capacity comparisons. All error rates are 0%; all requests in
+each row succeed. DB calls include execute/commit/rollback by the recorder's
+existing definition; message-writer SQL is reported separately in raw samples.
+
+| Command | n/version | E2E p50 | E2E p95 | E2E p99 | Foreground DB calls |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 我的修仙信息 | 651 | 6263.070 -> 3254.840 | 13647.499 -> 12341.033 | 14481.428 -> 13521.525 | 32175 -> 32166 |
+| 我的资产总览 | 139 | 1297.654 -> 415.477 | 9213.740 -> 6573.821 | 11577.502 -> 8507.270 | 3955 -> 3955 |
+| 我的状态 | 135 | 1281.773 -> 424.816 | 8871.543 -> 6335.356 | 11218.996 -> 8147.864 | 5535 -> 5547 |
+| 我的修为 | 135 | 1269.783 -> 432.658 | 8831.916 -> 6295.113 | 11178.894 -> 8287.446 | 2430 -> 2430 |
+| 我的背包 | 130 | 1251.801 -> 419.435 | 9056.491 -> 6497.225 | 11187.796 -> 8400.093 | 2340 -> 2340 |
+| 活动排行 | 130 | 1252.363 -> 464.093 | 9065.418 -> 6557.233 | 11457.134 -> 8492.378 | 2860 -> 2860 |
+| 灵石修炼 | 600 | 1815.195 -> 846.595 | 9462.142 -> 7093.985 | 11820.005 -> 8644.377 | 33600 -> 33600 |
+
+- Exact rank recomputations remain 1,302 (651 each field) on both versions;
+  recorded process-cache hits/misses are 0/1,302 with 936 evictions each.
+  Cold stages have no writes yet still miss on every different score. Training
+  advances both field generations by 12, 64 or 128 per relevant phase; cache
+  invalidations counted by the cache API remain zero because changing the SQL
+  generation key is logical invalidation. This workload confirms the bounded
+  cache provides no rank reuse here. It does not measure other caches' hit rates.
+- Before cold rank SQL runs entirely in `MainThread`, about 92% of foreground
+  SQL CPU. After it runs on the two named rank workers. Cold/limit5 and /10 rank
+  SQL CPU rises from about 22 to 42 seconds/phase, consistent with phase user
+  CPU; it is not merely overlapping wall time. Cold/limit20 instead consumes
+  about 22 seconds of rank CPU. Shared memory/cache effects or host scheduling
+  are possible causes, not established diagnoses. Thread CPU instrumentation
+  times execute/fetch on the same thread and was independently reviewed. A
+  single ordered experiment cannot establish significance or uniform speedup.
+- Total rank SQL wall time increases 114259.933 -> 175697.019ms. Foreground
+  calls remain 82895 -> 82898; with real message queue batching, total calls
+  are 91692 -> 92146 and summed SQL wall is 157243.428 -> 225129.288ms.
+  Offload primarily reduces event-loop stalls and other requests' queues;
+  it does not reduce the indexed DISTINCT range-count work. Busy/locked is
+  zero; maximum measured BEGIN execution rises 2.701 -> 7.030ms, not a direct
+  lock-wait measurement. Response persistence drain stays separately recorded.
+
+### Resource And Validation Closeout
+
+- Same exclusive validation lock; two CPU affinity; 1GiB AS, 600s CPU and
+  1200s wall; minimum 768MiB available RAM and 2GiB disk; RSS stop900MiB and
+  total/per-file WAL stop256MiB. Monitoring continues throughout each phase.
+  No cap was relaxed, no second long-lived million-user fixture was created.
+- Whole process wall 301.047 -> 279.485s; CPU 290.229 -> 342.202s; peak RSS
+  288.887 -> 299.910MiB. Traffic-phase CPU increases 209.646 -> 259.018s.
+  Minimum phase available RAM 1680 -> 1555MiB; disk 7375593472 -> 7226351616
+  bytes; maximum observed VmSize 842.551 -> 855.715MiB; threads45 -> 43.
+  Maximum total WAL 19739016 -> 19701936 bytes, single WAL15355272 both;
+  all WALs zero after restore. Process CPU includes harness/measurement cost.
+- Sampled traffic-window write bytes 274808832 -> 304439296 differ from about
+  13.6GB whole-process write bytes dominated by repeated snapshot restoration.
+  Setup/restore/check times, process I/O and response drain are separate fields;
+  none is attributed to gameplay transaction volume or durable data growth.
+- Exact code-only candidate: 94 focused tests plus 66 subtests pass in 8.77s;
+  compile, architecture (`ok=true`, `errors=[]`), generated inventory and
+  whitespace pass. This includes repeated cancellation/drain, real worker
+  connection close/reconnect, pool discard recovery, exact big-number training,
+  ignored/rewritten receipts, rollback and original-message recovery/replay.
+  The protected main-checkout JSON deletion remains untouched. Accepted old
+  unittest shards and old serial/mixed matrices were not repeated; the new
+  delivery still requires its exact-SHA CI to pass before CI closeout.
+
+The next unresolved work is reducing cold rank scan CPU and the zero-hit
+generation workload's cost, explaining the variable two-worker CPU penalty,
+and testing broader gameplay/population and multi-process contention where
+justified. The overall goal remains active; this bounded sample does not
+establish repository-wide capacity or sustained 50-success/s service.

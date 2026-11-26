@@ -736,7 +736,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await stone_exp.finish()
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = user_info
     level = user_mes['level']
     use_exp = user_mes['exp']
     use_stone = user_mes['stone']

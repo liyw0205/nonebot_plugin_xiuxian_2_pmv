@@ -16,6 +16,7 @@ from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..command_guard import guard_command
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
+from ..xiuxian_utils.exact_rank_reader import run_exact_rank_read
 from ...core.errors import DomainError
 from ...features.impart.application import ImpartApplication
 from ...features.sect.sect_info_repository import SectInfoSqlRepository
@@ -103,7 +104,7 @@ async def get_user_xiuxian_info(
     user_name = user_info['user_name']
 
     user_num = user_info['id']
-    rank = _sql_message().get_exp_and_stone_ranks(user_id)
+    rank = await run_exact_rank_read(_sql_message(), user_id)
     user_rank = int(rank[0])
     user_stone = int(rank[1])
 

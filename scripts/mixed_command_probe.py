@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from contextlib import AsyncExitStack, contextmanager
 from contextvars import ContextVar
 import fcntl
+import gc
 import hashlib
 import importlib
 import inspect
@@ -44,6 +45,7 @@ COUNTERS = ("hits", "misses", "waits", "expirations", "evictions",
 ACTIVE = ContextVar("mixed_command_request", default=None)
 BACKGROUND_SQL = ContextVar("mixed_command_background_sql", default=None)
 CHECKED_ATTACH = ContextVar("mixed_command_checked_attach", default=None)
+SQL_CPU_START = ContextVar("mixed_command_sql_cpu_start", default=None)
 BOUND_ATTACH = re.compile(r'^\s*ATTACH\s+(?:DATABASE\s+)?\?\s+AS\s+(?:[a-zA-Z_]\w*|"(?:[^"]|"")+")\s*;?\s*$', re.IGNORECASE)
 def bulk_probe(context, managers, fixture_identity):
     return measure_rank_generation_cost(context.paths.game_db)
@@ -134,6 +136,9 @@ class QueryRouter:
 
     def record(self, connection, sql, phase, elapsed_ms):
         row = ACTIVE.get()
+        ended = time.perf_counter()
+        cpu_start = SQL_CPU_START.get()
+        cpu_ms = (time.thread_time() - cpu_start) * 1000 if cpu_start is not None else None
         with self.lock:
             if row is None:
                 if not self.phase_active:
@@ -152,6 +157,18 @@ class QueryRouter:
             recorder = row["_recorder"]
             recorder.connections = self.connections
             recorder.record(connection, sql, phase, elapsed_ms)
+            name = threading.current_thread().name
+            totals = row["sql_threads"].setdefault(name, {"calls": 0, "wall_ms": 0.0, "cpu_ms": 0.0})
+            totals["calls"] += phase == "execute"
+            totals["wall_ms"] += elapsed_ms
+            totals["cpu_ms"] += cpu_ms or 0.0
+            if elapsed_ms >= 5 or "COUNT(DISTINCT" in str(sql).upper():
+                if len(row["sql_timeline"]) < 64:
+                    row["sql_timeline"].append({"start": ended - elapsed_ms / 1000, "end": ended,
+                        "thread": name, "operation": phase, "cpu_ms": cpu_ms,
+                        "wall_ms": elapsed_ms, "sql": matrix._normalized_sql(str(sql))})
+                else:
+                    row["sql_timeline_omitted"] += 1
             if phase == "execute" and str(sql).strip().upper().startswith("BEGIN"):
                 row["transaction_begin_ms"].append(elapsed_ms)
 
@@ -212,7 +229,21 @@ async def drain_message_writer(message_db, *, timeout=5):
         await asyncio.sleep(.005)
 
 
+async def drain_rank_workers():
+    module = sys.modules.get("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.exact_rank_reader")
+    if module is not None:
+        await module.drain_exact_rank_reads()
+
+
 class MixedCursor(matrix.TimedCursor):
+    @contextmanager
+    def cpu_clock(self):
+        token = SQL_CPU_START.set(time.thread_time())
+        try:
+            yield
+        finally:
+            SQL_CPU_START.reset(token)
+
     def execute(self, sql, parameters=()):
         token = None
         try:
@@ -221,7 +252,8 @@ class MixedCursor(matrix.TimedCursor):
                     ROUTER.deny("bound ATTACH must supply exactly one database path")
                 checked = ROUTER.check_path(parameters[0], operation="attaches")
                 token = CHECKED_ATTACH.set(checked if checked is not None else ":memory:")
-            return super().execute(sql, parameters)
+            with self.cpu_clock():
+                return super().execute(sql, parameters)
         except sqlite3.Error as exc:
             ROUTER.failure(exc, sql)
             raise
@@ -231,17 +263,35 @@ class MixedCursor(matrix.TimedCursor):
 
     def executemany(self, sql, parameters):
         try:
-            return super().executemany(sql, parameters)
+            with self.cpu_clock():
+                return super().executemany(sql, parameters)
         except sqlite3.Error as exc:
             ROUTER.failure(exc, sql)
             raise
 
     def executescript(self, sql):
         try:
-            return super().executescript(sql)
+            with self.cpu_clock():
+                return super().executescript(sql)
         except sqlite3.Error as exc:
             ROUTER.failure(exc, sql)
             raise
+
+    def fetchone(self):
+        with self.cpu_clock():
+            return super().fetchone()
+
+    def fetchmany(self, size=None):
+        with self.cpu_clock():
+            return super().fetchmany(size)
+
+    def fetchall(self):
+        with self.cpu_clock():
+            return super().fetchall()
+
+    def __next__(self):
+        with self.cpu_clock():
+            return super().__next__()
 
 
 class MixedConnection(matrix.TimedConnection):
@@ -293,18 +343,20 @@ def install_sql_timing(root):
 
 
 def resource_state(data_dir):
-    rss_kb = 0
+    memory = {}
     for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
-        if line.startswith("VmRSS:"):
-            rss_kb = int(line.split()[1])
-            break
+        name, _, value = line.partition(":")
+        if name in ("VmRSS", "VmSize", "Threads"):
+            memory[name] = int(value.split()[0])
     wal = [path.stat().st_size for path in Path(data_dir).rglob("*.db-wal") if path.is_file()]
     io = {}
     for line in Path("/proc/self/io").read_text(encoding="ascii").splitlines():
         name, value = line.split(":", 1)
         if name in ("read_bytes", "write_bytes", "syscr", "syscw"):
             io[name] = int(value)
-    return {"rss_mb": round(rss_kb / 1024, 3),
+    return {"rss_mb": round(memory.get("VmRSS", 0) / 1024, 3),
+            "virtual_mb": round(memory.get("VmSize", 0) / 1024, 3),
+            "threads": memory.get("Threads", 0),
             "process_cpu_s": round(time.process_time(), 6), "process_io": io,
             "available_mb": matrix._host_memory().get("available_mb"),
             "disk_free_bytes": shutil.disk_usage(data_dir).free,
@@ -321,6 +373,13 @@ def resource_violation(state):
     if state["rss_mb"] > 900:
         return "RSS above 900 MiB soft stop"
     return None
+
+
+def write_json_stream(path, value, *, mode="x"):
+    # Avoid a second full report allocation under the address-space guard.
+    with Path(path).open(mode, encoding="utf-8") as stream:
+        json.dump(value, stream, ensure_ascii=False)
+        stream.write("\n")
 
 
 class ResourceWatch:
@@ -360,6 +419,7 @@ def request_row(request, number):
             "number": request.get("number", number), "replies": [], "errors": [],
             "blocked": [], "logs": [], "sql_errors": [], "sqlite_busy_locked": 0,
             "transaction_begin_ms": [], "connect_ms": 0.0,
+            "sql_threads": {}, "sql_timeline": [], "sql_timeline_omitted": 0,
             "_recorder": recorder, "_tasks": []}
 
 
@@ -462,6 +522,9 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     watch = ResourceWatch(data_dir, stop)
     tasks, loop_lag, phase_errors = [], [], []
     inflight, peak_inflight = 0, 0
+    queue_counts = {"posted": 0, "received": 0, "admitted": 0}
+    queue_peaks = {"posted_not_received": 0, "received_not_admitted": 0}
+    gc_events, gc_started = [], {}
     previous_factory = loop.get_task_factory()
     queue_before = await drain_message_writer(message_db)
     ROUTER.background.reset()
@@ -470,6 +533,15 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     started = time.perf_counter()
     cpu_before = resource.getrusage(resource.RUSAGE_SELF)
     unattributed_before = ROUTER.unattributed
+
+    def gc_callback(phase, info):
+        key = (threading.get_ident(), info["generation"])
+        if phase == "start":
+            gc_started[key] = time.perf_counter()
+        elif key in gc_started:
+            begin = gc_started.pop(key)
+            gc_events.append({"start": begin, "end": time.perf_counter(),
+                              "generation": info["generation"], "thread": threading.current_thread().name})
 
     def task_factory(loop, coroutine, **kwargs):
         task = (previous_factory(loop, coroutine, **kwargs) if previous_factory else
@@ -520,8 +592,12 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     async def dispatch(row):
         nonlocal inflight, peak_inflight
         row["loop_received_at"] = time.perf_counter()
+        queue_counts["received"] += 1
+        queue_peaks["received_not_admitted"] = max(queue_peaks["received_not_admitted"],
+                                                  queue_counts["received"] - queue_counts["admitted"])
         async with semaphore:
             row["admitted_at"] = time.perf_counter()
+            queue_counts["admitted"] += 1
             if stop.is_set():
                 row["status"] = "resource_aborted"
                 row["outcome"] = "resource_aborted"
@@ -541,7 +617,9 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                 if entry["matcher"] not in matchers[entry["matcher"].priority]:
                     raise ProbeBlocked("route provider did not select the expected real matcher")
                 async with AsyncExitStack() as stack:
+                    row["matcher_check_started_at"] = time.perf_counter()
                     matched = await _check_matcher(entry["matcher"], bot, event, state, stack, {})
+                    row["matcher_check_completed_at"] = time.perf_counter()
                     if not matched:
                         row["blocked"].append("permission/rule rejected before handler")
                     else:
@@ -566,7 +644,9 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                 row["errors"].append("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
                 row["status"] = "exception"
             finally:
+                row["owned_drain_started_at"] = time.perf_counter()
                 await drain_owned(row)
+                row["owned_drain_completed_at"] = time.perf_counter()
                 _boundary_denials.reset(boundary_token)
                 _CURRENT_EVENT.reset(event_token)
                 ACTIVE.reset(active_token)
@@ -588,6 +668,8 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     def enqueue(row, scheduled_at, producer_posted_at):
         row["scheduled_at"] = scheduled_at
         row["producer_posted_at"] = producer_posted_at
+        queue_peaks["posted_not_received"] = max(queue_peaks["posted_not_received"],
+                                                 queue_counts["posted"] - queue_counts["received"])
         tasks.append(asyncio.create_task(dispatch(row)))
 
     def producer():
@@ -597,6 +679,7 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                 scheduled = anchor + index / arrival_rate
                 if stop.wait(max(0, scheduled - time.perf_counter())):
                     break
+                queue_counts["posted"] += 1
                 loop.call_soon_threadsafe(enqueue, row, scheduled, time.perf_counter())
         finally:
             loop.call_soon_threadsafe(producer_done.set)
@@ -613,6 +696,7 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     sink = logger.add(capture, level="WARNING")
     loop.set_task_factory(task_factory)
     ROUTER.phase_active = True
+    gc.callbacks.append(gc_callback)
     try:
         with patch.object(Bot, "call_api", transport), patch.object(MessageGatewayAdapter, "send", gateway):
             beat = asyncio.create_task(heartbeat())
@@ -637,11 +721,13 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
                     beat.cancel()
                     await asyncio.gather(beat, return_exceptions=True)
                 try:
+                    await drain_rank_workers()
                     await drain_message_writer(message_db)
                 except RuntimeError as exc:
                     phase_errors.append(str(exc))
                 watch.close()
     finally:
+        gc.callbacks.remove(gc_callback)
         ROUTER.phase_active = False
         loop.set_task_factory(previous_factory)
         logger.remove(sink)
@@ -663,8 +749,11 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
             ("queue_ms", "loop_received_at", "admitted_at"),
             ("service_ms", "admitted_at", "completed_at"),
             ("e2e_ms", "scheduled_at", "completed_at"),
+            ("matcher_check_ms", "matcher_check_started_at", "matcher_check_completed_at"),
+            ("owned_drain_ms", "owned_drain_started_at", "owned_drain_completed_at"),
         ):
-            row[name] = round((row[end] - row[begin]) * 1000, 3)
+            if begin in row and end in row:
+                row[name] = round((row[end] - row[begin]) * 1000, 3)
     queue_after = message_queue_state(message_db)
     if queue_after["dropped_jobs"] != queue_before["dropped_jobs"]:
         phase_errors.append("message writer dropped jobs during measured phase")
@@ -676,6 +765,7 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     return {"samples": rows, "planned_requests": len(rows), "arrival_rate_per_second": arrival_rate,
             "concurrency_limit": concurrency, "peak_inflight": peak_inflight,
             "handler_overlap": interval_overlap(rows, "handler_started_at", "handler_completed_at"),
+            "load_queue_peaks": queue_peaks, "gc_events": gc_events,
             "loop_lag_ms": distribution(loop_lag), "loop_lag_samples": len(loop_lag),
             "wall_s": round(finished - started, 3),
             "cpu_user_s": round(cpu_after.ru_utime - cpu_before.ru_utime, 3),
@@ -799,7 +889,7 @@ async def run(args, identity):
     root = data_dir / "xiuxian"
     report = args.report.resolve()
     matrix._read_report_path(fixture, report)
-    if report.exists():
+    if report.exists() or report.with_suffix(".phases.jsonl").exists():
         raise RuntimeError(f"refusing to overwrite an existing report: {report}")
     fixture_identity = json.loads(matrix._manifest_path(fixture).read_text(encoding="utf-8"))
     if (fixture_identity.get("users") != matrix.TARGET_USERS or
@@ -827,7 +917,14 @@ async def run(args, identity):
         importlib.import_module(module)
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import message_db
     prepare_message_writer(message_db, context.paths.message_db)
-    from tests import mixed_command_fixture as fixture_support
+    fixture_support = importlib.import_module(
+        "tests.mixed_command_fixture" if args.scenario == "legacy-v1"
+        else "tests.mixed_rank_gameplay_fixture"
+    )
+    specs = (fixture_support.phase_specs() if args.scenario == "rank-gameplay-v2" else [
+        {"mode": mode, "concurrency": concurrency, "requests": args.requests_per_phase,
+         "arrival_rate": args.arrival_rate}
+        for mode in MODES for concurrency in args.concurrency])
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
     entries = probe.inventory()
     if int(managers[0].conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0]) != matrix.TARGET_USERS:
@@ -843,6 +940,7 @@ async def run(args, identity):
               "entry": "real matcher/provider/permission/rule/DI/handler; mock OneBot transport only",
               "coverage": "bounded stratified mixed sample; not exhaustive of 674 matchers or background jobs",
               "phases": [], "bulk_probe": None, "preflight_only": args.preflight_only,
+              "scenario": args.scenario, "frozen_phase_specs": specs,
               "bulk_only": args.bulk_only,
             "cache_attribution": "exact phase counter deltas; per-command cache counters not measured",
               "background_sql_attribution": "actual message-db queue consumer context and exact DB path; measured per phase including drain, never assigned to a command",
@@ -853,35 +951,38 @@ async def run(args, identity):
         setup_started = time.perf_counter()
         manifest = fixture_support.seed(context, managers, participants=args.participants)
         preflight_phases = []
-        for index, (mode, concurrency) in enumerate((mode, concurrency) for mode in MODES for concurrency in args.concurrency):
-            plan = fixture_support.request_plan(manifest, mode, args.requests_per_phase, phase_number=index)
+        for index, spec in enumerate(specs):
+            mode, concurrency = spec["mode"], spec["concurrency"]
+            plan = fixture_support.request_plan(manifest, mode, spec["requests"], phase_number=index)
             resolved = validate_plan(plan, entries)
             preflight_phases.append({"mode": mode, "concurrency_limit": concurrency,
+                                     "arrival_rate": spec["arrival_rate"],
+                                     "plan_sha256": hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest(),
                                      **plan_summary(plan, resolved)})
         initial_check = fixture_support.check_invariants(context, managers, manifest, [])
         result["preflight"] = {"phases": preflight_phases, "fixture_manifest": manifest,
             "initial_invariants": initial_check, "setup_s": round(time.perf_counter() - setup_started, 3),
-            "total_planned_requests": args.requests_per_phase * len(preflight_phases),
-            "planned_arrival_window_s": round(len(preflight_phases) * (args.requests_per_phase - 1) / args.arrival_rate, 3),
+            "total_planned_requests": sum(spec["requests"] for spec in specs),
+            "planned_arrival_window_s": round(sum((spec["requests"] - 1) / spec["arrival_rate"] for spec in specs), 3),
             "dispatch_executed": False,
             "scope": "all command routes/registered handlers, seed invariants, observed startup/seed DB boundaries; actual handler SQL remains guarded at runtime"}
         if not initial_check.get("ok"):
             raise RuntimeError("seed invariants failed during preflight")
-        phases = [] if args.preflight_only or args.bulk_only else [
-            (mode, concurrency) for mode in MODES for concurrency in args.concurrency]
-        for index, (mode, concurrency) in enumerate(phases):
+        phases = [] if args.preflight_only or args.bulk_only else specs
+        for index, spec in enumerate(phases):
+            mode, concurrency = spec["mode"], spec["concurrency"]
             setup_started = time.perf_counter()
             snapshot.restore()
             manifest = fixture_support.seed(context, managers, participants=args.participants)
-            plan = fixture_support.request_plan(manifest, mode, args.requests_per_phase, phase_number=index)
+            plan = fixture_support.request_plan(manifest, mode, spec["requests"], phase_number=index)
             validate_plan(plan, entries)
             process_read_cache.clear()
             cache_before = process_read_cache.stats()
             generation_before = rank_generation_state(managers[0])
             setup_s = time.perf_counter() - setup_started
-            print(f"mixed phase {index + 1}: {mode} concurrency={concurrency} arrivals={args.arrival_rate}/s n={len(plan)}", flush=True)
+            print(f"mixed phase {index + 1}: {mode} concurrency={concurrency} arrivals={spec['arrival_rate']}/s n={len(plan)}", flush=True)
             phase = await run_phase(plan, entries, concurrency=concurrency,
-                                    arrival_rate=args.arrival_rate, data_dir=data_dir,
+                                    arrival_rate=spec["arrival_rate"], data_dir=data_dir,
                                     classify=fixture_support.classify_result)
             cache_after = process_read_cache.stats()
             generation_after = rank_generation_state(managers[0])
@@ -898,6 +999,9 @@ async def run(args, identity):
             phase["invariants"] = fixture_support.check_invariants(context, managers, manifest, phase["samples"])
             phase["invariant_check_s"] = round(time.perf_counter() - check_started, 3)
             result["phases"].append(phase)
+            write_json_stream(report.with_suffix(".phases.jsonl"), phase, mode="a")
+            print(json.dumps({"phase_complete": index + 1, "outcomes": phase["outcomes"],
+                              "invariants_ok": phase["invariants"].get("ok")}), flush=True)
             bad = {"exception", "timeout", "boundary", "unclassified", "not_sent", "resource_aborted"}
             if (phase["resource_stop_reason"] or phase["phase_errors"] or
                 phase["unattributed_sql_operations"] or phase["background_sql"]["errors"] or
@@ -905,7 +1009,7 @@ async def run(args, identity):
                 any(phase["outcomes"].get(key, 0) for key in bad)):
                 result["failure_reason"] = f"phase {index + 1} failed safety, classification or consistency checks"
                 break
-        if BULK_PROBE is not None and not args.preflight_only and "failure_reason" not in result:
+        if BULK_PROBE is not None and args.scenario == "legacy-v1" and not args.preflight_only and "failure_reason" not in result:
             snapshot.restore()
             bulk = BULK_PROBE(context, managers, fixture_identity)
             result["bulk_probe"] = await bulk if inspect.isawaitable(bulk) else bulk
@@ -917,6 +1021,7 @@ async def run(args, identity):
     finally:
         restore_started = time.perf_counter()
         try:
+            await drain_rank_workers()
             await drain_message_writer(message_db, timeout=10)
             snapshot.restore()
             digest_after = matrix._table_digest(managers[0].conn)
@@ -941,13 +1046,13 @@ async def run(args, identity):
             shutil.rmtree(temp_dir)
     result["status"] = "pass" if ("failure_reason" not in result and result["original_rank_digest_restored"] and
         (args.preflight_only or args.bulk_only or
-         len(result["phases"]) == len(MODES) * len(args.concurrency))) else "failed"
+         len(result["phases"]) == len(specs))) else "failed"
     run_cpu_after = resource.getrusage(resource.RUSAGE_SELF)
     result["process"] = {"wall_s": round(time.perf_counter() - run_started, 3),
         "cpu_user_s": round(run_cpu_after.ru_utime - run_cpu_before.ru_utime, 3),
         "cpu_system_s": round(run_cpu_after.ru_stime - run_cpu_before.ru_stime, 3),
         "max_rss_mb": round(run_cpu_after.ru_maxrss / 1024, 3)}
-    report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    write_json_stream(report, result)
     return result
 
 
@@ -956,10 +1061,11 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)
-    parser.add_argument("--participants", type=int, default=32)
+    parser.add_argument("--participants", type=int)
     parser.add_argument("--preflight-only", action="store_true",
                         help="resolve every route and validate seed/restore without dispatching load")
     parser.add_argument("--bulk-only", action="store_true",
@@ -979,19 +1085,27 @@ def parse_args(argv=None):
         parser.error("--arrival-rate must be between 0.5 and 50")
     if args.requests_per_phase / args.arrival_rate > 60:
         parser.error("planned phase duration must not exceed 60 seconds")
-    if args.participants != 32:
-        parser.error("--participants must be 32 for the frozen mixed fixture")
+    required_participants = 32 if args.scenario == "legacy-v1" else 128
+    if args.participants is None:
+        args.participants = required_participants
+    if args.participants != required_participants:
+        parser.error(f"--participants must be {required_participants} for the frozen scenario")
+    if args.scenario != "legacy-v1" and args.bulk_only:
+        parser.error("--bulk-only applies only to legacy-v1")
     return args
 
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.scenario == "rank-gameplay-v2" and os.environ.get("MALLOC_ARENA_MAX") != "2":
+        raise RuntimeError("start rank-gameplay-v2 with MALLOC_ARENA_MAX=2 before Python startup")
     identity = source_identity(args.source_repo.resolve())
     with validation_lock():
         matrix._enforce_matrix_limits()
         affinity = sorted(os.sched_getaffinity(0))[:2]
         os.sched_setaffinity(0, set(affinity))
         matrix.MATRIX_LIMITS["affinity_cpus"] = len(affinity)
+        matrix.MATRIX_LIMITS["malloc_arena_max"] = os.environ.get("MALLOC_ARENA_MAX")
         signal.signal(signal.SIGALRM, matrix._raise_wall_timeout)
         signal.alarm(1200)
         try:

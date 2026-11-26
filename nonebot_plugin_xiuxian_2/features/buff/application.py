@@ -87,7 +87,11 @@ class BuffApplication(LegacyApplication):
             # Unchanged historical refusals still replay their original outcome.
             if existing is not None and existing.request_hash == request_hash(payload):
                 stable_payload = payload
-        return self._execute(operation_id=operation_id, user_id=user_id, action=action, payload=stable_payload, call=call)
+        return self._execute(
+            operation_id=operation_id, user_id=user_id, action=action, payload=stable_payload, call=call,
+            zero_write_rejections=("stone_training_write_rejected", "currency_precision_unavailable")
+            if table == "stone_training_operations" else (),
+        )
 
     def open(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is not None:
