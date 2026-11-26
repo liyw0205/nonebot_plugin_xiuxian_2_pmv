@@ -41,7 +41,7 @@ from scripts.mixed_rank_bulk_probe import measure_rank_generation_cost
 
 MODES = ("pure", "readmostly", "mixed", "contention")
 COUNTERS = ("hits", "misses", "waits", "expirations", "evictions",
-            "invalidations", "oversized", "bypasses")
+            "invalidations", "oversized", "bypasses", "partial_hits")
 ACTIVE = ContextVar("mixed_command_request", default=None)
 BACKGROUND_SQL = ContextVar("mixed_command_background_sql", default=None)
 CHECKED_ATTACH = ContextVar("mixed_command_checked_attach", default=None)
@@ -917,11 +917,12 @@ async def run(args, identity):
         importlib.import_module(module)
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import message_db
     prepare_message_writer(message_db, context.paths.message_db)
-    fixture_support = importlib.import_module(
-        "tests.mixed_command_fixture" if args.scenario == "legacy-v1"
-        else "tests.mixed_rank_gameplay_fixture"
-    )
-    specs = (fixture_support.phase_specs() if args.scenario == "rank-gameplay-v2" else [
+    fixture_support = importlib.import_module({
+        "legacy-v1": "tests.mixed_command_fixture",
+        "rank-gameplay-v2": "tests.mixed_rank_gameplay_fixture",
+        "rank-range-v3": "tests.mixed_rank_range_fixture",
+    }[args.scenario])
+    specs = (fixture_support.phase_specs() if args.scenario != "legacy-v1" else [
         {"mode": mode, "concurrency": concurrency, "requests": args.requests_per_phase,
          "arrival_rate": args.arrival_rate}
         for mode in MODES for concurrency in args.concurrency])
@@ -987,9 +988,10 @@ async def run(args, identity):
             cache_after = process_read_cache.stats()
             generation_after = rank_generation_state(managers[0])
             phase["mode"] = mode
+            phase["request_order"] = spec.get("order", "original")
             phase["setup_s"] = round(setup_s, 3)
             phase["fixture_manifest"] = manifest
-            phase["cache"] = {"delta": {key: cache_after[key] - cache_before[key] for key in COUNTERS},
+            phase["cache"] = {"delta": {key: cache_after.get(key, 0) - cache_before.get(key, 0) for key in COUNTERS},
                               "end_state": cache_after}
             phase["rank_generation"] = {
                 "before": generation_before, "after": generation_after,
@@ -1061,7 +1063,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)
@@ -1097,8 +1099,8 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    if args.scenario == "rank-gameplay-v2" and os.environ.get("MALLOC_ARENA_MAX") != "2":
-        raise RuntimeError("start rank-gameplay-v2 with MALLOC_ARENA_MAX=2 before Python startup")
+    if args.scenario != "legacy-v1" and os.environ.get("MALLOC_ARENA_MAX") != "2":
+        raise RuntimeError("start rank scenarios with MALLOC_ARENA_MAX=2 before Python startup")
     identity = source_identity(args.source_repo.resolve())
     with validation_lock():
         matrix._enforce_matrix_limits()

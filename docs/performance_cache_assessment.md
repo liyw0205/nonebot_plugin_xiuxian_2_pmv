@@ -1191,3 +1191,159 @@ generation workload's cost, explaining the variable two-worker CPU penalty,
 and testing broader gameplay/population and multi-process contention where
 justified. The overall goal remains active; this bounded sample does not
 establish repository-wide capacity or sustained 50-success/s service.
+
+## Exact Rank Ranges And Training Connections (2026-11-26)
+
+### Frozen Evidence And Runtime Changes
+
+- Parent `6ded8d77cf087b30fe8bbc2967562b8ac6870a16` passed exact-SHA CI
+  `45738323640` (quality and both unittest shards). This next batch compares
+  `rank-range-before-20261126-r01.json` and
+  `rank-range-after-20261126-r01.json` under the retained fixture's `data/`.
+  Before runtime digest is
+  `797ab1f591bc28af23fe832ba749f68dbb6bd8819d1ad62b15188a304136731a`;
+  after runtime digest is
+  `92a33d76a54a6a1f909841d1d91c12ff279e53f9fbafba704137a9f8db9bdbb8`.
+  Baseline finished before runtime edits. Both runs passed once; no result
+  was replaced to select favorable numbers.
+- The same `rank-range-v3` harness, fixture identity, seven frozen phase
+  specifications, seed digests and ordered request payloads match exactly.
+  Descending and fixed-seed shuffled viewers avoid relying on ascending
+  neighboring scores. The existing 1M users, 128 distinct-score participants,
+  2,560 backpack rows, 128 BuffInfo rows and 8,192 activity users remain;
+  point/pass/boss tables each hold 32,768 rows across four activity keys.
+  These feature populations are not million-row feature tables. Each stage
+  uses one shared runtime/database; restore follows complete drain and checks.
+- The existing compact rank index already serves DISTINCT by an index range
+  without a temporary sort or per-row Python conversion. Instead of another
+  index, reuse a completed exact rank for the smallest cached score at or above
+  the target: `rank(target) = rank(ceiling) + DISTINCT(target < score <= ceiling)`.
+  Database identity, field generation, snapshot token and TTL must all match;
+  target/generation/range count share one live SQLite transaction. No suitable
+  ceiling or a NULL target falls back to the original scan. The scan range is
+  a subset of the original range. The existing 32-entry/1MiB cache remains
+  bounded; no public TOP slice, stale balance or full score map supplies rank.
+- Stone training explicitly scopes one idle SQLite connection to its
+  synchronous application request. Its four independent BEGIN/COMMIT pairs,
+  ledger/receipt validation and rollback behavior remain. Options, file
+  identity and owner thread constrain reuse; nested active UOWs use separate
+  connections, lifecycle failures discard them and scope exit closes them.
+  Other commands retain default UOW behavior. The training/open helper also
+  checks one named sqlite_master row rather than materializing every table.
+
+### Phase Results
+
+Milliseconds before -> after; E2E includes planned-arrival and queue delays.
+Every version executes 1,280 real matcher/DI/handler requests: 1,280 successes,
+zero refusals, exceptions, timeouts, SQLite busy/locked, boundary violations or
+unattributed SQL. All seven checks pass for exact training exp/stone/power,
+receipt/ledger identity, no unsettled writes, unchanged inventory and DB quick
+checks. The original fixture rank digest restores on both sides. Those load
+checks do not independently recompute every returned rank; rank correctness
+is covered by focused snapshot/generation, ties, NULL and large-number tests.
+
+| Mode / viewer order | Limit / arrivals per s | n | E2E p50 | E2E p95 | E2E p99 | Success/s | Observed handler overlap | Loop p95 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cold descending | 10 / 10 | 128 | 6782.236 -> 31.596 | 12493.037 -> 52.495 | 12891.162 -> 253.008 | 4.998 -> 10.054 | 10 -> 3 | 18.146 -> 9.558 |
+| Cold shuffled | 1 / 10 | 128 | 7244.476 -> 33.532 | 13466.717 -> 223.434 | 13985.529 -> 339.375 | 4.778 -> 10.049 | 1 -> 1 | 7.354 -> 9.018 |
+| Cold shuffled | 10 / 10 | 128 | 817.729 -> 32.907 | 1518.542 -> 230.413 | 1539.998 -> 267.955 | 9.009 -> 10.053 | 10 -> 2 | 13.038 -> 9.179 |
+| Read-mostly shuffled | 10 / 20 | 256 | 39.632 -> 37.604 | 312.710 -> 297.710 | 366.504 -> 334.973 | 19.904 -> 19.840 | 5 -> 4 | 43.909 -> 26.992 |
+| Mixed shuffled | 10 / 20 | 256 | 1008.470 -> 58.331 | 1786.462 -> 330.689 | 2014.234 -> 525.602 | 17.822 -> 19.974 | 10 -> 8 | 129.561 -> 60.423 |
+| Same-actor contention | 10 / 20 | 128 | 921.190 -> 49.052 | 1131.922 -> 240.872 | 1261.365 -> 318.762 | 17.582 -> 19.933 | 10 -> 5 | 185.074 -> 52.775 |
+| Mixed shuffled | 20 / 50 | 256 | 4284.338 -> 3007.166 | 8025.692 -> 5623.650 | 8319.939 -> 5936.260 | 19.117 -> 23.214 | 20 -> 19 | 244.657 -> 126.143 |
+
+Overlap denotes intersecting real handler wall intervals, not simultaneous CPU
+execution. The slightly above10/s cold throughput uses a finite first-send to
+last-completion window; it is not sustained capacity above the offered rate.
+The final phase offers 256 calls over about 5.1 seconds and includes
+drain in throughput: 50 sustained successes/s is still unachieved/unverified.
+Its queue p95 is 6723.058 -> 4671.544ms, dispatch delay p95 is
+253.266 -> 115.981ms and producer scheduling delay p95 is 5.164 -> 3.865ms.
+Thus measured queue growth is not hidden by a synchronous test-side producer.
+Mixed/10 queue p95 falls 1262.047 -> 0.010ms; cold shuffled/1 still has
+123.240ms queue p95. Read-mostly success throughput slightly falls and cold/1
+loop p95 rises. The baseline's two cold limit10 phases also differ in CPU
+(50.768 versus 27.834s); absent host/cycle diagnostics, that variation cannot
+be assigned a definitive cause. One ordered experiment establishes neither
+statistical significance nor a universal speedup. Earlier mixed10 regression
+247.574 -> 322.347ms and the previous batch's CPU increase remain valid records.
+
+### Commands, SQL And Cache
+
+Pooled E2E distributions combine the seven different queues/load conditions;
+phase rows are the appropriate capacity comparisons. All error rates are 0%.
+Foreground DB calls use the existing execute/commit/rollback definition.
+
+| Command | n/version | E2E p50 | E2E p95 | E2E p99 | Foreground DB calls |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 我的修仙信息 | 478 | 2232.469 -> 34.118 | 12420.674 -> 525.602 | 13684.369 -> 5056.105 | 23563 -> 23563 |
+| 我的资产总览 | 94 | 262.419 -> 36.516 | 6468.274 -> 4566.457 | 8297.157 -> 5875.868 | 2660 -> 2660 |
+| 我的状态 | 92 | 365.663 -> 45.880 | 6145.270 -> 4231.613 | 8034.677 -> 5602.978 | 3787 -> 3784 |
+| 我的修为 | 91 | 400.118 -> 45.384 | 6197.713 -> 4210.567 | 8069.515 -> 5797.603 | 1638 -> 1638 |
+| 我的背包 | 90 | 424.786 -> 32.099 | 6433.498 -> 4472.646 | 8339.671 -> 5924.914 | 1620 -> 1620 |
+| 活动排行 | 90 | 418.697 -> 40.891 | 6393.573 -> 4565.042 | 8300.236 -> 5956.155 | 1980 -> 1980 |
+| 灵石修炼 | 345 | 1198.065 -> 89.874 | 7233.721 -> 5108.855 | 8240.044 -> 5885.308 | 19320 -> 16215 |
+
+- Exact-result hits remain zero, misses/recomputations remain 956. New partial
+  reuse counts by phase are 252, 234, 233, 14, 0, 0, 0: 733 bounded range counts
+  still execute SQL, not cached-result hits. Rank SQL wall sum falls
+  118541.135 -> 23439.433ms; measured rank-thread CPU falls
+  107555.894 -> 22425.224ms. The three cold phases' range SQL wall totals become
+  409.775/2001.246/2346.103ms, from 48283.830/22090.172/26093.271ms.
+- Both field generations still advance by 25/128/64/128 for read-mostly,
+  mixed10, contention and mixed20. Frequent writes prevent any partial reuse
+  in all three write-heavy phases. API invalidations remain zero because
+  generation changes invalidate logically via keys; cache evictions are 742
+  per version and maximum retained size is 33,104 bytes. No write invalidation
+  reduction is claimed. Final-phase rank SQL slightly rises
+  4571.309 -> 4660.851ms, despite better overall E2E.
+- Training calls fall 56 -> 47 per request; total training SQL time falls
+  12287.068 -> 6368.732ms. Its journal_mode initialization calls fall
+  1380 -> 345, with recorded wall time 5283.420 -> 1213.416ms. Connection
+  creation time falls 569.993 -> 255.897ms; these timings are not a claim that
+  the pragma itself caused all initialization work. Recorded training COMMIT
+  calls on xiuxian.db remain2070 on both versions, including surrounding reads.
+  The named-table check's SQL time is 222.882 -> 43.103ms; the actual update
+  is only 198.012 -> 185.243ms. Per-SQL top-20 aggregation is a lower bound
+  when a statement is omitted; full recorder totals provide the call counts.
+- All foreground calls fall 54568 -> 51460, and with real asynchronous message
+  persistence, total calls fall 60734 -> 57751 and SQL wall sum
+  149903.257 -> 46070.723ms. SQL wall sums can overlap across threads. Other
+  command E2E benefits largely reflect less shared queuing, not direct changes
+  to their SQL. For example cultivation SQL time increases 871.974 -> 933.764ms.
+  Maximum BEGIN execution is 5.057 -> 2.940ms; this is an upper bound including
+  SQL execution, not an independent lock-wait measurement. Busy/locked is zero.
+
+### Resources, Validation And Remaining Work
+
+- Exclusive `/tmp/nonebot-project-validation.lock`; two CPU affinity, 1GiB AS,
+  600 CPU seconds and 1200 wall seconds, `MALLOC_ARENA_MAX=2`; preflight
+  requires 768MiB available memory and 2GiB disk, with continuous resource
+  checks and stop at 900MiB RSS or 256MiB single/total WAL. No cap relaxation
+  or new long-lived 1M database copy. No real QQ, account or production DB.
+- Process wall 189.102 -> 153.710s, CPU 231.648 -> 133.989s, traffic-phase CPU
+  173.321 -> 77.003s. Peak RSS increases 306.566 -> 316.801MiB; sampled VmSize
+  peak 835.902 -> 797.707MiB, sampled threads40 -> 34. Phase available memory
+  minimum1507 -> 1653MiB, disk minimum7102935040 -> 6979964928 bytes.
+  Maximum single WAL15355272 and total WAL19858496 bytes are unchanged;
+  final restored WAL is zero. Host state and warm OS cache remain limitations.
+- Setup/phase restore sums are32.413 -> 31.827s, invariant checks7.560 -> 7.356s
+  and final restore11.997 -> 11.621s, outside command E2E. Sampled traffic write
+  bytes197238784 -> 205914112 increase slightly. Whole-process counters end at
+  roughly8.0GB written per version, dominated by snapshot operations; this is
+  not application write volume, persistent growth or a second retained fixture.
+- Harness preflight tests:17 passed. Complete runtime batch:75 tests plus
+  83 subtests pass, including dense rank endpoints/NULL/ties/exact numbers,
+  WAL snapshot with concurrent generation changes and rollback, bounded cache
+  identity/TTL/dependencies, scoped connection lifecycle failures, thread/nested
+  isolation, exact training and receipt replay/rejection. Code-only acceptance
+  also passes compile, architecture, inventory and whitespace. Accepted old
+  suites/matrices were not repeated; delivery requires the new exact-SHA CI.
+
+The overall goal remains active. This is seven sampled commands, not exhaustive
+674-matcher coverage or sustained service capacity. Remaining evidence points
+to rank scans under frequent real writes (zero partial reuse), synchronous
+training/read initialization and event-loop blocking at higher arrival rates,
+plus broader gameplay/table populations and multi-process contention not yet
+measured. Freeze any next workload before another baseline/code/after batch;
+do not rerun unchanged phases to improve the displayed numbers.

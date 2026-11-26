@@ -38,6 +38,25 @@ class BuffCommandReplayTests(unittest.TestCase):
             self.app.stone_training(operation_id="training", user_id="other", requested_stone=100, expected_exp=110, expected_stone=900, exp_cap=1000, power_multiplier=2.0)
         self.assertEqual(self.pair.training_state(), after)
 
+    def test_training_reuses_one_connection_without_combining_transaction_boundaries(self):
+        from nonebot_plugin_xiuxian_2.infrastructure.database import uow as uow_module
+
+        original_connect = uow_module.sqlite3.connect
+        statements, connections = [], []
+        def connect(*args, **kwargs):
+            connection = original_connect(*args, **kwargs)
+            connection.set_trace_callback(statements.append)
+            connections.append(connection)
+            return connection
+        with patch.object(uow_module.sqlite3, "connect", side_effect=connect):
+            result = self.training()
+        self.assertTrue(result.ok)
+        self.assertEqual(1, len(connections))
+        self.assertEqual(4, statements.count("BEGIN IMMEDIATE"))
+        self.assertEqual(4, statements.count("COMMIT"))
+        self.assertEqual(1, statements.count("PRAGMA journal_mode"))
+        self.assertEqual((110, 900), self.pair.training_state()[:2])
+
     def test_historical_hash_is_replayed_only_after_business_identity_check(self):
         first = self.training()
         with DatabaseUnitOfWork(self.pair.game) as uow:

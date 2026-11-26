@@ -4,10 +4,55 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from threading import get_ident
 from typing import Any, Mapping
 
 from ...core.numeric import adapt_sqlite_params, register_numeric_functions
+
+
+class _ConnectionScope:
+    def __init__(self) -> None:
+        self.thread_id = get_ident()
+        self.active = True
+        self.idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
+
+    def available(self) -> bool:
+        return self.active and self.thread_id == get_ident()
+
+    def take(self, key: tuple[Any, ...]) -> tuple[sqlite3.Connection, Any] | None:
+        if not self.available() or self.idle is None or self.idle[0] != key:
+            return None
+        _, connection, numeric_functions = self.idle
+        self.idle = None
+        try:
+            if not connection.in_transaction:
+                return connection, numeric_functions
+        except sqlite3.ProgrammingError:
+            pass
+        connection.close()
+        return None
+
+    def put(self, key: tuple[Any, ...], connection: sqlite3.Connection, numeric_functions: Any) -> None:
+        if not self.available():
+            connection.close()
+            return
+        if self.idle is not None:
+            _, previous, _ = self.idle
+            self.idle = None
+            previous.close()
+        self.idle = key, connection, numeric_functions
+
+    def close(self) -> None:
+        self.active = False
+        if self.idle is not None:
+            _, connection, _ = self.idle
+            self.idle = None
+            connection.close()
+
+
+_CONNECTION_SCOPE: ContextVar[_ConnectionScope | None] = ContextVar("database_uow_connection_scope", default=None)
 
 
 class DatabaseUnitOfWork:
@@ -33,8 +78,52 @@ class DatabaseUnitOfWork:
         self.query_only = bool(query_only)
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
+        self._connection_scope: _ConnectionScope | None = None
+        self._scope_key: tuple[Any, ...] | None = None
+
+    @staticmethod
+    @contextmanager
+    def connection_scope() -> Iterator[None]:
+        """Reuse at most one idle connection within an explicit sync request.
+
+        Each unit of work still commits or rolls back its own transaction.
+        Nested scopes are independent; copied contexts on another thread do
+        not borrow the originating thread's connection.
+        """
+        scope = _ConnectionScope()
+        token = _CONNECTION_SCOPE.set(scope)
+        try:
+            yield
+        finally:
+            _CONNECTION_SCOPE.reset(token)
+            scope.close()
+
+    def _connection_key(self) -> tuple[Any, ...]:
+        path = self.database.resolve()
+        try:
+            stat = path.stat()
+            identity = stat.st_dev, stat.st_ino
+        except FileNotFoundError:
+            identity = None
+        return (path, identity, self.timeout, self.immediate, self.read_only,
+                self.foreign_keys, self.require_exists, self.query_only)
 
     def __enter__(self) -> "DatabaseUnitOfWork":
+        scope = _CONNECTION_SCOPE.get()
+        self._connection_scope = scope if scope is not None and scope.available() else None
+        self._scope_key = self._connection_key() if self._connection_scope is not None else None
+        if self.require_exists and not self.read_only and not self.database.is_file():
+            raise FileNotFoundError(f"database is unavailable: {self.database}")
+        borrowed = self._connection_scope.take(self._scope_key) if self._connection_scope is not None else None
+        if borrowed is not None:
+            self.connection, self._numeric_functions = borrowed
+            try:
+                self.connection.execute("BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN")
+            except Exception:
+                self.connection.close()
+                self.connection = None
+                raise
+            return self
         if self.read_only:
             self.connection = sqlite3.connect(
                 f"{self.database.resolve().as_uri()}?mode=ro",
@@ -44,8 +133,6 @@ class DatabaseUnitOfWork:
         elif self.require_exists:
             # mode=rw keeps an explicit existence check free of the create-on-open
             # race, so a missing business database never becomes an empty file.
-            if not self.database.is_file():
-                raise FileNotFoundError(f"database is unavailable: {self.database}")
             self.connection = sqlite3.connect(
                 f"{self.database.resolve().as_uri()}?mode=rw",
                 timeout=self.timeout,
@@ -68,6 +155,8 @@ class DatabaseUnitOfWork:
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
             )
+            if self._connection_scope is not None:
+                self._scope_key = self._connection_key()
         except Exception:
             # Exceptions raised while entering a context do not trigger
             # __exit__, so close the partially initialized connection here.
@@ -103,17 +192,30 @@ class DatabaseUnitOfWork:
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool | None:
         if self.connection is None:
             return None
+        connection = self.connection
+        reusable = False
         try:
             if exc_type is None:
-                self.connection.commit()
+                connection.commit()
             else:
-                self.connection.rollback()
-        finally:
+                connection.rollback()
             for schema in tuple(self._attached_schemas):
-                self.connection.execute(f'DETACH DATABASE "{schema}"')
+                connection.execute(f'DETACH DATABASE "{schema}"')
+            reusable = not connection.in_transaction
+        finally:
             self._attached_schemas.clear()
-            self.connection.close()
             self.connection = None
+            scope, key = self._connection_scope, self._scope_key
+            self._connection_scope = None
+            self._scope_key = None
+            if reusable and scope is not None and key is not None:
+                try:
+                    scope.put(key, connection, self._numeric_functions)
+                except Exception:
+                    connection.close()
+                    raise
+            else:
+                connection.close()
         return None
 
     def _conn(self) -> sqlite3.Connection:

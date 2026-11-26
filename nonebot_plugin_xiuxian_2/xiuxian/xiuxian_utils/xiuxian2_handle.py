@@ -1536,15 +1536,18 @@ class XiuxianDateManage:
                 ):
                     key = shared_snapshot_key(
                         self.database_path,
-                        "exact-numeric-score-rank-v2",
+                        "exact-numeric-score-rank-v3",
                         column,
-                        value,
                         int(generation),
+                        value,
                     )
 
-                    def load_rank(column=column, value=value):
+                    def load_rank(column=column, value=value, prefix=key[:-1]):
+                        ceiling = None if value is None else process_read_cache.get_snapshot_ceiling(
+                            prefix, value, database_path=self.database_path
+                        )
                         return XiuxianDateManage._read_numeric_rank_for_value(
-                            self, column, value, connection=conn
+                            self, column, value, connection=conn, ceiling=ceiling
                         )
 
                     ranks.append(
@@ -1561,15 +1564,23 @@ class XiuxianDateManage:
             finally:
                 conn.rollback()
 
-    def _read_numeric_rank_for_value(self, column, value, *, connection):
+    def _read_numeric_rank_for_value(self, column, value, *, connection, ceiling=None):
         if column not in {"exp", "stone"}:
             raise ValueError(f"unsupported numeric rank column: {column}")
         expression = f'xiuxian_int_sort_key_compact("{column}")'
         predicate = f"{expression} IS NOT NULL" if value is None else f"{expression} > %s"
+        params = () if value is None else (value,)
+        offset = 1
+        if ceiling is not None and value is not None:
+            # Both ranks use the same score generation. Count only (target, ceiling].
+            # A lower anchor could scan more than the original range, so never use it.
+            upper, offset = ceiling
+            predicate += f" AND {expression} <= %s"
+            params += (upper,)
         row = connection.execute(
-            f"SELECT 1 + COUNT(DISTINCT {expression}) FROM user_xiuxian "
+            f"SELECT %s + COUNT(DISTINCT {expression}) FROM user_xiuxian "
             f"WHERE {predicate}",
-            () if value is None else (value,),
+            (int(offset), *params),
         ).fetchone()
         return int(row[0])
 

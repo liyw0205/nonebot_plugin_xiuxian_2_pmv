@@ -68,6 +68,7 @@ class ProcessReadCache:
                 "invalidations",
                 "oversized",
                 "bypasses",
+                "partial_hits",
             )
         }
 
@@ -276,6 +277,34 @@ class ProcessReadCache:
                 self._generations.pop(path, None)
             self._cleanup_generation(path, False)
             self._stats["invalidations"] += 1
+
+    def get_snapshot_ceiling(
+        self, prefix: tuple, value: bytes, *, database_path: str | Path,
+        dependency_databases: tuple[str | Path, ...] = (),
+    ) -> tuple[bytes, Any] | None:
+        """Reuse a completed ordered snapshot within the existing cache bounds."""
+        path = self._database_path(database_path)
+        paths = tuple(dict.fromkeys((path, *(self._database_path(item) for item in dependency_databases))))
+        with self._lock:
+            now = self._clock()
+            selected = None
+            for cache_key, entry in self._entries.items():
+                key = cache_key[-1]
+                if (not entry.snapshot or entry.database_paths != paths
+                        or entry.expires_at <= now
+                        or entry.generations != self._generation_token(entry.database_paths, True)
+                        or not isinstance(key, tuple) or len(key) != len(prefix) + 1
+                        or key[:-1] != prefix or not isinstance(key[-1], bytes)
+                        or key[-1] < value):
+                    continue
+                if selected is None or key[-1] < selected[0]:
+                    selected = (key[-1], cache_key, entry)
+            if selected is None:
+                return None
+            ceiling, cache_key, entry = selected
+            self._entries.move_to_end(cache_key)
+            self._stats["partial_hits"] += 1
+            return ceiling, deepcopy(entry.value)
 
     def invalidate_snapshot_database(self, database_path: str | Path) -> None:
         """Explicitly invalidate shared snapshots after data replacement or schema changes."""

@@ -61,11 +61,23 @@ class BuffApplication(LegacyApplication):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"buff.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
     def _asset_request(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
+        if table == "stone_training_operations":
+            with DatabaseUnitOfWork.connection_scope():
+                return self._asset_request_scoped(
+                    operation_id=operation_id, user_id=user_id, action=action, kwargs=kwargs,
+                    identity=identity, table=table, extra=extra, transient=transient, call=call,
+                )
+        return self._asset_request_scoped(
+            operation_id=operation_id, user_id=user_id, action=action, kwargs=kwargs,
+            identity=identity, table=table, extra=extra, transient=transient, call=call,
+        )
+
+    def _asset_request_scoped(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
         payload = {"user_id": user_id, **kwargs}
         stable_payload = {key: value for key, value in payload.items() if key not in transient}
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            tables = {row["name"] for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
-            existing = self.ledger.get(uow, operation_id, action) if "operation_ledger" in tables else None
+            ledger_ready = uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_ledger'")
+            existing = self.ledger.get(uow, operation_id, action) if ledger_ready is not None else None
             receipt_ready = operations_ready(uow) if table == "blessed_spot_operations" else stone_training_ready(uow)
             if receipt_ready:
                 suffix = " AND action='open'" if table == "blessed_spot_operations" else ""
