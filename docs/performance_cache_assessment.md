@@ -2623,3 +2623,139 @@ p95 and p99 are both the maximum sample; this is weak tail evidence.
   and V10/V11/serial matrices are not repeated; exact delivered SHA CI is the
   full-suite delivery gate. The repository performance goal remains active,
   including remaining contention/loop stalls and unverified sustained50/s.
+
+## V13: Timestamp Connection Reuse and Live Rank Ranges (2026-11-27)
+
+- Continue from V12 SHA `7480dc3071e70dbd5884a6640dc1783cf4326857`, whose
+  exact-SHA CI `45858612953` passed quality and both unittest shards. Reuse
+  the accepted V12 final after as this batch's before; no baseline, old
+  workload or full local shard rerun. Its runtime tree matches that committed
+  SHA. The frozen harness, fixture identity, phase specs and every request,
+  actor, argument and setup oracle are identical. Only four runtime Python
+  files change; the after tree is
+  `a2c7791ff8fbdfce6b5bc083906c8de99ac01d7fab0138fcc88ded34e2eb85d2`.
+- Timestamp writes opt in to one idle main-thread connection, sharing the
+  existing owner's lifecycle and error/identity checks. Every request still
+  performs its own `BEGIN IMMEDIATE`, live UPDATE and COMMIT; no timestamp
+  result cache, batching or delay. Threads and reentrant calls use independent
+  handles, explicit request scopes retain their own lifetime, and shutdown
+  closes the owner. Missing databases cannot be recreated by an open race.
+  Active retained writers check path/inode before either automatic or explicit
+  commit; mismatch discards the connection and rolls back the pending write.
+- Live sign/boss standings use disjoint indexed range COUNTs instead of
+  evaluating the row-wise CASE predicate across every positive participant.
+  Tie order, positive-participant total, missing/nonpositive viewers and live
+  values remain exact in one transaction. Counts still visit qualifying index
+  entries; this is not constant-time ranking. Existing bounded 60-minute public
+  display snapshots and live eligibility/reward decisions are unchanged.
+- Reports in the sole retained 1M fixture's `data/` directory:
+  `activity-rank-after-v12-20261127-r02.json` (before),
+  `activity-rank-after-v13-20261127-r01.json` (one after), and
+  `activity-rank-comparison-v13-20261127-r01.json` (extraction). Three phases
+  dispatch128 real matcher/DI/handler requests each, sharing one instance and
+  isolated DB set: pure cap10/offered20/s, mixed cap20/35/s, contention
+  cap20/50/s. Each phase has12 sign-board,12 boss-board,12 boss-display and56
+  profile requests; relationship fillers and32 real distinct-user training
+  writes in each mixed/contention phase complete the same384-request plan.
+  Exp and stone both change in training. The existing8,192 sign/32,768 boss,
+  8,192 avatar/title and4,096 mentor-application rows are retained; no new
+  fixture copy or empty-feature-table extrapolation. Activity sign/damage
+  writes and activity index maintenance cost remain unmeasured.
+- Both versions have384 successes, zero business/cooldown refusals, system
+  exceptions, timeouts, boundary violations and SQLite busy/locked errors.
+  Every phase's balance/item/receipt/live-rank/huge-number/activity invariant
+  passes, including32 fresh training receipts in each write phase. All tasks
+  drain before restoration; original1M rank digest restoration passes and
+  equals the before digest. Business manifest fields match; only
+  `xiuxian/compatibility_hits.json` diagnostic counters and their derived
+  `seed_sha256` differ. This is seven sampled paths, not all674 matchers,
+  background jobs, activity mutations or a sustained-capacity qualification.
+
+E2E includes producer, event-loop and admission queueing. Each latency cell is
+p50/p95/p99 in milliseconds, V12 -> V13. With n12, p95/p99 are the maximum;
+relationship n2 is only a sanity sample. All listed path error rates are0.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / sign board | 12 | 17.489/64.403/64.403 -> 15.605/82.205/82.205 | 199 -> 199 | 77.797 -> 73.539 |
+| pure / boss board | 12 | 17.876/23.502/23.502 -> 16.850/24.604/24.604 | 198 -> 198 | 78.510 -> 82.099 |
+| pure / boss display | 12 | 8.989/23.588/23.588 -> 8.949/24.033/24.033 | 55 -> 55 | 4.923 -> 5.177 |
+| pure / mentor | 18 | 20.690/33.577/33.577 -> 20.252/33.174/33.174 | 524 -> 524 | 142.662 -> 146.860 |
+| pure / partner | 18 | 15.825/32.465/32.465 -> 15.400/24.905/24.905 | 342 -> 342 | 100.103 -> 92.994 |
+| pure / profile | 56 | 24.052/39.934/114.814 -> 19.067/29.814/132.599 | 2685 -> 2520 | 427.040 -> 211.571 |
+| mixed / sign board | 12 | 240.658/378.350/378.350 -> 57.453/284.492/284.492 | 199 -> 199 | 83.027 -> 73.253 |
+| mixed / boss board | 12 | 247.297/319.996/319.996 -> 21.501/51.552/51.552 | 199 -> 199 | 91.849 -> 75.409 |
+| mixed / boss display | 12 | 144.524/248.600/248.600 -> 12.459/24.910/24.910 | 55 -> 55 | 6.576 -> 5.043 |
+| mixed / mentor | 2 | 48.136/54.239/54.239 -> 36.130/39.234/39.234 | 60 -> 60 | 18.772 -> 20.122 |
+| mixed / partner | 2 | 40.124/40.552/40.552 -> 19.939/21.057/21.057 | 38 -> 38 | 10.610 -> 12.847 |
+| mixed / profile | 56 | 258.255/375.854/432.113 -> 43.374/180.311/225.100 | 2706 -> 2538 | 702.155 -> 348.886 |
+| mixed / training | 32 | 229.037/293.043/301.434 -> 46.827/200.887/256.172 | 1312 -> 1312 | 371.851 -> 361.612 |
+| contention / sign board | 12 | 319.199/675.003/675.003 -> 220.694/458.218/458.218 | 199 -> 199 | 82.696 -> 66.259 |
+| contention / boss board | 12 | 1086.964/1183.720/1183.720 -> 534.008/709.040/709.040 | 199 -> 199 | 87.649 -> 81.040 |
+| contention / boss display | 12 | 1163.911/1296.698/1296.698 -> 610.449/630.741/630.741 | 55 -> 55 | 9.230 -> 8.403 |
+| contention / mentor | 2 | 1206.570/1226.358/1226.358 -> 774.496/794.614/794.614 | 60 -> 60 | 16.158 -> 16.909 |
+| contention / partner | 2 | 1166.722/1185.709/1185.709 -> 733.799/753.472/753.472 | 38 -> 38 | 10.468 -> 10.759 |
+| contention / profile | 56 | 704.313/1275.758/1295.626 -> 464.280/685.716/853.009 | 2690 -> 2531 | 962.545 -> 501.119 |
+| contention / training | 32 | 949.854/1243.106/1262.067 -> 451.362/812.258/832.179 | 1312 -> 1312 | 391.034 -> 358.725 |
+
+- Complete timestamp diagnostics:168 live writes still produce168 BEGINs,
+  UPDATEs and COMMITs. New writer opens168 ->1; writer SQL1008 ->507,
+  wall621.943 ->21.960ms. Journal reads168 ->1,594.926 ->3.864ms; UPDATE
+  wall9.071 ->9.558ms actually regresses slightly. Independent commit time
+  5.588 ->5.913ms also rises; connection initialization removal, not relaxed
+  write durability or fewer business transactions, accounts for this SQL gain.
+  All writer statements are captured. Other long-lived diagnostic streams
+  truncate577 statements in each write phase; aggregate SQL counters include
+  them, so do not claim the entire per-statement trace is complete.
+- Sign standing36 SQL calls201.897 ->163.632ms, boss36 calls207.695
+  ->193.472ms. These API call counts do not change; pure boss standing
+  66.508 ->67.587ms regresses despite the new ranges. Query-plan tests require
+  range-index searches and the independent full-sort oracle checks128 viewers,
+  every tie field, nonpositive/missing viewers and updates after warm reads.
+- Observed success throughput is20.091/34.890/34.532 ->20.088/35.072/39.089/s;
+  handler-interval overlap2/9/17 ->2/6/14. Caps10/20/20 and offered20/35/50/s
+  are separate from actual overlap and successful throughput. Sustained50
+  successful requests/s and20 simultaneously executing handlers remain
+  unproven. Contention admission queue p95782.053 ->232.859ms, producer p95
+  38.859 ->1.984ms and loop-dispatch p9587.180 ->68.660ms improve. Mixed
+  producer p953.130 ->5.076ms regresses. Loop-lag p959.518/75.692/93.907
+  ->6.841/40.459/82.614ms improves, but contention loop p99152.603
+  ->250.896ms and pure loop p9913.984 ->14.514ms regress. Pure sign/boss
+  board/display p95 and profile p99 regress as the table shows. This finite
+  pair supports SQL gains and sampled E2E gains, not an unconditional latency
+  claim; host warmth, scheduling and request interleavings remain uncontrolled.
+- Cache hits/misses48/103,33/118,39/112 ->48/103,33/118,35/116; partial
+  hits91/40/45 ->91/36/43, evictions71/86/80 ->71/86/84, waits0/0/2
+  ->0/0/0. Explicit invalidations/expiry/bypass/oversized remain0. Maximum
+  32 entries/105,819 estimated bytes stays within32-entry/1MiB bounds.
+  Per-path cache attribution is unmeasured. Exp/stone generation deltas stay
+  0/32/32, so training still globally invalidates generation-keyed ranks;
+  unchanged small-strata traffic does not establish worst-case cold-rank or
+  batch-update capacity. MainThread CPU2399.239/3064.928/3116.921
+  ->2080.703/2680.482/2699.262ms; all BEGIN counts759/855/855 unchanged,
+  total BEGIN wall59.689 ->45.934ms. This includes execute overhead and is
+  not a measurement of pure transaction-lock waiting. Observer CPU and
+  queue/loop samples remain in both reports, included in E2E without subtracting
+  instrument overhead.
+- Limits unchanged: shared validation flock,2/4 CPUs,1GiB AS,600 CPU seconds,
+  1200 wall seconds, `MALLOC_ARENA_MAX=2`,768MiB free-RAM/2GiB disk floors,
+  900MiB RSS and256MiB single/total WAL stops. Minimum sampled RAM1742
+  ->1569MiB, disk14,833,831,936 ->14,671,863,808 bytes; peak RSS242.613
+  ->266.141MiB regresses, virtual memory643.293 ->595.602MiB. Maximum
+  single/total WAL18,321,672/25,399,928 bytes unchanged, final WAL0. Process
+  CPU62.311 ->60.522s, wall75.454 ->75.466s, final restore13.641 ->13.385s
+  include setup/snapshot/restore and are not request costs. Sample-window IO
+  reads180,224 ->1,449,984 and writes55,717,888 ->58,290,176 bytes regress;
+  full-process reads765,636,608 ->527,409,152 and writes3,792,945,152
+  ->3,794,661,376 bytes include restoration. Do not infer a product-memory
+  or disk-IO improvement from these process totals.
+- Affected consolidated regression:101 tests/291 subtests pass8.45s; the
+  subsequently identified commit-before-identity gap has one additional
+  focused regression passing with two subtests, covering both commit entry
+  points. Compile, architecture (`ok=true/errors=[]`), inventory and whitespace
+  pass on the code-only checkout with the six-file code/test whitelist.
+  The protected status modification, legacy JSON deletion, local goals and
+  inventory helper remain excluded. Exact delivered SHA CI supplies the full
+  clean-checkout gate. Overall repository performance goal remains active;
+  unresolved loop tails, wider cold-rank/write strata and sustained throughput
+  require separately frozen future evidence, not a rerun to select this pair.

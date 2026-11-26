@@ -55,11 +55,11 @@ class _ConnectionScope:
 _CONNECTION_SCOPE: ContextVar[_ConnectionScope | None] = ContextVar("database_uow_connection_scope", default=None)
 
 
-class ReadOnlyConnectionOwner:
-    """Retain one idle main-thread reader, never a transaction or query result.
+class _IdleConnectionOwner:
+    """Retain one idle main-thread connection, never a transaction or result.
 
     Callers must finish each unit of work synchronously. Other threads and
-    reentrant reads use independent connections that close at their exit.
+    reentrant calls use independent connections that close at their exit.
     Use query_one/query_all for fetched results, or propagate raw cursor errors.
     """
 
@@ -69,7 +69,7 @@ class ReadOnlyConnectionOwner:
         self._retain = True
         self._idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
 
-    def when_unscoped(self) -> ReadOnlyConnectionOwner | None:
+    def when_unscoped(self) -> _IdleConnectionOwner | None:
         """Select at UOW construction, preserving an explicit request's key/lifetime."""
         scope = _CONNECTION_SCOPE.get()
         return None if scope is not None and scope.available() else self
@@ -110,9 +110,9 @@ class ReadOnlyConnectionOwner:
             self._lock.release()
 
     def close(self) -> None:
-        """Close on the main lifecycle thread; the next read may reopen lazily."""
+        """Close on the main lifecycle thread; the next call may reopen lazily."""
         if current_thread() is not main_thread():
-            raise RuntimeError("read-only connection owner must close on the main thread")
+            raise RuntimeError("connection owner must close on the main thread")
         with self._lock:
             self._retain = False
             idle, self._idle = self._idle, None
@@ -120,10 +120,19 @@ class ReadOnlyConnectionOwner:
                 idle[1].close()
 
 
+class ReadOnlyConnectionOwner(_IdleConnectionOwner):
+    """Retain a query-only reader across independent live read transactions."""
+
+
+class WriteConnectionOwner(_IdleConnectionOwner):
+    """Retain an opt-in writer across independent synchronous transactions."""
+
+
 # Opt-in live projections share one idle handle, including across repository types.
 LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 # A separate player handle avoids evicting the live game projection reader.
 PLAYER_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+PLAYER_ACTIVITY_WRITE_OWNER = WriteConnectionOwner()
 
 
 class DatabaseUnitOfWork:
@@ -140,6 +149,7 @@ class DatabaseUnitOfWork:
         require_exists: bool = False,
         query_only: bool = False,
         read_owner: ReadOnlyConnectionOwner | None = None,
+        write_owner: WriteConnectionOwner | None = None,
     ) -> None:
         self.database = Path(database)
         self.timeout = timeout
@@ -150,7 +160,10 @@ class DatabaseUnitOfWork:
         self.query_only = bool(query_only) or read_owner is not None
         if read_owner is not None and not self.read_only:
             raise ValueError("a retained reader requires read_only=True")
-        self._read_owner = read_owner
+        if write_owner is not None and (self.read_only or self.query_only or read_owner is not None):
+            raise ValueError("a retained writer requires a writable unit of work")
+        self._read_owner = read_owner or write_owner
+        self._write_owned = write_owner is not None
         self._read_owner_active = False
         self._read_owner_key: tuple[Any, ...] | None = None
         self._read_cursors: list[sqlite3.Cursor] = []
@@ -219,7 +232,8 @@ class DatabaseUnitOfWork:
 
     def _check_read_identity(self) -> None:
         if self._read_owner is not None and self._read_owner_key != self._connection_key():
-            raise sqlite3.OperationalError("read-only database identity changed")
+            kind = "write" if self._write_owned else "read-only"
+            raise sqlite3.OperationalError(f"{kind} database identity changed")
 
     def _check_scoped_database_identity(self) -> None:
         if self._connection_scope is None or self._scope_key is None:
@@ -324,6 +338,8 @@ class DatabaseUnitOfWork:
                 cursor.close()
             self._read_cursors.clear()
             if exc_type is None:
+                if self._write_owned:
+                    self._check_read_identity()
                 connection.commit()
             else:
                 connection.rollback()
@@ -362,6 +378,8 @@ class DatabaseUnitOfWork:
     def commit(self) -> None:
         """Commit before invoking an external post-transaction effect."""
         try:
+            if self._write_owned:
+                self._check_read_identity()
             self._conn().commit()
         except BaseException:
             self._read_failed = True
@@ -451,4 +469,4 @@ def is_database_busy(exc: BaseException) -> bool:
     )
 
 
-__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "LIVE_PROJECTION_READ_OWNER", "is_database_busy"]
+__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "WriteConnectionOwner", "LIVE_PROJECTION_READ_OWNER", "PLAYER_ACTIVITY_WRITE_OWNER", "is_database_busy"]

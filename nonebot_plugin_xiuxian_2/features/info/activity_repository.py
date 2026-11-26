@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import PLAYER_ACTIVITY_WRITE_OWNER
 
 
 class PlayerActivitySqlRepository:
@@ -18,7 +19,10 @@ class PlayerActivitySqlRepository:
         if not self.database.exists():
             return 0
         try:
-            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            with DatabaseUnitOfWork(
+                self.database, immediate=True, require_exists=True,
+                write_owner=PLAYER_ACTIVITY_WRITE_OWNER.when_unscoped(),
+            ) as uow:
                 cursor = uow.execute(
                     "UPDATE user_cd SET last_check_info_time=? WHERE user_id=?",
                     (str(occurred_at), str(user_id)),

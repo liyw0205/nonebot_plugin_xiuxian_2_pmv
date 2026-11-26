@@ -863,28 +863,21 @@ class ActivityReadModelSqlRepository:
                            COALESCE(own.total_sign_days,0) AS own_total,
                            COALESCE(own.last_sign_date,'') AS own_last
                     FROM viewer LEFT JOIN activity_user AS own ON own.user_id=viewer.user_id
-                ),
-                rows AS (
-                    SELECT target.own_id,target.own_days,target.own_total,target.own_last,
-                           activity_user.user_id,activity_user.sign_days,
-                           activity_user.total_sign_days,activity_user.last_sign_date
-                    FROM activity_user CROSS JOIN target
-                ),
-                counts AS (
-                    SELECT COUNT(*) AS total,
-                           COUNT(CASE WHEN own_days>0 AND (
-                               sign_days>own_days
-                               OR (sign_days=own_days AND total_sign_days>own_total)
-                               OR (sign_days=own_days AND total_sign_days=own_total
-                                   AND last_sign_date<own_last)
-                               OR (sign_days=own_days AND total_sign_days=own_total
-                                   AND last_sign_date=own_last AND user_id<own_id)
-                           ) THEN 1 END) AS better
-                    FROM rows WHERE sign_days>0
                 )
                 SELECT target.own_days AS value,
-                       counts.total,counts.better FROM counts
-                CROSS JOIN target
+                       (SELECT COUNT(*) FROM activity_user WHERE sign_days>0) AS total,
+                       CASE WHEN own_days>0 THEN
+                           (SELECT COUNT(*) FROM activity_user WHERE sign_days>own_days)
+                           + (SELECT COUNT(*) FROM activity_user
+                              WHERE sign_days=own_days AND total_sign_days>own_total)
+                           + (SELECT COUNT(*) FROM activity_user
+                              WHERE sign_days=own_days AND total_sign_days=own_total
+                                AND last_sign_date<own_last)
+                           + (SELECT COUNT(*) FROM activity_user
+                              WHERE sign_days=own_days AND total_sign_days=own_total
+                                AND last_sign_date=own_last AND user_id<own_id)
+                       ELSE 0 END AS better
+                FROM target
             """
             try:
                 row = uow.query_one(sql, (uid,))
@@ -905,26 +898,22 @@ class ActivityReadModelSqlRepository:
                            COALESCE(own.total_damage,0) AS own_damage
                     FROM viewer LEFT JOIN activity_boss_damage AS own
                       ON own.activity_key=? AND own.user_id=viewer.user_id
-                ),
-                rows AS (
-                    SELECT target.own_id,target.own_damage,
-                           damage.user_id,damage.total_damage
-                    FROM activity_boss_damage AS damage CROSS JOIN target
-                    WHERE damage.activity_key=? AND damage.total_damage>0
-                ),
-                counts AS (
-                    SELECT COUNT(*) AS total,
-                           COUNT(CASE WHEN own_damage>0 AND (
-                               total_damage>own_damage
-                               OR (total_damage=own_damage AND user_id<own_id)
-                           ) THEN 1 END) AS better
-                    FROM rows
                 )
-                SELECT target.own_damage AS value,counts.total,counts.better
-                FROM counts CROSS JOIN target
+                SELECT target.own_damage AS value,
+                       (SELECT COUNT(*) FROM activity_boss_damage
+                        WHERE activity_key=? AND total_damage>0) AS total,
+                       CASE WHEN own_damage>0 THEN
+                           (SELECT COUNT(*) FROM activity_boss_damage
+                            WHERE activity_key=? AND total_damage>0
+                              AND total_damage>own_damage)
+                           + (SELECT COUNT(*) FROM activity_boss_damage
+                              WHERE activity_key=? AND total_damage>0
+                                AND total_damage=own_damage AND user_id<own_id)
+                       ELSE 0 END AS better
+                FROM target
             """
             try:
-                row = uow.query_one(sql, (uid, key, key))
+                row = uow.query_one(sql, (uid, key, key, key, key))
             except (OSError, sqlite3.Error):
                 return 0, 0, 0
             total = max(0, int((row or {}).get("total") or 0))

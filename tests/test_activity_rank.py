@@ -523,6 +523,12 @@ class ActivityRankTests(unittest.TestCase):
                         captured_standing_plans)
         self.assertTrue(any("idx_activity_boss_damage_rank" in row for row in captured_standing_plans),
                         captured_standing_plans)
+        self.assertFalse(any("SCAN activity_user" in row or "SCAN activity_boss_damage" in row
+                             for row in captured_standing_plans), captured_standing_plans)
+        self.assertTrue(any("sign_days>?" in row for row in captured_standing_plans),
+                        captured_standing_plans)
+        self.assertTrue(any("total_damage>?" in row for row in captured_standing_plans),
+                        captured_standing_plans)
         display = repository.board_rank("sign", "spring", 10)
         self.assertEqual(["a", "b"], [row["user_id"] for row in display[:2]])
         repository.board_rank("boss", "spring", 10)
@@ -536,6 +542,47 @@ class ActivityRankTests(unittest.TestCase):
         self.assertEqual((1, 2, 101), repository.board_standing("boss", "spring", "boss-b"))
         self.assertEqual((0, 2, 0), repository.board_standing("sign", "spring", "zero"))
         self.assertEqual((0, 2, 0), repository.board_standing("boss", "spring", "boss-zero"))
+
+    def test_indexed_standings_match_independent_full_sort_across_all_tie_fields(self):
+        database = self._database()
+        signs = {f"user{index:03d}": (index % 9 - 1, index % 7,
+                                    f"2026-10-{index % 3 + 1:02d}")
+                 for index in range(128)}
+        bosses = {user_id: (index % 11 - 1) * 100
+                  for index, user_id in enumerate(signs)}
+        with DatabaseUnitOfWork(database) as uow:
+            apply_activity_rank_indexes(uow)
+            uow.executemany("INSERT INTO activity_user"
+                            "(user_id,sign_days,total_sign_days,last_sign_date) VALUES(?,?,?,?)",
+                            ((user_id, *values) for user_id, values in signs.items()))
+            uow.executemany("INSERT INTO activity_boss_damage"
+                            "(activity_key,user_id,total_damage) VALUES('spring',?,?)",
+                            bosses.items())
+            uow.execute("INSERT INTO activity_boss_damage VALUES('other','outsider',999999,'')")
+        repository = ActivityReadModelSqlRepository(database)
+        for updated in (False, True):
+            if updated:
+                signs["user001"] = (99, 99, "2026-01-01")
+                bosses["user001"] = 9999
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("UPDATE activity_user SET sign_days=?,total_sign_days=?,"
+                                "last_sign_date=? WHERE user_id='user001'", signs["user001"])
+                    uow.execute("UPDATE activity_boss_damage SET total_damage=? "
+                                "WHERE activity_key='spring' AND user_id='user001'", (9999,))
+            sign_order = sorted((uid for uid, values in signs.items() if values[0] > 0),
+                                key=lambda uid: (-signs[uid][0], -signs[uid][1],
+                                                 signs[uid][2], uid))
+            boss_order = sorted((uid for uid, value in bosses.items() if value > 0),
+                                key=lambda uid: (-bosses[uid], uid))
+            for uid in (*signs, "missing", ""):
+                with self.subTest(updated=updated, uid=uid):
+                    actual = repository.board_standings(("sign", "boss"), "spring", uid)
+                    for source, order, value in (
+                        ("sign", sign_order, max(0, signs.get(uid, (0,))[0])),
+                        ("boss", boss_order, max(0, bosses.get(uid, 0))),
+                    ):
+                        self.assertEqual((order.index(uid) + 1 if uid in order else 0,
+                                          len(order), value), actual[source])
 
     # --- 阶段四：结算与领取 ---------------------------------------------
 
