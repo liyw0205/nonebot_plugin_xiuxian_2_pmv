@@ -1236,6 +1236,7 @@ async def run(args, identity):
         "player-projection-v10": "tests.mixed_player_projection_fixture",
         "activity-rank-v12": "tests.mixed_activity_rank_fixture",
         "cold-rank-v14": "tests.mixed_cold_rank_fixture",
+        "activity-write-v16": "tests.mixed_activity_write_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1397,7 +1398,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

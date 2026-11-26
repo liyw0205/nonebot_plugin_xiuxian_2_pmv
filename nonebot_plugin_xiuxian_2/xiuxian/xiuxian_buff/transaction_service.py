@@ -1462,6 +1462,14 @@ class MentorApplicationService:
             "CREATE UNIQUE INDEX IF NOT EXISTS mentor_application_pending_apprentice "
             "ON mentor_applications(apprentice_id) WHERE status='pending'"
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS mentor_application_pending_expiry "
+            "ON mentor_applications(expires_at) WHERE status='pending'"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS mentor_application_pending_mentor "
+            "ON mentor_applications(mentor_id,created_at) WHERE status='pending'"
+        )
 
     @staticmethod
     def _ensure_mentor_schema(conn) -> None:
@@ -1785,6 +1793,17 @@ class MentorApplicationService:
             except Exception:
                 conn.rollback()
                 raise
+
+    def count_pending(self, mentor_id, *, now=None) -> int:
+        current = float(time.time() if now is None else now)
+        with self._lock, db_backend.transaction(self._player_database) as conn:
+            self._ensure_schema(conn)
+            self._expire_stale(conn, current)
+            row = conn.execute(
+                "SELECT COUNT(*) FROM mentor_applications WHERE mentor_id=%s AND status='pending'",
+                (str(mentor_id),),
+            ).fetchone()
+        return int(row[0])
 
     def list_pending(self, mentor_id, *, now=None) -> list[MentorApplication]:
         current = float(time.time() if now is None else now)

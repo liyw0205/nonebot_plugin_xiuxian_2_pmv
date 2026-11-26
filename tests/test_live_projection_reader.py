@@ -80,12 +80,15 @@ class LiveProjectionReaderTests(unittest.TestCase):
         self.assertIsNone(self.sect.get_name_by_id(1))
 
     def test_explicit_scope_keeps_original_connection_key_and_close_boundary(self):
+        self.write("ALTER TABLE user_xiuxian ADD COLUMN level TEXT")
         self.profile.get_user_profile("u")
         retained = self.connections[0]
         with uow_module.DatabaseUnitOfWork.connection_scope():
             self.assertIsNone(self.owner.when_unscoped())
             self.assertEqual(100, self.profile.get_user_profile("u")["exp"])
             self.assertEqual("Original", self.sect.get_name_by_id(1))
+            self.assertEqual({"u": {"user_name": "Original", "level": None}},
+                             self.profile.get_user_display_profiles_by_ids(["u"]))
             with uow_module.DatabaseUnitOfWork(self.database, read_only=True) as reader:
                 self.assertEqual(200, reader.query_one("SELECT stone FROM user_xiuxian")["stone"])
             self.assertEqual(2, len(self.connections))
@@ -97,6 +100,37 @@ class LiveProjectionReaderTests(unittest.TestCase):
         self.assertIs(self.owner, self.owner.when_unscoped())
         self.assertEqual(100, self.profile.get_user_profile("u")["exp"])
         self.assertEqual(2, len(self.connections))
+
+    def test_display_batch_reuses_live_reader_with_earliest_duplicates_and_exact_profiles(self):
+        self.write("ALTER TABLE user_xiuxian ADD COLUMN level TEXT")
+        self.write("UPDATE user_xiuxian SET level='R1'")
+        self.write("INSERT INTO user_xiuxian VALUES('u','Later',300,400,'R2')")
+        self.assertEqual("Original", self.profile.get_user_profile("u")["user_name"])
+        expected = {"u": {"user_name": "Original", "level": "R1"}}
+        self.assertEqual(expected, self.profile.get_user_display_profiles_by_ids(["u", "missing", "u"]))
+        self.assertEqual(1, len(self.connections))
+        projected = self.profile.get_user_display_profiles_by_ids(["u"])
+        projected["u"]["level"] = "changed result"
+        self.write("UPDATE user_xiuxian SET level='Updated' WHERE rowid=1")
+        self.assertEqual("Updated", self.profile.get_user_display_profiles_by_ids(["u"])["u"]["level"])
+        self.assertEqual(1, len(self.connections))
+        self.assertFalse(self.connections[0].in_transaction)
+        self.assertEqual(4, self.connections[0].commits)
+        self.assertEqual({}, self.profile.get_user_display_profiles_by_ids([]))
+        self.assertEqual(4, self.connections[0].commits)
+
+    def test_display_batch_failure_discards_reader_and_schema_recovery_is_live(self):
+        self.write("ALTER TABLE user_xiuxian ADD COLUMN level TEXT")
+        self.profile.get_user_display_profiles_by_ids(["u"])
+        reader = self.connections[-1]
+        reader.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
+                              if action == sqlite3.SQLITE_READ else sqlite3.SQLITE_OK)
+        with self.assertRaises(DomainError) as caught:
+            self.profile.get_user_display_profiles_by_ids(["u"])
+        self.assertEqual({"reason": "profile_read_failed", "subject": "player_profile"},
+                         caught.exception.details)
+        self.assertTrue(reader.closed)
+        self.assertEqual("Original", self.profile.get_user_display_profiles_by_ids(["u"])["u"]["user_name"])
 
     def test_worker_with_copied_parent_scope_uses_its_own_short_connection(self):
         self.profile.get_user_profile("u")

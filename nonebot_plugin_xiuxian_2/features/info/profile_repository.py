@@ -75,7 +75,10 @@ class PlayerProfileSqlRepository:
 
         profiles: dict[str, dict[str, Any]] = {}
         try:
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            with DatabaseUnitOfWork(
+                self.database, read_only=True,
+                read_owner=LIVE_PROJECTION_READ_OWNER.when_unscoped(),
+            ) as uow:
                 for offset in range(0, len(ids), 400):
                     batch = ids[offset : offset + 400]
                     placeholders = ",".join("?" for _ in batch)

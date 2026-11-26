@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
-from ...infrastructure.database.uow import DatabaseUnitOfWork
 from ...infrastructure.ids import UUIDGenerator
 from ..command_guard import guard_command, result_failure
 from ...infrastructure.random_source import SystemRandom
@@ -1427,14 +1426,13 @@ def get_affection_level(affection):
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    with DatabaseUnitOfWork.connection_scope():
-        isUser, user_info, msg = check_user(event)
-        if isUser:
-            partner_data = load_partner(user_info['user_id'])
-            partner_info = (
-                get_user_profile(partner_data["partner_id"], raise_errors=True)
-                if partner_data and partner_data.get('partner_id') is not None else None
-            )
+    isUser, user_info, msg = check_user(event)
+    if isUser:
+        partner_data = load_partner(user_info['user_id'])
+        partner_info = (
+            get_user_profile(partner_data["partner_id"], raise_errors=True)
+            if partner_data and partner_data.get('partner_id') is not None else None
+        )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_partner.finish()
@@ -1536,7 +1534,7 @@ def _format_pending_mentor_applicants(mentor_id, limit=5):
 
 
 def _count_pending_mentor_invites(mentor_id):
-    return len(_get_pending_mentor_invites(mentor_id))
+    return _mentor_application_service().count_pending(mentor_id)
 
 
 def _cooldown_remaining(user_id, field, *, mentor_data=None):
@@ -2240,16 +2238,15 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, command: tuple = Command()):
     """查看师徒信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    with DatabaseUnitOfWork.connection_scope():
-        isUser, user_info, msg = check_user(event)
-        if isUser:
-            user_id = str(user_info["user_id"])
-            mentor_data = load_mentor(user_id)
-            mentor_id = mentor_data.get("mentor_id")
-            apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
-            profiles = get_user_display_profiles_by_ids(
-                ([mentor_id] if mentor_id else []) + apprentice_ids
-            )
+    isUser, user_info, msg = check_user(event)
+    if isUser:
+        user_id = str(user_info["user_id"])
+        mentor_data = load_mentor(user_id)
+        mentor_id = mentor_data.get("mentor_id")
+        apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+        profiles = get_user_display_profiles_by_ids(
+            ([mentor_id] if mentor_id else []) + apprentice_ids
+        )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_mentor.finish()

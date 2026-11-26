@@ -3055,3 +3055,186 @@ API calls. Full aggregates are distinct from bounded statement diagnostics.
   the full clean-checkout gate. This bounded batch is not completion of the
   repository-wide performance goal; activity mutations, broader score/load
   distributions, loop regressions and sustained capacity remain unproved.
+
+## V16: Live Relationship and Boss Pre-Read Reuse (2026-11-27)
+
+- Start from delivered `20a862240585306452b9ef797283a3cda98ccbb5`, whose
+  exact-SHA CI `45885559085` succeeded. This batch adds a frozen workload
+  containing actual cooperative activity writes; accepted old matrices and
+  full unittest shards were not repeated. Before traces identify38 mentor
+  views opening114 handles,38 partner views opening76, and32 boss attacks
+  opening128 game handles. The mentor global expiry/list queries cost
+  32.258/34.997ms; boss table-list/journal queries cost304.977/342.392ms.
+- Remove only the two relationship handlers' internal synchronous connection
+  scopes, allowing existing bounded idle game/player owners to survive
+  requests. These scopes never made reads across the two managers atomic.
+  Batched display-name/realm reads now use the existing live projection owner
+  when unscoped, preserving400-ID chunks and earliest-row duplicate handling.
+  Explicit caller scopes retain their old ownership and close boundary.
+- Count pending mentor applications directly instead of constructing every
+  invitation. The same lock, transaction, schema checks, global expiry update,
+  exact `expires_at <= now` boundary and resolved timestamps remain. The
+  existing unique pending-apprentice constraint makes COUNT equivalent to the
+  old dictionary length. Two nonunique partial indexes cover pending expiry
+  and mentor/creation-time ranges. First index creation occurs during fixture
+  setup, outside traffic; its latency and extra create/accept/reject/expiry
+  write-maintenance cost are not benchmarked. Lifecycle, slot reuse and both
+  expiry/COUNT failure rollback are covered by direct tests.
+- Boss pre-settlement reads reuse the same existing idle projection owner.
+  Each call still starts and commits its own live read transaction and checks
+  schema, attributes/name, HP, inventory and daily quota. Real settlement,
+  operation ledger and their three cold writer handles per attack remain
+  unchanged. No new owner or value cache, stale balance/eligibility/reward
+  decision, rank algorithm, TOP-slice substitution or gameplay change.
+
+Reports under the sole retained fixture's `data/` directory:
+
+- Before: `activity-write-before-v16-20261127-r02.json`.
+- After: `activity-write-after-v16-20261127-r01.json`.
+- Offline comparison: `activity-write-comparison-v16-20261127-r01.json`.
+  Driver,1M fixture identity, limits, phase specs, all requests/actors/arguments
+  and business manifests match. Only compatibility diagnostic JSON and its
+  derived seed differ. Runtime trees
+  `fb813f286b6870b920250ca3587389a54b1df17995a9c5f57a18d3b01fee01eb`
+  -> `e6db5c3c51600993e5f69e61e81f7a29649dc8ed53e3c8f7f10d70fa60bc4909`
+  differ exactly in activity/profile repositories and partner/transaction
+  service. Before-r01 stopped on harness invariants, not a product failure:
+  OneBot CR versus ledger LF and a legitimate `feature:activity` diagnostic
+  increment. It is excluded from performance evidence. The repaired oracle
+  permits only the exact planned counter increment, protects unrelated keys
+  and business JSON, and normalizes reply newlines. Its11 tests/10 subtests
+  passed before freezing r02; no driver or fixture edits followed.
+
+The executable entry is `scripts/mixed_command_probe.py --scenario
+activity-write-v16 --fixture <retained-1M-fixture> --source-repo <repo>
+--report <new-report.json>`, launched with `MALLOC_ARENA_MAX=2` and
+`XIUXIAN_MATRIX_LIMITS=1`. It owns the shared validation lock and all guards;
+do not nest another lock or overwrite reports.
+
+- Each version executes448 real matcher/DI/handler requests: pure128,
+  mixed160, contention160, caps10/20/20, offered20/35/50 arrivals/s.
+  Each phase retains56 profiles and12 each boss-board/boss-display/sign-board
+  reads. Pure has18 mentor+18 partner views; mixed/contention have10+10,
+  32 real stone-training writes and16 actual cooperative boss attacks.
+  Training changes exp+100 and stone-1000; boss damage10 or11 derives from
+  live actor attributes. All requests in a phase share one instance/DB set;
+  requests, background workers and message writes drain before restore.
+- Retain128 actors,32 training writers,24 huge readers,32 fixed pivots,
+  4096 distinct-score nonparticipants,4237/4202 exp/stone groups in1M users,
+  32768 boss-damage rows across four keys and8192 selected-boss participants,
+  8192 historical fight logs,8192 sign/natal/avatar/title rows,4096 mentor
+  applications and2560 backpack rows. Sixteen distinct boss writers exclude
+  profile readers and TOP15; checked score gaps prove these attacks do not
+  move any personal or public board rank. Historical logs have an old date;
+  their damage is not claimed to reconstruct current totals.
+- Both versions448/448 successful,0 business/cooldown refusals, exceptions,
+  timeouts, SQL errors, busy/locked errors or boundary violations (0% each).
+  All three phase invariants and original1M digest restoration pass. Checks
+  retain exact ranks/huge integers, exp/stone/item balances, nonparticipants,
+  natal data and JSON protections, plus exact damage/HP/log/receipt/ledger
+  deltas. No lost update, duplicate debit/reward, negative asset or deadlock
+  was observed. Human HP display rounds via `number_to`; precise HP is
+  validated against SQL receipts and ledger, not inferred from display text.
+
+All cells are E2E p50/p95/p99 milliseconds including producer, dispatch and
+admission queues, before -> after. Each row has0% error/refusal/timeout.
+For n10/n12/n16, p95/p99 equal the maximum: these are small tail samples,
+not exhaustive runtime coverage of674 matchers or all feature populations.
+SQL calls include control APIs; statement wall includes instrumentation.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / boss board |12|11.292/17.366/17.366 ->11.529/17.555/17.555|174 ->174|27.015 ->29.019|
+| pure / boss display |12|9.350/23.083/23.083 ->9.068/23.638/23.638|55 ->55|5.168 ->4.835|
+| pure / sign board |12|10.878/244.718/244.718 ->10.847/76.815/76.815|175 ->175|19.870 ->25.909|
+| pure / mentor |18|21.459/33.826/33.826 ->12.412/21.950/21.950|524 ->488|153.443 ->38.811|
+| pure / partner |18|16.505/26.276/26.276 ->8.674/19.753/19.753|342 ->270|102.354 ->15.419|
+| pure / profile |56|16.058/128.915/293.560 ->15.816/24.404/127.352|2321 ->2321|139.515 ->140.447|
+| mixed / boss attack |16|60.971/299.325/299.325 ->46.904/216.642/216.642|817 ->785|608.388 ->340.290|
+| mixed / boss board |12|27.559/302.877/302.877 ->13.465/165.730/165.730|175 ->175|31.960 ->30.263|
+| mixed / boss display |12|136.269/240.244/240.244 ->18.452/101.669/101.669|55 ->55|13.207 ->6.698|
+| mixed / sign board |12|22.607/101.727/101.727 ->13.499/247.636/247.636|175 ->175|25.376 ->25.768|
+| mixed / mentor |10|43.655/214.947/214.947 ->13.389/148.581/148.581|300 ->280|104.175 ->29.414|
+| mixed / partner |10|35.686/232.647/232.647 ->8.739/214.986/214.986|190 ->150|64.524 ->7.180|
+| mixed / profile |56|64.098/299.460/333.048 ->39.365/194.544/302.811|2377 ->2375|349.668 ->305.693|
+| mixed / training |32|61.131/274.669/352.380 ->50.895/192.508/243.947|1219 ->1219|158.123 ->152.407|
+| contention / boss attack |16|476.383/843.591/843.591 ->589.457/696.293/696.293|817 ->785|402.271 ->358.609|
+| contention / boss board |12|531.437/755.280/755.280 ->586.322/708.428/708.428|175 ->175|31.628 ->32.205|
+| contention / boss display |12|758.959/788.154/788.154 ->580.523/615.743/615.743|55 ->55|10.308 ->5.428|
+| contention / sign board |12|258.620/362.189/362.189 ->243.696/320.086/320.086|175 ->175|26.214 ->22.580|
+| contention / mentor |10|501.370/869.129/869.129 ->534.432/585.907/585.907|300 ->280|88.709 ->36.544|
+| contention / partner |10|644.072/782.015/782.015 ->513.480/590.042/590.042|190 ->150|66.230 ->11.170|
+| contention / profile |56|440.132/864.868/886.095 ->482.515/685.622/713.382|2360 ->2367|450.526 ->503.085|
+| contention / training |32|488.417/862.567/882.480 ->557.415/698.169/710.824|1216 ->1216|167.769 ->161.291|
+
+- Mentor cold handles114 ->38: the38 live count/expiry writers remain cold,
+  while the game/player display handles were already warm from other paths.
+  Complete command SQL1124 ->1048, wall346.327 ->104.769ms. Expiry SQL
+  32.258 ->4.332ms and old list34.997 ->COUNT3.419ms; repeated checks of the
+  two new indexes add76 APIs/1.890ms, included in traffic totals, distinct from
+  unmeasured first creation. Partner cold handles76 ->0, complete SQL722
+  ->570, wall233.108 ->33.769ms. Both relationship diagnostics omit0 statements.
+- Boss cold game handles128 ->96; complete game SQL1506 ->1442,
+  wall994.189 ->682.269ms. The64 table-list checks still execute, now
+  304.977 ->37.569ms. The96 writer journal checks remain, wall342.392
+  ->327.055ms; contention alone regresses158.878 ->169.503ms. Boss game
+  diagnostics omit17 statements/phase/version; complete aggregates, not
+  bounded diagnostic CPU, establish query totals. Three cold writers per
+  attack are a remaining hotspot, not optimized here.
+- Successful throughput20.081/34.937/40.779 ->20.117/35.154/43.405/s.
+  Observed handler wall-interval overlap4/9/18 ->2/8/17, peak in-flight
+  6/13/20 ->3/11/20; queued in-flight work and interval overlap are neither
+  simultaneous CPU/SQLite execution nor proof of20 active handlers. This
+  short pair does not demonstrate sustained50 successful requests/s.
+  Admission p95371.885 ->249.805ms under contention; dispatch p95/p99
+  86.501/219.736 ->79.817/111.256ms. Contention producer p95/p99 regresses
+  5.394/117.894 ->6.215/123.227ms; mixed producer p99 regresses94.358
+  ->101.775ms. Loop p95/p99:6.661/15.726 ->3.074/6.072,
+  51.656/103.756 ->37.310/57.264,99.348/236.378 ->83.267/249.307ms.
+  Contention loop p99 and several medians above regress. Mixed sign-board
+  p95 regresses101.727 ->247.636ms. Do not attribute all E2E changes to SQL
+  or infer an all-path win from this single pair.
+- Exp and stone generation deltas remain0/32/32. COUNT remainder calls
+  9/54/49 ->9/52/56, wall10.370/105.025/100.080 ->15.107/76.572/120.602ms;
+  contention seek wall97.407 ->134.300ms and rank worker wall293.432
+  ->355.322ms regress. Plan calls4/8/8 stay bounded; their contention wall
+  13.842 ->16.314ms regresses. Profile contention SQL wall also regresses
+  as shown. This batch leaves global invalidation and exact-rank computation
+  unchanged and preserves these costs for subsequent evidence-based work.
+- Cache hits/misses103/104,88/119,94/113 and evictions72/87/81 are unchanged;
+  partial hits91/31/51 ->91/36/34. Waits, expiry, explicit invalidation,
+  bypass and oversized remain0. Maximum32 entries/106235 ->106240 estimated
+  bytes stays within1MiB. These are phase totals, not per-command attribution.
+  Request BEGIN durations (including SQL, not a pure lock-wait timer) have
+  p95/p99 .018/.066 ->.025/.293, .039/.171 ->.029/.109,
+  .047/.280 ->.045/.236ms, with unchanged759/1031/1031 BEGIN counts.
+  Main-thread CPU2006.807/3396.123/3164.248 ->1574.812/3021.259/2956.380ms
+  includes observer work. Observer timing/bookkeeping remains uncalibrated;
+  do not subtract counters from E2E or add overlapping SQL/observer CPU.
+- Same shared lock,2/4 CPUs,1GiB AS,600 CPU/1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`,768MiB available RAM/2GiB disk floors,900MiB RSS
+  and256MiB single/total WAL stops; no guard stops. Minimum sampled RAM1535
+  ->1586MiB; disk14252490752 ->14118420480 bytes. Peak RSS236.641
+  ->232.316MiB; virtual646.555 ->647.336MiB and total WAL25840768
+  ->26075608 bytes regress; single WAL18321672 unchanged, final WAL0.
+  Full-process CPU72.185 ->69.371s, wall86.680 ->84.970s and restore13.800
+  ->13.486s include setup/restoration. Traffic-window reads1208320 ->1298432
+  bytes regress; writes67055616 ->64974848 bytes improve. Full-window IO
+  includes snapshots/fixtures: reads1415983104 ->803561472 and writes
+  4302802944 ->4303421440 bytes, not an application-only cost measurement.
+- New harness tests11/10 subtests pass once; consolidated affected regression
+  116 tests/31 subtests passes in15.17s, including live external updates,
+  authorizer failure/recovery, caller scopes, real cooperative/item settlement,
+  lifecycle/replay/protection, rollback, index plans and attached UOW behavior.
+  Compile, architecture (`ok=true/errors=[]`), inventory and scoped whitespace
+  pass on the code-only candidate. Archive initially omitted export-ignore
+  manifests/Git metadata; only that temporary validation environment was
+  repaired, preserving the user's deleted JSON and other files. Accepted
+  old full shards are reused; exact delivered SHA CI is the clean full gate.
+- This bounded batch does not complete the repository-wide performance goal.
+  Cooperative write/index costs are sampled; sign, item, world-boss and reward
+  load writes remain unmeasured (item settlement has direct functional tests).
+  Mentor index-maintenance/first-build cost, other score distributions,
+  rank/loop tail regressions, broader commands and sustained capacity remain
+  explicit gaps. The before-r01 oracle failure is retained, not counted as
+  a second valid comparison or hidden by changing the frozen workload.

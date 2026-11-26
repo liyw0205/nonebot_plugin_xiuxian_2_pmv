@@ -214,6 +214,7 @@ class ActivityRepository(ServicePort):
         from datetime import datetime
 
         from ...infrastructure.database import DatabaseUnitOfWork
+        from ...infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER
         from ...xiuxian.xiuxian_activity.activity_config import activity_runtime_state, load_config
         from ...xiuxian.xiuxian_activity.activity_views import STAGE_FEATURES
         from ...xiuxian.xiuxian_utils.utils import number_to
@@ -252,7 +253,10 @@ class ActivityRepository(ServicePort):
         key = str(activity["key"])
         now = datetime.now()
         today = now.strftime("%Y-%m-%d")
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(
+            self.database, read_only=True,
+            read_owner=LIVE_PROJECTION_READ_OWNER.when_unscoped(),
+        ) as uow:
             required = {
                 "activity_boss_state", "activity_boss_damage", "activity_boss_fight_log",
                 "user_xiuxian",
