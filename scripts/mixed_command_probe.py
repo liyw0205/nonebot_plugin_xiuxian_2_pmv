@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from contextlib import AsyncExitStack, contextmanager
 from contextvars import ContextVar
 import fcntl
@@ -44,6 +45,13 @@ COUNTERS = ("hits", "misses", "waits", "expirations", "evictions",
             "invalidations", "oversized", "bypasses", "partial_hits")
 RANK_OPERATIONS = ("count", "seek_batch", "plan")
 RANK_OPERATION_FIELDS = ("statements", "execute_ms", "fetch_ms", "total_ms", "cpu_ms")
+RANK_STATE_PREFIX = (
+    "SELECT rank_state.exp_generation, rank_state.stone_generation, "
+    "target.user_id, xiuxian_int_sort_key_compact(target.exp), "
+    "xiuxian_int_sort_key_compact(target.stone) "
+    "FROM xiuxian_numeric_rank_generation AS rank_state "
+).upper()
+PROFILE_DISPLAY_SQL = "SELECT * FROM USER_XIUXIAN WHERE USER_ID=? ORDER BY ROWID ASC LIMIT 1"
 ACTIVE = ContextVar("mixed_command_request", default=None)
 BACKGROUND_SQL = ContextVar("mixed_command_background_sql", default=None)
 CHECKED_ATTACH = ContextVar("mixed_command_checked_attach", default=None)
@@ -347,7 +355,30 @@ class MixedCursor(matrix.TimedCursor):
 
     def fetchone(self):
         with self.cpu_clock():
-            return super().fetchone()
+            result = super().fetchone()
+        row = ACTIVE.get()
+        if (row is not None and "dynamic_rank_oracle" in row["request"] and
+            result is not None):
+            sql = self._matrix_sql.upper()
+            if len(result) == 5 and sql.startswith(RANK_STATE_PREFIX):
+                row["rank_state_observations"].append({
+                    "exp_generation": int(result[0]), "stone_generation": int(result[1]),
+                    "actor": str(result[2]) if result[2] is not None else None,
+                    "exp_key": bytes(result[3]).hex() if result[3] is not None else None,
+                    "stone_key": bytes(result[4]).hex() if result[4] is not None else None,
+                })
+            elif sql == PROFILE_DISPLAY_SQL:
+                from nonebot_plugin_xiuxian_2.core.numeric import sqlite_int_sort_key
+
+                columns = {column[0]: index for index, column in enumerate(self.description)}
+                raw = {name: result[name] if isinstance(result, Mapping) else result[columns[name]]
+                       for name in ("user_id", "exp", "stone")}
+                keys = {name: sqlite_int_sort_key(raw[name]) for name in ("exp", "stone")}
+                row["profile_display_observations"].append({
+                    "actor": str(raw["user_id"]) if raw["user_id"] is not None else None,
+                    **{f"{name}_key": key.hex() if key is not None else None for name, key in keys.items()},
+                })
+        return result
 
     def fetchmany(self, size=None):
         with self.cpu_clock():
@@ -522,6 +553,8 @@ def request_row(request, number):
             "connection_diagnostics": [], "_connection_entries": {}, "_connection_owner": object(),
             "connection_diagnostic_omitted_touches": 0,
             "sql_threads": {}, "sql_timeline": [], "sql_timeline_omitted": 0,
+            "rank_state_observations": [],
+            "profile_display_observations": [],
             "_rank_cpu_ms": {operation: 0.0 for operation in RANK_OPERATIONS},
             "_recorder": recorder, "_tasks": []}
 
@@ -1075,6 +1108,7 @@ async def run(args, identity):
         "read-strata-v4": "tests.mixed_read_strata_fixture",
         "relation-v5": "tests.mixed_relation_fixture",
         "rank-seek-v6": "tests.mixed_rank_seek_fixture",
+        "dynamic-relation-v7": "tests.mixed_dynamic_relation_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1228,7 +1262,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

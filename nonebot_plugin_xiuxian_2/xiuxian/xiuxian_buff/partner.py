@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from ...paths import get_paths
 from ...infrastructure.clock import SystemClock
+from ...infrastructure.database.uow import DatabaseUnitOfWork
 from ...infrastructure.ids import UUIDGenerator
 from ..command_guard import guard_command, result_failure
 from ...infrastructure.random_source import SystemRandom
@@ -1426,23 +1427,23 @@ def get_affection_level(affection):
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
+    with DatabaseUnitOfWork.connection_scope():
+        isUser, user_info, msg = check_user(event)
+        if isUser:
+            partner_data = load_partner(user_info['user_id'])
+            partner_info = (
+                get_user_profile(partner_data["partner_id"], raise_errors=True)
+                if partner_data and partner_data.get('partner_id') is not None else None
+            )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_partner.finish()
-    
-    user_id = user_info['user_id']
-    
-    # 获取道侣数据
-    partner_data = load_partner(user_id)
     
     if not partner_data or partner_data.get('partner_id') is None:
         msg = "你还没有道侣！"
         await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await my_partner.finish()
     
-    partner_user_id = partner_data["partner_id"]
-    partner_info = get_user_profile(partner_user_id, raise_errors=True)
     if partner_info is None:
         await handle_send(bot, event, "道侣档案不存在，无法显示道侣信息。")
         await my_partner.finish()
@@ -2239,18 +2240,19 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, command: tuple = Command()):
     """查看师徒信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
+    with DatabaseUnitOfWork.connection_scope():
+        isUser, user_info, msg = check_user(event)
+        if isUser:
+            user_id = str(user_info["user_id"])
+            mentor_data = load_mentor(user_id)
+            mentor_id = mentor_data.get("mentor_id")
+            apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+            profiles = get_user_display_profiles_by_ids(
+                ([mentor_id] if mentor_id else []) + apprentice_ids
+            )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_mentor.finish()
-
-    user_id = str(user_info["user_id"])
-    mentor_data = load_mentor(user_id)
-    mentor_id = mentor_data.get("mentor_id")
-    apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
-    profiles = get_user_display_profiles_by_ids(
-        ([mentor_id] if mentor_id else []) + apprentice_ids
-    )
 
     if mentor_id:
         mentor_info = profiles.get(mentor_id)

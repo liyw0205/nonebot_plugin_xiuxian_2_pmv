@@ -1803,3 +1803,148 @@ exp/stone writes, sustained50 successful/s, broader gameplay/background and
 multi-process behavior remain unverified. Select the next batch from saved
 remaining queue/loop/connection costs, freeze its data/load before one baseline,
 and retain successful and refused work separately without retrying for numbers.
+
+## V7: Live Relation Connection Reuse And Changing Exact Ranks (2026-11-26)
+
+### Frozen Scope And Evidence
+
+- V6 `c2014e0b` CI45766419511 completed/success. The expanded repository
+  performance goal remains active. V7 changes only `my_partner_` and
+  `my_mentor_`: reuse one idle game connection across current self/related
+  profile reads, with separate BEGIN/COMMIT transactions. No await occurs in
+  the scope; statistics, cooldowns, transmission allowance and pending-invite
+  handling stay outside. Router blacklist reads remain separate. No new
+  pool, cache, index, generation rule or gameplay change.
+- Reports under the same sole1M fixture's `data/` directory:
+  `dynamic-relation-before-20261126-r01.json` and
+  `dynamic-relation-after-20261126-r01.json`, plus `.phases.jsonl` samples.
+  Both first traffic attempts pass. Driver hashes, phase specs, ordered
+  requests, fixture identity, limits and business seeds match exactly using
+  Python integers. Only runtime `xiuxian/xiuxian_buff/partner.py` differs.
+  Seed hashes differ solely through startup `compatibility_hits.json`
+  telemetry and its enclosing hash; this is not full-byte seed equality.
+  All JSON stays unchanged during each measured phase; original rank digest
+  restoration passes both times. No extra retained million-row DB.
+- 512 requests/version:128 profiles,112 mentor views (all four aliases),
+  112 partner views and160 actual stone-training writes. All512 succeed;
+  business refusal, cooldown, exception, timeout, boundary, unclassified and
+  SQLite busy/locked counts are all zero, error rate0 on every path. One
+  instance/shared isolated DB per phase, real matcher/rules/DI/handler;
+  transport alone is mocked. Workers/persistence drain and invariants run
+  before stage restore. This is four sampled paths, not674 matcher coverage.
+- Retain128 seeded participants, of which62 distinct actors issue requests
+  (62 pure,51 mixed,51 contention). Preserve32 original REAL and32 exact
+  BLOB users. One low-score writer actually gains100 exp/spends1000 stone
+  per training, crossing16 low-reader score pairs; profiles also include the
+  writer and8 high exact readers. No multiwriter dynamic-rank claim.
+- Nonempty feature data:2560 inventory rows,128 each BuffInfo/bank/arena/
+  status/impart rows,4 sects,8192 activity users and32768 each activity point,
+  pass and boss-damage rows. Relationships have128 mentor/128 partner rows,
+  64 links/pairs each and4096 pending applications,128/master; apprentice
+  fanout1/3/5/7. V7 executes relationship/profile/training paths, not activity
+  commands or expired-invite cleanup, so their population is not new runtime
+  coverage or a claim about million-row feature tables.
+- Independent setup ranking algorithm streams GROUP BY key/multiplicity over
+  all1M rows (141 exp/107 stone groups), then computes dense ordinals for25
+  users at write offsets0..96. It reuses the production numeric parser/key
+  UDF; independence is in the rank/multiset algorithm. Passive capture of
+  the actual rank-state fetch supplies actor, both generation values and
+  both target keys, without extra SQL or an audit trigger. Offset equality,
+  expected keys and both reply ranks are checked, never inferred from offered
+  order or completed-success count.256 reply-rank checks/version pass;
+  mixed profiles observe42 ->46 distinct offsets, contention28 ->30, with
+  maxima62/92. At least one rank differs from setup in34 ->32 mixed and
+  12 ->13 contention profiles. Full generation delta equals fresh training
+  receipts0/64/96; exact writer exp/stone/power and127 nonwriter participants'
+  raw scores/types/keys/power, inventory/features/relations/JSON all pass.
+  The127 check is not a per-user hash of the other999999 rows.
+- All128 captured display-key observations match their respective rank
+  snapshot keys in this pair. Capture is diagnostic, not mandatory for
+  classification; profile attributes can precede the rank await. This does
+  not establish an atomic snapshot for the whole reply.
+
+### Same-Load Results
+
+Every latency below includes producer delay, event-loop dispatch and admission
+queueing. Values are before -> after in milliseconds; small samples and a
+single ordered pair do not establish variance or universal improvements.
+
+| Phase/path | n/version | E2E p50 | E2E p95 | E2E p99 | Foreground SQL calls | SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure / profile |32|37.520 ->37.522|133.111 ->63.803|171.079 ->134.291|1829 ->1829|665.708 ->661.716|
+| Pure / mentor |48|27.016 ->22.956|43.844 ->37.021|167.341 ->82.791|1588 ->1492|733.346 ->571.057|
+| Pure / partner |48|22.752 ->18.588|65.561 ->31.224|216.375 ->63.228|1104 ->1008|589.579 ->419.902|
+| Mixed / profile |64|1906.944 ->1547.545|3168.673 ->2624.469|3277.499 ->2695.636|3732 ->3735|1530.351 ->1521.566|
+| Mixed / mentor |32|2029.262 ->1401.143|3166.096 ->2625.456|3166.995 ->2631.666|1058 ->994|537.631 ->406.504|
+| Mixed / partner |32|1933.338 ->1572.073|3134.631 ->2582.889|3173.021 ->2590.486|736 ->672|438.942 ->294.582|
+| Mixed / training |64|2008.973 ->1649.246|3197.373 ->2639.543|3222.783 ->2681.163|3008 ->3008|1258.143 ->1272.563|
+| Contention / profile |32|2957.520 ->2876.446|5454.180 ->4917.161|5473.841 ->4936.487|1875 ->1875|770.757 ->753.559|
+| Contention / mentor |32|3119.305 ->2877.710|5467.591 ->4955.958|5492.193 ->4966.455|1058 ->994|567.115 ->388.505|
+| Contention / partner |32|3078.666 ->2797.348|5447.167 ->4898.015|5495.252 ->4989.882|736 ->672|428.627 ->434.184|
+| Contention / training |96|3166.738 ->2905.696|5467.908 ->4948.380|5516.041 ->5010.905|4512 ->4512|1879.318 ->1789.292|
+
+| Phase | Admission cap | Offered arrivals/s | Peak admitted | Peak handler intervals | Successful completions/s | E2E p95 | Queue p95 | Loop lag p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure |10|20|3 ->3|3 ->2|19.792 ->20.097|67.237 ->50.028|0.010 ->0.009|14.948 ->11.912|
+| Mixed |20|35|20 ->20|15 ->14|22.404 ->23.964|3166.995 ->2624.469|2386.821 ->1871.565|106.968 ->98.051|
+| Contention |20|50|20 ->20|17 ->17|20.653 ->21.841|5454.180 ->4944.732|4590.832 ->4098.364|232.491 ->221.695|
+
+- Overlapping handler intervals prove simultaneous outstanding work, not
+  parallel Python/SQLite execution. Cap20 and50 offered/s do not prove20
+  actively processing handlers or sustained50 successful/s. Response E2E
+  excludes asynchronous message persistence; phase wall includes its drain.
+- Actual game opens for each relation path fall144 ->96 (pure),96 ->64
+  (mixed),96 ->64 (contention):3 ->2 per view,224 fewer opens total and448
+  fewer initialization PRAGMAs. Transactions/real decisions stay live. Total
+  foreground SQL21236 ->20791 (relation calls alone remove448; profile
+  recomputation timing adds3). Including background message persistence,
+  calls23623 ->23172 and wall10607.593 ->9607.335ms. Recorded statement
+  counts are SQL API calls, not individual recursive index seeks.
+- Phase cache hits/misses22/42 ->22/42,0/128 ->0/128,0/64 ->0/64;
+  partial-range hits16/21/4 ->16/18/2. General/exp/stone generations advance
+  0/64/96 identically; `invalidations=0` does not mean write reuse survives:
+  generation-key changes cause misses. Cache remains32 entries/about33KiB
+  within1MiB. No personal decision data or TOP slice substitutes for rank.
+- Rank worker SQL calls194/479/238 ->194/482/238; wall39.842/189.001/124.091
+  ->36.887/231.398/136.033ms; CPU27.964/125.191/77.603
+  ->31.889/128.950/90.833ms. Mixed/contention rank SQL regresses despite
+  lower E2E. Rank CPU is only0.77%/1.46%/0.98% of after traffic CPU;
+  remaining seconds of queueing are not explained by cold-rank SQL alone.
+  COUNT API calls11/28/14 ->11/31/14, seeks42/128/64 unchanged. This pair
+  does not remeasure the earlier bulk-generation update-cost probe.
+- Preserve adverse measurements: pure-profile p50 rises0.002ms, mixed
+  training SQL1258.143 ->1272.563ms, contention partner SQL428.627 ->434.184ms.
+  Mixed producer p95 rises3.300 ->4.011ms and contention loop lag p99
+  280.851 ->391.276ms; loop dispatch p95 rises215.975 ->295.796ms there.
+  No retry or refactor based on a single fluctuation. Prior V5 and earlier
+  mixed regressions remain valid; this different load cannot erase them.
+
+### Resources, Verification And Remaining Work
+
+- Same exclusive validation lock;2 cores,1GiB AS,600 CPU/1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`; RAM>=768MiB/disk>=2GiB and continuous RSS900MiB/
+  single+total WAL256MiB stop guards. Peak RSS rises425.594 ->445.785MiB;
+  sampled VmSize949.004 ->964.727MiB (close to the fixed AS cap, not headroom
+  for raising load unconditionally). Minimum traffic RAM1695 ->1746MiB,
+  disk5976641536 ->5871751168 bytes; max single WAL15355272 unchanged,
+  total21288168 ->21300528 bytes. Restored WAL zero.
+- Whole process wall87.811 ->79.397s, CPU71.105 ->68.235s; traffic CPU
+  23.909 ->22.253s. Phase setup18.662 ->19.388s, invariants4.743 ->3.668s
+  and final restore12.554 ->12.233s stay outside E2E. Whole-process writes
+  4280008704 ->4282601472 bytes largely include fixture/snapshot/restore IO;
+  sampled traffic writes100311040 ->102723584 bytes, reads1798144 ->1540096.
+  Do not attribute restore IO or harness observations to game-write cost.
+- 13 new harness/oracle/plan preflight tests pass; concentrated affected
+  acceptance64 unittest pass in3.310s in a clean code-only worktree, including
+  the new lifecycle tests, existing relationship/UOW and driver/fixture
+  regressions. Two transactions see an external commit between reads;
+  awaits/rejections/errors close the scope and the next request recovers.
+  Compile, architecture `ok=true/errors=[]`, inventory `--check`, whitespace
+  pass. Reuse unchanged full-suite baseline; exact delivered SHA CI is the
+  remaining delivery gate, not another old local shard/matrix run.
+
+The overall goal remains active beyond V7. Next selection must use the saved
+SQL/connection/queue evidence for synchronous router/training costs; dynamic
+multiwriter ranks, broader gameplay/background, multiple processes and sustained
+50 successful/s remain unverified. Freeze any new data/load before its one
+baseline and coherent runtime batch; do not rerun this pair for nicer figures.

@@ -1,7 +1,7 @@
 """Small deterministic contracts for the mixed-load harness, not a load run."""
 import asyncio
 from contextvars import copy_context
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, contextmanager
 import io
 import json
 from pathlib import Path
@@ -349,15 +349,167 @@ class MixedProbeHelperTests(unittest.TestCase):
             probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
                               "--requests-per-phase", "160", "--arrival-rate", ".5"])
 
-    def test_rank_seek_scenario_retains_frozen_participants_and_no_bulk(self):
-        args = probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
-                                 "--scenario", "rank-seek-v6", "--preflight-only"])
-        self.assertEqual(args.scenario, "rank-seek-v6")
-        self.assertEqual(args.participants, 128)
-        for extra in (("--participants", "32"), ("--bulk-only",)):
-            with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
-                probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
-                                  "--scenario", "rank-seek-v6", *extra])
+    def test_rank_scenarios_retain_frozen_participants_and_no_bulk(self):
+        for scenario in ("rank-seek-v6", "dynamic-relation-v7"):
+            with self.subTest(scenario=scenario):
+                args = probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
+                                         "--scenario", scenario, "--preflight-only"])
+                self.assertEqual(args.scenario, scenario)
+                self.assertEqual(args.participants, 128)
+                for extra in (("--participants", "32"), ("--bulk-only",)):
+                    with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+                        probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
+                                          "--scenario", scenario, *extra])
+
+
+class MixedProbeRankStateTests(unittest.TestCase):
+    state_sql = (
+        "SELECT rank_state.exp_generation, rank_state.stone_generation, "
+        "target.user_id, xiuxian_int_sort_key_compact(target.exp), "
+        "xiuxian_int_sort_key_compact(target.stone) "
+        "FROM xiuxian_numeric_rank_generation AS rank_state "
+        "LEFT JOIN user_xiuxian AS target ON target.user_id=? "
+        "WHERE rank_state.singleton=1"
+    )
+
+    @contextmanager
+    def state_connection(self):
+        from nonebot_plugin_xiuxian_2.core.numeric import register_numeric_functions
+
+        old_connect, old_router, old_recorder = sqlite3.connect, probe.ROUTER, probe.matrix.RECORDER
+        token = probe.ACTIVE.set(None)
+        connection = None
+        try:
+            probe.install_sql_timing(tempfile.gettempdir())
+            connection = sqlite3.connect(":memory:")
+            register_numeric_functions(connection)
+            connection.execute("CREATE TABLE xiuxian_numeric_rank_generation "
+                               "(singleton INTEGER, exp_generation INTEGER, stone_generation INTEGER)")
+            connection.execute("INSERT INTO xiuxian_numeric_rank_generation VALUES(1,17,23)")
+            connection.execute("CREATE TABLE user_xiuxian(stone BLOB,user_id TEXT,exp BLOB)")
+            connection.execute("INSERT INTO user_xiuxian(user_id,exp,stone) VALUES(?,?,?)", (
+                "900001", str(10**120 + 7).encode(), str(-(10**95 + 11)).encode()))
+            yield connection
+        finally:
+            if connection is not None:
+                connection.close()
+            probe.ACTIVE.reset(token)
+            sqlite3.connect, probe.ROUTER, probe.matrix.RECORDER = old_connect, old_router, old_recorder
+
+    def test_state_fetch_preserves_real_result_and_large_integer_keys_outside_sql_clock(self):
+        from nonebot_plugin_xiuxian_2.core.numeric import sqlite_int_sort_key
+
+        with self.state_connection() as connection:
+            row = probe.request_row({**request(), "dynamic_rank_oracle": {}}, 1)
+            clock_at_capture = []
+
+            class Observations(list):
+                def append(self, value):
+                    clock_at_capture.append(probe.SQL_CPU_START.get())
+                    super().append(value)
+
+            row["rank_state_observations"] = Observations()
+            token = probe.ACTIVE.set(row)
+            try:
+                result = connection.execute(self.state_sql, ("900001",)).fetchone()
+                expected = (17, 23, "900001", sqlite_int_sort_key(10**120 + 7),
+                            sqlite_int_sort_key(-(10**95 + 11)))
+                self.assertEqual(result, expected)
+                self.assertEqual(row["rank_state_observations"], [{
+                    "exp_generation": 17, "stone_generation": 23, "actor": "900001",
+                    "exp_key": expected[3].hex(), "stone_key": expected[4].hex(),
+                }])
+                self.assertEqual(clock_at_capture, [None])
+                self.assertIsNone(probe.SQL_CPU_START.get())
+                self.assertEqual(sum(value["count"] for value in row["_recorder"].by_sql.values()), 1)
+            finally:
+                probe.ACTIVE.reset(token)
+
+    def test_non_target_queries_and_unmarked_requests_do_not_capture(self):
+        with self.state_connection() as connection:
+            row = probe.request_row({**request(), "dynamic_rank_oracle": True}, 1)
+            token = probe.ACTIVE.set(row)
+            try:
+                connection.execute("SELECT 17,23,'900001',x'01',x'02'").fetchone()
+                connection.execute("EXPLAIN QUERY PLAN " + self.state_sql, ("900001",)).fetchone()
+                connection.execute(self.state_sql.replace("rank_state.exp_generation, ", ""),
+                                   ("900001",)).fetchone()
+                connection.execute(self.state_sql.replace("SELECT rank_state.exp_generation,",
+                                   "SELECT rank_state.exp_generation, 99,"), ("900001",)).fetchone()
+                connection.execute("SELECT * FROM user_xiuxian WHERE user_id=?", ("900001",)).fetchone()
+                self.assertEqual(row["rank_state_observations"], [])
+                self.assertEqual(row["profile_display_observations"], [])
+                unmarked = probe.request_row(request(), 2)
+                probe.ACTIVE.set(unmarked)
+                self.assertIsNotNone(connection.execute(self.state_sql, ("900001",)).fetchone())
+                self.assertIsNotNone(connection.execute(probe.PROFILE_DISPLAY_SQL, ("900001",)).fetchone())
+                self.assertEqual(unmarked["rank_state_observations"], [])
+                self.assertEqual(unmarked["profile_display_observations"], [])
+            finally:
+                probe.ACTIVE.reset(token)
+
+    def test_display_snapshot_uses_description_for_tuple_row_and_mapping_without_rounding(self):
+        from nonebot_plugin_xiuxian_2.core.numeric import sqlite_int_sort_key
+
+        def dictionary_row(cursor, values):
+            return dict(zip((column[0] for column in cursor.description), values))
+
+        with self.state_connection() as connection:
+            for factory in (None, sqlite3.Row, dictionary_row):
+                with self.subTest(factory=factory):
+                    connection.row_factory = factory
+                    row = probe.request_row({**request(), "dynamic_rank_oracle": True}, 1)
+                    token = probe.ACTIVE.set(row)
+                    try:
+                        cursor = connection.execute(probe.PROFILE_DISPLAY_SQL, ("900001",))
+                        result = cursor.fetchone()
+                        raw = result if isinstance(result, dict) else dict(zip(
+                            (column[0] for column in cursor.description), result))
+                        self.assertEqual(raw["exp"], str(10**120 + 7).encode())
+                        self.assertEqual(raw["stone"], str(-(10**95 + 11)).encode())
+                        self.assertEqual(row["profile_display_observations"], [{
+                            "actor": "900001", "exp_key": sqlite_int_sort_key(10**120 + 7).hex(),
+                            "stone_key": sqlite_int_sort_key(-(10**95 + 11)).hex(),
+                        }])
+                        self.assertIsNone(cursor.fetchone())
+                        self.assertEqual(len(row["profile_display_observations"]), 1)
+                        self.assertEqual(row["rank_state_observations"], [])
+                        self.assertEqual(sum(value["count"] for value in row["_recorder"].by_sql.values()), 1)
+                    finally:
+                        probe.ACTIVE.reset(token)
+
+    def test_missing_target_and_exhausted_fetch_keep_nulls_without_duplicate_observations(self):
+        with self.state_connection() as connection:
+            row = probe.request_row({**request(), "dynamic_rank_oracle": True}, 1)
+            token = probe.ACTIVE.set(row)
+            try:
+                cursor = connection.execute(self.state_sql, ("missing",))
+                self.assertEqual(cursor.fetchone(), (17, 23, None, None, None))
+                self.assertIsNone(cursor.fetchone())
+                self.assertIsNone(cursor.fetchone())
+                self.assertEqual(row["rank_state_observations"], [{
+                    "exp_generation": 17, "stone_generation": 23,
+                    "actor": None, "exp_key": None, "stone_key": None,
+                }])
+                connection.execute("DELETE FROM xiuxian_numeric_rank_generation")
+                self.assertIsNone(connection.execute(self.state_sql, ("900001",)).fetchone())
+                self.assertEqual(len(row["rank_state_observations"]), 1)
+            finally:
+                probe.ACTIVE.reset(token)
+
+    def test_state_fetch_without_active_request_leaves_prior_observations_untouched(self):
+        with self.state_connection() as connection:
+            row = probe.request_row({**request(), "dynamic_rank_oracle": True}, 1)
+            token = probe.ACTIVE.set(row)
+            try:
+                cursor = connection.execute(self.state_sql, ("900001",))
+                display_cursor = connection.execute(probe.PROFILE_DISPLAY_SQL, ("900001",))
+            finally:
+                probe.ACTIVE.reset(token)
+            self.assertIsNotNone(cursor.fetchone())
+            self.assertIsNotNone(display_cursor.fetchone())
+            self.assertEqual(row["rank_state_observations"], [])
+            self.assertEqual(row["profile_display_observations"], [])
 
 
 class MixedProbeDispatchTests(unittest.IsolatedAsyncioTestCase):
