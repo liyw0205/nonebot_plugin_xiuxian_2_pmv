@@ -58,7 +58,8 @@ class ExactRankRangeTests(unittest.TestCase):
         with self.handle() as (handle, conn):
             self.rank(handle, 8)  # 1000, rank2
             sql = []
-            conn._raw.set_trace_callback(lambda value: sql.append(value) if "COUNT(DISTINCT" in value else None)
+            conn._raw.set_trace_callback(lambda value: sql.append(value) if
+                "COUNT(DISTINCT" in value or value.startswith("WITH RECURSIVE numeric_rank_keys") else None)
             self.assertEqual((3, 3), self.rank(handle, 6))
             self.assertEqual(2, len(sql))
             self.assertTrue(all("<=" in query for query in sql))

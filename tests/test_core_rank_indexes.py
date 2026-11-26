@@ -16,6 +16,10 @@ from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import pro
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import XiuxianDateManage
 
 
+def _is_rank_computation(sql):
+    return "COUNT(DISTINCT" in sql or sql.startswith("WITH RECURSIVE numeric_rank_keys")
+
+
 class CoreRankIndexTests(unittest.TestCase):
     def setUp(self):
         process_read_cache.clear()
@@ -202,7 +206,7 @@ class CoreRankIndexTests(unittest.TestCase):
             generation_reads = []
 
             def trace_query(sql):
-                if "COUNT(DISTINCT" in sql:
+                if _is_rank_computation(sql):
                     rank_reads.append(sql)
                 if "xiuxian_numeric_rank_generation" in sql:
                     generation_reads.append(sql)
@@ -287,7 +291,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 yield conn
 
             conn._raw.set_trace_callback(
-                lambda sql: rank_reads.append(sql) if "COUNT(DISTINCT" in sql else None
+                lambda sql: rank_reads.append(sql) if _is_rank_computation(sql) else None
             )
             handle = SimpleNamespace(
                 database_path=self.database,
@@ -382,7 +386,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 yield conn
 
             def trace_query(sql):
-                if "COUNT(DISTINCT" in sql:
+                if _is_rank_computation(sql):
                     rank_reads.append(sql)
 
             conn._raw.set_trace_callback(trace_query)
@@ -447,7 +451,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 yield conn
 
             conn._raw.set_trace_callback(
-                lambda sql: rank_reads.append(sql) if "COUNT(DISTINCT" in sql else None
+                lambda sql: rank_reads.append(sql) if _is_rank_computation(sql) else None
             )
             handle = SimpleNamespace(
                 database_path=self.database,
@@ -508,7 +512,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 return SimpleNamespace(fetchone=fetch_generation)
 
             def trace_query(sql):
-                if "COUNT(DISTINCT" in sql:
+                if _is_rank_computation(sql):
                     rank_reads.append(sql)
 
             conn.execute = execute
@@ -542,7 +546,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 yield conn
 
             def trace_query(sql):
-                if "COUNT(DISTINCT" in sql:
+                if _is_rank_computation(sql):
                     rank_reads.append(sql)
 
             conn._raw.set_trace_callback(trace_query)

@@ -42,6 +42,8 @@ from scripts.mixed_rank_bulk_probe import measure_rank_generation_cost
 MODES = ("pure", "readmostly", "mixed", "contention")
 COUNTERS = ("hits", "misses", "waits", "expirations", "evictions",
             "invalidations", "oversized", "bypasses", "partial_hits")
+RANK_OPERATIONS = ("count", "seek_batch", "plan")
+RANK_OPERATION_FIELDS = ("statements", "execute_ms", "fetch_ms", "total_ms", "cpu_ms")
 ACTIVE = ContextVar("mixed_command_request", default=None)
 BACKGROUND_SQL = ContextVar("mixed_command_background_sql", default=None)
 CHECKED_ATTACH = ContextVar("mixed_command_checked_attach", default=None)
@@ -65,6 +67,18 @@ def percentile(values, fraction):
 def distribution(values):
     return {name: percentile(values, fraction) for name, fraction in
             (("p50", .5), ("p95", .95), ("p99", .99), ("max", 1))}
+
+
+def rank_operation(sql):
+    upper = matrix._normalized_sql(sql).upper()
+    if upper.startswith("EXPLAIN QUERY PLAN"):
+        return "plan" if "XIUXIAN_INT_SORT_KEY_COMPACT" in upper else None
+    if "NUMERIC_RANK_KEYS" in upper:
+        return "seek_batch"
+    if any(f'COUNT(DISTINCT XIUXIAN_INT_SORT_KEY_COMPACT("{column}"))' in upper
+           for column in ("EXP", "STONE")):
+        return "count"
+    return None
 
 
 def database_path(value):
@@ -198,6 +212,9 @@ class QueryRouter:
             recorder = row["_recorder"]
             recorder.connections = self.connections
             recorder.record(connection, sql, phase, elapsed_ms)
+            operation = rank_operation(sql)
+            if operation is not None:
+                row["_rank_cpu_ms"][operation] += cpu_ms or 0.0
             diagnostic = getattr(connection, "_mixed_diagnostic", None)
             statement = SQL_DIAGNOSTIC.get()
             if statement is not None:
@@ -505,6 +522,7 @@ def request_row(request, number):
             "connection_diagnostics": [], "_connection_entries": {}, "_connection_owner": object(),
             "connection_diagnostic_omitted_touches": 0,
             "sql_threads": {}, "sql_timeline": [], "sql_timeline_omitted": 0,
+            "_rank_cpu_ms": {operation: 0.0 for operation in RANK_OPERATIONS},
             "_recorder": recorder, "_tasks": []}
 
 
@@ -565,22 +583,37 @@ async def drain_owned(row, *, timeout=1):
                     row["errors"].append(detail)
 
 
-def recorder_metrics(recorder):
+def recorder_metrics(recorder, *, rank_cpu_ms=None):
     metrics = recorder.snapshot()
     # Count from the complete aggregation, never the display-only top 20 SQLs.
     ranks = {"statements": 0, "exp_recomputations": 0, "stone_recomputations": 0,
              "total_ms": 0.0}
+    operations = {operation: {"statements": 0, "execute_ms": 0.0, "fetch_ms": 0.0,
+                             "total_ms": 0.0,
+                             "cpu_ms": rank_cpu_ms[operation] if rank_cpu_ms is not None else None}
+                  for operation in RANK_OPERATIONS}
     for (_, sql), values in recorder.by_sql.items():
+        operation = rank_operation(sql)
+        if operation is not None:
+            totals = operations[operation]
+            totals["statements"] += values["count"]
+            for phase in ("execute_ms", "fetch_ms"):
+                totals[phase] += values[phase]
+            totals["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         upper = sql.upper()
         columns = [column for column in ("exp", "stone")
                    if f'COUNT(DISTINCT XIUXIAN_INT_SORT_KEY_COMPACT("{column.upper()}"))' in upper]
-        if columns:
+        if columns and operation == "count":
             ranks["statements"] += values["count"]
             ranks["total_ms"] += values["execute_ms"] + values["fetch_ms"]
             for column in columns:
                 ranks[f"{column}_recomputations"] += values["count"]
     ranks["total_ms"] = round(ranks["total_ms"], 3)
     metrics["exact_rank_scans"] = ranks
+    metrics["exact_rank_operations"] = {
+        operation: {field: round(value, 3) if value is not None else None
+                    for field, value in totals.items()}
+        for operation, totals in operations.items()}
     return metrics
 
 
@@ -832,7 +865,7 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
         row.pop("_tasks")
         row.pop("_connection_entries")
         row.pop("_connection_owner")
-        metrics = recorder_metrics(recorder)
+        metrics = recorder_metrics(recorder, rank_cpu_ms=row.pop("_rank_cpu_ms"))
         row["sql"] = metrics
         row["db_query_count"] = sum(db["query_count"] for db in metrics["by_database"].values())
         row["db_total_ms"] = round(sum(db["total_ms"] for db in metrics["by_database"].values()), 3)
@@ -904,29 +937,51 @@ def interval_overlap(rows, begin, end):
             "interpretation": "wall-interval overlap, not parallel CPU/SQLite execution"}
 
 
+def summarize_selection(rows):
+    outcomes = Counter(row.get("outcome", "unclassified") for row in rows)
+    operations = {}
+    for operation in RANK_OPERATIONS:
+        operations[operation] = {}
+        for field in RANK_OPERATION_FIELDS:
+            values = [row["sql"]["exact_rank_operations"][operation][field] for row in rows]
+            measured = [value for value in values if value is not None]
+            operations[operation][field] = round(sum(measured), 3) if measured else None
+    workers = [totals for row in rows for name, totals in row["sql_threads"].items()
+               if name.startswith("xiuxian-exact-rank")]
+    return {"n": len(rows), "outcomes": dict(outcomes),
+            "error_rate": sum(outcomes[name] for name in
+                              ("exception", "timeout", "boundary", "unclassified", "not_sent", "resource_aborted")) / len(rows) if rows else 0,
+            "e2e_ms": distribution([row["e2e_ms"] for row in rows if "e2e_ms" in row]),
+            "service_ms": distribution([row["service_ms"] for row in rows if "service_ms" in row]),
+            "queue_ms": distribution([row["queue_ms"] for row in rows if "queue_ms" in row]),
+            "loop_dispatch_delay_ms": distribution([row["loop_dispatch_delay_ms"] for row in rows if "loop_dispatch_delay_ms" in row]),
+            "db_queries": sum(row["db_query_count"] for row in rows),
+            "db_total_ms": round(sum(row["db_total_ms"] for row in rows), 3),
+            "exact_rank_scans": {field: round(sum(row["sql"]["exact_rank_scans"][field]
+                                                  for row in rows), 3)
+                                 for field in ("statements", "exp_recomputations", "stone_recomputations", "total_ms")},
+            "exact_rank_operations": operations,
+            "exact_rank_worker_sql": {field: round(sum(worker[field] for worker in workers), 3)
+                                      for field in ("calls", "wall_ms", "cpu_ms")},
+            "sqlite_busy_locked": sum(row["sqlite_busy_locked"] for row in rows)}
+
+
 def summarize(rows):
     by_command = {}
     for key in sorted({row["key"] for row in rows}):
         selected = [row for row in rows if row["key"] == key]
-        outcomes = Counter(row.get("outcome", "unclassified") for row in selected)
-        by_command[key] = {"command": selected[0]["command"], "n": len(selected),
-            "outcomes": dict(outcomes),
-            "error_rate": sum(outcomes[name] for name in
-                              ("exception", "timeout", "boundary", "unclassified", "not_sent", "resource_aborted")) / len(selected),
-            "e2e_ms": distribution([row["e2e_ms"] for row in selected if "e2e_ms" in row]),
-            "service_ms": distribution([row["service_ms"] for row in selected if "service_ms" in row]),
-            "queue_ms": distribution([row["queue_ms"] for row in selected if "queue_ms" in row]),
-            "loop_dispatch_delay_ms": distribution([row["loop_dispatch_delay_ms"] for row in selected if "loop_dispatch_delay_ms" in row]),
-            "db_queries": sum(row["db_query_count"] for row in selected),
-            "db_total_ms": round(sum(row["db_total_ms"] for row in selected), 3),
-            "exact_rank_scans": {field: round(sum(row["sql"]["exact_rank_scans"][field]
-                                                  for row in selected), 3)
-                                 for field in ("statements", "exp_recomputations", "stone_recomputations", "total_ms")},
-            "sqlite_busy_locked": sum(row["sqlite_busy_locked"] for row in selected)}
+        by_command[key] = {"command": selected[0]["command"], **summarize_selection(selected)}
+    profiles = [row for row in rows if row["key"] == "profile_info" and row["request"].get("rank_cohort")]
+    by_cohort = {cohort: summarize_selection([
+        row for row in profiles if row["request"]["rank_cohort"] == cohort])
+        for cohort in sorted({row["request"]["rank_cohort"] for row in profiles})}
+    totals = summarize_selection(rows)
     completed = [row for row in rows if "completed_at" in row]
     duration = (max(row["completed_at"] for row in completed) - min(row["scheduled_at"] for row in completed)) if completed else 0
     success = sum(row.get("outcome") == "success" for row in rows)
-    return {"commands": by_command, "outcomes": dict(Counter(row.get("outcome", "unclassified") for row in rows)),
+    return {"commands": by_command, "rank_cohorts": by_cohort, "outcomes": totals["outcomes"],
+            "exact_rank_operations": totals["exact_rank_operations"],
+            "exact_rank_worker_sql": totals["exact_rank_worker_sql"],
             "load_window_s": round(duration, 6),
             "completed_throughput_per_second": round(len(completed) / duration, 3) if duration else 0,
             "successful_throughput_per_second": round(success / duration, 3) if duration else 0,
@@ -1019,6 +1074,7 @@ async def run(args, identity):
         "rank-range-v3": "tests.mixed_rank_range_fixture",
         "read-strata-v4": "tests.mixed_read_strata_fixture",
         "relation-v5": "tests.mixed_relation_fixture",
+        "rank-seek-v6": "tests.mixed_rank_seek_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1052,6 +1108,7 @@ async def run(args, identity):
             "cache_attribution": "exact phase counter deltas; per-command cache counters not measured",
               "background_sql_attribution": "actual message-db queue consumer context and exact DB path; measured per phase including drain, never assigned to a command",
               "sql_count_definition": "execute/executemany/executescript calls plus commit/rollback; fetch time counted separately",
+              "exact_rank_operation_definition": "complete per-request SQL aggregation: count=compact COUNT(DISTINCT), seek_batch=non-EXPLAIN numeric_rank_keys CTE, plan=EXPLAIN QUERY PLAN with compact expression; statements count API execute calls, never internal seeks; total wall includes execute+fetch; CPU is null when not routed; worker SQL includes all xiuxian-exact-rank threads, independent of bounded timeline/connection diagnostics",
               "connection_diagnostic_definition": "at most 32 connections/request and first 12 statements/connection/request; stable connection ID and lifetime ordinal; raw open, UDF registration, authorizer callbacks, execute/fetch CPU and wall time; omitted touches/statements counted",
               "transaction_wait_definition": "BEGIN execution time is an upper bound including SQL execution; not a pure lock-wait timer",
               "resource_before": resource_state(data_dir)}
@@ -1171,7 +1228,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

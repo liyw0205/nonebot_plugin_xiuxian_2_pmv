@@ -1643,3 +1643,163 @@ requests/s. Next select cold exact-rank/write-interference or first-schema
 hotspots from these saved SQL/queue/loop records, freeze a new bounded workload,
 then perform one baseline -> runtime batch -> same-load comparison. Do not
 reinterpret old regressions as resolved by this delivery.
+
+## V6: Bounded Cold Exact-Rank Seeks (2026-11-26)
+
+### Frozen Evidence And Runtime Change
+
+- Baseline runtime is `a3cc28bfa3c9737751a91e504c9362b035e3093d`, whose exact
+  CI45759556810 passed quality and both unittest jobs. One valid first-attempt
+  pair is retained under the sole fixture's `data/` directory:
+  `rank-seek-before-20261126-r01.json` and
+  `rank-seek-after-20261126-r01.json`, plus full `.phases.jsonl` records.
+  No V5 stage, old serial matrix or unchanged full-suite shard was rerun.
+- Python JSON comparison preserving large integers confirms identical driver
+  hashes, fixture identity, complete seed manifests, frozen phase specs,
+  ordered requests, generations and limits. Only the runtime handle file hash
+  differs. Both original rank digests restore exactly. Unlike V5, this pair
+  has no startup telemetry seed exception.
+- Keep1M existing users and128 actors:64 low training writers,32 preserved
+  original REAL users,32 exact BLOB readers. Temporarily reassign8192 existing
+  nonactors to distinct score bands; do not add users or retain another DB.
+  Exp/stone have8341/8307 distinct groups. A setup-only streaming grouped-count
+  oracle computes dense ranks independently of product COUNT/seek code;
+  no request-time oracle SQL runs.
+
+| Reader cohort | Users | Exp dense rank | Stone dense rank | Higher rows in either field |
+| --- | ---: | ---: | ---: | ---: |
+| Near | 8 | 58-61 | 24-27 | 991712-991718 |
+| Mid | 8 | 4150-4164 | 4116-4130 | 995808-995822 |
+| Deep | 16 | 8246-8276 | 8212-8242 | 999904-999934 |
+
+- Feature populations remain back2560/BuffInfo128/activity_user8192,
+  activity point/pass/boss32768 each, bank/status/arena/impart128 each, sects4.
+  These are six real command paths, not exhaustive coverage of674 matchers
+  or41 background entries. Activity results do not represent empty tables,
+  but no million-row feature-table performance claim follows.
+- In `_read_numeric_rank_for_value`, reuse the target/generation transaction
+  and compact-key expression index. One recursive SQL statement performs at
+  most128 descending next-distinct seeks; if exhausted, COUNT only the strict
+  remaining interval. Preserve ceiling offsets and exact arbitrary integers.
+  Check both scalar lookups' range SEARCH plan and absence of temporary sort;
+  missing/wrong indexes fall back once, other read/lock failures propagate.
+  NULL keeps the previous count. No new cache, index, generation journal,
+  worker capacity, cooldown or gameplay change; TOP slices never supply ranks.
+
+### Results And Attribution
+
+Each version executes416 real matcher/DI/handler requests against one shared
+instance/isolated DB; only message transport is mocked. Before has416 successes;
+after has400 successes and16 normal backpack cooldown refusals, zero system
+errors/timeouts/busy/locked in either. All144 profiles succeed and independently
+check both ranks; all128 training writes succeed with exp+100/stone-1000.
+Every phase drains before invariants and restore. Exact balances/exp/power,
+receipts/ledgers/inventory, no duplicate or lost writes/negative resources,
+readonly storage types, all8192 band rows, feature invariants, quick_check and
+original restoration pass. Training stays below every reader score: changing
+low ranks across score boundaries is still unproved by this workload.
+
+Milliseconds before -> after; E2E includes scheduled arrival and all queues.
+
+| Phase | n; cap / arrivals per s | E2E p50 | E2E p95 | E2E p99 | Success/s | Handler wall overlap |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Pure | 96;10/20 | 36.261 -> 34.376 | 433.561 -> 61.124 | 614.948 -> 100.228 | 19.550 -> 20.093 | 6 -> 2 |
+| Mixed | 192;20/35 | 4680.448 -> 1539.708 | 9649.282 -> 2487.603 | 10022.103 -> 2528.879 | 12.758 -> 22.277 | 19 -> 14 |
+| Same-user contention | 128;20/50 | 2357.173 -> 1767.968 | 4079.139 -> 2991.065 | 4204.711 -> 3088.546 | 19.308 -> 23.144 | 15 -> 15 |
+
+Mixed has192 ->176 successes, with16/192=8.333% normal cooldown outcomes.
+Backpack itself has32 ->16 successes (50% cooldown after); faster execution
+leaves repeat requests within its existing cooldown. Its reduced work is a
+confounder: do not attribute the whole mixed E2E/CPU change to ranking. Pure
+and contention outcomes, and profile/training success counts, match exactly.
+All commands have0% system errors. Short arrival bursts plus drain do not
+prove sustained50 successful/s. Peak admitted/inflight is10/20/20 ->2/20/20;
+wall overlap is not parallel CPU/SQLite execution.
+
+| Phase / command | n | E2E p50 | E2E p95 | E2E p99 | DB calls | SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure / activity | 24 | 29.254 -> 25.225 | 240.477 -> 36.931 | 303.597 -> 60.590 | 528 -> 528 | 446.504 -> 352.499 |
+| Pure / assets | 24 | 25.579 -> 20.832 | 263.358 -> 29.582 | 319.443 -> 80.522 | 655 -> 655 | 310.447 -> 247.123 |
+| Pure / profile | 48 | 40.349 -> 36.965 | 533.029 -> 65.479 | 614.948 -> 100.228 | 2609 -> 2716 | 2988.866 -> 974.120 |
+| Mixed / activity | 32 | 4047.410 -> 1539.708 | 8484.707 -> 2471.374 | 8754.902 -> 2557.530 | 704 -> 704 | 1057.113 -> 558.198 |
+| Mixed / backpack | 32 | 3900.971 -> 1478.750 | 8433.190 -> 2425.543 | 8673.526 -> 2471.979 | 579 -> 384 | 550.273 -> 236.315 |
+| Mixed / profile | 64 | 6001.000 -> 1494.519 | 9946.783 -> 2493.239 | 10031.249 -> 2500.890 | 3475 -> 3702 | 26709.393 -> 2134.413 |
+| Mixed / training | 64 | 4018.738 -> 1541.561 | 8427.988 -> 2487.603 | 8784.947 -> 2528.879 | 3008 -> 3008 | 2192.169 -> 1343.998 |
+| Contention / state | 32 | 2206.827 -> 1667.561 | 4019.211 -> 2970.721 | 4084.249 -> 2994.491 | 932 -> 928 | 486.499 -> 486.927 |
+| Contention / profile | 32 | 2361.927 -> 1775.755 | 4204.711 -> 3010.967 | 4239.596 -> 3088.546 | 1745 -> 1859 | 7634.650 -> 1092.948 |
+| Contention / training | 64 | 2334.950 -> 1767.968 | 4064.943 -> 2991.065 | 4144.073 -> 3108.754 | 3008 -> 3008 | 1560.179 -> 1203.846 |
+
+Profile cohort latency retains the deep distinct tail, rather than reporting
+only near-top users. Small cohort p99 often equals the maximum.
+
+| Phase / cohort | n | E2E p50 | E2E p95 | E2E p99 | Rank-worker SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pure / near | 10 | 127.715 -> 38.090 | 476.249 -> 60.850 | 476.249 -> 60.850 | 775.439 -> 3.605 |
+| Pure / mid | 12 | 38.333 -> 37.939 | 614.948 -> 100.228 | 614.948 -> 100.228 | 759.607 -> 30.303 |
+| Pure / deep | 26 | 37.734 -> 36.228 | 351.092 -> 65.479 | 551.885 -> 73.361 | 456.756 -> 22.200 |
+| Mixed / near | 16 | 5736.790 -> 1279.771 | 10031.249 -> 2496.304 | 10031.249 -> 2496.304 | 6211.136 -> 29.304 |
+| Mixed / mid | 16 | 5999.672 -> 1427.422 | 10022.103 -> 2499.423 | 10022.103 -> 2499.423 | 5008.251 -> 205.417 |
+| Mixed / deep | 32 | 6001.000 -> 1494.519 | 9824.181 -> 2493.239 | 9946.783 -> 2500.890 | 13294.406 -> 570.440 |
+| Contention / near | 8 | 2625.435 -> 1941.290 | 4239.596 -> 2896.517 | 4239.596 -> 2896.517 | 1582.685 -> 25.170 |
+| Contention / mid | 8 | 1176.669 -> 799.618 | 4149.260 -> 3010.967 | 4149.260 -> 3010.967 | 1927.990 -> 94.403 |
+| Contention / deep | 16 | 2027.683 -> 1478.488 | 4204.711 -> 3088.546 | 4204.711 -> 3088.546 | 3483.015 -> 337.292 |
+
+Diagnostics count execute plus fetch and all rank-worker SQL, independent of
+top20/timeline64/connection12 truncation. API calls include transaction calls;
+the internal128 seeks are one recursive CTE statement, not one index lookup.
+
+| Phase | All rank-worker calls | Rank SQL wall ms | Rank SQL CPU ms | COUNT before -> after | After seek CTE / EQP |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pure | 236 -> 343 | 1991.802 -> 56.108 | 1759.704 -> 55.859 | 86 -> 24 | 86 / 86 |
+| Mixed | 318 -> 545 | 24513.794 -> 805.160 | 17746.501 -> 607.937 | 126 -> 94 | 128 / 128 |
+| Contention | 160 -> 270 | 6993.690 -> 456.864 | 5756.748 -> 346.997 | 64 -> 46 | 64 / 64 |
+
+- Total foreground calls17243 ->17492, including message persistence19270
+  ->19429; total SQL wall44807.438 ->9555.616ms. Fewer COUNTs do not mean
+  fewer SQL API calls. State SQL wall slightly regresses486.499 ->486.927ms.
+- Cache hits/misses by phase are10/86 ->10/86,2/126 ->0/128,0/64 ->0/64;
+  partial-range hits74/12/0 ->76/22/6. Cache attribution is phase-wide, not
+  per-command. Both exp/stone generations advance0/64/64 in each version;
+  writes still invalidate generation-key reuse despite `invalidations=0`.
+  The existing cache retains32 entries/about33KiB within1MiB; no new cache.
+- Queue p95 is0.010/7567.021/3196.823 ->0.008/1748.600/2240.653ms;
+  loop p95 is28.516/130.476/115.909 ->14.416/107.303/98.068ms;
+  producer p95 is0.305/10.513/1.746 ->0.199/2.051/1.606ms.
+  BEGIN p95 is0.050/0.030/0.023 ->0.043/0.055/0.045ms, max
+  0.330/12.809/3.103 ->0.510/5.232/2.252ms. BEGIN includes SQL execution,
+  an upper bound rather than a pure lock-wait timer. No busy/locked occurred.
+
+### Resources, Verification And Open Scope
+
+- Exclusive shared validation lock,2 CPU affinity,1GiB AS,600 CPU/1200 wall
+  seconds, `MALLOC_ARENA_MAX=2`; RAM768MiB/disk2GiB preflight and continuous
+  RSS900MiB/single+total WAL256MiB abort guards all pass. Whole process wall
+  91.858 ->80.140s and CPU97.460 ->70.219s; traffic CPU46.072 ->18.727s.
+  Peak RSS increases409.539 ->428.547MiB. Sampled traffic VmSize peaks
+  807.484 ->783.402MiB; final VmSize812.570 ->785.887MiB. Minimum monitored
+  traffic RAM1750 ->1747MiB; disk6207401984 ->6076211200 bytes.
+- Maximum single WAL stays15355272 bytes; sampled total WAL20661928 ->
+  20649568 bytes; final restored WAL zero. Sampled traffic IO reads1130496
+  ->1130496 bytes, writes64618496 ->58695680 bytes. Whole-process writes
+  4268871680 ->4265234432 bytes mainly include setup/snapshot/restore IO;
+  do not attribute these roughly4.27GB totals to application write amplification.
+  Phase setup/restore22.237 ->22.372s, invariants4.300 ->3.902s, final
+  restore12.224 ->12.498s are outside request E2E. No extra retained1M DB.
+- Harness/fixture25 small tests pass using the existing shared interpreter
+  where the workspace environment lacked OneBot; no package/environment edit.
+  Concentrated affected acceptance68 unittest passes in1.907s. After fixing
+  static inventory's CTE recognition through complete SQL templates/aliases,
+  28 affected rank checks pass; architecture `ok=true/errors=[]`, inventory
+  `--check`, compile and whitespace pass. No classifier/taxonomy change.
+  Coverage preserves0/1/127/128/129 boundaries, ties/negative/NULL/TEXT/BLOB,
+  missing/wrong indexes, read/lock failure recovery, snapshot/write/rollback
+  and bounded-cache contracts. Delivery still requires its exact-SHA CI.
+
+The expanded goal remains active. This pair supports lower exact-rank CPU and
+latency for these distinct/tie distributions, not universal gains. Keep V5's
+pure/contention regressions and the earlier mixed regression recorded above;
+different V6 traffic cannot erase them. Dynamic low ranks crossed by actual
+exp/stone writes, sustained50 successful/s, broader gameplay/background and
+multi-process behavior remain unverified. Select the next batch from saved
+remaining queue/loop/connection costs, freeze its data/load before one baseline,
+and retain successful and refused work separately without retrying for numbers.

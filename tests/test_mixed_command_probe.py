@@ -203,6 +203,94 @@ class MixedProbeHelperTests(unittest.TestCase):
         self.assertEqual(metrics["exact_rank_scans"],
                          {"statements": 1, "exp_recomputations": 1, "stone_recomputations": 0, "total_ms": 1})
 
+    def test_rank_operations_keep_fast_seek_fetch_and_exclude_plans_from_counts(self):
+        router = probe.QueryRouter(Path(tempfile.gettempdir()))
+        row = probe.request_row(request(), 1)
+        connection = SimpleNamespace(_mixed_diagnostic={
+            "serial": 1, "database": "game.db", "opened_by": row["_connection_owner"],
+            "open_ms": 0.0, "ordinal": 0, "statement": None})
+        router.connections[id(connection)] = "game.db"
+        count = ('SELECT 1 + COUNT(DISTINCT xiuxian_int_sort_key_compact("exp")) '
+                 'FROM user_xiuxian WHERE xiuxian_int_sort_key_compact("exp") > ?')
+        seek = ('WITH RECURSIVE numeric_rank_keys(value) AS '
+                '(SELECT xiuxian_int_sort_key_compact("stone") FROM user_xiuxian) '
+                'SELECT * FROM numeric_rank_keys LIMIT 128')
+        token, cpu_token = probe.ACTIVE.set(row), probe.SQL_CPU_START.set(1.0)
+        try:
+            with patch.object(probe.time, "thread_time", return_value=1.002):
+                for index in range(21):
+                    sql = f"SELECT {index}"
+                    router.begin_statement(connection, sql)
+                    router.record(connection, sql, "execute", 10)
+                with patch.object(probe.threading, "current_thread",
+                                  return_value=SimpleNamespace(name="xiuxian-exact-rank_0")):
+                    for sql, execute_ms, fetch_ms in (
+                        (count, .5, 1.5), (seek, 1, 2),
+                        ("EXPLAIN QUERY PLAN " + count, .25, .5),
+                        ("EXPLAIN QUERY PLAN " + seek, .25, .5),
+                    ):
+                        router.begin_statement(connection, sql)
+                        router.record(connection, sql, "execute", execute_ms)
+                        router.record(connection, sql, "fetch", fetch_ms)
+        finally:
+            probe.SQL_CPU_START.reset(cpu_token)
+            probe.ACTIVE.reset(token)
+        metrics = probe.recorder_metrics(row["_recorder"], rank_cpu_ms=row["_rank_cpu_ms"])
+        self.assertEqual(len(metrics["top_queries"]), 20)
+        self.assertFalse(any(item["sql"] == seek for item in row["sql_timeline"]))
+        self.assertEqual(len(row["connection_diagnostics"][0]["statements"]), 12)
+        self.assertEqual(row["connection_diagnostics"][0]["statements_omitted"], 13)
+        self.assertEqual(metrics["exact_rank_operations"], {
+            "count": {"statements": 1, "execute_ms": .5, "fetch_ms": 1.5, "total_ms": 2, "cpu_ms": 4},
+            "seek_batch": {"statements": 1, "execute_ms": 1, "fetch_ms": 2, "total_ms": 3, "cpu_ms": 4},
+            "plan": {"statements": 2, "execute_ms": .5, "fetch_ms": 1, "total_ms": 1.5, "cpu_ms": 8},
+        })
+        self.assertEqual(metrics["exact_rank_scans"],
+                         {"statements": 1, "exp_recomputations": 1, "stone_recomputations": 0, "total_ms": 2})
+        self.assertEqual(row["sql_threads"]["xiuxian-exact-rank_0"]["calls"], 4)
+        self.assertEqual(row["sql_threads"]["xiuxian-exact-rank_0"]["wall_ms"], 6.5)
+
+    def test_cohorts_only_group_profiles_and_keep_all_rank_worker_totals(self):
+        rows = []
+        connection = object()
+        seek = ('WITH RECURSIVE numeric_rank_keys(value) AS '
+                '(SELECT xiuxian_int_sort_key_compact("exp") FROM user_xiuxian) '
+                'SELECT * FROM numeric_rank_keys')
+        for index, (key, cohort, latency) in enumerate((
+            ("profile_info", "near", 10), ("profile_info", "near", 30),
+            ("profile_info", "deep", 100), ("training", "near", 1000),
+        )):
+            row = probe.request_row({**request(key=key), "rank_cohort": cohort}, index)
+            row["_recorder"].record(connection, seek, "execute", 2)
+            row["_recorder"].record(connection, seek, "fetch", 1)
+            row["sql"] = probe.recorder_metrics(row["_recorder"], rank_cpu_ms=row["_rank_cpu_ms"])
+            row.update(outcome="success", scheduled_at=0, completed_at=latency / 1000,
+                       e2e_ms=latency, service_ms=latency, queue_ms=0,
+                       loop_dispatch_delay_ms=0, producer_delay_ms=0,
+                       db_query_count=1, db_total_ms=3)
+            rows.append(row)
+        rows[0]["sql_threads"] = {f"xiuxian-exact-rank_{index}":
+                                  {"calls": 1, "wall_ms": 2, "cpu_ms": 1} for index in range(25)}
+        rows[0]["sql_threads"]["asyncio_0"] = {"calls": 100, "wall_ms": 100, "cpu_ms": 100}
+        for row, calls, wall, cpu in ((rows[1], 2, 3, 2), (rows[2], 1, 4, 3), (rows[3], 9, 9, 9)):
+            row["sql_threads"] = {"xiuxian-exact-rank_0": {"calls": calls, "wall_ms": wall, "cpu_ms": cpu}}
+        summary = probe.summarize(rows)
+        self.assertEqual(summary["commands"]["profile_info"]["n"], 3)
+        self.assertEqual(summary["commands"]["profile_info"]["exact_rank_worker_sql"],
+                         {"calls": 28, "wall_ms": 57, "cpu_ms": 30})
+        self.assertEqual(summary["commands"]["profile_info"]["exact_rank_operations"]["seek_batch"]["statements"], 3)
+        self.assertEqual(summary["exact_rank_worker_sql"], {"calls": 37, "wall_ms": 66, "cpu_ms": 39})
+        near = summary["rank_cohorts"]["near"]
+        self.assertEqual(near["n"], 2)
+        self.assertEqual(near["e2e_ms"], {"p50": 10, "p95": 30, "p99": 30, "max": 30})
+        self.assertEqual(near["db_queries"], 2)
+        self.assertEqual(near["db_total_ms"], 6)
+        self.assertEqual(near["exact_rank_worker_sql"], {"calls": 27, "wall_ms": 53, "cpu_ms": 27})
+        self.assertEqual(near["exact_rank_operations"]["seek_batch"]["total_ms"], 6)
+        self.assertEqual(summary["rank_cohorts"]["deep"]["n"], 1)
+        self.assertNotIn("cache", near)
+        self.assertNotIn("cache", summary["commands"]["profile_info"])
+
     def test_sqlite_busy_is_separate_from_business_rejection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -260,6 +348,16 @@ class MixedProbeHelperTests(unittest.TestCase):
         with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
             probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
                               "--requests-per-phase", "160", "--arrival-rate", ".5"])
+
+    def test_rank_seek_scenario_retains_frozen_participants_and_no_bulk(self):
+        args = probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
+                                 "--scenario", "rank-seek-v6", "--preflight-only"])
+        self.assertEqual(args.scenario, "rank-seek-v6")
+        self.assertEqual(args.participants, 128)
+        for extra in (("--participants", "32"), ("--bulk-only",)):
+            with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+                probe.parse_args(["--fixture", "/tmp/fixture", "--report", "/tmp/report",
+                                  "--scenario", "rank-seek-v6", *extra])
 
 
 class MixedProbeDispatchTests(unittest.IsolatedAsyncioTestCase):

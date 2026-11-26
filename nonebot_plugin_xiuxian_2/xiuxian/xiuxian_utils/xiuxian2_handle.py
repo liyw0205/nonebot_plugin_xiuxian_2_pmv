@@ -1577,6 +1577,43 @@ class XiuxianDateManage:
             upper, offset = ceiling
             predicate += f" AND {expression} <= %s"
             params += (upper,)
+        if value is not None:
+            index = f"idx_user_xiuxian_{column}_rank_key_v2"
+            seek_sql = (
+                "WITH RECURSIVE numeric_rank_keys AS ("
+                "SELECT (SELECT {expression} FROM user_xiuxian INDEXED BY {index} "
+                "WHERE {predicate} ORDER BY {expression} DESC LIMIT 1) AS rank_key "
+                "UNION ALL "
+                "SELECT (SELECT {expression} FROM user_xiuxian INDEXED BY {index} "
+                "WHERE {expression} > %s AND {expression} < numeric_rank_keys.rank_key "
+                "ORDER BY {expression} DESC LIMIT 1) "
+                "FROM numeric_rank_keys WHERE rank_key IS NOT NULL LIMIT 128) "
+                "SELECT MIN(rank_key), COUNT(rank_key) FROM numeric_rank_keys"
+            ).format(expression=expression, index=index, predicate=predicate)
+            seek_params = (*params, value)
+            try:
+                plans = connection.execute("EXPLAIN QUERY PLAN " + seek_sql, seek_params).fetchall()
+            except db_backend.OperationalError as exc:
+                if str(exc).lower() != f"no such index: {index}":
+                    raise
+                plans = []
+            details = [str(row[-1]).upper() for row in plans]
+            lookups = [detail for detail in details if "USER_XIUXIAN" in detail]
+            # Check both scalar lookups: a same-named but unrelated index must
+            # never turn the bounded seeks into repeated full scans or sorts.
+            indexed = len(lookups) == 2 and all(
+                detail.startswith("SEARCH ") and index.upper() in detail and "<EXPR>" in detail
+                for detail in lookups
+            ) and not any("TEMP B-TREE" in detail for detail in details)
+            if indexed:
+                last, count = connection.execute(seek_sql, seek_params).fetchone()
+                offset = int(offset) + int(count)
+                if count < 128:
+                    return offset
+                # The last key was already counted. Only the strict remainder
+                # is scanned when the fixed seek budget is exhausted.
+                predicate = f"{expression} > %s AND {expression} < %s"
+                params = (value, last)
         row = connection.execute(
             f"SELECT %s + COUNT(DISTINCT {expression}) FROM user_xiuxian "
             f"WHERE {predicate}",
