@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER
 from ...core.numeric import as_int_like
 from ..base.schema_catalog import sqlite_table_names
 from ..base.public_display_snapshot import shared_display_snapshot
@@ -836,7 +837,10 @@ class ActivityReadModelSqlRepository:
         key = str(activity_key).strip()
         uid = str(user_id or "").strip()
         needs_table_catalog = any(source not in {"sign", "boss"} for source in normalized)
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(
+            self.database, read_only=True,
+            read_owner=LIVE_PROJECTION_READ_OWNER.when_unscoped(),
+        ) as uow:
             tables = self._table_names(uow) if needs_table_catalog else set()
             return {
                 source: self._board_standing_in_uow(

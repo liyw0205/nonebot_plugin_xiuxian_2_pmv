@@ -4,7 +4,9 @@ from pathlib import Path
 from nonebot.log import logger
 
 from ...core.errors import DomainError
+from ...features.base.schema_catalog import sqlite_table_columns
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import PLAYER_PROJECTION_READ_OWNER
 from ...paths import get_paths
 from ..xiuxian_utils.xiuxian2_handle import PlayerDataManager
 from .natal_config import *
@@ -46,17 +48,13 @@ class NatalTreasure:
             return None
 
         try:
-            with DatabaseUnitOfWork(database, read_only=True, require_exists=True) as uow:
-                table = uow.query_one(
-                    "SELECT 1 AS present FROM sqlite_master "
-                    "WHERE type='table' AND name='natal_treasure'"
-                )
-                if table is None:
+            with DatabaseUnitOfWork(
+                database, read_only=True,
+                read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped(),
+            ) as uow:
+                columns = sqlite_table_columns(uow, database, "natal_treasure")
+                if not columns:
                     return None
-                columns = {
-                    str(row[1])
-                    for row in uow.execute("PRAGMA table_info(natal_treasure)").fetchall()
-                }
                 if not {"user_id", "form"}.issubset(columns):
                     raise ValueError("natal_treasure table is missing identity columns")
 

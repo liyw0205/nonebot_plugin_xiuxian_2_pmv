@@ -2759,3 +2759,157 @@ relationship n2 is only a sanity sample. All listed path error rates are0.
   clean-checkout gate. Overall repository performance goal remains active;
   unresolved loop tails, wider cold-rank/write strata and sustained throughput
   require separately frozen future evidence, not a rerun to select this pair.
+
+## V14: Schema Plan Proofs and Live Display Readers (2026-11-27)
+
+- Continue from `ad5905d61a64751e08d989ddb4454cd7c9a95a21`, whose exact-SHA
+  CI `45866105031` passed quality and both unittest shards. The old accepted
+  V10-V13 matrices and full shards are not repeated. This batch removes
+  repeated rank-plan inspection and cold activity/natal display connections;
+  it does not cache personal values or replace exact ranks with TOP slices.
+- A rank connection retains at most four plan proofs, exp/stone with/without
+  a ceiling, for its current schema version. Each rank transaction lazily
+  reads the schema cookie once on its first non-NULL cache miss. A normal
+  schema read refreshes SQLite's parsed schema before initial/changed-epoch
+  EXPLAIN; EXPLAIN alone can see stale index descriptions after external DDL.
+  Both scalar lookups still must SEARCH the correct expression index with
+  no temporary sort. Missing/wrong indexes retain one live COUNT fallback;
+  metadata/read failures propagate. Target scores, generations and exact
+  seek/count remain live in the same transaction, including huge BLOB values.
+  Score writes invalidate value ranks but do not invalidate schema proofs.
+- Activity personal standings reuse the existing bounded game read owner.
+  Natal display reads reuse the existing player read owner and bounded
+  schema-version column catalog. Every call still opens its own live read
+  transaction and reads its values; no new owner, player-value TTL or gameplay
+  change. Error, scope/thread, database replacement and shutdown boundaries
+  use the existing owner behavior. Missing natal tables/rows remain absent;
+  malformed identity columns/read denial retain the original DomainError.
+- New frozen `cold-rank-v14` uses the sole retained synthetic 1M fixture,
+  with exactly the V12 request schedule: three phases of128 requests,
+  cap10/20/20 and offered20/35/50 arrivals/s. Each phase has56 distinct
+  profile viewers (32 writers and24 huge-value readers),12 sign standings,
+  12 boss standings and12 boss displays. Relationship fillers and32 real
+  `灵石修炼 1000` operations in each mixed/contention phase complete384
+  requests. Real exp+100/stone-1000 writes, fixed rank pivots, balances/items/
+  receipts and huge-number oracles stay unchanged; all phases share one
+  instance and DB set and drain before restoration.
+- The new distribution updates4096 existing nonparticipants, never inserts
+  users: exp=1,000,000+i*1000, stone=1,000,000,000+i*10,000, with matching
+  power. There are4237 exp/4202 stone groups among1M rows, not1M distinct
+  scores. These rows lie above writer intervals and are hashed with storage
+  types/power after every phase. Natal data now has8192 real display rows;
+  the whole bounded table is hashed and all56 profile natal replies per phase
+  are checked. Existing8192 sign,32768 boss (8192 selected-key),8192 avatar/
+  title,4096 mentor applications and2560 backpack rows remain populated.
+  Activity sign/damage mutation and index-write costs remain unmeasured.
+- Reports under the retained fixture's `data/` directory are
+  `cold-rank-before-v14-20261127-r01.json`,
+  `cold-rank-after-v14-20261127-r01.json` and
+  `cold-rank-comparison-v14-20261127-r01.json`. One new baseline on unchanged
+  V13 was needed for the new distribution; one frozen after followed the
+  complete code/test batch. Driver hashes, fixture identity, limits, phase
+  specs, every request/actor/argument/oracle and business manifests match.
+  Only compatibility diagnostic JSON and its derived seed hash differ.
+  Runtime trees are `a2c7791ff8fbdfce6b5bc083906c8de99ac01d7fab0138fcc88ded34e2eb85d2`
+  -> `de539ceb8a7acbbb1487a3867281144900f3b34c991ab0c7fb7b5df501a96906`;
+  exactly the three runtime files above differ.
+- Both versions complete384/384 successes, zero business/cooldown refusals,
+  exceptions, timeouts, boundary violations or SQLite busy/locked errors.
+  All three phase invariants and original1M digest restoration pass. This is
+  seven sampled paths, including two variants of `活动排行`, not exhaustive
+  runtime coverage of674 matchers, background jobs or sustained capacity.
+
+E2E includes producer, event-loop and admission queueing. Cells are p50/p95/p99
+milliseconds, before -> after. With n12, p95/p99 are the maximum; relationship
+n2 is only a sanity sample. Every listed error rate is0. SQL counts include
+transaction API calls; aggregate counts/time are complete even when bounded
+per-connection diagnostics or per-request top-query lists omit statements.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / boss board | 12 | 16.079/22.522/22.522 -> 11.628/17.164/17.164 | 198 -> 174 | 72.513 -> 27.241 |
+| pure / boss display | 12 | 9.085/23.637/23.637 -> 9.355/130.585/130.585 | 55 -> 55 | 4.975 -> 5.374 |
+| pure / sign board | 12 | 18.207/226.003/226.003 -> 10.901/62.372/62.372 | 199 -> 175 | 81.755 -> 24.736 |
+| pure / mentor | 18 | 20.350/29.822/29.822 -> 19.748/31.241/31.241 | 524 -> 524 | 143.855 -> 139.160 |
+| pure / partner | 18 | 15.489/27.454/27.454 -> 15.194/27.506/27.506 | 342 -> 342 | 90.166 -> 94.146 |
+| pure / profile | 56 | 19.402/147.316/276.783 -> 16.689/89.778/160.750 | 2644 -> 2430 | 281.140 -> 172.391 |
+| mixed / boss board | 12 | 21.858/84.479/84.479 -> 11.260/24.716/24.716 | 199 -> 175 | 87.104 -> 27.878 |
+| mixed / boss display | 12 | 17.650/81.095/81.095 -> 15.151/89.746/89.746 | 55 -> 55 | 11.187 -> 4.987 |
+| mixed / sign board | 12 | 22.616/67.816/67.816 -> 12.065/38.873/38.873 | 199 -> 175 | 79.085 -> 27.972 |
+| mixed / mentor | 2 | 200.597/202.371/202.371 -> 27.751/35.898/35.898 | 60 -> 60 | 16.345 -> 16.979 |
+| mixed / partner | 2 | 15.148/183.607/183.607 -> 14.541/14.888/14.888 | 38 -> 38 | 10.253 -> 9.697 |
+| mixed / profile | 56 | 48.596/128.750/230.116 -> 33.594/89.516/97.438 | 2693 -> 2483 | 521.325 -> 288.876 |
+| mixed / training | 32 | 50.421/100.672/257.613 -> 45.957/70.591/71.924 | 1312 -> 1312 | 359.122 -> 335.486 |
+| contention / boss board | 12 | 517.285/728.883/728.883 -> 458.247/571.923/571.923 | 199 -> 175 | 87.399 -> 28.020 |
+| contention / boss display | 12 | 631.484/675.123/675.123 -> 482.581/502.065/502.065 | 55 -> 55 | 10.636 -> 8.587 |
+| contention / sign board | 12 | 234.773/498.983/498.983 -> 249.337/298.275/298.275 | 199 -> 175 | 75.414 -> 35.098 |
+| contention / mentor | 2 | 627.555/647.647/647.647 -> 469.812/489.730/489.730 | 60 -> 60 | 17.293 -> 16.562 |
+| contention / partner | 2 | 587.416/607.108/607.108 -> 429.603/448.595/448.595 | 38 -> 38 | 12.174 -> 10.983 |
+| contention / profile | 56 | 475.175/721.240/756.152 -> 379.516/557.569/574.590 | 2688 -> 2477 | 649.145 -> 532.037 |
+| contention / training | 32 | 487.497/726.546/737.622 -> 404.133/567.788/574.588 | 1312 -> 1312 | 347.441 -> 369.215 |
+
+- Rank EXPLAIN98/112/110 ->4/8/8, wall15.392/67.769/93.869
+  ->2.715/9.650/20.520ms. Worker SQL376/440/435 ->332/394/391 calls,
+  wall80.632/284.310/379.405 ->58.026/149.078/353.300ms. This includes
+  the newly required schema cookie/refresh statements. Recursive seek batches
+  stay98/112 in pure/mixed and110 ->108 under contention. Live remainder
+  COUNTs9/48/47 ->9/48/51; their wall15.475/89.621/128.506
+  ->19.264/64.627/142.029ms retains pure/contention regressions. Contention
+  seek wall91.758 ->102.549ms and worker CPU159.211 ->163.860ms also regress.
+  Different concurrent interleavings change rank-cache reuse; exact oracles
+  pass, but proofs do not remove cold remainder scans/global invalidation.
+- Activity board game-reader opens13 ->1 per path/phase (other cold reads
+  included); combined standing commands remove144 SQL API calls. Profile
+  player-reader opens57/56/56 ->1/0/0; the per-call natal cold handle is gone.
+  Baseline top-query lists capture all168 repeated natal sqlite_master probes,
+  204.453ms; after code removes that query. Top-query lists are bounded, so
+  natal SELECT/table-info appearances there are not full execution counts.
+  Fresh natal replies/table hashes and live external-change tests verify that
+  metadata/handle reuse does not cache player values.
+- Success throughput20.094/33.577/40.925 ->20.097/35.131/43.100/s;
+  actual handler-interval overlap4/4/15 ->3/2/15 is wall overlap, not parallel
+  CPU/SQLite execution. Caps/offered arrivals differ from observed overlap
+  and successful throughput. Sustained50 successful requests/s and20 active
+  handlers remain unproved. Contention admission p95265.760 ->130.449ms;
+  producer p952.870 ->1.986ms. Mixed dispatch p9526.456 ->28.860ms and
+  contention dispatch p9986.520 ->95.454ms regress. Loop p95/p99 is
+  9.485/23.880 ->5.050/13.065,37.855/62.255 ->36.042/53.509,
+  75.531/85.701 ->81.456/106.048ms; contention loop tails regress.
+  Pure/mixed boss-display p95, pure relationship tails and contention sign
+  median regress as the table shows. Finite sample variation, host warmth,
+  observer work and scheduling prevent unconditional E2E improvement claims.
+- Shared-cache hits/misses48/103,33/118,35/116 ->103/104,88/119,92/115;
+  partial hits91/35/49 ->91/32/42, evictions71/86/84 ->72/87/83,
+  waits0/0/1 ->0/0/0. Maximum32 entries/106243 estimated bytes stays within
+  32-entry/1MiB bounds; proof storage is separately bounded to four entries
+  per existing rank connection. Explicit invalidations/expiry/bypass/oversized
+  are0, but exp/stone generation deltas remain0/32/32 in both versions:
+  real writes still globally invalidate generation-keyed value ranks.
+  Per-command cache attribution is not measured. MainThread phase CPU
+  2264.371/2680.263/2549.816 ->2017.903/2460.238/2422.331ms includes
+  application and observer work. BEGIN count759/855/855 is unchanged;
+  total BEGIN execution wall49.329 ->36.982ms includes overhead and is
+  only an upper bound on transaction wait. Observer counters remain in both
+  reports and cannot be subtracted from E2E or added to overlapping SQL CPU.
+- Resource guards remain the shared validation lock,2/4 CPUs,1GiB AS,
+  600 CPU/1200 wall seconds, `MALLOC_ARENA_MAX=2`,768MiB available-RAM and
+  2GiB disk floors,900MiB RSS and256MiB single/total WAL stops. No guard
+  stops. Minimum sampled RAM1621 ->1728MiB, disk14594179072 ->14446256128
+  bytes; peak RSS266.141 ->237.750MiB, virtual622.887 ->620.105MiB.
+  Single WAL18321672 bytes unchanged; total25865488 ->25881968 bytes
+  regresses slightly, final WAL0. Process CPU66.336 ->65.448s,
+  wall78.634 ->78.349s and restore13.391 ->13.549s include setup/snapshot/
+  restoration and are not request costs. Traffic-window reads1130496 bytes
+  unchanged; writes53202944 ->54067200 bytes regress. Full-window reads
+  713527296 ->702418944 and writes3815534592 ->3815653376 include fixture
+  IO; do not attribute process RSS/IO differences solely to the product.
+- Harness seed/oracle boundaries passed5 direct tests. The consolidated
+  affected run had128 green tests/380 subtests plus three new failing DDL
+  subcases. The actual parsed-schema refresh defect was fixed without
+  weakening those oracles; only seven failed/new/changed-budget methods were
+  rerun, passing7 tests/57 subtests in1.27s. Existing green cases are reused.
+  Compile, architecture (`ok=true/errors=[]`), inventory and scoped whitespace
+  pass on the code-only checkout, preserving the user's legacy JSON deletion.
+  Exact delivered SHA CI is the full clean-checkout gate. Overall performance
+  goal remains active for wider score strata/activity writes/loop tails and
+  sustained throughput; this accepted pair will not be rerun to select numbers.

@@ -1530,6 +1530,7 @@ class XiuxianDateManage:
                     return None
 
                 ranks = []
+                plan_context = {}
                 for column, generation, value in (
                     ("exp", state[0], state[3]),
                     ("stone", state[1], state[4]),
@@ -1547,7 +1548,8 @@ class XiuxianDateManage:
                             prefix, value, database_path=self.database_path
                         )
                         return XiuxianDateManage._read_numeric_rank_for_value(
-                            self, column, value, connection=conn, ceiling=ceiling
+                            self, column, value, connection=conn, ceiling=ceiling,
+                            plan_context=plan_context,
                         )
 
                     ranks.append(
@@ -1564,7 +1566,9 @@ class XiuxianDateManage:
             finally:
                 conn.rollback()
 
-    def _read_numeric_rank_for_value(self, column, value, *, connection, ceiling=None):
+    def _read_numeric_rank_for_value(
+        self, column, value, *, connection, ceiling=None, plan_context=None
+    ):
         if column not in {"exp", "stone"}:
             raise ValueError(f"unsupported numeric rank column: {column}")
         expression = f'xiuxian_int_sort_key_compact("{column}")'
@@ -1591,20 +1595,43 @@ class XiuxianDateManage:
                 "SELECT MIN(rank_key), COUNT(rank_key) FROM numeric_rank_keys"
             ).format(expression=expression, index=index, predicate=predicate)
             seek_params = (*params, value)
-            try:
-                plans = connection.execute("EXPLAIN QUERY PLAN " + seek_sql, seek_params).fetchall()
-            except db_backend.OperationalError as exc:
-                if str(exc).lower() != f"no such index: {index}":
-                    raise
-                plans = []
-            details = [str(row[-1]).upper() for row in plans]
-            lookups = [detail for detail in details if "USER_XIUXIAN" in detail]
-            # Check both scalar lookups: a same-named but unrelated index must
-            # never turn the bounded seeks into repeated full scans or sorts.
-            indexed = len(lookups) == 2 and all(
-                detail.startswith("SEARCH ") and index.upper() in detail and "<EXPR>" in detail
-                for detail in lookups
-            ) and not any("TEMP B-TREE" in detail for detail in details)
+            if plan_context is None:
+                plan_context = {}
+            if "seek_plans" not in plan_context:
+                version = int(connection.execute("PRAGMA schema_version").fetchone()[0])
+                cached = getattr(connection, "_xiuxian_numeric_rank_seek_plans", None)
+                if cached is None or cached[0] != version:
+                    # EXPLAIN alone does not refresh SQLite's parsed schema after DDL.
+                    connection.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
+                    # Only the current schema's four column/ceiling shapes are retained.
+                    cached = (version, {})
+                    try:
+                        connection._xiuxian_numeric_rank_seek_plans = cached
+                    except (AttributeError, TypeError):
+                        pass
+                plan_context["schema_version"], plan_context["seek_plans"] = cached
+            proofs = plan_context["seek_plans"]
+            shape = (column, ceiling is not None)
+            if shape not in proofs:
+                version = plan_context["schema_version"]
+                try:
+                    # Vary the prepared EXPLAIN across DDL epochs as well as our proof.
+                    plans = connection.execute(
+                        "EXPLAIN QUERY PLAN " + seek_sql + f" /* rank_schema={version} */",
+                        seek_params,
+                    ).fetchall()
+                except db_backend.OperationalError as exc:
+                    if str(exc).lower() != f"no such index: {index}":
+                        raise
+                    plans = []
+                details = [str(row[-1]).upper() for row in plans]
+                lookups = [detail for detail in details if "USER_XIUXIAN" in detail]
+                # Both scalar lookups must seek; a same-named unrelated index is unsafe.
+                proofs[shape] = len(lookups) == 2 and all(
+                    detail.startswith("SEARCH ") and index.upper() in detail and "<EXPR>" in detail
+                    for detail in lookups
+                ) and not any("TEMP B-TREE" in detail for detail in details)
+            indexed = proofs[shape]
             if indexed:
                 last, count = connection.execute(seek_sql, seek_params).fetchone()
                 offset = int(offset) + int(count)
