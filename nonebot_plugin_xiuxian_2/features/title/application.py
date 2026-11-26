@@ -11,6 +11,7 @@ from ...core.errors import ConflictError, DomainError, OperationConflictError, V
 from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
+from ...infrastructure.database.uow import PLAYER_PROJECTION_READ_OWNER
 from ...infrastructure.observability import trace_context
 from .domain import TitleTransactionResult
 from .repository import TitleBatchUnlockWriteRejected, TitleEquipmentWriteRejected, TitleGrantTargetSnapshot, TitleGrantTargetSqlRepository, TitleGrantWriteRejected, TitleRepository
@@ -37,7 +38,10 @@ class TitleApplication:
             return self.repository.get_result(uow, operation_id)
 
     def get_state(self, user_id: str) -> dict[str, Any] | None:
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(
+            self.database, read_only=True,
+            read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped(),
+        ) as uow:
             return self.repository.get_state(uow, user_id)
 
     def execute(

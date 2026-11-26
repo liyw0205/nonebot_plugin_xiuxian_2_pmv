@@ -122,6 +122,8 @@ class ReadOnlyConnectionOwner:
 
 # Opt-in live projections share one idle handle, including across repository types.
 LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+# A separate player handle avoids evicting the live game projection reader.
+PLAYER_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 
 
 class DatabaseUnitOfWork:
