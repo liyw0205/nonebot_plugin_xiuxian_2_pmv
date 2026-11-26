@@ -14,7 +14,7 @@ from ...paths import get_paths
 from . import db_backend
 from .shared_read_cache import process_read_cache
 from ...core.errors import DomainError
-from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param
+from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param, exact_crystal_integer
 
 
 DATABASE = get_paths().data
@@ -58,6 +58,10 @@ _MONEY_FIELDS = {
 
 
 def _decode_field(table, field, value):
+    if table == "statistics" and isinstance(value, (bytes, bytearray, memoryview)):
+        integer = exact_crystal_integer(value)
+        if integer is not None:
+            return integer
     money = _MONEY_FIELDS.get(table, {}).get(field)
     if money and value is not None:
         return require_exact_integer(value, field=money, subject="actor")
@@ -237,6 +241,60 @@ class PlayerDataManager:
                 )
             self._commit_write()
             self._invalidate_field_list_cache(table_name, field)
+
+    def increment_statistics(self, user_id, increments):
+        """Apply one event's counters with one current read and one atomic write."""
+        changes = {str(key): int(value) for key, value in increments.items() if value}
+        if not changes:
+            return
+        if "user_id" in changes:
+            raise ValueError("user_id is not a statistics counter")
+        with self._conn_lock:
+            if self.conn.in_transaction:
+                raise RuntimeError("statistics batch requires an idle manager connection")
+            self._ensure_table_exists("statistics")
+            for field in changes:
+                self._ensure_field_exists("statistics", field, "INTEGER")
+            fields = list(changes)
+            columns = ", ".join(self._quote_ident(field) for field in fields)
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self.conn.execute(
+                    f"SELECT {columns} FROM statistics WHERE user_id=%s", (str(user_id),)
+                ).fetchone()
+                values = []
+                for index, field in enumerate(fields):
+                    current = _decode_field("statistics", field, row[index]) if row is not None else 0
+                    try:
+                        current = int(current) if current is not None else 0
+                    except (TypeError, ValueError):
+                        current = 0
+                    values.append(current + changes[field])
+                placeholders = ", ".join("%s" for _ in values)
+                assignments = ", ".join(
+                    f"{self._quote_ident(field)}=excluded.{self._quote_ident(field)}"
+                    for field in fields
+                )
+                written = self.conn.execute(
+                    f"INSERT INTO statistics(user_id, {columns}) VALUES(%s, {placeholders}) "
+                    f"ON CONFLICT(user_id) DO UPDATE SET {assignments}",
+                    (str(user_id), *(bind_sqlite_param(value, exact=True) for value in values)),
+                )
+                saved = self.conn.execute(
+                    f"SELECT {columns} FROM statistics WHERE user_id=%s", (str(user_id),)
+                ).fetchone()
+                # Do not silently report success when a trigger ignored or
+                # rewrote an event. Large new totals use exact BLOB encoding.
+                if written.rowcount != 1 or saved is None or any(
+                    exact_crystal_integer(saved[index]) != value for index, value in enumerate(values)
+                ):
+                    raise DocumentWriteRejected("statistics", str(user_id), projection_mismatch=True)
+                self._commit_write()
+            except Exception:
+                self.conn.rollback()
+                raise
+            for field in fields:
+                self._invalidate_field_list_cache("statistics", field)
 
     def get_fields(self, user_id, table_name, *, raise_errors=False):
         """通过user_id查看一个表这个主键的全部字段"""

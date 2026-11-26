@@ -2427,6 +2427,21 @@ def get_statistics_data(user_id: str, key: str = None, *, raise_errors=False):
             ) from e
         return {}
 
+def update_statistics_values(user_id: str, increments: dict) -> None:
+    """Record one trade event's counters without repeated row reads/commits."""
+    if not any(increments.values()):
+        return
+    try:
+        original_user_id = str(user_id)
+        impersonated_id = get_impersonating_target(original_user_id)
+        user_id_for_stats = original_user_id if impersonated_id is None else impersonated_id
+        if impersonated_id is not None:
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
+        _player_data_manager().increment_statistics(str(user_id_for_stats), increments)
+    except Exception as e:
+        logger.error(f"更新统计数据失败: {e}")
+
+
 def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
     """
     更新统计数据的参数值

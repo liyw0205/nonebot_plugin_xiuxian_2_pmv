@@ -29,10 +29,15 @@ _boundary_denials = ContextVar("probe_boundary_denials", default=None)
 _SOURCE_MARKER = ".rank-hotpath-source"
 
 
-def isolate_source() -> Path:
+def isolate_source(source_root: Path | None = None) -> Path:
     if "nonebot_plugin_xiuxian_2" in sys.modules:
         raise AssertionError("command diagnostics require a fresh process")
-    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
+    source = (Path(source_root).resolve() if source_root is not None else
+              Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2")
+    if (source / "nonebot_plugin_xiuxian_2").is_dir():
+        source = source / "nonebot_plugin_xiuxian_2"
+    if not (source / "__init__.py").is_file():
+        raise RuntimeError(f"fixture package source is missing: {source}")
     source_copy = tests._data_dir.parent / "command-source"
     if source_copy.exists():
         marker = source_copy / _SOURCE_MARKER
@@ -154,7 +159,8 @@ def install_boundary(root: Path) -> None:
     sys.addaudithook(audit)
 
 
-async def prepare(*, seed: bool = True, minimal_map: bool = False):
+async def prepare(*, seed: bool = True, minimal_map: bool = False,
+                  skip_training_wait: bool = True):
     import nonebot
 
     if minimal_map:
@@ -231,7 +237,8 @@ async def prepare(*, seed: bool = True, minimal_map: bool = False):
     pet_system._ensure_pet_storage()
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_buff
 
-    xiuxian_buff.asyncio = ImmediateTrainingWait()
+    if skip_training_wait:
+        xiuxian_buff.asyncio = ImmediateTrainingWait()
     # Legacy JSON consumers keep their real implementation but write only fixtures.
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.IllusionData import IllusionData
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base import xiangyuan

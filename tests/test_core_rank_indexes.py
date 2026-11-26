@@ -56,6 +56,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 "20261125_0002_realm_rank_index",
                 "20261125_0003_public_rank_indexes",
                 "20261126_0001_exact_numeric_rank_generation",
+                "20261126_0002_independent_numeric_rank_generation",
             ],
             run_core_migrations(self.database),
         )
@@ -215,17 +216,18 @@ class CoreRankIndexTests(unittest.TestCase):
 
             self.assertEqual((2, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
             self.assertEqual((2, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(1, len(rank_reads))
-            self.assertEqual(1, process_read_cache.stats()["hits"])
+            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(2, process_read_cache.stats()["hits"])
             self.assertEqual(2, len(generation_reads))
-            self.assertTrue(all("user_xiuxian" not in sql for sql in generation_reads))
+            self.assertTrue(all("COUNT(DISTINCT" not in sql for sql in generation_reads))
+            self.assertTrue(all("target.user_id=" in sql for sql in generation_reads))
 
             # The profile command writes an unrelated last-viewed timestamp;
             # that must not evict an exact rank keyed by the DB score generation.
             process_read_cache.invalidate_database(self.database)
             self.assertEqual((2, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(1, len(rank_reads))
-            self.assertEqual(2, process_read_cache.stats()["hits"])
+            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(4, process_read_cache.stats()["hits"])
             self.assertEqual(3, len(generation_reads))
 
             with db_backend.transaction(self.database) as writer:
@@ -233,7 +235,9 @@ class CoreRankIndexTests(unittest.TestCase):
                     "UPDATE user_xiuxian SET exp=%s WHERE user_id=%s", ("2000", "viewer")
                 )
             self.assertEqual((3, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(3, len(rank_reads))
+            self.assertEqual(2, sum('("exp")' in sql for sql in rank_reads))
+            self.assertEqual(1, sum('("stone")' in sql for sql in rank_reads))
 
             with db_backend.transaction(self.database) as writer:
                 writer.execute(
@@ -248,7 +252,7 @@ class CoreRankIndexTests(unittest.TestCase):
                 (2, 2),
                 XiuxianDateManage.get_exp_and_stone_ranks(handle, "viewer-renamed"),
             )
-            self.assertEqual(4, len(rank_reads))
+            self.assertEqual(5, len(rank_reads))
             self.assertEqual((3, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
             self.assertEqual(5, len(rank_reads))
 
@@ -266,12 +270,108 @@ class CoreRankIndexTests(unittest.TestCase):
                     ("new-leader", "3000", "0"),
             )
             self.assertEqual((4, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(6, len(rank_reads))
+            self.assertEqual(7, len(rank_reads))
 
             with db_backend.transaction(self.database) as writer:
                 writer.execute("DELETE FROM user_xiuxian WHERE user_id=%s", ("new-leader",))
             self.assertEqual((3, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(7, len(rank_reads))
+            self.assertEqual(9, len(rank_reads))
+
+    def test_exact_rank_cache_shares_canonical_scores_between_viewers(self):
+        run_core_migrations(self.database)
+        with db_backend.connection(self.database) as conn:
+            rank_reads = []
+
+            @contextmanager
+            def read_connection():
+                yield conn
+
+            conn._raw.set_trace_callback(
+                lambda sql: rank_reads.append(sql) if "COUNT(DISTINCT" in sql else None
+            )
+            handle = SimpleNamespace(
+                database_path=self.database,
+                _repository_read_connection=read_connection,
+            )
+            self.assertEqual((2, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
+            # Scientific notation and decimal text have the same numeric key.
+            self.assertEqual((2, 1), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-b"))
+            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(2, process_read_cache.stats()["hits"])
+            self.assertEqual(2, process_read_cache.stats()["misses"])
+
+            with db_backend.transaction(self.database) as writer:
+                writer.execute(
+                    "INSERT INTO user_xiuxian(user_id,exp,stone) VALUES(%s,%s,%s)",
+                    ("null-exp", None, "0"),
+                )
+            self.assertEqual((5, 4), XiuxianDateManage.get_exp_and_stone_ranks(handle, "null-exp"))
+            self.assertEqual((5, 4), XiuxianDateManage.get_exp_and_stone_ranks(handle, "null-exp"))
+            self.assertEqual(4, len(rank_reads))
+            self.assertFalse(conn.in_transaction)
+
+    def test_independent_rank_generation_upgrades_legacy_state_without_resetting_it(self):
+        with db_backend.transaction(self.database) as conn:
+            _create_numeric_rank_generation(conn)
+            conn.execute("UPDATE user_xiuxian SET exp=%s WHERE user_id=%s", ("901", "viewer"))
+            self.assertEqual(
+                1,
+                conn.execute(
+                    "SELECT generation FROM xiuxian_numeric_rank_generation WHERE singleton=1"
+                ).fetchone()[0],
+            )
+
+        self.assertIn(
+            "20261126_0002_independent_numeric_rank_generation",
+            run_core_migrations(self.database),
+        )
+        self.assertEqual([], run_core_migrations(self.database))
+        with db_backend.transaction(self.database) as conn:
+            state_sql = (
+                "SELECT generation,exp_generation,stone_generation "
+                "FROM xiuxian_numeric_rank_generation WHERE singleton=1"
+            )
+            self.assertEqual((1, 0, 0), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute(
+                "UPDATE user_xiuxian SET user_id=%s WHERE user_id=%s",
+                ("viewer-renamed", "viewer"),
+            )
+            self.assertEqual((2, 0, 0), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute(
+                "UPDATE user_xiuxian SET exp=%s WHERE user_id=%s",
+                ("902", "viewer-renamed"),
+            )
+            self.assertEqual((3, 1, 0), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute(
+                "UPDATE user_xiuxian SET stone=%s WHERE user_id=%s",
+                ("1001", "viewer-renamed"),
+            )
+            self.assertEqual((4, 1, 1), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute(
+                "UPDATE user_xiuxian SET stone=stone,exp=exp WHERE user_id=%s",
+                ("viewer-renamed",),
+            )
+            self.assertEqual((4, 1, 1), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute(
+                "INSERT INTO user_xiuxian(user_id,exp,stone) VALUES(%s,%s,%s)",
+                ("new-user", "0", "0"),
+            )
+            self.assertEqual((5, 2, 2), tuple(conn.execute(state_sql).fetchone()))
+            conn.execute("DELETE FROM user_xiuxian WHERE user_id=%s", ("new-user",))
+            self.assertEqual((6, 3, 3), tuple(conn.execute(state_sql).fetchone()))
+            row_count = conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0]
+            conn.execute("UPDATE user_xiuxian SET stone=%s", ("777",))
+            self.assertEqual(
+                (6 + row_count, 3, 3 + row_count),
+                tuple(conn.execute(state_sql).fetchone()),
+            )
+            self.assertEqual(
+                3,
+                conn.execute(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' "
+                    "AND tbl_name='user_xiuxian'"
+                ).fetchone()[0],
+            )
 
     def test_exact_personal_rank_without_generation_table_stays_live_and_uncached(self):
         with db_backend.connection(self.database) as conn:
@@ -312,6 +412,66 @@ class CoreRankIndexTests(unittest.TestCase):
             self.assertEqual(0, process_read_cache.stats()["misses"])
             self.assertFalse(conn.in_transaction)
 
+    def test_exact_rank_state_lookup_does_not_hide_unrelated_database_errors(self):
+        run_core_migrations(self.database)
+        with db_backend.connection(self.database) as conn:
+            original_execute = conn.execute
+
+            @contextmanager
+            def read_connection():
+                yield conn
+
+            def execute(sql, params=None):
+                if sql.startswith("SELECT rank_state.exp_generation"):
+                    raise db_backend.OperationalError("no such column: target.unrelated")
+                return original_execute(sql, params)
+
+            conn.execute = execute
+            handle = SimpleNamespace(
+                database_path=self.database,
+                _repository_read_connection=read_connection,
+            )
+            with self.assertRaisesRegex(db_backend.OperationalError, "target.unrelated"):
+                XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a")
+            self.assertFalse(conn.in_transaction)
+            self.assertEqual(0, process_read_cache.stats()["misses"])
+
+    def test_exact_rank_legacy_generation_schema_stays_live_and_uncached(self):
+        with db_backend.transaction(self.database) as writer:
+            _create_numeric_rank_generation(writer)
+        with db_backend.connection(self.database) as conn:
+            rank_reads = []
+
+            @contextmanager
+            def read_connection():
+                yield conn
+
+            conn._raw.set_trace_callback(
+                lambda sql: rank_reads.append(sql) if "COUNT(DISTINCT" in sql else None
+            )
+            handle = SimpleNamespace(
+                database_path=self.database,
+                _repository_read_connection=read_connection,
+            )
+            self.assertEqual(
+                (2, 1), tuple(XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
+            )
+            with db_backend.transaction(self.database) as writer:
+                writer.execute(
+                    "UPDATE user_xiuxian SET exp=%s,stone=%s WHERE user_id=%s",
+                    ("2000", "200000000000000000000", "viewer"),
+                )
+            self.assertEqual(
+                (3, 2), tuple(XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
+            )
+            self.assertEqual(
+                (3, 2), tuple(XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
+            )
+            self.assertEqual(3, len(rank_reads))
+            self.assertEqual(0, process_read_cache.stats()["hits"])
+            self.assertEqual(0, process_read_cache.stats()["misses"])
+            self.assertFalse(conn.in_transaction)
+
     def test_exact_personal_rank_generation_and_values_share_wal_snapshot(self):
         run_core_migrations(self.database)
         with db_backend.connection(self.database) as conn:
@@ -327,13 +487,13 @@ class CoreRankIndexTests(unittest.TestCase):
 
             def execute(sql, params=None):
                 cursor = original_execute(sql, params)
-                if not sql.startswith("SELECT generation FROM xiuxian_numeric_rank_generation"):
+                if not sql.startswith("SELECT rank_state.exp_generation"):
                     return cursor
 
                 def fetch_generation():
                     nonlocal writer_committed
                     row = cursor.fetchone()
-                    generations.append(row[0])
+                    generations.append((row[0], row[1]))
                     if not writer_committed:
                         # Commit after pinning the generation read snapshot,
                         # before the cold rank query reads either score index.
@@ -363,10 +523,13 @@ class CoreRankIndexTests(unittest.TestCase):
             self.assertFalse(conn.in_transaction)
             self.assertEqual((3, 2), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
             self.assertEqual((3, 2), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(2, len(rank_reads))
-            self.assertEqual([generations[0], generations[0] + 1, generations[0] + 1], generations)
-            self.assertEqual(2, process_read_cache.stats()["misses"])
-            self.assertEqual(1, process_read_cache.stats()["hits"])
+            self.assertEqual(4, len(rank_reads))
+            updated_generations = tuple(value + 1 for value in generations[0])
+            self.assertEqual(
+                [generations[0], updated_generations, updated_generations], generations
+            )
+            self.assertEqual(4, process_read_cache.stats()["misses"])
+            self.assertEqual(2, process_read_cache.stats()["hits"])
             self.assertFalse(conn.in_transaction)
 
     def test_exact_personal_rank_stone_changes_commit_and_rollback_atomically(self):
@@ -394,7 +557,9 @@ class CoreRankIndexTests(unittest.TestCase):
                     ("200000000000000000000", "viewer"),
                 )
             self.assertEqual((2, 2), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(3, len(rank_reads))
+            self.assertEqual(1, sum('("exp")' in sql for sql in rank_reads))
+            self.assertEqual(2, sum('("stone")' in sql for sql in rank_reads))
 
             with db_backend.connection(self.database) as writer:
                 writer.execute("BEGIN")
@@ -420,7 +585,7 @@ class CoreRankIndexTests(unittest.TestCase):
                     ).fetchone()[0],
                 )
             self.assertEqual((2, 2), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(2, len(rank_reads))
+            self.assertEqual(3, len(rank_reads))
 
             with db_backend.transaction(self.database) as writer:
                 writer.execute(
@@ -428,9 +593,11 @@ class CoreRankIndexTests(unittest.TestCase):
                     ("300000000000000000000", "tie-b"),
                 )
             self.assertEqual((2, 3), XiuxianDateManage.get_exp_and_stone_ranks(handle, "tie-a"))
-            self.assertEqual(3, len(rank_reads))
-            self.assertEqual(3, process_read_cache.stats()["misses"])
-            self.assertEqual(2, process_read_cache.stats()["hits"])
+            self.assertEqual(4, len(rank_reads))
+            self.assertEqual(1, sum('("exp")' in sql for sql in rank_reads))
+            self.assertEqual(3, sum('("stone")' in sql for sql in rank_reads))
+            self.assertEqual(4, process_read_cache.stats()["misses"])
+            self.assertEqual(6, process_read_cache.stats()["hits"])
             self.assertFalse(conn.in_transaction)
 
     def test_numeric_rank_generation_migration_skips_incomplete_legacy_schema(self):

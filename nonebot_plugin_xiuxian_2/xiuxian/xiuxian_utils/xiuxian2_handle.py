@@ -1479,7 +1479,7 @@ class XiuxianDateManage:
         return XiuxianDateManage._get_numeric_rank(self, user_id, "stone")
 
     def get_exp_and_stone_ranks(self, user_id):
-        """Read exact current personal ranks, reusing only an unchanged score set."""
+        """Read live score keys and reuse exact ranks of unchanged score columns."""
         user_id = str(user_id)
         if not hasattr(self, "database_path") or not hasattr(
             self, "_repository_read_connection"
@@ -1491,11 +1491,21 @@ class XiuxianDateManage:
             try:
                 try:
                     state = conn.execute(
-                        "SELECT generation FROM xiuxian_numeric_rank_generation "
-                        "WHERE singleton=1"
+                        "SELECT rank_state.exp_generation, rank_state.stone_generation, "
+                        "target.user_id, xiuxian_int_sort_key_compact(target.exp), "
+                        "xiuxian_int_sort_key_compact(target.stone) "
+                        "FROM xiuxian_numeric_rank_generation AS rank_state "
+                        "LEFT JOIN user_xiuxian AS target ON target.user_id=%s "
+                        "WHERE rank_state.singleton=1",
+                        (user_id,),
                     ).fetchone()
                 except db_backend.OperationalError as exc:
-                    if "no such table: xiuxian_numeric_rank_generation" not in str(exc).lower():
+                    missing_generation_schema = (
+                        "no such table: xiuxian_numeric_rank_generation",
+                        "no such column: rank_state.exp_generation",
+                        "no such column: rank_state.stone_generation",
+                    )
+                    if str(exc).lower() not in missing_generation_schema:
                         raise
                     return XiuxianDateManage._read_exp_and_stone_ranks(
                         self, user_id, connection=conn
@@ -1505,29 +1515,52 @@ class XiuxianDateManage:
                     return XiuxianDateManage._read_exp_and_stone_ranks(
                         self, user_id, connection=conn
                     )
-                key = shared_snapshot_key(
-                    self.database_path,
-                    "exact-numeric-personal-rank-v1",
-                    user_id,
-                    int(state[0]),
-                )
+                if state[2] is None:
+                    return None
 
-                def load_ranks():
-                    row = XiuxianDateManage._read_exp_and_stone_ranks(
-                        self, user_id, connection=conn
+                ranks = []
+                for column, generation, value in (
+                    ("exp", state[0], state[3]),
+                    ("stone", state[1], state[4]),
+                ):
+                    key = shared_snapshot_key(
+                        self.database_path,
+                        "exact-numeric-score-rank-v2",
+                        column,
+                        value,
+                        int(generation),
                     )
-                    return None if row is None else tuple(row)
 
-                return process_read_cache.get_or_load(
-                    key,
-                    database_path=self.database_path,
-                    ttl=60 * 60,
-                    # The generation and exact rank share this SQLite read snapshot.
-                    snapshot=True,
-                    loader=load_ranks,
-                )
+                    def load_rank(column=column, value=value):
+                        return XiuxianDateManage._read_numeric_rank_for_value(
+                            self, column, value, connection=conn
+                        )
+
+                    ranks.append(
+                        process_read_cache.get_or_load(
+                            key,
+                            database_path=self.database_path,
+                            ttl=60 * 60,
+                            # Target keys, generations and counts share one read snapshot.
+                            snapshot=True,
+                            loader=load_rank,
+                        )
+                    )
+                return tuple(ranks)
             finally:
                 conn.rollback()
+
+    def _read_numeric_rank_for_value(self, column, value, *, connection):
+        if column not in {"exp", "stone"}:
+            raise ValueError(f"unsupported numeric rank column: {column}")
+        expression = f'xiuxian_int_sort_key_compact("{column}")'
+        predicate = f"{expression} IS NOT NULL" if value is None else f"{expression} > %s"
+        row = connection.execute(
+            f"SELECT 1 + COUNT(DISTINCT {expression}) FROM user_xiuxian "
+            f"WHERE {predicate}",
+            () if value is None else (value,),
+        ).fetchone()
+        return int(row[0])
 
     def _read_exp_and_stone_ranks(self, user_id, *, connection=None):
         """Compute both exact ranks from their ordered indexes on a cache miss."""

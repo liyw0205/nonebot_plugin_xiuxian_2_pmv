@@ -224,6 +224,51 @@ def _create_numeric_rank_generation(conn) -> None:
         )
 
 
+def _migration_20261126_0002_independent_numeric_rank_generation(conn) -> None:
+    """Retain legacy invalidation while tracking each score column separately."""
+    _create_numeric_rank_generation(conn)
+    if not conn.table_exists("xiuxian_numeric_rank_generation"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"user_id", "exp", "stone"}.issubset(available):
+        return
+
+    generation_columns = {
+        name.lower() for name in conn.column_names("xiuxian_numeric_rank_generation")
+    }
+    for column in ("exp_generation", "stone_generation"):
+        if column not in generation_columns:
+            conn.execute(
+                f"ALTER TABLE xiuxian_numeric_rank_generation "
+                f"ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            )
+
+    for operation in ("insert", "delete", "update"):
+        name = f"xiuxian_numeric_rank_generation_{operation}"
+        conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+        if operation == "update":
+            condition = (
+                " WHEN NEW.user_id IS NOT OLD.user_id "
+                "OR NEW.exp IS NOT OLD.exp OR NEW.stone IS NOT OLD.stone"
+            )
+            increments = (
+                "exp_generation=exp_generation+(NEW.exp IS NOT OLD.exp), "
+                "stone_generation=stone_generation+(NEW.stone IS NOT OLD.stone)"
+            )
+        else:
+            condition = ""
+            increments = (
+                "exp_generation=exp_generation+1, "
+                "stone_generation=stone_generation+1"
+            )
+        conn.execute(
+            f"CREATE TRIGGER {name} AFTER {operation.upper()} "
+            f"ON user_xiuxian{condition} "
+            "BEGIN UPDATE xiuxian_numeric_rank_generation "
+            f"SET generation=generation+1, {increments} WHERE singleton=1; END"
+        )
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -361,6 +406,10 @@ CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20261125_0002_realm_rank_index", _create_realm_rank_index),
     ("20261125_0003_public_rank_indexes", _create_public_rank_indexes),
     ("20261126_0001_exact_numeric_rank_generation", _create_numeric_rank_generation),
+    (
+        "20261126_0002_independent_numeric_rank_generation",
+        _migration_20261126_0002_independent_numeric_rank_generation,
+    ),
 ]
 
 

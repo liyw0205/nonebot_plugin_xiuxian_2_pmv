@@ -709,3 +709,310 @@ claim for cultivation or closing.
   compileall, architecture, generated-inventory and whitespace gates passed.
   The generated inventory change is only the new generation table name.
   These correctness results supplement the matrix; they do not replace it.
+
+## Shared-Instance Mixed Workload (2026-11-26)
+
+The serial evidence above is a pre-created 1M-row user table and mostly
+repeated viewers, not mixed-user capacity evidence. This successor measures
+one actual runtime and one shared isolated database set per phase through real
+matcher/rule/permission/DI/handler execution. Only OneBot transport is replaced;
+business results, eligibility, cooldowns and writes execute normally. No QQ or
+OneBot service, production database or deployment is involved.
+
+### Scope and Reproduction
+
+- Retained fixture: `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`.
+  Its original 1M-user rank-data digest remains
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  Only one temporary all-DB restore snapshot exists during each process. There
+  are no per-user databases, between-request restores, or extra persistent
+  million-row fixtures. All requests and actual message-writer jobs drain
+  before stage checks and restore.
+- Baseline runtime is exact `3acaac96`, in the code-only detached worktree
+  `/tmp/xiu-mixed-baseline-20261126-r01`; runtime source SHA256 is
+  `6d6c6d1802ebebbebeafac489bdc2a04c419c696a43a7cf4ec2b73e3fbc3c389`.
+  Candidate adds the independent rank generations and batched trade statistics
+  described below. Both use the same fixture, participant selection, item
+  catalog, request plan, arrival rate and resource limits.
+- Select 32 existing participants by indexed row ID, spread across the retained
+  dataset. Seed 640 backpack rows, 32 equipment/BuffInfo records, 32 activity
+  users, 128 rows each in activity points/pass/BOSS balances, and 32 real trade
+  listings with 7,944 total items. Stage manifests record actual table counts,
+  seed digest and activity projection hashes. Activity availability is enabled
+  only in the isolated projection, retaining costs/rewards/limits/cooldowns;
+  the original bytes are restored. These are bounded feature datasets, not
+  million-row feature tables or evidence about unmeasured arena/tower data.
+  Participants start with equal 500M wallets and their original exp values;
+  cross-user stone-rank reuse benefits from that synthetic tie distribution,
+  which is not a measured production balance distribution.
+- Each version has 16 phases: pure reads, 90/10 reads/writes, 50/50, and
+  same-user/resource contention, each with admission limits 1/5/10/20. Each
+  phase schedules 128 arrivals at 20/sec independently of the event loop.
+  Pure/read-mostly/mixed distribute readers among 32 users; contention shares
+  one wallet and an eight-item listing. This is 2,048 requests/version across
+  13 real commands, a stratified sample rather than all 674 matchers or the
+  41 background entries. The workload does not measure exp-changing gameplay
+  or sustained 50 successful requests/sec.
+- The producer is an independent thread. Reports retain scheduled/posted/
+  received/admitted/completed times, producer and loop dispatch delay, admission
+  queueing, response E2E, service time and heartbeat lag. Actual handler interval
+  overlap is measured; it is explicitly not proof of parallel CPU or SQLite
+  execution. E2E includes scheduled arrival to response, not just admitted work.
+- SQL counts include execute/executemany/executescript and explicit commits/
+  rollbacks; fetch time is separate. Per-command SQL is foreground only. Real
+  durable message-writer SQL is measured separately and included in phase
+  totals, because a batch commit cannot be assigned honestly to one request.
+  Queue unfinished/reserved bytes and dropped-job counters are checked. Unknown
+  SQL ownership still fails the run; it is not silently discarded.
+- Phase cache numbers are exact shared-counter deltas, not per-request hit
+  rates. Exact-rank recomputations are counted from the complete SQL recorder,
+  not its top-20 display. BEGIN duration is reported as an upper bound including
+  execution, not a pure transaction lock-wait measurement. SQLite busy/locked,
+  successful work, business refusals, cooldowns, exceptions and timeouts remain
+  distinct.
+
+The command (with explicit existing fixture/source and a new report path) is:
+
+```bash
+MALLOC_ARENA_MAX=2 XIUXIAN_MATRIX_LIMITS=1 .venv/bin/python \
+  scripts/mixed_command_probe.py --fixture FIXTURE --source-repo SOURCE \
+  --report NEW_REPORT --requests-per-phase 128 --arrival-rate 20
+```
+The script owns `/tmp/nonebot-project-validation.lock`; do not nest the same
+lock or run another heavy validation alongside it. `--preflight-only` resolves
+all routes and validates seed/restore without dispatch. `--bulk-only` runs
+only the separately bounded rollback control, permitting reuse of unchanged,
+already validated request stages after a post-traffic control setup failure.
+
+### Runtime Changes and Semantics
+
+1. Split exact numeric rank invalidation into transactional exp/stone counters,
+   retaining the legacy global counter for compatibility. A stone-only update
+   no longer invalidates exp ranks. Read current target canonical scores and
+   generations in the same BEGIN snapshot as any cold counts; reuse only an
+   identical score/column/generation/database key. Tied users can share an exact
+   result. This is not a cached TOP slice. Missing legacy generation columns
+   fall back to live SQL, and unrelated DB errors propagate. The shared budget
+   remains 32 entries / 1 MiB; distinct cold scores and changing score sets can
+   still require expensive exact index range scans.
+2. Batch one trade event's statistics per user: resolve impersonation once,
+   project only changed counters, then one BEGIN IMMEDIATE/current read/UPSERT/
+   final projection/commit under the manager lock. Failed or rewritten writes
+   roll back all counters; large totals retain exact integer representation and
+   display decoding. This removes repeated full-row reads and per-field commits
+   in purchase/sale statistics. Single-counter events retain verification costs.
+   Trade principal settlement is still its existing transaction; post-trade
+   statistics are not claimed to be atomic with that principal settlement.
+
+Balances, inventory, attributes, targets, reward/eligibility decisions and writes
+stay live. The statistics change does not alter the separate legacy single-field
+helper's concurrency behavior or solve cold cross-process dynamic-column DDL
+races. Both remain limitations outside this measured warmed-schema event path.
+
+### Evidence Integrity
+
+Reports are under the retained fixture's `data` directory. Initial setup-only
+failures and `mixed-before-20261126-r01.json` are excluded from performance
+claims. The latter stopped after its first phase because message-writer SQL
+lacked ownership instrumentation; its 626 operations cannot be retroactively
+attributed. The corrected harness labels the real consumer and drains its real
+queue, preserving unknown-operation rejection.
+
+`mixed-before-20261126-r02.json` completed all 16 request phases with passing
+ownership/resource/consistency checks, then exited 1 in the separate bulk
+control because original seed values included ambiguous legacy currency.
+That failed overall status is retained. Its unchanged valid request phases
+are reused, not rerun for better numbers. `mixed-before-bulk-20261126-r01.json`
+also failed selection setup without traffic; the valid supplement is
+`mixed-before-bulk-20261126-r02.json`. It uses the identical baseline source
+digest and original fixture, with a deterministic 2,048-row synthetic numeric
+seed inside an outer rollback. All original values are restored and checked.
+This isolates trigger cost while preserving actual numeric rejection rules.
+
+The control tests stone, exp and both together, three enabled/control samples
+each with alternating order, retaining UDFs/expression indexes. Trigger removal
+is only inside a rolled-back child savepoint; it is never a gameplay option.
+2,045 of the selected original rows contain an inexact value, so these seeded
+subset timings must not be extrapolated to an unseeded million-row update.
+
+### Mixed Workload Results
+
+`mixed-after-20261126-r01.json` exited 0: all 16 phases and the bulk control
+passed. Candidate runtime source SHA256 is
+`012e81fee6301537426d5a20b1fc80c4823c0fca04108b8f562f419eb22816ad`.
+An explicit cross-report check confirmed identical request objects, all 16
+seed digests, phase order, arrival rates and original rank-data digests. The
+bulk supplement/candidate also match selected IDs and seeded/original data
+digests. Neither failed report was rewritten or relabeled as passing.
+
+Each version has 1,888 successful responses and 160 business refusals: all
+four contention phases have exactly 88 successes and 40 sold-out purchases.
+Other phases have 128 successes each. There are zero cooldowns, exceptions,
+timeouts, boundary violations, unknown SQL operations or resource aborts.
+All balance/inventory/nonnegative/proceeds/statistics/receipt-ledger checks
+pass; message jobs drain with zero drops or residual reservations. Writes are
+344 successful deposits and 184 successful purchases per version, plus the
+160 refused purchase attempts. Business refusals are excluded from successful
+throughput, not counted as high-throughput successful transactions.
+
+Each row below has n=128/version. Latencies are response E2E including scheduled
+arrival, producer delay, event-loop dispatch and admission queueing. SQL counts
+include foreground and real asynchronous message persistence. Loop is heartbeat
+p95 in ms. Entries show before -> after; these are finite samples, not a
+capacity certification or confidence intervals.
+
+| Mix | Limit | p50 ms | p95 ms | p99 ms | SQL calls | Loop p95 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Pure | 1 | 49.049 -> 21.131 | 194.674 -> 151.288 | 233.155 -> 234.541 | 3496 -> 3496 | 128.586 -> 28.992 |
+| Pure | 5 | 42.266 -> 19.235 | 226.309 -> 102.264 | 250.784 -> 255.017 | 3472 -> 3482 | 147.878 -> 22.475 |
+| Pure | 10 | 29.398 -> 24.330 | 223.051 -> 220.755 | 245.430 -> 298.141 | 3471 -> 3478 | 142.448 -> 39.843 |
+| Pure | 20 | 36.159 -> 19.449 | 219.257 -> 112.562 | 239.884 -> 224.500 | 3468 -> 3483 | 144.157 -> 18.537 |
+| Read-mostly | 1 | 49.342 -> 51.592 | 183.566 -> 182.168 | 210.942 -> 207.073 | 4119 -> 4085 | 125.989 -> 113.208 |
+| Read-mostly | 5 | 58.734 -> 41.106 | 281.183 -> 210.335 | 379.532 -> 251.328 | 4102 -> 4072 | 158.945 -> 99.658 |
+| Read-mostly | 10 | 42.660 -> 47.099 | 225.016 -> 215.439 | 263.047 -> 262.206 | 4106 -> 4070 | 162.057 -> 144.697 |
+| Read-mostly | 20 | 61.893 -> 39.232 | 266.288 -> 218.742 | 368.629 -> 247.294 | 4104 -> 4072 | 157.777 -> 101.096 |
+| Mixed | 1 | 59.235 -> 63.517 | 202.971 -> 206.717 | 220.838 -> 277.805 | 6653 -> 6434 | 43.672 -> 45.447 |
+| Mixed | 5 | 71.350 -> 63.037 | 273.014 -> 234.120 | 329.506 -> 290.843 | 6634 -> 6423 | 126.743 -> 73.076 |
+| Mixed | 10 | 66.566 -> 72.451 | 247.574 -> 322.347 | 309.552 -> 396.635 | 6641 -> 6411 | 66.107 -> 102.132 |
+| Mixed | 20 | 93.914 -> 66.214 | 319.412 -> 268.043 | 360.624 -> 316.013 | 6633 -> 6420 | 124.126 -> 84.856 |
+| Contention | 1 | 886.030 -> 331.335 | 1525.710 -> 458.396 | 1591.821 -> 479.540 | 6568 -> 6596 | 182.902 -> 91.811 |
+| Contention | 5 | 993.116 -> 295.809 | 1463.697 -> 392.403 | 1525.767 -> 425.633 | 6518 -> 6568 | 187.941 -> 102.352 |
+| Contention | 10 | 1013.257 -> 196.068 | 1474.488 -> 371.742 | 1535.925 -> 429.405 | 6522 -> 6574 | 210.540 -> 107.057 |
+| Contention | 20 | 1037.425 -> 383.722 | 1645.195 -> 547.639 | 1810.835 -> 613.615 | 6508 -> 6542 | 215.361 -> 125.297 |
+
+Pure/read-mostly successful response throughput remains near the imposed
+20 arrivals/sec (19.999-20.099); mixed remains 19.891-19.974. Contention
+successful throughput at limits 1/5/10/20 is respectively
+11.178/11.335/11.471/11.432 -> 13.363/13.429/13.771/13.383 per second,
+with the same 40 refusals/phase. Actual maximum handler interval overlap is
+18 -> 8; higher limits were configured but do not imply 20 simultaneous SQL
+executions. Shorter queueing can lower observed overlap. Admission queue max
+falls 1550.079 -> 421.853ms; max producer lateness is still 148.240 ->
+134.328ms, and max loop-dispatch delay 261.985 -> 213.150ms. The producer
+is not perfectly punctual, and these delays remain inside E2E.
+
+All command-level results below aggregate the same deterministic phase mix
+and all four admission limits. This aggregation is not an individual-command
+standalone benchmark. Error rate is 0% for every row; the purchase row includes
+160 business refusals (184 successes), while all other samples succeed.
+SQL columns are foreground means/request; asynchronous message SQL is included
+only in phase totals. Before -> after values are retained even when worse.
+
+| Command | n/version | p50 ms | p95 ms | p99 ms | Queries/request | SQL ms/request |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `我的修仙信息` | 180 | 221.011 -> 188.772 | 1393.389 -> 436.648 | 1525.767 -> 570.796 | 49.88 -> 50.19 | 169.318 -> 109.215 |
+| `我的资产总览` | 180 | 228.882 -> 175.170 | 1331.799 -> 393.851 | 1519.329 -> 446.142 | 28.87 -> 28.81 | 12.847 -> 13.543 |
+| `我的状态` | 116 | 141.861 -> 83.494 | 223.049 -> 228.617 | 269.432 -> 262.945 | 41.07 -> 41.14 | 13.016 -> 13.904 |
+| `我的修为` | 116 | 100.179 -> 61.982 | 187.789 -> 214.298 | 236.542 -> 268.923 | 18.00 -> 18.00 | 8.070 -> 8.342 |
+| `我的背包` | 116 | 67.362 -> 28.348 | 137.563 -> 164.799 | 281.183 -> 220.755 | 18.00 -> 18.00 | 8.018 -> 8.476 |
+| `丹药背包` | 116 | 36.837 -> 21.320 | 148.481 -> 126.677 | 250.218 -> 192.367 | 18.00 -> 18.00 | 8.160 -> 8.540 |
+| `药材背包` | 112 | 19.273 -> 19.177 | 124.570 -> 97.733 | 227.380 -> 199.676 | 18.00 -> 18.00 | 8.159 -> 8.336 |
+| `我的装备` | 108 | 18.877 -> 18.948 | 110.262 -> 55.016 | 183.177 -> 149.816 | 18.15 -> 18.15 | 8.190 -> 8.347 |
+| `排行榜` | 108 | 13.103 -> 13.274 | 68.338 -> 37.539 | 170.733 -> 169.092 | 6.11 -> 6.11 | 3.602 -> 3.705 |
+| `灵石排行榜` | 104 | 13.058 -> 13.046 | 36.475 -> 29.205 | 185.104 -> 109.889 | 6.12 -> 6.12 | 3.598 -> 3.609 |
+| `活动排行` | 104 | 23.997 -> 24.199 | 45.473 -> 35.307 | 115.209 -> 61.239 | 22.15 -> 22.15 | 11.698 -> 11.809 |
+| `鬼市存灵石` | 344 | 462.177 -> 231.668 | 1475.119 -> 449.584 | 1600.976 -> 547.639 | 39.67 -> 41.24 | 18.307 -> 18.720 |
+| `仙肆购买` | 344 | 466.229 -> 218.940 | 1490.555 -> 444.825 | 1650.108 -> 531.810 | 78.11 -> 73.76 | 30.596 -> 30.664 |
+
+### Attribution and Remaining Bottlenecks
+
+All exact profile scans are counted from full SQL aggregations. Each row below
+describes one phase; values repeat across its four admission limits. Cache H/M
+includes public/schema/exact-rank operations, not only profile hits. The legacy
+generation delta is unchanged; new exp delta is 0 in this stone-write workload.
+
+| Mix | Profile n | Exp recomputations | Stone recomputations | All-cache H/M | Legacy / new stone generation delta |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pure | 12 | 12 -> 10 | 12 -> 1 | 20/14 -> 33/13 | 0 / 0 |
+| Read-mostly | 11 | 11 -> 9 | 11 -> 11 | 18/13 -> 20/22 | 18 / 18 |
+| Mixed | 6 | 6 -> 5 | 6 -> 6 | 9/8 -> 10/13 | 96 / 96 |
+| Contention | 16 | 16 -> 1 | 16 -> 16 | 0/16 -> 15/17 | 64 / 64 |
+
+- Contention confirms that unrelated stone writes no longer force exp rescans:
+  profile rank SQL takes 2,713-2,871 -> 1,431-1,478ms/phase. Stone ranks still
+  recompute 16 times; they are not returned stale. Pure-viewer stone ties share
+  one exact count, reducing rank SQL 1,645-1,740 -> 550-590ms/phase. Synthetic
+  equal wallets and repeated contention identity are favorable cache cases.
+- Mixed/read-mostly still cold-scan most profiles: different exp values and
+  changing stone sets limit cache reuse. Two scalar cache checks can increase
+  misses and statement count versus one combined miss; a miss counter is not
+  itself evidence of a regression or improvement. Live cold ranking remains
+  a main event-loop blocking source. No unbounded per-user rank map was added.
+- Foreground calls across all traffic fall 73,295 -> 72,393. Total foreground
+  plus message SQL time falls 61,798.309 -> 51,502.858ms. Background queries
+  vary 9,720 -> 9,813 because real queue batches and commits interleave
+  differently. These are measured time/call reductions, not a claim that every
+  path's own SQL got faster.
+- Purchase foreground calls/request fall 78.11 -> 73.76, reflecting batched
+  statistics. Single-counter deposits increase 39.67 -> 41.24, including the
+  atomic current-read/final-projection checks. Purchase SQL mean is essentially
+  unchanged and deposit SQL mean rises; queue-inclusive latency benefits also
+  come from reducing blocking profile work. No claim of faster transaction
+  execution on every write path is supported.
+- Regressions remain: mixed/limit10 p95 247.574 -> 322.347ms and p99
+  309.552 -> 396.635ms; pure/limit10 p99 245.430 -> 298.141ms. Cultivation-value
+  and backpack aggregate p95 also worsen. No selective rerun replaced these
+  samples. A single ordered before/after experiment, small per-path phase
+  samples and host I/O variability do not establish statistical significance.
+- No SQLite busy/locked errors occurred. Maximum observed BEGIN time rises
+  0.990 -> 3.209ms; it includes execution and is not a proven lock-wait
+  regression. Response-to-message-queue-drain tails are recorded separately;
+  candidate phase drain/teardown remains 2.6-26.1ms, excluded from response
+  E2E but included in phase wall. This does not test multi-process writers,
+  continuously growing game data or long-running 50-success/sec capacity.
+
+### Bounded Bulk Counter Control
+
+Same 2,048 IDs and deterministic seeded values, three samples per enabled or
+disabled variant. No real command traffic runs while triggers are disabled.
+Before data is from the valid bulk supplement, after from the complete after
+report. All values below are p50 milliseconds, before -> after.
+
+| Fields updated | Trigger enabled | Trigger-free control | Incremental difference |
+| --- | ---: | ---: | ---: |
+| stone | 83.913 -> 84.318 | 81.530 -> 81.682 | 2.383 -> 2.636 |
+| exp | 94.444 -> 96.517 | 92.893 -> 95.574 | 1.551 -> 0.943 |
+| exp + stone | 174.389 -> 172.637 | 171.713 -> 171.318 | 2.676 -> 1.319 |
+
+Enabled legacy counter delta is exactly 2,048/statement, disabled delta zero;
+candidate field counters change only for updated columns. Added split counters
+do not show a large write-cost increase in this bounded sample. Small noisy
+incremental differences are not proof of a trigger speedup. Per-row legacy
+generation updates still exist; no million-row update time is extrapolated.
+Exp-changing gameplay and its sustained invalidation behavior remain unmeasured.
+
+### Guards and Validation
+
+- Both traffic versions used the same lock, two-CPU affinity, 1,024MiB address
+  space, 600s CPU / 1,200s wall caps, 768MiB minimum available RAM, 2GiB free
+  disk minimum, 900MiB RSS soft stop and 256MiB total/per-file WAL stop. A
+  separate 250ms watchdog monitors RAM/RSS, CPU, process I/O, disk and WAL,
+  stops new admissions on breach and permits draining. No limits were relaxed.
+- Before traffic process: 207.195s wall, 164.457s CPU, 237.375MiB peak RSS;
+  valid bulk supplement: 28.732s wall, 23.217s CPU, 234.242MiB RSS. After with
+  all traffic and bulk: 204.451s wall, 156.723s CPU, 269.562MiB RSS. Whole-run
+  times include setup/snapshot/restore, and the before process ends in the
+  failed post-traffic control; use per-phase metrics for the comparison.
+- Observed phase minimum available RAM: 1,728 -> 1,698MiB; minimum free disk:
+  7,362,310,144 -> 7,289,741,312 bytes. Maximum total WAL: 9,599,760 ->
+  9,093,000 bytes; largest single WAL 4,190,072 -> 4,177,712 bytes. All WALs
+  are zero after final restore. Retained JSON report snapshots also grow
+  harness RSS; the process RSS difference is not isolated application cache
+  growth. Largest sampled cache state: 16/41,367 -> 22/49,171 entries/bytes,
+  within the unchanged 32-entry/1MiB bound.
+- Process write_bytes rises by about 16.3GB in each traffic run, dominated by
+  repeatedly restoring the same five DB files. This is I/O amplification from
+  the harness, not durable data growth or a measured gameplay-write volume.
+  Reports retain phase I/O separately. No duplicate long-lived 1M DB remains.
+- Concentrated acceptance: 115 affected tests plus 35 subtests passed in
+  9.93s. Compileall, architecture (`ok=true`, `errors=[]`), generated inventory
+  and whitespace passed on the exact code-only candidate tree, whose legacy
+  inventory file remains at HEAD. The main checkout's user-owned inventory
+  deletion and status edits are untouched. No additional full unittest or old
+  serial matrix was run; the preceding full baseline is reused, with the
+  new delivery's exact-SHA CI required separately.
+
+This closes a bounded mixed-workload implementation/measurement batch, not the
+repository-wide performance problem. Distinct-user cold exact ranks, frequent
+dual-field gameplay updates, populated large feature tables, multi-process
+contention and sustained 50 successful requests/sec remain open evidence gaps.

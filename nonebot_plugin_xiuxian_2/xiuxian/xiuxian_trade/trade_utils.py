@@ -2,7 +2,7 @@ import random
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from ..xiuxian_utils.utils import log_message, update_statistics_value
+from ..xiuxian_utils.utils import log_message, update_statistics_values
 
 
 def _trade_economy_context(action: str, trace_id: str | None = None, **detail):
@@ -21,9 +21,7 @@ def record_trade_event(user_id: str, title: str, detail: str, stats: Optional[Di
     log_message(str(user_id), f"[{title}] {detail}")
     if not stats:
         return
-    for key, increment in stats.items():
-        if increment:
-            update_statistics_value(str(user_id), key, increment=increment)
+    update_statistics_values(str(user_id), stats)
 
 
 def get_item_trade_rank(item_info: Optional[Dict[str, Any]]) -> Optional[int]:
