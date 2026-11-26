@@ -3238,3 +3238,160 @@ SQL calls include control APIs; statement wall includes instrumentation.
   rank/loop tail regressions, broader commands and sustained capacity remain
   explicit gaps. The before-r01 oracle failure is retained, not counted as
   a second valid comparison or hidden by changing the frozen workload.
+
+## V17: Reuse the Existing Boss Writer (2026-11-27)
+
+- Start from delivered `ab1380863cb5e62b25933449e75e0e43ea041132`, whose
+  exact-SHA CI `45898400343` succeeded. Reuse the accepted V16 after as the
+  frozen before; no old baseline, full shards or traffic stages were rerun.
+  Its32 cooperative attacks opened96 cold game writers and spent327.055ms
+  on96 journal checks. This is a measured connection-initialization cost,
+  distinct from the rank/loop tails discussed in V16.
+- Only cooperative/item boss application execution opts into the existing
+  bounded plain writer owner shared with stone training. Ledger reservation,
+  real settlement and ledger finish remain THREE independent transactions;
+  this does not wrap the action in one transaction. A default-off scope option
+  lets existing read-only owners survive this internal writer scope, retaining
+  V16 live pre-reads. Write owners still respect every caller scope; explicit
+  caller scopes and all other activity actions keep their original lifetime.
+  Worker/reentrant UOWs retain their independent short connections. No new
+  owner, value cache, generic coordinator copy, rank algorithm or gameplay
+  change. Core attributes, balances, inventory, quota, HP, CAS and rewards
+  retain their live checks and existing transaction/replay semantics.
+
+Reports in the same sole retained1M fixture's `data/` directory:
+
+- Before: `activity-write-after-v16-20261127-r01.json`.
+- After: `activity-write-after-v17-20261127-r01.json` (the only new load run).
+- Comparison: `activity-write-comparison-v17-20261127-r01.json`.
+  Offline assertions confirm identical driver/fixture identities, limits,
+  phase specifications, every request/user/argument, business manifests and
+  original rank digest. Only compatibility diagnostic JSON and its derived
+  seed differ. Runtime hashes
+  `e6db5c3c51600993e5f69e61e81f7a29649dc8ed53e3c8f7f10d70fa60bc4909`
+  -> `1073ac21a550d57dd4d5a1c7b4cdbeb805fc2affd91c475937478906b22146fd`
+  differ only in activity application and database UOW. Driver, fixture and
+  request sequence were not edited to obtain this comparison.
+- The unchanged V16 scenario executes448 real matcher/DI/handler requests per
+  version: pure128, mixed160, contention160; caps10/20/20 and offered20/35/50
+  arrivals/s. It retains128 actors,32 distinct training writers changing BOTH
+  exp+100 and stone-1000, cold/different-score personal ranks and16 actual
+  cooperative boss attacks in each mixed phase. Table populations remain
+  1M users,32768 damage rows/8192 selected-boss participants,8192 historical
+  fight logs,8192 sign/natal/avatar/title rows,4096 pending mentor applications
+  and2560 backpack rows. Boss item inventory is empty in this load: item
+  behavior has real functional tests, not a populated-item load claim.
+- Both versions448/448 successful;0 business/cooldown refusals, exceptions,
+  timeouts, SQL errors, busy/locked errors or boundary violations (0% each).
+  All three phase invariants and original1M restoration pass. Exact ranks,
+  huge integer values, exp/stone/power deltas, inventory/nonparticipants,
+  attributes/features, JSON, boss HP/damage/quota/log/receipt/ledger and
+  protected public ranks are checked. No duplicate debit/reward, lost update,
+  negative asset or deadlock was observed. Requests and background workers
+  drain before stage restoration; response E2E excludes asynchronous message
+  persistence, whose drain is included in phase wall time.
+
+Every row below gives E2E p50/p95/p99 milliseconds including producer,
+dispatch and admission queues, before -> after. Every row has0% errors,
+refusals and timeouts. n10/12/16 tails equal the maximum and are small samples.
+These22 phase/path rows cover8 command paths, not all674 matchers; the earlier
+28-path serial matrix also remains a stratified sample. SQL includes control
+APIs and observed execution/fetch wall time, not SQLite execution alone.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / boss board |12|11.529/17.555/17.555 ->11.484/17.834/17.834|174 ->174|29.019 ->27.006|
+| pure / boss display |12|9.068/23.638/23.638 ->9.170/23.388/23.388|55 ->55|4.835 ->5.017|
+| pure / sign board |12|10.847/76.815/76.815 ->10.724/141.759/141.759|175 ->175|25.909 ->31.732|
+| pure / mentor |18|12.412/21.950/21.950 ->12.454/20.883/20.883|488 ->488|38.811 ->39.085|
+| pure / partner |18|8.674/19.753/19.753 ->8.876/20.525/20.525|270 ->270|15.419 ->11.288|
+| pure / profile |56|15.816/24.404/127.352 ->16.053/92.007/156.029|2321 ->2321|140.447 ->127.542|
+| mixed / boss attack |16|46.904/216.642/216.642 ->24.246/192.106/192.106|785 ->641|340.290 ->94.295|
+| mixed / boss board |12|13.465/165.730/165.730 ->11.945/275.002/275.002|175 ->175|30.263 ->28.007|
+| mixed / boss display |12|18.452/101.669/101.669 ->15.482/46.523/46.523|55 ->55|6.698 ->5.399|
+| mixed / sign board |12|13.499/247.636/247.636 ->10.884/42.599/42.599|175 ->175|25.768 ->19.912|
+| mixed / mentor |10|13.389/148.581/148.581 ->12.465/82.478/82.478|280 ->280|29.414 ->23.525|
+| mixed / partner |10|8.739/214.986/214.986 ->8.625/11.615/11.615|150 ->150|7.180 ->6.833|
+| mixed / profile |56|39.365/194.544/302.811 ->22.632/168.703/221.748|2375 ->2371|305.693 ->287.133|
+| mixed / training |32|50.895/192.508/243.947 ->36.272/164.153/246.683|1219 ->1219|152.407 ->140.262|
+| contention / boss attack |16|589.457/696.293/696.293 ->181.993/357.426/357.426|785 ->641|358.609 ->90.956|
+| contention / boss board |12|586.322/708.428/708.428 ->183.629/225.652/225.652|175 ->175|32.205 ->43.733|
+| contention / boss display |12|580.523/615.743/615.743 ->205.347/418.734/418.734|55 ->55|5.428 ->9.532|
+| contention / sign board |12|243.696/320.086/320.086 ->113.291/143.205/143.205|175 ->175|22.580 ->30.650|
+| contention / mentor |10|534.432/585.907/585.907 ->192.201/399.074/399.074|280 ->280|36.544 ->37.157|
+| contention / partner |10|513.480/590.042/590.042 ->161.786/326.587/326.587|150 ->150|11.170 ->17.420|
+| contention / profile |56|482.515/685.622/713.382 ->161.740/262.550/374.427|2367 ->2361|503.085 ->461.073|
+| contention / training |32|557.415/698.169/710.824 ->166.689/339.511/377.239|1216 ->1216|161.291 ->170.638|
+
+- Boss cold game handles96 ->0 over32 attacks: the shared plain writer was
+  opened once by training earlier in mixed, not eliminated entirely. Training
+  still opens1/0 handles in mixed/contention, with unchanged game SQL1091/1088.
+  Boss game SQL1442 ->1154, wall682.269 ->171.033ms; all-database command SQL
+  1570 ->1282, wall698.899 ->185.251ms. The96 initialization journal checks
+  disappear from boss requests; all live schema/pre-read/settlement statements
+  remain. Bounded connection diagnostics omit17 ->161 statements per mixed
+  phase/version because more statements now touch one handle; complete SQL
+  aggregates establish totals. Do not infer missing business reads from the
+  diagnostic truncation. Pure has no boss writes and is an unchanged control.
+- Successful throughput20.117/35.154/43.405 ->20.117/35.154/46.143 per second;
+  the short contention traffic window3.686 ->3.468s remains below offered50/s.
+  Peak in-flight3/11/20 ->4/10/14; observed handler wall-interval overlap
+  2/8/17 ->3/6/10. Neither queued requests nor wall overlap proves concurrent
+  CPU/SQLite execution,20 simultaneously active handlers or sustained50
+  successes/s. Admission p95/p99 under contention249.805/300.454 ->.009/.023ms;
+  dispatch p95/p9979.817/111.256 ->53.135/66.273ms. Producer contention p99
+  123.227 ->142.000ms regresses. Loop p95/p99:3.074/6.072 ->2.942/22.047,
+  37.310/57.264 ->31.097/67.862,83.267/249.307 ->61.544/185.090ms. Pure/mixed
+  loop p99 regress. Unchanged pure profile p95 and mixed boss-board p95 also
+  regress substantially, as does mixed training p99; retain all rows instead
+  of calling this an all-path speedup or attributing all E2E variance to SQL.
+- Exp/stone generation deltas stay0/32/32; exact-rank worker calls332/401/393
+  ->332/394/387, wall53.745/197.320/355.322 ->45.804/173.883/329.071ms.
+  COUNT remainder calls9/52/56 ->9/48/47 reflect scheduling/cache reuse;
+  contention COUNT wall120.602 ->144.682ms regresses, seek134.300 ->92.574ms,
+  plan16.314 ->19.915ms regresses with unchanged8 plan calls. Rank worker CPU
+  149.366 ->165.418ms regresses there. The rank implementation and global
+  generation invalidation are unchanged; these totals are not per-request
+  latencies and do not justify changing exactness, thread count or TOP slices.
+- Cache hits/misses103/104,88/119,94/113 ->103/104,88/119,92/115; evictions
+  72/87/81 ->72/87/83, partial hits91/36/34 ->91/32/64. Waits, expiry, explicit
+  invalidation, oversized and bypass remain0.32 entries/maximum106240
+  ->106235 estimated bytes remain within1MiB; counters are phase totals, not
+  per-command attribution. Request BEGIN counts759/1031/1031 are unchanged;
+  p95/p99 .025/.293 ->.020/.196, .029/.109 ->.019/.087,
+  .045/.236 ->.040/.424ms (contention p99 regresses). BEGIN includes SQL
+  execution and is only an upper bound for transaction wait, not a pure timer.
+  Whole-phase SQL4129/5998/5923 ->4128/5860/5782 includes background work;
+  wall499.787/1215.518/1544.635 ->492.422/914.586/1420.382ms.
+- Same shared lock,2/4 CPUs,1GiB AS,600 CPU/1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`,768MiB RAM/2GiB disk floors,900MiB RSS and256MiB
+  single/total WAL stops; no guard stops. Minimum sampled RAM1586 ->1679MiB,
+  disk14118420480 ->13959970816 bytes; peak RSS232.316 ->236.125MiB
+  regresses, sampled virtual647.336 ->599.219MiB. Single WAL18321672 and
+  peak total26075608 bytes unchanged, final WAL0. Full process CPU69.371
+  ->69.480s, wall84.970 ->86.421s and restore13.486 ->13.788s regress; these
+  include fixture/setup/restoration, not application throughput. Traffic-window
+  reads1298432 ->1687552 and writes64974848 ->66695168 bytes regress.
+  Full-window IO reads803561472 ->946081792 and writes4303421440
+  ->4304449536 bytes include snapshot IO; do not attribute them to handlers.
+  Main-thread CPU1574.812/3021.259/2956.380 ->1709.188/2773.692/2793.792ms
+  includes observer work. Observer overhead remains uncalibrated; no subtraction
+  of overlapping observer/SQL CPU from E2E is claimed.
+- Consolidated affected suite96 cases:95 pass/26 subtests; one new test first
+  incorrectly expected a failed ledger to replay instead of retrying via its
+  permanent business receipt. Existing `ledger.begin` proves failed requests
+  are retryable. Corrected it to require receipt-only recovery, no duplicate
+  inventory/log/HP change, applied ledger and subsequent replay; also require
+  same-ID retry after settlement rollback. Only those2 changed recovery cases
+  reran and passed5.18s; other accepted passes were reused. Product code required
+  no fix. Coverage includes three externally visible commits, live external
+  attributes/HP/inventory/quota, real coop/item actions, conflict/replay, read/
+  settlement/finish failures, scope defaults/nesting/worker/reentrancy and
+  training/timestamp/readers/attached-UOW boundaries. Compile, architecture
+  (`ok=true/errors=[]`), inventory and scoped whitespace pass in a code-only
+  checkout; original protected files/deletion are untouched. Exact delivered
+  SHA CI supplies the full clean-checkout gate; old full shards are reused.
+- This bounded batch leaves the repository-wide goal active. Item/sign/
+  world-boss/reward write loads, mentor index-maintenance/first-build costs,
+  broader score distributions, sustained capacity and unsampled command
+  populations remain unproved. No rerun was made to select favorable numbers.

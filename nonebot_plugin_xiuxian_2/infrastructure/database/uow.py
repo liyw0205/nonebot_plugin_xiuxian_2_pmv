@@ -13,12 +13,13 @@ from ...core.numeric import adapt_sqlite_params, register_numeric_functions
 
 
 class _ConnectionScope:
-    def __init__(self, *, write_owner=None, write_database=None) -> None:
+    def __init__(self, *, write_owner=None, write_database=None, reuse_live_readers=False) -> None:
         self.thread_id = get_ident()
         self.active = True
         self.idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
         self.write_owner = write_owner
         self.write_database = Path(write_database).resolve() if write_database is not None else None
+        self.reuse_live_readers = bool(reuse_live_readers)
 
     def available(self) -> bool:
         return self.active and self.thread_id == get_ident()
@@ -132,6 +133,12 @@ class _IdleConnectionOwner:
 class ReadOnlyConnectionOwner(_IdleConnectionOwner):
     """Retain a query-only reader across independent live read transactions."""
 
+    def when_unscoped(self) -> ReadOnlyConnectionOwner | None:
+        scope = _CONNECTION_SCOPE.get()
+        if scope is not None and scope.available() and scope.reuse_live_readers:
+            return self
+        return super().when_unscoped()
+
 
 class WriteConnectionOwner(_IdleConnectionOwner):
     """Retain an opt-in writer across independent synchronous transactions."""
@@ -143,7 +150,7 @@ LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 PLAYER_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 PLAYER_ACTIVITY_WRITE_OWNER = WriteConnectionOwner()
 IMPART_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
-# Training has different connection options from the timestamp writer.
+# Training and boss settlement use plain writers, unlike the timestamp writer.
 STONE_TRAINING_WRITE_OWNER = WriteConnectionOwner()
 
 
@@ -191,6 +198,7 @@ class DatabaseUnitOfWork:
     def connection_scope(
         *, write_owner: WriteConnectionOwner | None = None,
         write_database: str | Path | None = None,
+        reuse_live_readers: bool = False,
     ) -> Iterator[None]:
         """Reuse at most one idle connection within an explicit sync request.
 
@@ -200,10 +208,17 @@ class DatabaseUnitOfWork:
 
         An opt-in writer retains only idle plain UOW handles for one database
         across scopes; read and attached transactions keep the scoped lifetime.
+        Internal writer scopes may preserve existing opt-in live read owners;
+        this never makes nested writers ignore an explicit caller scope.
         """
         if (write_owner is None) != (write_database is None):
             raise ValueError("write_owner and write_database must be specified together")
-        scope = _ConnectionScope(write_owner=write_owner, write_database=write_database)
+        if reuse_live_readers and write_owner is None:
+            raise ValueError("live reader reuse requires an opt-in writer scope")
+        scope = _ConnectionScope(
+            write_owner=write_owner, write_database=write_database,
+            reuse_live_readers=reuse_live_readers,
+        )
         token = _CONNECTION_SCOPE.set(scope)
         try:
             yield

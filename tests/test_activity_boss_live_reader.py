@@ -14,7 +14,10 @@ import nonebot
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.features.activity.migrations import apply_activity_state_schema
+from nonebot_plugin_xiuxian_2.features.activity import application as activity_application
 from nonebot_plugin_xiuxian_2.features.activity.repository import ActivityRepository
+from nonebot_plugin_xiuxian_2.core.errors import OperationConflictError
+from nonebot_plugin_xiuxian_2.infrastructure.database import OperationLedger
 from nonebot_plugin_xiuxian_2.infrastructure.database import uow as uow_module
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_activity import activity_config
 from tests.test_uow_connection_scope import ObservedConnection, REAL_CONNECT
@@ -37,6 +40,7 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
         self.database = Path(directory.name) / "game.db"
         with DatabaseUnitOfWork(self.database) as uow:
             apply_activity_state_schema(uow)
+            OperationLedger().ensure_schema(uow)
             uow.execute(
                 "CREATE TABLE user_xiuxian(user_id TEXT PRIMARY KEY,user_name TEXT,atk INTEGER)"
             )
@@ -47,12 +51,17 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
                 "VALUES('boss','u','flare',2)"
             )
         self.repository = ActivityRepository(self.database)
+        self.application = activity_application.ActivityApplication(self.database, repository=self.repository)
         self.owner = uow_module.ReadOnlyConnectionOwner()
+        self.writer = uow_module.WriteConnectionOwner()
         self.connections = []
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         self.addCleanup(self.owner.close)
+        self.addCleanup(self.writer.close)
         self.stack.enter_context(patch.object(uow_module, "LIVE_PROJECTION_READ_OWNER", self.owner))
+        for module in (uow_module, activity_application):
+            self.stack.enter_context(patch.object(module, "STONE_TRAINING_WRITE_OWNER", self.writer))
         self.stack.enter_context(patch.object(activity_config, "load_config", return_value={
             "enabled": True,
             "gameplay_activities": [{
@@ -223,6 +232,209 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
         self.assertTrue(self.repository._fight_boss(user_id="u", operation_id="after-scope")[0])
         self.assertEqual((100, 700, 3, None), self.receipt("after-scope"))
         self.assert_idle_reader(retained, 2)
+
+    def execute(self, operation_id, *, item=False, **kwargs):
+        payload = {
+            "action": "activity_boss.use_item_on_boss" if item else "activity_boss.fight_cooperative_boss",
+        }
+        if item:
+            payload["query"] = "Boss Flare"
+        return self.application.execute(
+            operation_id=operation_id, user_id="u", payload=payload, **kwargs,
+        )
+
+    def test_application_reuses_two_idle_handles_and_three_visible_commits_per_attack(self):
+        settle = self.repository.boss_settlement.settle_cooperative
+        boundaries = []
+
+        def observe(**kwargs):
+            operation_id = kwargs["operation_id"]
+            writer = self.writer._idle[1]
+            self.assertFalse(writer.in_transaction)
+            self.assertFalse(self.owner._idle[1].in_transaction)
+            self.assertEqual(("started",), self.row(
+                "SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,),
+            ))
+            self.assertIsNone(self.receipt(operation_id))
+            result = settle(**kwargs)
+            self.assertFalse(writer.in_transaction)
+            self.assertEqual(("started",), self.row(
+                "SELECT status FROM operation_ledger WHERE operation_id=?", (operation_id,),
+            ))
+            self.assertIsNotNone(self.receipt(operation_id))
+            boundaries.append(writer)
+            return result
+
+        with patch.object(self.repository.boss_settlement, "settle_cooperative", side_effect=observe):
+            first = self.execute("app-first")
+            self.assertTrue(first.ok)
+            self.assertEqual((100, 900, 1, None), self.receipt("app-first"))
+            self.write_external(
+                ("UPDATE user_xiuxian SET atk=150,user_name='Changed' WHERE user_id='u'", ()),
+                ("UPDATE activity_boss_state SET hp_left=600 WHERE activity_key='boss'", ()),
+            )
+            second = self.execute("app-second")
+        self.assertTrue(second.ok)
+        self.assertIn("Changed", second.data["message"])
+        self.assertEqual((150, 450, 2, None), self.receipt("app-second"))
+        self.assertEqual(2, len(self.connections))
+        writer, reader = self.connections
+        self.assertEqual([writer, writer], boundaries)
+        self.assertEqual(6, writer.commits)
+        self.assertEqual(6, writer.statements.count("BEGIN IMMEDIATE"))
+        self.assertEqual(2, reader.commits)
+        self.assertEqual(2, reader.statements.count("BEGIN"))
+        self.assertEqual(1, writer.statements.count("PRAGMA journal_mode"))
+        self.assertEqual(1, reader.statements.count("PRAGMA query_only=ON"))
+        self.assertTrue(all(not c.closed and not c.in_transaction for c in self.connections))
+        replay = self.execute("app-first")
+        self.assertTrue(replay.replayed)
+        self.assertEqual(first.data, replay.data)
+        self.assertEqual(7, writer.commits)
+        self.assertEqual(2, reader.commits)
+        self.assertEqual(2, len(self.connections))
+        self.assertEqual((450,), self.row("SELECT hp_left FROM activity_boss_state"))
+        self.assertEqual((2,), self.row("SELECT COUNT(*) FROM activity_boss_fight_log"))
+        self.assertEqual((2,), self.row("SELECT COUNT(*) FROM operation_ledger WHERE status='applied'"))
+
+    def test_application_item_live_inventory_rejection_and_replay_preserve_ledger_identity(self):
+        identity = {"item": "flare", "message": "original"}
+        first = self.execute("app-item", item=True, ledger_payload=identity)
+        self.assertTrue(first.ok)
+        self.assertEqual((25, 975, 1, 1), self.receipt("app-item"))
+        self.write_external(
+            ("UPDATE activity_item_inventory SET count=0 WHERE user_id='u'", ()),
+            ("UPDATE activity_boss_state SET hp_left=700 WHERE activity_key='boss'", ()),
+        )
+        rejected = self.execute("app-empty", item=True)
+        self.assertFalse(rejected.ok)
+        self.assertIn("\u4e0d\u8db3", rejected.data["message"])
+        self.assertIsNone(self.receipt("app-empty"))
+        self.assertEqual((700,), self.row("SELECT hp_left FROM activity_boss_state"))
+        self.write_external(("UPDATE activity_item_inventory SET count=3 WHERE user_id='u'", ()))
+        self.assertTrue(self.execute("app-refill", item=True).ok)
+        self.assertEqual((25, 675, 2, 2), self.receipt("app-refill"))
+        replay = self.execute("app-item", item=True, ledger_payload=identity)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(first.data, replay.data)
+        with self.assertRaises(OperationConflictError):
+            self.execute("app-item", item=True, ledger_payload={**identity, "message": "changed"})
+        self.assertEqual((2,), self.row("SELECT count FROM activity_item_inventory"))
+        self.assertEqual((2,), self.row("SELECT COUNT(*) FROM activity_boss_fight_log"))
+        self.assertEqual((675,), self.row("SELECT hp_left FROM activity_boss_state"))
+
+    def test_application_settlement_error_rolls_back_and_records_failure_before_recovery(self):
+        self.write_external((
+            "CREATE TRIGGER deny_damage BEFORE INSERT ON activity_boss_damage "
+            "BEGIN SELECT RAISE(ABORT,'injected damage failure'); END", (),
+        ))
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "injected damage failure"):
+            self.execute("app-error", item=True)
+        failed_writer, reader = self.connections[:2]
+        self.assertTrue(failed_writer.closed)
+        self.assertEqual(1, failed_writer.rollbacks)
+        self.assertFalse(self.writer._active)
+        self.assertFalse(reader.closed)
+        self.assertFalse(reader.in_transaction)
+        self.assertIsNone(self.receipt("app-error"))
+        self.assertEqual((1000,), self.row("SELECT hp_left FROM activity_boss_state"))
+        self.assertEqual((2,), self.row("SELECT count FROM activity_item_inventory"))
+        self.assertEqual((0,), self.row("SELECT COUNT(*) FROM activity_boss_fight_log"))
+        self.assertEqual(("failed",), self.row(
+            "SELECT status FROM operation_ledger WHERE operation_id='app-error'",
+        ))
+        self.write_external(("DROP TRIGGER deny_damage", ()))
+        self.assertTrue(self.execute("app-error", item=True).ok)
+        self.assertEqual((25, 975, 1, 1), self.receipt("app-error"))
+        self.assertIs(reader, self.owner._idle[1])
+        self.assertIsNot(failed_writer, self.writer._idle[1])
+        self.assertFalse(self.writer._idle[1].in_transaction)
+
+    def test_application_read_error_does_not_settle_and_next_request_sees_external_updates(self):
+        self.assertTrue(self.execute("app-warm").ok)
+        writer, reader = self.connections
+        reader.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
+                              if action == sqlite3.SQLITE_READ and table == "user_xiuxian"
+                              else sqlite3.SQLITE_OK)
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.execute("app-read-error")
+        self.assertTrue(reader.closed)
+        self.assertTrue(writer.closed)
+        self.assertIsNone(self.receipt("app-read-error"))
+        self.assertEqual((900,), self.row("SELECT hp_left FROM activity_boss_state"))
+        self.write_external(("UPDATE user_xiuxian SET atk=175 WHERE user_id='u'", ()))
+        self.assertTrue(self.execute("app-read-recovery").ok)
+        self.assertEqual((175, 725, 2, None), self.receipt("app-read-recovery"))
+        self.assertFalse(self.owner._idle[1].in_transaction)
+        self.assertFalse(self.writer._idle[1].in_transaction)
+
+    def test_application_explicit_scope_preserves_original_lifetime_and_default_reader_key(self):
+        self.assertTrue(self.execute("app-unscoped").ok)
+        retained_writer, retained_reader = self.connections
+        with DatabaseUnitOfWork.connection_scope():
+            self.assertTrue(self.execute("app-scoped").ok)
+            self.assertIsNone(self.writer.when_unscoped())
+            self.assertIsNone(self.owner.when_unscoped())
+            scoped = self.connections[2:]
+            self.assertEqual(3, len(scoped))
+            self.assertTrue(all(c.closed for c in scoped[:-1]))
+            self.assertFalse(scoped[-1].closed)
+            self.assertTrue(all("PRAGMA query_only=ON" not in c.statements for c in scoped))
+        self.assertTrue(all(c.closed for c in scoped))
+        self.assertFalse(retained_writer.closed)
+        self.assertFalse(retained_reader.closed)
+        self.assertEqual(3, retained_writer.commits)
+        self.assertEqual(1, retained_reader.commits)
+        self.assertTrue(self.execute("app-after-scope").ok)
+        self.assertEqual(5, len(self.connections))
+        self.assertEqual(6, retained_writer.commits)
+        self.assertEqual(2, retained_reader.commits)
+
+    def test_application_other_actions_remain_unscoped_and_operation_alias_is_supported(self):
+        self.assertTrue(self.execute("app-warm").ok)
+        retained = tuple(self.connections)
+        other = self.application.execute(operation_id="app-unsupported", user_id="u")
+        self.assertFalse(other.ok)
+        self.assertEqual(4, len(self.connections))
+        self.assertTrue(all(c.closed for c in self.connections[2:]))
+        self.assertTrue(all(not c.closed for c in retained))
+        outcome = self.application.execute(
+            operation_id="app-operation-alias", user_id="u",
+            payload={"operation": "activity_boss.fight_cooperative_boss"},
+        )
+        self.assertTrue(outcome.ok)
+        self.assertEqual(4, len(self.connections))
+        self.assertEqual((100, 800, 2, None), self.receipt("app-operation-alias"))
+
+    def test_application_finish_error_recovers_via_receipt_without_repeating_settlement(self):
+        self.write_external((
+            "CREATE TRIGGER deny_finish BEFORE UPDATE ON operation_ledger "
+            "WHEN NEW.status='applied' BEGIN SELECT RAISE(ABORT,'injected finish failure'); END", (),
+        ))
+        with self.assertRaisesRegex(sqlite3.DatabaseError, "injected finish failure"):
+            self.execute("app-finish-error", item=True)
+        self.assertEqual((25, 975, 1, 1), self.receipt("app-finish-error"))
+        self.assertEqual((975,), self.row("SELECT hp_left FROM activity_boss_state"))
+        self.assertEqual((1,), self.row("SELECT count FROM activity_item_inventory"))
+        self.assertEqual(("failed",), self.row(
+            "SELECT status FROM operation_ledger WHERE operation_id='app-finish-error'",
+        ))
+        self.assertTrue(self.connections[0].closed)
+        self.assertFalse(self.writer._active)
+        self.write_external(("DROP TRIGGER deny_finish", ()))
+        recovered = self.execute("app-finish-error", item=True)
+        self.assertTrue(recovered.ok)
+        self.assertFalse(recovered.replayed)
+        self.assertEqual((1,), self.row("SELECT COUNT(*) FROM activity_boss_fight_log"))
+        self.assertEqual((1,), self.row("SELECT count FROM activity_item_inventory"))
+        self.assertEqual(("applied",), self.row(
+            "SELECT status FROM operation_ledger WHERE operation_id='app-finish-error'",
+        ))
+        replay = self.execute("app-finish-error", item=True)
+        self.assertTrue(replay.replayed)
+        self.assertEqual(recovered.data, replay.data)
+        self.assertTrue(self.execute("app-after-finish-error", item=True).ok)
+        self.assertEqual((25, 950, 2, 0), self.receipt("app-after-finish-error"))
 
 
 if __name__ == "__main__":
