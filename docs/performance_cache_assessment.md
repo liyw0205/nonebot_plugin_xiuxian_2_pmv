@@ -2409,3 +2409,74 @@ timestamp writer initialization, unpopulated natal reads, arbitrary/repeated
 multiwriter rank transitions, broader gameplay/background and sustained50
 successful requests/s. V10 is a bounded live-read batch, not completion of the
 repository-wide goal. No main merge, release or deployment is authorized.
+
+## V11: Scoped Relationship Schema Metadata (2026-11-26)
+
+- V10 `0f9e9525` passed exact-SHA CI `45804281267`. Its saved relation traces
+  showed repeated avatar table/schema probes in `我的师徒` and `我的道侣`.
+  Within an explicit database connection scope, UOW now exposes only its
+  validated file identity for the existing bounded 64-entry schema-version
+  cache. File replacement is rechecked at connection entry; avatar/profile
+  rows, active identity, equipped title, balances, eligibility and writes
+  remain live. No result or player-state cache was added.
+- One valid same-fixture pair is retained at
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+  `relation-schema-before-v11-20261126-r01.json` and
+  `relation-schema-after-v11-20261126-r01.json`. Both use the same sole
+  1M-user, 388,411,392-byte fixture and rank digest
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`;
+  each version runs 384 requests, 128 per pure/mixed/contention phase, through
+  the real matcher/DI/handler on one shared instance and isolated DB set.
+  The four paths are `我的师徒`, `我的道侣`, `我的修仙信息` and `灵石修炼`.
+  All 384/version succeeded; error, refusal, cooldown, timeout and
+  busy/locked counts are zero, and every invariant/restore check passed.
+  This is a bounded four-path sample, not all 674 matchers or 41 background
+  entries; per-command cache counters are not available.
+
+| Phase / path | n | E2E p50 ms before -> after | E2E p95 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| pure / mentor | 36 | 21.221 -> 19.958 | 146.434 -> 29.613 | 1154 -> 1046 | 329.285 -> 293.141 |
+| pure / partner | 36 | 15.981 -> 15.574 | 178.286 -> 23.396 | 794 -> 684 | 208.788 -> 194.297 |
+| pure / profile | 56 | 23.091 -> 23.145 | 100.269 -> 33.170 | 2679 -> 2681 | 372.272 -> 374.308 |
+| mixed / mentor | 20 | 37.866 -> 117.920 | 65.588 -> 249.726 | 642 -> 582 | 171.816 -> 157.550 |
+| mixed / partner | 20 | 32.900 -> 109.854 | 74.944 -> 228.274 | 440 -> 380 | 110.223 -> 107.772 |
+| mixed / profile | 56 | 47.793 -> 160.566 | 96.273 -> 310.030 | 2703 -> 2705 | 403.503 -> 395.837 |
+| mixed / training | 32 | 53.027 -> 157.191 | 84.809 -> 303.072 | 1312 -> 1312 | 352.437 -> 356.208 |
+| contention / mentor | 20 | 808.026 -> 1027.483 | 943.800 -> 1195.922 | 642 -> 582 | 167.191 -> 176.548 |
+| contention / partner | 20 | 725.346 -> 923.737 | 933.785 -> 1134.193 | 440 -> 380 | 113.713 -> 111.378 |
+| contention / profile | 56 | 526.200 -> 686.975 | 905.750 -> 1136.493 | 2700 -> 2699 | 424.184 -> 421.988 |
+| contention / training | 32 | 656.654 -> 847.539 | 963.535 -> 1196.798 | 1312 -> 1312 | 378.555 -> 352.894 |
+
+- Relationship paths remove 458 SQL calls across the paired samples, with
+  lower relationship SQL wall time in pure and mixed phases. This does not
+  translate into a consistent end-to-end gain: mixed and contention p50/p95
+  regress across relationship, profile and training paths, including paths
+  outside the schema-cache change. Pure-phase tails improve, but this finite
+  pair cannot assign causality or resolve the mixed/contended regressions; do
+  not claim an overall latency win. The underlying cached metadata remains
+  correctness-bounded by device/inode and live `schema_version`.
+- Cache phase counters remain 16/96 hits/misses in pure, 0/112 in mixed and
+  4/108 in contention for both versions; no expiry, invalidation, wait or
+  bypass occurred. Shared-cache size remained 32 entries / about33 KiB under
+  its 32-entry / 1 MiB caps. Offered rates were20/35/50 per second with
+  concurrency caps10/20/20; successful throughput was19.703 -> 20.098,
+  35.015 -> 35.051 and37.381 -> 35.142 per second. The maximum observed
+  handler-interval overlap was15 -> 18, not evidence of equivalent CPU/SQLite
+  parallelism or sustained50 successful requests/s.
+- Limits were1 GiB address space,600 CPU seconds,1,200 wall seconds, one
+  affinity CPU on a two-CPU host, plus the existing 768 MiB free-memory,
+  2 GiB disk and WAL guardrails. Observed minimum available memory was1,506
+  -> 1,688 MiB and minimum free disk14.958 -> 14.936 GB; peak RSS rose
+  526.609 -> 552.047 MiB; maximum WAL remained15,355,272 bytes. CPU was
+  62.826 -> 60.820 seconds, wall time93.286 -> 78.887 seconds, and the
+  1M fixture restore took14.717 -> 14.325 seconds. These setup/restore and
+  process totals are not per-request application costs.
+- Direct regression `tests.test_player_projection_reader` plus
+  `tests.test_uow_connection_scope`:27 passed. The earlier full-suite attempt
+  in the protected worktree is not a valid result because the pre-existing
+  deletion of `docs/refactor_phase2_legacy_path_items.json` caused seven
+  frozen owner assertions to fail. The deletion remains untouched; exact-SHA
+  CI on a clean checkout is the full-suite gate for this delivery. Compile,
+  architecture and whitespace checks are performed on the scoped diff before
+  delivery. The overall performance goal remains active; no main merge,
+  release or deployment is authorized.

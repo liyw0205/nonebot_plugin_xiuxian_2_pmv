@@ -206,15 +206,28 @@ class DatabaseUnitOfWork:
 
     @property
     def database_identity(self) -> tuple[str, int, int]:
-        """Identity bound to this reader, including the file behind its handle."""
-        path, identity, *_ = self._read_owner_key or self._connection_key()
+        """Identity bound to this transaction's retained or scoped connection."""
+        bound_key = self._read_owner_key or self._scope_key
+        path, identity, *_ = bound_key or self._connection_key()
         if identity is None:
             raise FileNotFoundError(f"database is unavailable: {path}")
         return str(path), *identity
 
+    @property
+    def has_bound_database_identity(self) -> bool:
+        return self._read_owner_key is not None or self._scope_key is not None
+
     def _check_read_identity(self) -> None:
         if self._read_owner is not None and self._read_owner_key != self._connection_key():
             raise sqlite3.OperationalError("read-only database identity changed")
+
+    def _check_scoped_database_identity(self) -> None:
+        if self._connection_scope is None or self._scope_key is None:
+            return
+        current_key = self._connection_key()
+        if self._scope_key[1] is not None and self._scope_key != current_key:
+            raise sqlite3.OperationalError("scoped database identity changed")
+        self._scope_key = current_key
 
     def _enter_connection(self, borrowed=None) -> "DatabaseUnitOfWork":
         scope = _CONNECTION_SCOPE.get()
@@ -228,6 +241,7 @@ class DatabaseUnitOfWork:
             self.connection, self._numeric_functions = borrowed
             try:
                 self.connection.execute("BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN")
+                self._check_scoped_database_identity()
                 self._check_read_identity()
             except Exception:
                 self.connection.close()
@@ -252,6 +266,7 @@ class DatabaseUnitOfWork:
             self.database.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
+            self._check_scoped_database_identity()
             self._numeric_functions = register_numeric_functions(self.connection)
             self.connection.row_factory = sqlite3.Row
             # busy_timeout must be in effect before any statement that could
@@ -265,8 +280,7 @@ class DatabaseUnitOfWork:
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
             )
-            if self._connection_scope is not None:
-                self._scope_key = self._connection_key()
+            self._check_scoped_database_identity()
             self._check_read_identity()
         except Exception:
             # Exceptions raised while entering a context do not trigger

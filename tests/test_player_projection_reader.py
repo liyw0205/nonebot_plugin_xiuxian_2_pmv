@@ -118,29 +118,95 @@ class PlayerProjectionReaderTests(unittest.TestCase):
         self.assertTrue(all(not connection.closed for connection in self.connections))
         self.assertEqual([2, 3], [connection.statements.count("BEGIN") for connection in self.connections])
 
-    def test_explicit_scope_preserves_original_key_lifetime_and_live_schema_checks(self):
+    def test_explicit_scope_reuses_bound_schema_metadata_without_caching_player_rows(self):
         self.avatar.get_active_id("main")
         retained = self.connections[0]
         cached = tuple(AvatarRepository._schema_cache.items())
         missing = AvatarRepository(self.database.with_name("missing.db"))
-        with patch.object(AvatarRepository, "_cached_schema_ready", side_effect=AssertionError("scoped cache")):
-            with DatabaseUnitOfWork.connection_scope():
-                self.assertIsNone(self.owner.when_unscoped())
-                self.assertEqual("main", self.avatar.get_active_id("main"))
-                self.assertEqual("1", self.title.get_state("main")["equipped"])
-                self.assertEqual("main", self.avatar.get_avatar_info("main")["active_id"])
-                self.assertIsNone(missing.get_active_id("main"))
-                self.assertEqual({}, missing.get_avatar_info("main"))
-                self.assertEqual(2, len(self.connections))
-                scoped = self.connections[-1]
-                self.assertFalse(scoped.closed)
-                self.assertNotIn("PRAGMA query_only=ON", scoped.statements)
-                self.assertFalse(retained.closed)
+        with DatabaseUnitOfWork.connection_scope():
+            self.assertIsNone(self.owner.when_unscoped())
+            self.assertEqual("main", self.avatar.get_active_id("main"))
+            self.assertEqual("1", self.title.get_state("main")["equipped"])
+            self.assertEqual("main", self.avatar.get_avatar_info("main")["active_id"])
+            self.assertIsNone(missing.get_active_id("main"))
+            self.assertEqual({}, missing.get_avatar_info("main"))
+            self.assertEqual(2, len(self.connections))
+            scoped = self.connections[-1]
+            self.assertFalse(scoped.closed)
+            self.assertNotIn("PRAGMA query_only=ON", scoped.statements)
+            self.assertEqual(2, scoped.statements.count("PRAGMA schema_version"))
+            self.assertNotIn(
+                "SELECT name FROM sqlite_master WHERE type='table'", scoped.statements
+            )
+            self.assertFalse(retained.closed)
         self.assertTrue(scoped.closed)
         self.assertFalse(retained.closed)
         self.assertEqual(cached, tuple(AvatarRepository._schema_cache.items()))
         self.assertEqual("main", self.avatar.get_active_id("main"))
         self.assertEqual(2, len(self.connections))
+        toggled = PlayerAvatarApplication(self.database).toggle_active(
+            operation_id="toggle-after-scoped-cache", user_id="main",
+            expected_active_id="main",
+        )
+        self.assertTrue(toggled.ok)
+        self.assertEqual("avatar", self.avatar.get_active_id("main"))
+
+    def test_scoped_schema_cache_invalidates_on_schema_version_change(self):
+        with DatabaseUnitOfWork.connection_scope():
+            self.assertEqual("main", self.avatar.get_active_id("main"))
+            with DatabaseUnitOfWork(self.database) as uow:
+                uow.execute("DROP TABLE avatar")
+            self.assertIsNone(self.avatar.get_active_id("main"))
+
+        self.assertEqual(2, len(AvatarRepository._schema_cache))
+        statements = [sql for connection in self.connections for sql in connection.statements]
+        self.assertEqual(2, statements.count("PRAGMA schema_version"))
+        self.assertEqual(
+            2,
+            statements.count("SELECT name FROM sqlite_master WHERE type='table'"),
+        )
+
+    def test_scoped_schema_metadata_does_not_cross_same_version_file_replacements(self):
+        self.assertEqual("main", self.avatar.get_active_id("main"))
+        original_identity = next(iter(AvatarRepository._schema_cache))[:3]
+        connection = REAL_CONNECT(self.database)
+        try:
+            version = connection.execute("PRAGMA schema_version").fetchone()[0]
+        finally:
+            connection.close()
+
+        missing_schema = self.database.with_name("missing-schema.db")
+        connection = REAL_CONNECT(missing_schema)
+        try:
+            connection.execute("CREATE TABLE unrelated(value INTEGER)")
+            connection.execute(f"PRAGMA schema_version={version}")
+            connection.commit()
+        finally:
+            connection.close()
+        ready_schema = self.database.with_name("ready-schema.db")
+        self._create_database(ready_schema, active_id="avatar")
+        connection = REAL_CONNECT(ready_schema)
+        try:
+            connection.execute(f"PRAGMA schema_version={version}")
+            connection.commit()
+        finally:
+            connection.close()
+
+        missing_schema.replace(self.database)
+        with DatabaseUnitOfWork.connection_scope():
+            self.assertIsNone(self.avatar.get_active_id("main"))
+        missing_identity = next(reversed(AvatarRepository._schema_cache))[:3]
+        ready_schema.replace(self.database)
+        with DatabaseUnitOfWork.connection_scope():
+            self.assertEqual("avatar", self.avatar.get_active_id("main"))
+
+        self.assertEqual(3, len(AvatarRepository._schema_cache))
+        keys = [key[:3] for key in AvatarRepository._schema_cache]
+        self.assertEqual(3, len(set(keys)))
+        self.assertIn(original_identity, keys)
+        self.assertIn(missing_identity, keys)
+        self.assertEqual({version}, {key[-1] for key in AvatarRepository._schema_cache})
+        self.assertEqual([True, False, True], list(AvatarRepository._schema_cache.values()))
 
     def test_worker_with_copied_scope_uses_short_readers_and_cannot_close_main_idle(self):
         self.avatar.get_active_id("main")

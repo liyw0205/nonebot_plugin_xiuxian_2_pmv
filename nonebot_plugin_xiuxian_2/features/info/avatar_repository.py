@@ -115,7 +115,11 @@ class AvatarStateSqlRepository:
             return {}
         try:
             with DatabaseUnitOfWork(self.database, read_only=True, read_owner=owner) as uow:
-                ready = self._cached_schema_ready(uow, self.database) if owner is not None else self._schema_ready(uow)
+                ready = (
+                    self._cached_schema_ready(uow, self.database)
+                    if uow.has_bound_database_identity
+                    else self._schema_ready(uow)
+                )
                 if not ready:
                     return {}
                 row = uow.query_one("SELECT * FROM avatar WHERE user_id=? LIMIT 1", (str(user_id),))
@@ -141,7 +145,11 @@ class AvatarStateSqlRepository:
             return None
         try:
             with DatabaseUnitOfWork(self.database, read_only=True, read_owner=owner) as uow:
-                ready = self._cached_schema_ready(uow, self.database) if owner is not None else self._schema_ready(uow)
+                ready = (
+                    self._cached_schema_ready(uow, self.database)
+                    if uow.has_bound_database_identity
+                    else self._schema_ready(uow)
+                )
                 if not ready:
                     return None
                 row = uow.query_one(
