@@ -10,6 +10,7 @@ from loguru import logger
 from ...core.errors import DomainError
 from ...core.numeric import normalize_user_row
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER
 
 
 MAX_USER_SEARCH_QUERY_CHARS = 64
@@ -26,7 +27,10 @@ class PlayerProfileSqlRepository:
         self, user_id: int | str, *, raise_errors: bool = False
     ) -> dict[str, Any] | None:
         try:
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            with DatabaseUnitOfWork(
+                self.database, read_only=True,
+                read_owner=LIVE_PROJECTION_READ_OWNER.when_unscoped(),
+            ) as uow:
                 row = uow.query_one(
                     "SELECT * FROM user_xiuxian WHERE user_id=? "
                     "ORDER BY rowid ASC LIMIT 1",

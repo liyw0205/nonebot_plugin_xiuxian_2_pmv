@@ -565,13 +565,25 @@ def install_sql_timing(root):
     return ROUTER
 
 
+def wal_sizes(data_dir):
+    """Enumerate every directory once; never recurse through directory links."""
+    pending = [os.fspath(data_dir)]
+    while pending:
+        with os.scandir(pending.pop()) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry.path)
+                elif entry.name.endswith(".db-wal") and entry.is_file():
+                    yield entry.stat().st_size
+
+
 def resource_state(data_dir):
     memory = {}
     for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
         name, _, value = line.partition(":")
         if name in ("VmRSS", "VmSize", "Threads"):
             memory[name] = int(value.split()[0])
-    wal = [path.stat().st_size for path in Path(data_dir).rglob("*.db-wal") if path.is_file()]
+    wal = list(wal_sizes(data_dir))
     io = {}
     for line in Path("/proc/self/io").read_text(encoding="ascii").splitlines():
         name, value = line.split(":", 1)
@@ -1220,6 +1232,7 @@ async def run(args, identity):
         "relation-v5": "tests.mixed_relation_fixture",
         "rank-seek-v6": "tests.mixed_rank_seek_fixture",
         "dynamic-relation-v7": "tests.mixed_dynamic_relation_fixture",
+        "multiwriter-v9": "tests.mixed_multiwriter_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1375,7 +1388,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

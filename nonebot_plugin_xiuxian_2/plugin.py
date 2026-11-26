@@ -1546,9 +1546,14 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         phase_state["web"] = False
 
     def shutdown_database() -> None:
-        from .features.admin.blackhouse_repository import AdminBlackhouseSqlRepository
+        from threading import current_thread, main_thread
 
-        AdminBlackhouseSqlRepository.close_read_connection()
+        from .features.admin.blackhouse_repository import AdminBlackhouseSqlRepository
+        from .infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER
+
+        if current_thread() is main_thread():
+            AdminBlackhouseSqlRepository.close_read_connection()
+            LIVE_PROJECTION_READ_OWNER.close()
         phase_state["database"] = False
 
     lifecycle.register(LifecyclePhase.FILESYSTEM, ensure_filesystem)

@@ -1,5 +1,8 @@
 """Deterministic observer accounting contracts without a fixture or load run."""
 import threading
+import os
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -8,6 +11,41 @@ from scripts import mixed_command_probe as probe
 
 
 class MixedObserverCPUTests(unittest.TestCase):
+    def test_wal_walk_covers_nested_files_once_and_preserves_symlink_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data, outside = root / "data", root / "outside"
+            nested = data / "players" / "nested.db-wal"
+            nested.mkdir(parents=True)
+            outside.mkdir()
+            (data / "main.db-wal").write_bytes(b"m" * 3)
+            (nested / "player.db-wal").write_bytes(b"p" * 5)
+            (outside / "other.db-wal").write_bytes(b"o" * 7)
+            (data / "ignore.txt").write_bytes(b"i" * 11)
+            (data / "linked-directory").symlink_to(outside, target_is_directory=True)
+            (data / "linked.db-wal").symlink_to(outside / "other.db-wal")
+            (data / "missing.db-wal").symlink_to(root / "missing")
+            expected = sorted(path.stat().st_size for path in data.rglob("*.db-wal") if path.is_file())
+            scanned, original = [], os.scandir
+
+            def scan(path):
+                scanned.append(Path(path))
+                return original(path)
+
+            with patch.object(probe.os, "scandir", side_effect=scan):
+                self.assertEqual(expected, sorted(probe.wal_sizes(data)))
+            self.assertEqual([3, 5, 7], expected)
+            self.assertEqual({data, data / "players", nested}, set(scanned))
+            self.assertEqual(3, len(scanned))
+
+    def test_wal_walk_failure_stops_watcher_instead_of_reporting_zero(self):
+        watch = probe.ResourceWatch("unavailable", threading.Event())
+        with patch.object(probe.os, "scandir", side_effect=PermissionError("walk denied")):
+            watch._run()
+        self.assertTrue(watch.stop.is_set())
+        self.assertIn("walk denied", watch.reason)
+        self.assertEqual([], watch.samples)
+
     def test_inactive_observer_does_not_read_cpu_clock(self):
         def forbidden_clock():
             self.fail("inactive observer sampled CPU")

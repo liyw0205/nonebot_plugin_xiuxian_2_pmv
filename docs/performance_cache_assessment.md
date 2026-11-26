@@ -2097,3 +2097,165 @@ should use saved synchronous profile/sect/timestamp and training transaction
 costs, explicitly separating watcher/observer overhead. Multiwriter dynamic
 ranks, broader gameplay/background, multiple processes, real image delivery
 and sustained50 successful/s remain unverified; do not rerun V8 unchanged.
+
+## V9: Live Profile Projections With Symmetric Multiple Writers (2026-11-26)
+
+### Scope And Frozen Evidence
+
+- V8 `1399ac99` / CI45779082549 completed/success (quality and both unittest
+  shards). The next batch targets measured cold profile/sect-name connections,
+  including the live profile read before actual stone training. V8's training
+  already reuses one write connection across four independent transactions;
+  those transaction/replay/rollback boundaries are unchanged.
+- `PlayerProfileSqlRepository.get_user_profile` and
+  `SectInfoSqlRepository.get_name_by_id` share one opt-in idle main-thread
+  reader. Every call starts and ends a fresh readonly transaction; no balance,
+  profile, membership, eligibility or name result is cached. An active explicit
+  synchronous request scope takes precedence at UOW construction, preserving
+  its original connection key and close-before-await boundary. Worker/reentrant
+  fallback, identity/error discard and main-thread shutdown retain the V8
+  owner contracts. Other profile/sect methods and rank algorithms are unchanged.
+- Driver WAL monitoring now traverses each directory once with `os.scandir`.
+  It still covers the complete tree, follows file links but not directory
+  links, retains thresholds/frequency and stops on traversal errors. This
+  change was frozen before both measurements; it is measurement infrastructure,
+  not an independently measured product speedup.
+- Reports: retained sole1M fixture
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/` contains
+  `multiwriter-before-20261126-r01.json`, `multiwriter-after-20261126-r01.json`
+  and their `.phases.jsonl` files. Both first traffic attempts passed. Exact
+  Python-integer comparison confirms identical driver/fixture identity,
+  phase specs, limits, ordered requests and business seeds. The only seed
+  differences are startup `compatibility_hits.json` telemetry and its enclosing
+  seed hash. Only the four scoped runtime files differ between source trees.
+- Each version executes384 real matcher/DI/handler requests on one shared
+  instance and isolated DB set:168 profile,76 mentor (four aliases),76 partner,
+  64 actual stone-training requests. Each stage has128 requests, including
+  56 distinct profile actors (32 writers,16 different-score low readers,8 exact
+  high readers). Pure/mixed/contention use caps10/20/20 and offered20/35/50/s;
+  pure has36 mentor+36 partner, the other stages20+20 and32 writes. There are
+  66/58/58 actual actors among128 seeded participants. This is not exhaustive
+  coverage of674 matchers or background work.
+- In each write stage,32 users each perform exactly one actual exp+100,
+  stone-1000 update. Writers start at the same score pair. A bounded setup
+  histogram over all1M rows (111 exp/76 stone groups, hard16384 groups/column)
+  computes independent dense ranks. Captured snapshot dual-generation offsets
+  choose the global shape; the actual target's paired keys select old/new own
+  state, rejecting torn pairs and impossible endpoints. No oracle SQL is added
+  during requests, no business result is mocked, and restores occur only after
+  task/message/rank-worker drain and invariant checks.
+- Symmetric writers create only three distinct histogram shapes: zero, some,
+  all32 writes. They favor same-score cache reuse. This validates a bounded
+  symmetric multiwriter case, not arbitrary multiwriter scores or repeated
+  writes to one user's balance. Preserved32 REAL/32 exact BLOB participants,
+  96 unchanged nonwriters, live resources/receipts, relationships and JSON
+  checks all pass. Each version validates336 reply ranks; generation deltas
+  are0/32/32, exactly matching successful fresh writes. All384 requests succeed;
+  refusals/cooldowns/exceptions/timeouts/busy/locked are zero (error rate0%).
+- Nonempty features remain:2560 backpack rows,128 BuffInfo/bank/arena/status/
+  impart/mentor/partner rows each,4096 pending mentor applications,8192 activity
+  users and32768 activity point/pass/damage rows each; sects has4 rows. Activity
+  commands are not executed in V9, so this does not establish their runtime
+  performance at that scale or a large sect-directory scan result.
+
+### Same-Load Results
+
+Values are before -> after; latency is milliseconds including scheduled-arrival
+queueing. Each table row retains every sample, not only successful fast cases.
+
+| Phase / Path | n/version | E2E p50 | E2E p95 | E2E p99 | Foreground SQL calls | SQL wall ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| pure / mentor |36|20.102 ->19.089|39.713 ->24.467|211.832 ->48.129|1046 ->1046|304.813 ->279.549|
+| pure / partner |36|15.339 ->14.532|110.454 ->18.011|227.829 ->92.916|686 ->686|201.655 ->196.890|
+| pure / profile |56|35.078 ->24.626|161.011 ->38.608|281.048 ->143.651|2984 ->2760|970.717 ->523.471|
+| mixed / mentor |20|855.917 ->178.909|1014.036 ->231.742|1034.101 ->237.111|582 ->582|174.206 ->175.453|
+| mixed / partner |20|853.836 ->146.368|1020.862 ->209.265|1027.963 ->210.457|380 ->380|121.979 ->125.467|
+| mixed / profile |56|622.960 ->171.568|1049.188 ->263.952|1083.680 ->270.959|3077 ->2892|1196.148 ->737.309|
+| mixed / training |32|748.884 ->166.778|1025.062 ->246.984|1027.103 ->260.556|1440 ->1376|535.024 ->415.182|
+| contention / mentor |20|1630.268 ->987.361|2054.225 ->1172.099|2074.036 ->1172.264|582 ->582|191.096 ->164.550|
+| contention / partner |20|1603.059 ->910.916|2013.893 ->1132.963|2032.848 ->1149.187|380 ->380|115.864 ->111.576|
+| contention / profile |56|1169.719 ->710.864|1999.743 ->1178.907|2153.268 ->1228.268|3049 ->2825|1181.169 ->696.929|
+| contention / training |32|1300.451 ->805.806|2094.141 ->1192.389|2113.835 ->1198.772|1440 ->1376|549.927 ->406.863|
+
+| Phase | cap / offered per s | Peak admitted | Peak handler intervals | Success/s | Phase E2E p95 | Queue p95 | Loop lag p95 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| pure |10 /20|6 ->3|3 ->2|20.094 ->20.093|110.454 ->31.813|0.011 ->0.009|14.498 ->10.898|
+| mixed |20 /35|20 ->10|14 ->6|28.378 ->34.110|1025.062 ->243.269|421.458 ->0.008|91.824 ->49.866|
+| contention |20 /50|20 ->20|15 ->14|28.106 ->35.037|2054.225 ->1185.382|1500.066 ->687.264|91.866 ->66.773|
+
+Handler counts measure overlapping wall intervals, not parallel CPU/SQLite
+execution. Same-actor profile/training intervals actually overlap30 ->23 times
+in mixed and30 ->30 in contention. Observed writer rank states are old/new
+30/2 ->24/8 in mixed,32/0 ->32/0 in contention. Thus contention does not sample
+a post-write own profile, although it verifies all final assets/receipts and
+changing global offsets. No profile display/rank key divergence was observed;
+the reply still has no whole-profile atomicity guarantee. Offered50/s yields
+only35.037 successful/s over a finite run, not sustained50/s or20 simultaneous
+handlers. Existing earlier regressions remain valid historical evidence.
+
+### SQL, Cache And Measurement Costs
+
+- Game opens243/272/272 ->131/129/128,399 fewer total. Captured profile/name
+  SELECT CPU totals2074.137 ->583.326ms across628 unchanged SELECT calls;
+  scoped relation profile reads intentionally retain their existing lifecycle.
+  Foreground SQL15646 ->14885; including message-writer background17455 ->16699.
+  Total observed SQL wall6363.657 ->4611.800ms. Training45 ->43 SQL/request
+  removes initialization PRAGMAs, not business checks or write transactions.
+- Main-thread CPU3119.266/3938.363/4017.465 ->2500.868/3169.675/3161.127ms;
+  total traffic CPU13.320 ->10.789s. Queueing falls more than isolated SQL time,
+  consistent with lower synchronous work near the offered-rate threshold.
+  This single pair does not establish a universal throughput multiplier.
+- Rank hits/misses pure70/42 ->70/42; mixed20/92 ->2/110; contention34/78 ->34/78.
+  Partial hits33/22/19 ->33/30/19; evictions10/60/46 ->10/78/46. All explicit
+  invalidations/waits/expirations/bypasses are0; generation changes still make
+  keys stale, so `invalidations=0` does not mean writes caused no invalidation.
+  Full COUNT(DISTINCT) operations remain0. Seek batches42/92/78 ->42/110/78;
+  mixed seek CPU46.550 ->50.589ms and wall76.743 ->79.337ms regress as actual
+  interleaving changes. All exact snapshot reply checks still pass. Rank-worker
+  total SQL CPU28.879/80.265/83.269 ->29.392/83.732/64.120ms is a small component
+  of this workload; it does not justify a further rank-algorithm rewrite.
+- All BEGIN execution totals11.127/22.844/20.973 ->9.643/22.443/21.139ms;
+  mixed/contention max2.237/1.273 ->3.820/2.124ms regress. These include SQL
+  execution, not pure lock-wait measurements. No busy/locked error occurs.
+- Watcher CPU277.315/247.956/286.009 ->247.911/203.052/166.320ms with25/17/17
+  ->25/14/14 samples. Per-sample costs and stage lengths both vary. Observer
+  record/begin/authorizer are retained in raw reports; authorizer overlaps SQL
+  CPU and cannot be added to it. Neither measured observer cost nor unexplained
+  CPU can be subtracted from E2E or labeled purely application CPU. Watcher
+  traversal improvement is common to both versions, not a V9 runtime delta.
+- GC total22.313/43.749/46.064 ->21.074/31.049/42.106ms; max pause remains below
+  2.1ms. Contention producer delay p95/p99 worsens1.608/4.493 ->3.649/6.019ms;
+  loop-dispatch p95 improves78.155 ->71.777ms, loop-lag p99 improves129.369
+  ->113.163ms. Mixed mentor/partner SQL wall slightly increases as table shows.
+
+### Resources And Acceptance
+
+- Same hard limits:2/4 CPU affinity,1GiB address space,600 CPU seconds,1200 wall
+  seconds,`MALLOC_ARENA_MAX=2`; RAM768MiB and disk2GiB floors,900MiB RSS stop,
+  256MiB individual/total WAL guard. One process pair runs serially under the
+  existing validation lock, with only transient restore snapshots of the sole
+  1M fixture. No production/network/account traffic.
+- Max RSS475.918 ->503.988MiB regresses; sampled VmSize846.488 ->871.699MiB.
+  RAM minimum1628 ->1719MiB; free disk minimum5625774080 ->5963890688 bytes.
+  Max individual WAL15355272 bytes both; total21288168 ->21284048 bytes;
+  final WAL0, original rank digest restored both. These observations do not
+  authorize raising concurrency or memory ceilings.
+- Full process wall86.558 ->77.664s; setup21.759 ->20.821s, invariant checks
+  5.067 ->3.846s, final restore15.050 ->13.594s. Sampled traffic reads4423680
+  ->2691072 and writes55828480 ->55504896 bytes; full process writes4230926336
+  ->4231430144 bytes slightly rise and primarily include fixture restoration.
+  Full-run I/O/CPU and setup/cache warmth are not product request costs.
+- 45 bounded driver/oracle/WAL/DI tests pass0.852s before driver freeze. After
+  implementation,78 affected pytest cases and52 subtests pass9.16s, including
+  unchanged relation/asset scope checks, numeric error contracts, external
+  commits, missing/replaced files, copied worker contexts and shutdown. Compile,
+  architecture, inventory and whitespace pass in a code-only acceptance tree.
+  No old full unittest shard, old serial matrix or unchanged mixed stage was
+  rerun. Exact delivered SHA CI remains the batch delivery gate.
+
+The expanded performance goal remains active. The next evidence selection must
+use the saved remaining synchronous timestamp/avatar/title/natal and relation
+costs before any new load; no unchanged V9 rerun or unconditional writer-cache
+change. Arbitrary multiwriter score transitions, repeated-user writes with
+dynamic exact ranks, broader gameplay/background and sustained50 successful/s
+remain unverified. No main merge, release or deployment is authorized.

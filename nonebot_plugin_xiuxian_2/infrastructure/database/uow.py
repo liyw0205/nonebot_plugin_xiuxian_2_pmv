@@ -69,6 +69,11 @@ class ReadOnlyConnectionOwner:
         self._retain = True
         self._idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
 
+    def when_unscoped(self) -> ReadOnlyConnectionOwner | None:
+        """Select at UOW construction, preserving an explicit request's key/lifetime."""
+        scope = _CONNECTION_SCOPE.get()
+        return None if scope is not None and scope.available() else self
+
     def _acquire(self, key: tuple[Any, ...]) -> tuple[bool, tuple[sqlite3.Connection, Any] | None]:
         if current_thread() is not main_thread():
             return False, None
@@ -113,6 +118,10 @@ class ReadOnlyConnectionOwner:
             idle, self._idle = self._idle, None
             if idle is not None:
                 idle[1].close()
+
+
+# Opt-in live projections share one idle handle, including across repository types.
+LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 
 
 class DatabaseUnitOfWork:
@@ -426,4 +435,4 @@ def is_database_busy(exc: BaseException) -> bool:
     )
 
 
-__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "is_database_busy"]
+__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "LIVE_PROJECTION_READ_OWNER", "is_database_busy"]
