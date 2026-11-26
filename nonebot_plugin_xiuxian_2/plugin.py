@@ -211,6 +211,7 @@ from .features.activity_reward.migrations import (
     apply_activity_boss_rank_legacy_receipts,
 )
 from .features.activity.migrations import (
+    apply_activity_rank_indexes,
     apply_activity_state_schema,
     apply_activity_state_legacy,
     apply_activity_event_receipts,
@@ -357,6 +358,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy),
         Migration("activity_state.003", "activity_event_receipts", apply_activity_event_receipts),
         Migration("activity_state.004", "activity_collect_synthesis_operations", apply_collect_synthesis),
+        Migration("activity_state.005", "activity_rank_indexes", apply_activity_rank_indexes),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment),
         Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch),

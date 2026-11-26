@@ -20,6 +20,68 @@ def request(key="profile", actor="900001"):
 
 
 class MixedProbeHelperTests(unittest.TestCase):
+    def test_phase_selection_requires_real_nonlegacy_traffic(self):
+        base = ["--fixture", "/tmp/fixture", "--report", "/tmp/report"]
+        args = probe.parse_args(base + ["--scenario", "activity-rank-v12", "--phase-index", "2"])
+        self.assertEqual(2, args.phase_index)
+        self.assertEqual("activity-rank-v12", args.scenario)
+        for extra in (["--phase-index", "0"],
+                      ["--scenario", "activity-rank-v12", "--phase-index", "2", "--preflight-only"]):
+            with self.subTest(extra=extra), self.assertRaises(SystemExit):
+                probe.parse_args(base + extra)
+
+    def test_disk_snapshot_restores_application_json_without_copying_or_removing_reports(self):
+        import nonebot
+
+        try:
+            nonebot.get_driver()
+        except ValueError:
+            nonebot.init(log_level="ERROR")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "fixture" / "data" / "xiuxian"
+            root.mkdir(parents=True)
+            target = root / "xiuxian.db"
+            snapshot_path = Path(directory) / "snapshot.db"
+            for path, value in ((target, "mutated"), (snapshot_path, "baseline")):
+                with sqlite3.connect(path) as connection:
+                    connection.execute("CREATE TABLE state(value TEXT)")
+                    connection.execute("INSERT INTO state VALUES(?)", (value,))
+
+            snapshot = object.__new__(probe.matrix.DiskFixtureSnapshot)
+            snapshot.root = root
+            snapshot.managers = []
+            snapshot.snapshot_dir = root / ".snapshot"
+            snapshot.databases = {target: snapshot_path}
+            snapshot.snapshot_connections = []
+            snapshot.json_stores = []
+
+            source = root.parent / "command-source"
+            source.mkdir()
+            config = source / "activity.json"
+            runtime_json = root / "state.json"
+            report = root.parent / "old-report.json"
+            config.write_bytes(b'{"board":"sign"}')
+            runtime_json.write_bytes(b'{"state":"baseline"}')
+            report.write_bytes(b'{"evidence":"before"}')
+            snapshot.json_files = {path: path.read_bytes() for path in snapshot._json_paths()}
+            self.assertEqual({config, runtime_json}, set(snapshot.json_files))
+            config.write_bytes(b'{"board":"changed"}')
+            runtime_json.unlink()
+            created = root / "new-state.json"
+            created.write_bytes(b'{}')
+            new_report = root.parent / "new-report.json"
+            new_report.write_bytes(b'{"evidence":"after"}')
+
+            snapshot.restore()
+
+            with sqlite3.connect(target) as connection:
+                self.assertEqual("baseline", connection.execute("SELECT value FROM state").fetchone()[0])
+            self.assertEqual(b'{"board":"sign"}', config.read_bytes())
+            self.assertEqual(b'{"state":"baseline"}', runtime_json.read_bytes())
+            self.assertFalse(created.exists())
+            self.assertEqual(b'{"evidence":"before"}', report.read_bytes())
+            self.assertEqual(b'{"evidence":"after"}', new_report.read_bytes())
+
     def test_connection_diagnostics_bound_setup_and_keep_cursor_fetch_attribution(self):
         with tempfile.TemporaryDirectory() as directory:
             old_connect, old_router, old_recorder = sqlite3.connect, probe.ROUTER, probe.matrix.RECORDER

@@ -1234,6 +1234,7 @@ async def run(args, identity):
         "dynamic-relation-v7": "tests.mixed_dynamic_relation_fixture",
         "multiwriter-v9": "tests.mixed_multiwriter_fixture",
         "player-projection-v10": "tests.mixed_player_projection_fixture",
+        "activity-rank-v12": "tests.mixed_activity_rank_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1245,6 +1246,10 @@ async def run(args, identity):
         {"mode": mode, "concurrency": concurrency, "requests": args.requests_per_phase,
          "arrival_rate": args.arrival_rate}
         for mode in MODES for concurrency in args.concurrency])
+    selected_phases = [(index, spec) for index, spec in enumerate(specs)
+                       if args.phase_index is None or index == args.phase_index]
+    if not selected_phases:
+        raise ValueError("selected phase is outside the frozen scenario")
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
     entries = probe.inventory()
     if int(managers[0].conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0]) != matrix.TARGET_USERS:
@@ -1263,6 +1268,7 @@ async def run(args, identity):
               "coverage": "bounded stratified mixed sample; not exhaustive of 674 matchers or background jobs",
               "phases": [], "bulk_probe": None, "preflight_only": args.preflight_only,
               "scenario": args.scenario, "frozen_phase_specs": specs,
+              "selected_phase_indices": [index for index, _spec in selected_phases],
               "bulk_only": args.bulk_only,
             "cache_attribution": "exact phase counter deltas; per-command cache counters not measured",
               "background_sql_attribution": "actual message-db queue consumer context and exact DB path; measured per phase including drain, never assigned to a command",
@@ -1294,8 +1300,8 @@ async def run(args, identity):
             "scope": "all command routes/registered handlers, seed invariants, observed startup/seed DB boundaries; actual handler SQL remains guarded at runtime"}
         if not initial_check.get("ok"):
             raise RuntimeError("seed invariants failed during preflight")
-        phases = [] if args.preflight_only or args.bulk_only else specs
-        for index, spec in enumerate(phases):
+        phases = [] if args.preflight_only or args.bulk_only else selected_phases
+        for index, spec in phases:
             mode, concurrency = spec["mode"], spec["concurrency"]
             setup_started = time.perf_counter()
             snapshot.restore()
@@ -1313,6 +1319,7 @@ async def run(args, identity):
             cache_after = process_read_cache.stats()
             generation_after = rank_generation_state(managers[0])
             phase["mode"] = mode
+            phase["phase_index"] = index
             phase["label"] = spec.get("label", mode)
             phase["request_order"] = spec.get("order", "original")
             phase["setup_s"] = round(setup_s, 3)
@@ -1374,7 +1381,7 @@ async def run(args, identity):
             shutil.rmtree(temp_dir)
     result["status"] = "pass" if ("failure_reason" not in result and result["original_rank_digest_restored"] and
         (args.preflight_only or args.bulk_only or
-         len(result["phases"]) == len(specs))) else "failed"
+         len(result["phases"]) == len(selected_phases))) else "failed"
     run_cpu_after = resource.getrusage(resource.RUSAGE_SELF)
     result["process"] = {"wall_s": round(time.perf_counter() - run_started, 3),
         "cpu_user_s": round(run_cpu_after.ru_utime - run_cpu_before.ru_utime, 3),
@@ -1389,13 +1396,15 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)
     parser.add_argument("--participants", type=int)
     parser.add_argument("--preflight-only", action="store_true",
                         help="resolve every route and validate seed/restore without dispatching load")
+    parser.add_argument("--phase-index", type=int, choices=range(3),
+                        help="run one frozen nonlegacy phase; preserve its original request identities")
     parser.add_argument("--bulk-only", action="store_true",
                         help="supplement drained request evidence with rollback-only bulk cost; no traffic rerun")
     args = parser.parse_args(argv)
@@ -1420,6 +1429,8 @@ def parse_args(argv=None):
         parser.error(f"--participants must be {required_participants} for the frozen scenario")
     if args.scenario != "legacy-v1" and args.bulk_only:
         parser.error("--bulk-only applies only to legacy-v1")
+    if args.phase_index is not None and (args.scenario == "legacy-v1" or args.preflight_only):
+        parser.error("--phase-index requires a nonlegacy traffic scenario")
     return args
 
 

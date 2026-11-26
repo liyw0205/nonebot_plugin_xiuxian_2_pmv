@@ -2480,3 +2480,146 @@ repository-wide goal. No main merge, release or deployment is authorized.
   architecture and whitespace checks are performed on the scoped diff before
   delivery. The overall performance goal remains active; no main merge,
   release or deployment is authorized.
+
+## V12: Live Activity Standings and Indexed Public Rows (2026-11-27)
+
+- V11 SHA `9745f1e787d3c86b06ce3bff31e901c257acb208` passed exact-SHA
+  CI `45817424407` (quality and both unittest shards). This batch adds
+  `activity_state.005` to the startup migration catalog, only for `game_db`.
+  It installs covering sign-order and positive-boss-damage indexes on existing
+  databases; published migrations remain unchanged. Sign standing now joins
+  the viewer once instead of three correlated PK lookups, and both standings
+  restrict their aggregate to positive rows. Sign display explicitly uses
+  `user_id ASC` for the final tie, matching exact personal rank. Personal
+  position/value/reward eligibility still execute live SQL in one transaction;
+  public display retains the existing bounded 60-minute snapshot and freshness
+  label. No new result cache, balance cache or write-rule change was added.
+- Sole retained fixture and report directory:
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`.
+  Valid pair: `activity-rank-before-v12-20261126-r02.json` and
+  `activity-rank-after-v12-20261127-r02.json`; compact extraction:
+  `activity-rank-comparison-v12-20261127-r01.json`. The original 1M-user
+  manifest/rank digest is identical to V11, as are frozen phase specs and
+  every request identity/actor/argument/oracle. The after records runtime tree
+  `53e1209a81e33ddcb0f5fcd3de46e0cb2dd625b0aa514d033f6007797fc8e743`;
+  only the activity migration/repository and startup catalog differ from the
+  baseline runtime. A read-only post-run check confirmed the `.005` marker
+  and both index definitions in the actual fixture.
+- Each version dispatches 384 real matcher/DI/handler requests on one shared
+  instance/database set: three phases of128; three new activity paths each
+  have12 requests/phase, alongside56 profile reads,18/2/2 mentor reads and
+  18/2/2 partner reads. Mixed/contention each retain32 real distinct-user
+  `灵石修炼` writes (exp+100, stone-1000), with exact dynamic rank/live
+  asset/receipt and huge-number strata checks. All384/version succeed;
+  business refusal, cooldown, system error, timeout, boundary violation and
+  SQLite busy/locked counts are zero. All phase invariants and final original
+  1M rank-digest restoration pass. This seven-path short sample is not all
+  674 matchers, background jobs or sustained capacity.
+- Activity tables are populated:8,192 sign users and32,768 boss rows across
+  four keys (8,192 each), plus8,192 avatar/title rows and4,096 mentor
+  applications. `活动排行 首领榜` uses `festival_sign` while
+  `活动首领排行` uses `festival_world_boss`. All four boss cohorts are seeded
+  identically, so the setup full-sort world-boss oracle also matches the
+  generic board's replies. The activity invariant hashes the sign table and
+  world-boss cohort; it does not independently hash every boss key. No activity
+  sign/damage writes occur during traffic, so activity-index write cost and
+  concurrent activity-reward changes remain unmeasured. These are explicit
+  limits, not evidence for performance across other activity datasets.
+
+All times below include producer/loop/admission queueing. Activity n12 means
+p95 and p99 are both the maximum sample; this is weak tail evidence.
+
+| Phase / path | n | E2E p50 ms before -> after | E2E p95 ms before -> after | E2E p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| pure / sign board | 12 | 16.933 -> 17.489 | 92.050 -> 64.403 | 92.050 -> 64.403 | 199 -> 199 | 91.605 -> 77.797 |
+| pure / boss board | 12 | 17.371 -> 17.876 | 36.495 -> 23.502 | 36.495 -> 23.502 | 198 -> 198 | 99.362 -> 78.510 |
+| pure / boss display | 12 | 8.774 -> 8.989 | 31.113 -> 23.588 | 31.113 -> 23.588 | 55 -> 55 | 13.329 -> 4.923 |
+| pure / mentor | 18 | 20.046 -> 20.690 | 129.270 -> 33.577 | 129.270 -> 33.577 | 524 -> 524 | 139.432 -> 142.662 |
+| pure / partner | 18 | 15.591 -> 15.825 | 162.517 -> 32.465 | 162.517 -> 32.465 | 342 -> 342 | 91.584 -> 100.103 |
+| pure / profile | 56 | 23.192 -> 24.052 | 34.863 -> 39.934 | 142.307 -> 114.814 | 2685 -> 2685 | 415.659 -> 427.040 |
+| mixed / sign board | 12 | 247.512 -> 240.658 | 394.939 -> 378.350 | 394.939 -> 378.350 | 199 -> 199 | 99.496 -> 83.027 |
+| mixed / boss board | 12 | 262.595 -> 247.297 | 321.507 -> 319.996 | 321.507 -> 319.996 | 199 -> 199 | 103.578 -> 91.849 |
+| mixed / boss display | 12 | 169.010 -> 144.524 | 263.018 -> 248.600 | 263.018 -> 248.600 | 55 -> 55 | 13.315 -> 6.576 |
+| mixed / mentor | 2 | 78.889 -> 48.136 | 106.403 -> 54.239 | 106.403 -> 54.239 | 60 -> 60 | 16.046 -> 18.772 |
+| mixed / partner | 2 | 74.067 -> 40.124 | 77.651 -> 40.552 | 77.651 -> 40.552 | 38 -> 38 | 14.778 -> 10.610 |
+| mixed / profile | 56 | 275.374 -> 258.255 | 389.157 -> 375.854 | 423.037 -> 432.113 | 2699 -> 2706 | 723.178 -> 702.155 |
+| mixed / training | 32 | 281.282 -> 229.037 | 384.161 -> 293.043 | 405.886 -> 301.434 | 1312 -> 1312 | 380.797 -> 371.851 |
+| contention / sign board | 12 | 399.449 -> 319.199 | 705.302 -> 675.003 | 705.302 -> 675.003 | 199 -> 199 | 94.992 -> 82.696 |
+| contention / boss board | 12 | 1024.063 -> 1086.964 | 1177.072 -> 1183.720 | 1177.072 -> 1183.720 | 199 -> 199 | 92.834 -> 87.649 |
+| contention / boss display | 12 | 1105.662 -> 1163.911 | 1149.551 -> 1296.698 | 1149.551 -> 1296.698 | 55 -> 55 | 15.866 -> 9.230 |
+| contention / mentor | 2 | 1125.966 -> 1206.570 | 1145.759 -> 1226.358 | 1145.759 -> 1226.358 | 60 -> 60 | 16.277 -> 16.158 |
+| contention / partner | 2 | 1084.942 -> 1166.722 | 1105.046 -> 1185.709 | 1105.046 -> 1185.709 | 38 -> 38 | 11.934 -> 10.468 |
+| contention / profile | 56 | 658.191 -> 704.313 | 1181.966 -> 1275.758 | 1228.554 -> 1295.626 | 2701 -> 2690 | 717.893 -> 962.545 |
+| contention / training | 32 | 743.779 -> 949.854 | 1279.357 -> 1243.106 | 1300.043 -> 1262.067 | 1312 -> 1312 | 371.378 -> 391.034 |
+
+- Complete captured activity statement diagnostics (execute+fetch) show sign
+  standing36 SQLs223.272 ->201.897ms wall /223.090 ->201.897ms CPU;
+  boss standing36 SQLs228.262 ->207.695ms wall /227.561 ->206.148ms CPU.
+  These exact counts still scan qualifying index rows, not an O(1) rank cache.
+  Sign cold display3 SQLs20.423 ->0.740ms wall; boss cold display6 SQLs
+  60.448 ->4.785ms wall. The query-plan regression requires both covering
+  indexes and no temporary display sort. This is a measured SQL reduction,
+  not proof of a general E2E improvement: public/standing SQL API call counts
+  stay the same, pure medians rise slightly, and contention boss/profile/
+  relationship tails regress. Total contention SQL wall1804.172 ->1920.556ms
+  also regresses, with profile SQL717.893 ->962.545ms. No repeated run was
+  selected to replace these outcomes.
+- Offered rates20/35/50 per second and caps10/20/20 are distinct from observed
+  interval overlap2/9/19 ->2/9/17 and success throughput19.755/34.534/35.301
+  ->20.091/34.890/34.532 per second. Contention queue p95722.952 ->782.053ms
+  and producer delay p9532.235 ->38.859ms regress; loop lag p9510.824/88.549/
+  90.855 ->9.518/75.692/93.907ms includes another contention regression.
+  Loop dispatch p95 is0.193/69.523/103.237 ->0.980/62.380/87.180ms.
+  Mixed loop p99133.691 ->208.595ms regresses. This still does not establish
+  sustained50 successful requests/s or20 simultaneously executing handlers.
+- Cache phase hits/misses48/103,37/114,35/116 ->48/103,33/118,39/112;
+  partial hits91/44/47 ->91/40/45; evictions71/82/84 ->71/86/80; waits0/0/1
+  ->0/0/2. Explicit invalidations, expiry, bypass and oversized counts are0.
+  Entries remain32, estimated bytes peak105,825 ->105,819 under32 entries/
+  1MiB caps. Per-command cache counters are not measured. Exp/stone generation
+  changes0/32/32 in both versions; generation-key invalidation still applies.
+  BEGIN counts759/855/855 are unchanged, total execution54.505 ->59.689ms
+  regresses; this includes SQL execution, not pure transaction lock waiting.
+- Limits:2/4 CPUs,1GiB address space,600 CPU seconds,1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`, common validation lock,768MiB available-memory floor,
+  2GiB free-disk floor,900MiB RSS stop and256MiB single/total WAL stop.
+  Minimum sampled available RAM1701 ->1742MiB; free disk14,934,732,800
+  ->14,833,831,936 bytes. Peak RSS577.656 ->242.613MiB and sampled virtual
+  memory951.566 ->643.293MiB reflect the driver repair below, not a claimed
+  product memory reduction. Maximum single WAL15,355,272 ->18,321,672 and
+  total WAL22,433,528 ->25,399,928 bytes regress but remain below caps; final
+  WAL0 both. Process CPU64.087 ->62.311s / wall86.920 ->75.454s include
+  setup, hashing and snapshot IO; final restore14.161 ->13.641s is not request
+  latency. Sample-window IO reads2,396,160 ->180,224 / writes57,315,328
+  ->55,717,888 bytes; larger full-process reads2,342,916,096 ->765,636,608 /
+  writes3,768,799,232 ->3,792,945,152 bytes include restoration and are not
+  application traffic. MainThread CPU2526.355/3115.967/2886.881
+  ->2399.239/3064.928/3116.921ms retains the contention regression. Observer
+  record/begin/authorizer/watch counters remain in the reports; authorizer
+  overlaps SQL CPU, and observer overhead cannot be subtracted from E2E.
+- Provenance: early setup/actor-selection failures are invalid benchmark
+  evidence. Earlier after attempts never installed indexes because `.001`
+  was already applied; they remain diagnostics, including worse tails, not
+  accepted index results. One also failed restoration near1GiB AS because
+  the harness retained about361MiB of adjacent historical JSON reports as
+  application state. Recovery report
+  `activity-rank-recovery-v12-20261126-r01.json` verifies all five DB quick
+  checks/row counts and the original1M digest, then removes the temporary
+  restore snapshot. Snapshot JSON now covers only the runtime root and
+  isolated command-source tree; report evidence is neither copied nor erased.
+  This corrected driver and a new runtime migration justify the single final
+  after, without another baseline. Traffic/oracles match, but driver snapshot
+  scope and memory footprint differ; OS warmth/GC/scheduling are uncontrolled.
+  Business seed fields match; manifest hashes differ only through
+  `xiuxian/compatibility_hits.json` diagnostic startup counters and derived
+  `seed_sha256`. Do not claim byte-identical full manifests or attribute all
+  E2E/RSS changes to indexes.
+- Consolidated affected regression:91 tests and19 subtests pass9.76s,
+  including populated001-004 ->005 migration/idempotence/ownership, published
+  checksums, query plans, warm-public-cache/live-personal changes and harness
+  restore/report-preservation/oracle/phase-selector boundaries. Compile,
+  architecture and inventory checks pass on a clean code-only checkout so
+  the protected legacy JSON deletion stays untouched. Old green full shards
+  and V10/V11/serial matrices are not repeated; exact delivered SHA CI is the
+  full-suite delivery gate. The repository performance goal remains active,
+  including remaining contention/loop stalls and unverified sustained50/s.

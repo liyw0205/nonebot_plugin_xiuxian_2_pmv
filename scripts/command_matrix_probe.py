@@ -404,12 +404,17 @@ def expand_fixture(fixture: Path, target_users: int) -> dict:
 
 
 class DiskFixtureSnapshot:
+    def _json_paths(self):
+        # Reports beside the data tree are immutable evidence, not application state.
+        for tree in (self.root, self.root.parent / "command-source"):
+            yield from tree.rglob("*.json")
+
     def __init__(self, root: Path, managers: tuple, snapshot_dir: Path) -> None:
         self.root = root
         self.managers = managers
         self.snapshot_dir = snapshot_dir
         self.snapshot_dir.mkdir()
-        self.json_files = {path: path.read_bytes() for path in root.parent.rglob("*.json")}
+        self.json_files = {path: path.read_bytes() for path in self._json_paths()}
         self.databases: dict[Path, Path] = {}
         self.snapshot_connections = []
         for number, path in enumerate(sorted(root.glob("*.db"))):
@@ -428,7 +433,7 @@ class DiskFixtureSnapshot:
 
         _shutdown_cooldown_runtimes()
         limit_all_data.clear()
-        for path in self.root.parent.rglob("*.json"):
+        for path in self._json_paths():
             if path not in self.json_files:
                 path.unlink()
         for path, content in self.json_files.items():

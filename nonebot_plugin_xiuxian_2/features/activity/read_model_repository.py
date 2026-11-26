@@ -228,7 +228,8 @@ class ActivityReadModelSqlRepository:
                 "user_xiuxian.user_name AS user_name FROM activity_user "
                 "LEFT JOIN user_xiuxian ON user_xiuxian.user_id=activity_user.user_id "
                 "ORDER BY activity_user.sign_days DESC,"
-                "activity_user.total_sign_days DESC,activity_user.last_sign_date ASC "
+                "activity_user.total_sign_days DESC,activity_user.last_sign_date ASC,"
+                "activity_user.user_id ASC "
                 "LIMIT ?",
                 (limit,),
             )
@@ -858,10 +859,10 @@ class ActivityReadModelSqlRepository:
                 WITH viewer AS (SELECT ? AS user_id),
                 target AS (
                     SELECT viewer.user_id AS own_id,
-                           COALESCE((SELECT sign_days FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),0) AS own_days,
-                           COALESCE((SELECT total_sign_days FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),0) AS own_total,
-                           COALESCE((SELECT last_sign_date FROM activity_user WHERE user_id=viewer.user_id ORDER BY rowid ASC LIMIT 1),'') AS own_last
-                    FROM viewer
+                           COALESCE(own.sign_days,0) AS own_days,
+                           COALESCE(own.total_sign_days,0) AS own_total,
+                           COALESCE(own.last_sign_date,'') AS own_last
+                    FROM viewer LEFT JOIN activity_user AS own ON own.user_id=viewer.user_id
                 ),
                 rows AS (
                     SELECT target.own_id,target.own_days,target.own_total,target.own_last,
@@ -870,7 +871,7 @@ class ActivityReadModelSqlRepository:
                     FROM activity_user CROSS JOIN target
                 ),
                 counts AS (
-                    SELECT COUNT(CASE WHEN sign_days>0 THEN 1 END) AS total,
+                    SELECT COUNT(*) AS total,
                            COUNT(CASE WHEN own_days>0 AND (
                                sign_days>own_days
                                OR (sign_days=own_days AND total_sign_days>own_total)
@@ -879,7 +880,7 @@ class ActivityReadModelSqlRepository:
                                OR (sign_days=own_days AND total_sign_days=own_total
                                    AND last_sign_date=own_last AND user_id<own_id)
                            ) THEN 1 END) AS better
-                    FROM rows
+                    FROM rows WHERE sign_days>0
                 )
                 SELECT target.own_days AS value,
                        counts.total,counts.better FROM counts
@@ -901,19 +902,18 @@ class ActivityReadModelSqlRepository:
                 WITH viewer AS (SELECT ? AS user_id),
                 target AS (
                     SELECT viewer.user_id AS own_id,
-                           COALESCE((SELECT total_damage FROM activity_boss_damage
-                                     WHERE activity_key=? AND user_id=viewer.user_id
-                                     ORDER BY rowid ASC LIMIT 1),0) AS own_damage
-                    FROM viewer
+                           COALESCE(own.total_damage,0) AS own_damage
+                    FROM viewer LEFT JOIN activity_boss_damage AS own
+                      ON own.activity_key=? AND own.user_id=viewer.user_id
                 ),
                 rows AS (
                     SELECT target.own_id,target.own_damage,
                            damage.user_id,damage.total_damage
                     FROM activity_boss_damage AS damage CROSS JOIN target
-                    WHERE damage.activity_key=?
+                    WHERE damage.activity_key=? AND damage.total_damage>0
                 ),
                 counts AS (
-                    SELECT COUNT(CASE WHEN total_damage>0 THEN 1 END) AS total,
+                    SELECT COUNT(*) AS total,
                            COUNT(CASE WHEN own_damage>0 AND (
                                total_damage>own_damage
                                OR (total_damage=own_damage AND user_id<own_id)

@@ -30,6 +30,42 @@ class ActivityStateMigrationTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
+    def test_existing_activity_database_receives_rank_indexes_once(self) -> None:
+        from nonebot_plugin_xiuxian_2.infrastructure.database.migrations import MigrationRunner
+        from nonebot_plugin_xiuxian_2.plugin import build_migrations, migrations_for_database
+
+        catalog = build_migrations()
+        activity = tuple(migration for migration in migrations_for_database(catalog, "game_db")
+                         if migration.version.startswith("activity_state."))
+        self.assertEqual([f"activity_state.{index:03d}" for index in range(1, 6)],
+                         [migration.version for migration in activity])
+        for key in ("player_db", "trade_db", "impart_db", "message_db"):
+            self.assertNotIn("activity_state.005",
+                             [migration.version for migration in migrations_for_database(catalog, key)])
+        runner = MigrationRunner(activity)
+        with DatabaseUnitOfWork(self.database) as uow:
+            self.assertEqual([migration.version for migration in activity[:-1]],
+                             MigrationRunner(activity[:-1]).apply(uow))
+            uow.execute("INSERT INTO activity_user(user_id,sign_days) VALUES('u1',7)")
+            uow.execute("INSERT INTO activity_boss_damage(activity_key,user_id,total_damage) "
+                        "VALUES('festival','u1',123)")
+            previous_markers = uow.query_all("SELECT * FROM schema_migrations ORDER BY version")
+            self.assertIsNone(uow.query_one(
+                "SELECT 1 FROM sqlite_master WHERE name='idx_activity_user_sign_rank'"))
+        with DatabaseUnitOfWork(self.database) as uow:
+            before = [uow.query_all(f"SELECT * FROM {table}")
+                      for table in ("activity_user", "activity_boss_damage")]
+            self.assertEqual(["activity_state.005"], runner.preview(uow))
+            self.assertEqual(["activity_state.005"], runner.apply(uow))
+            self.assertEqual([], runner.apply(uow))
+            self.assertEqual(previous_markers, uow.query_all(
+                "SELECT * FROM schema_migrations WHERE version<'activity_state.005' ORDER BY version"))
+            self.assertEqual(before, [uow.query_all(f"SELECT * FROM {table}")
+                                     for table in ("activity_user", "activity_boss_damage")])
+            indexes = {row["name"] for row in uow.query_all(
+                "SELECT name FROM sqlite_master WHERE type='index'")}
+            self.assertTrue({"idx_activity_user_sign_rank", "idx_activity_boss_damage_rank"} <= indexes)
+
     def create_legacy_state(self) -> None:
         with sqlite3.connect(self.legacy_database) as conn:
             conn.executescript(
