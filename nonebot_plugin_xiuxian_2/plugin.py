@@ -1551,13 +1551,19 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         from threading import current_thread, main_thread
 
         from .features.admin.blackhouse_repository import AdminBlackhouseSqlRepository
-        from .infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER, PLAYER_PROJECTION_READ_OWNER, PLAYER_ACTIVITY_WRITE_OWNER
+        from .infrastructure.database.uow import (
+            LIVE_PROJECTION_READ_OWNER, PLAYER_PROJECTION_READ_OWNER,
+            PLAYER_ACTIVITY_WRITE_OWNER, IMPART_PROJECTION_READ_OWNER,
+            STONE_TRAINING_WRITE_OWNER,
+        )
 
         if current_thread() is main_thread():
             AdminBlackhouseSqlRepository.close_read_connection()
             LIVE_PROJECTION_READ_OWNER.close()
             PLAYER_PROJECTION_READ_OWNER.close()
             PLAYER_ACTIVITY_WRITE_OWNER.close()
+            IMPART_PROJECTION_READ_OWNER.close()
+            STONE_TRAINING_WRITE_OWNER.close()
         phase_state["database"] = False
 
     lifecycle.register(LifecyclePhase.FILESYSTEM, ensure_filesystem)

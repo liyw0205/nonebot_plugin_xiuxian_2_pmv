@@ -13,13 +13,22 @@ from ...core.numeric import adapt_sqlite_params, register_numeric_functions
 
 
 class _ConnectionScope:
-    def __init__(self) -> None:
+    def __init__(self, *, write_owner=None, write_database=None) -> None:
         self.thread_id = get_ident()
         self.active = True
         self.idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
+        self.write_owner = write_owner
+        self.write_database = Path(write_database).resolve() if write_database is not None else None
 
     def available(self) -> bool:
         return self.active and self.thread_id == get_ident()
+
+    def writer_for(self, database: Path):
+        if (self.available() and current_thread() is main_thread()
+                and self.write_owner is not None
+                and database.resolve() == self.write_database and database.is_file()):
+            return self.write_owner
+        return None
 
     def take(self, key: tuple[Any, ...]) -> tuple[sqlite3.Connection, Any] | None:
         if not self.available() or self.idle is None or self.idle[0] != key:
@@ -133,6 +142,9 @@ LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 # A separate player handle avoids evicting the live game projection reader.
 PLAYER_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
 PLAYER_ACTIVITY_WRITE_OWNER = WriteConnectionOwner()
+IMPART_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+# Training has different connection options from the timestamp writer.
+STONE_TRAINING_WRITE_OWNER = WriteConnectionOwner()
 
 
 class DatabaseUnitOfWork:
@@ -164,6 +176,7 @@ class DatabaseUnitOfWork:
             raise ValueError("a retained writer requires a writable unit of work")
         self._read_owner = read_owner or write_owner
         self._write_owned = write_owner is not None
+        self._scope_write_owner = False
         self._read_owner_active = False
         self._read_owner_key: tuple[Any, ...] | None = None
         self._read_cursors: list[sqlite3.Cursor] = []
@@ -175,14 +188,22 @@ class DatabaseUnitOfWork:
 
     @staticmethod
     @contextmanager
-    def connection_scope() -> Iterator[None]:
+    def connection_scope(
+        *, write_owner: WriteConnectionOwner | None = None,
+        write_database: str | Path | None = None,
+    ) -> Iterator[None]:
         """Reuse at most one idle connection within an explicit sync request.
 
         Each unit of work still commits or rolls back its own transaction.
         Nested scopes are independent; copied contexts on another thread do
         not borrow the originating thread's connection.
+
+        An opt-in writer retains only idle plain UOW handles for one database
+        across scopes; read and attached transactions keep the scoped lifetime.
         """
-        scope = _ConnectionScope()
+        if (write_owner is None) != (write_database is None):
+            raise ValueError("write_owner and write_database must be specified together")
+        scope = _ConnectionScope(write_owner=write_owner, write_database=write_database)
         token = _CONNECTION_SCOPE.set(scope)
         try:
             yield
@@ -202,6 +223,17 @@ class DatabaseUnitOfWork:
 
     def __enter__(self) -> "DatabaseUnitOfWork":
         self._read_failed = False
+        if self._scope_write_owner:
+            self._read_owner = None
+            self._read_owner_key = None
+            self._write_owned = self._scope_write_owner = False
+        scope = _CONNECTION_SCOPE.get()
+        if (type(self) is DatabaseUnitOfWork and self._read_owner is None
+                and not self.read_only and not self.query_only and scope is not None):
+            owner = scope.writer_for(self.database)
+            if owner is not None:
+                self._read_owner = owner
+                self._write_owned = self._scope_write_owner = True
         if self._read_owner is not None:
             self._read_owner_key = self._connection_key()
             self._read_owner_active, borrowed = self._read_owner._acquire(self._read_owner_key)

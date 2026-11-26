@@ -2913,3 +2913,145 @@ per-connection diagnostics or per-request top-query lists omit statements.
   Exact delivered SHA CI is the full clean-checkout gate. Overall performance
   goal remains active for wider score strata/activity writes/loop tails and
   sustained throughput; this accepted pair will not be rerun to select numbers.
+
+## V15: Live Impart Reader and Training Writer Reuse (2026-11-27)
+
+- Start from `694f63ae571e534a89f040363d007707298715bd`, exact-SHA CI
+  `45877945768` completed/success. Reuse its accepted V14 after report as
+  this batch's before; no old baseline, matrix or full shard was repeated.
+  Saved traces show168 cold impart connections and64 cold training writers.
+  Rank COUNT+seek averages only4.37ms/profile under contention, while even
+  the24 huge readers without COUNT have504.8ms p95. Increasing rank seek
+  budgets or reusing stale TOP slices has no supporting benefit evidence.
+- `ImpartRepository.state(ensure=False)` uses one independent bounded idle
+  read owner. Every call still BEGINs, checks the table, queries the earliest
+  live player row, validates exact crystal values/optional duplicate agreement
+  and commits. `ensure=True` keeps its real writable transaction. No personal
+  attributes, balance, eligibility, rewards or target choices are cached.
+- Only the stone-training synchronous scope opts plain writable UOWs into
+  another single-idle owner, bound to the resolved game database. Each of
+  the four independent ledger/check/settlement/finish transactions still
+  commits or rolls back immediately. Selection happens at enter; an escaped
+  or reused UOW cannot retain scope ownership. Explicit outer/default scopes,
+  other databases, attached UOWs, readers, query-only calls, workers and
+  reentrant active transactions retain their isolation. Missing databases
+  retain the old create path. Existing-file identity is checked before commit;
+  errors discard the handle. Two fixed extra handles avoid repeatedly evicting
+  the separate timestamp writer; lifecycle shutdown closes both.
+- Reports in the sole retained fixture's `data/` directory:
+  before `cold-rank-after-v14-20261127-r01.json`,
+  after `cold-rank-after-v15-20261127-r01.json`,
+  comparison `cold-rank-comparison-v15-20261127-r01.json`.
+  Driver, fixture, limits, phase specs, every request/actor/argument/oracle
+  and business manifests match. Only compatibility diagnostic JSON and its
+  derived seed hash differ. Runtime trees
+  `de539ceb8a7acbbb1487a3867281144900f3b34c991ab0c7fb7b5df501a96906`
+  -> `fb813f286b6870b920250ca3587389a54b1df17995a9c5f57a18d3b01fee01eb`
+  differ in exactly UOW, buff application, impart repository and lifecycle.
+  The first launcher omitted `XIUXIAN_MATRIX_LIMITS=1` and was rejected before
+  fixture loading/traffic, producing no JSON. The corrected capped launch is
+  the single after run; its separate log preserves this setup error.
+- Same384 real matcher/DI/handler requests,128 per pure/mixed/contention
+  phase, caps10/20/20 and offered20/35/50 arrivals/s. Retain128 actors,
+  32 training writers,24 huge readers,32 fixed pivots,4096 distinct-score
+  nonparticipants,4237/4202 exp/stone groups in1M existing users,8192 natal/
+  avatar/title/sign rows,32768 boss rows and4096 mentor applications. These
+  are populated sampled features, not1M distinct scores or exhaustive runtime
+  coverage of674 matchers. Activity damage/sign mutation/index maintenance
+  remains outside the workload. All phases share one instance/database set,
+  drain before restore, and preserve real exp+100/stone-1000 writes.
+- Both versions384/384 successful,0 business/cooldown refusals, exceptions,
+  timeouts, SQL errors, busy/locked errors or boundary violations. All three
+  phase invariants, exact rank/huge-value replies, asset/receipt/nonparticipant/
+  natal checks and original1M digest restoration pass. No duplicate reward,
+  lost asset update, negative asset or deadlock was observed in this sample.
+
+Cells are E2E p50/p95/p99 milliseconds, including producer/event-loop/admission
+queueing, before -> after. Each listed error rate is0. For n12 p95/p99 is the
+maximum; n2 relationships are only sanity samples. SQL counts include control
+API calls. Full aggregates are distinct from bounded statement diagnostics.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / boss board | 12 | 11.628/17.164/17.164 -> 11.608/181.606/181.606 | 174 -> 174 | 27.241 -> 36.272 |
+| pure / boss display | 12 | 9.355/130.585/130.585 -> 9.034/24.117/24.117 | 55 -> 55 | 5.374 -> 4.911 |
+| pure / sign board | 12 | 10.901/62.372/62.372 -> 10.600/77.211/77.211 | 175 -> 175 | 24.736 -> 27.542 |
+| pure / mentor | 18 | 19.748/31.241/31.241 -> 20.182/28.284/28.284 | 524 -> 524 | 139.160 -> 146.007 |
+| pure / partner | 18 | 15.194/27.506/27.506 -> 15.341/28.123/28.123 | 342 -> 342 | 94.146 -> 96.185 |
+| pure / profile | 56 | 16.689/89.778/160.750 -> 15.627/50.465/132.171 | 2430 -> 2321 | 172.391 -> 141.652 |
+| mixed / boss board | 12 | 11.260/24.716/24.716 -> 15.221/48.436/48.436 | 175 -> 175 | 27.878 -> 36.399 |
+| mixed / boss display | 12 | 15.151/89.746/89.746 -> 9.447/35.627/35.627 | 55 -> 55 | 4.987 -> 7.617 |
+| mixed / sign board | 12 | 12.065/38.873/38.873 -> 11.774/39.376/39.376 | 175 -> 175 | 27.972 -> 22.240 |
+| mixed / mentor | 2 | 27.751/35.898/35.898 -> 19.693/24.978/24.978 | 60 -> 60 | 16.979 -> 16.974 |
+| mixed / partner | 2 | 14.541/14.888/14.888 -> 14.986/171.988/171.988 | 38 -> 38 | 9.697 -> 10.206 |
+| mixed / profile | 56 | 33.594/89.516/97.438 -> 25.883/85.468/94.966 | 2483 -> 2371 | 288.876 -> 266.749 |
+| mixed / training | 32 | 45.957/70.591/71.924 -> 43.298/66.008/68.925 | 1312 -> 1219 | 335.486 -> 155.082 |
+| contention / boss board | 12 | 458.247/571.923/571.923 -> 208.937/294.114/294.114 | 175 -> 175 | 28.020 -> 29.297 |
+| contention / boss display | 12 | 482.581/502.065/502.065 -> 258.066/306.546/306.546 | 55 -> 55 | 8.587 -> 8.332 |
+| contention / sign board | 12 | 249.337/298.275/298.275 -> 172.929/241.150/241.150 | 175 -> 175 | 35.098 -> 41.763 |
+| contention / mentor | 2 | 469.812/489.730/489.730 -> 226.188/246.096/246.096 | 60 -> 60 | 16.562 -> 16.011 |
+| contention / partner | 2 | 429.603/448.595/448.595 -> 185.902/205.206/205.206 | 38 -> 38 | 10.983 -> 11.799 |
+| contention / profile | 56 | 379.516/557.569/574.590 -> 203.943/323.989/339.102 | 2477 -> 2370 | 532.037 -> 504.556 |
+| contention / training | 32 | 404.133/567.788/574.588 -> 228.613/312.705/351.520 | 1312 -> 1216 | 369.215 -> 183.334 |
+
+- Impart handles56/56/56 ->1/0/0; complete SQL336/336/336 ->227/224/224,
+  wall39.583/44.332/57.287 ->5.868/7.163/14.175ms. Diagnostics omit no
+  impart statements: CPU40.690/43.599/47.867 ->6.843/7.379/8.160ms.
+  Raw open34.866 ->0.131ms and UDF setup4.933 ->0.023ms are separate.
+  Each request retains its live table/row reads, with no new value cache.
+- Training cold game opens32/32 ->1/0; raw open10.361 ->0.163ms. Complete
+  game SQL1184/1184 ->1091/1088, wall324.032/358.807 ->145.856/164.744ms;
+  all-database command SQL wall335.486/369.215 ->155.082/183.334ms.
+  The journal checks captured in both diagnostics and top queries64 ->1,
+  wall233.398 ->3.097ms. Training diagnostics omit576/576 statements before
+  and483/480 after; their CPU/BEGIN counts are partial, not all transactions.
+  Direct real-settlement tests independently retain four BEGIN/commit pairs
+  per success and verify immediate assets plus replay without second debit.
+- Successful throughput20.097/35.131/43.100 ->20.097/33.679/46.952/s;
+  mixed throughput regresses. Observed handler wall-interval overlap3/2/15
+  ->3/2/11 differs from cap10/20/20 and peak in-flight4/4/20 ->4/4/17.
+  In-flight includes queued requests; overlap does not prove parallel CPU or
+  SQLite execution. Neither sustained50 successes/s nor20 active handlers is
+  proved. Contention admission p95130.449 ->0.009ms and dispatch p95/p99
+  67.590/95.454 ->54.377/70.554ms improve; producer p951.986 ->3.663ms
+  regresses. Loop p95/p99:5.050/13.065 ->9.220/19.172,
+  36.042/53.509 ->28.531/54.296,81.456/106.048 ->62.766/76.265ms.
+  Pure loop tails and mixed loop p99 regress. Pure boss/sign boards, mixed
+  boss board/partner and other medians/SQL times above retain regressions;
+  finite one-pair scheduling/host/observer variation forbids an all-path win.
+- Global exp/stone generation deltas remain0/32/32, with live exact ranks.
+  Remainder COUNT9/48/51 ->9/48/53, wall19.264/64.627/142.029
+  ->13.717/59.985/127.049ms. Seek98/112/108 ->98/112/110; mixed/contention
+  seek wall49.689/102.549 ->58.909/109.570ms regresses. Plan4/8/8 stays
+  bounded, but contention plan wall20.520 ->32.388ms regresses. Rank worker
+  wall58.026/149.078/353.300 ->53.997/160.440/346.052ms: mixed regresses.
+  No generation, rank algorithm or gameplay change was made to select numbers.
+- Shared cache hits/misses103/104,88/119,92/115 ->103/104,88/119,90/117;
+  partial hits91/32/42 ->91/32/56, evictions72/87/83 ->72/87/85.
+  Waits/expiry/explicit invalidation/bypass/oversized remain0. Maximum32
+  entries/106243 estimated bytes before,106235 after, within1MiB; command
+  attribution of cache hits is unmeasured. Main-thread CPU2017.903/2460.238/
+  2422.331 ->2002.617/2496.018/2186.472ms includes observer work; mixed
+  regresses. Observer counters remain in the original reports and cannot be
+  subtracted from E2E or added to overlapping SQL worker CPU. Statement wall
+  includes instrumentation; no separate exact SQLite transaction-wait claim.
+- Guards unchanged: shared lock,2/4 CPUs,1GiB AS,600 CPU/1200 wall seconds,
+  `MALLOC_ARENA_MAX=2`,768MiB available RAM/2GiB disk floors,900MiB RSS and
+  256MiB single/total WAL stops. No guard stops. Minimum sampled RAM1728
+  ->1552MiB, disk14446256128 ->14314532864 bytes; process peak RSS237.750
+  ->229.148MiB, sampled virtual620.105 ->645.684MiB (regression).
+  Single WAL18321672 bytes unchanged, total25881968 ->25890208 bytes slightly
+  regresses; final WAL0. Full-process CPU65.448 ->65.943s, wall78.349
+  ->81.597s and restore13.549 ->13.741s regress and include setup/fixture IO.
+  Traffic-window reads1130496 ->1257472 bytes, writes54067200 ->55205888
+  bytes regress. Full-window reads702418944 ->546439168, writes3815653376
+  ->3815243776 bytes include restoration/setup, not just application work.
+- One affected consolidated run passes81 tests/31 subtests in17.78s, covering
+  the two new boundary suites, original scope/writer/reader/attached/replay/
+  precision cases, impart application and real profile alias/fault probe.
+  Compile, architecture (`ok=true/errors=[]`), inventory and scoped whitespace
+  pass on a code-only checkout, preserving the user's legacy JSON deletion.
+  Previously accepted full shards are reused; exact delivered SHA CI supplies
+  the full clean-checkout gate. This bounded batch is not completion of the
+  repository-wide performance goal; activity mutations, broader score/load
+  distributions, loop regressions and sustained capacity remain unproved.

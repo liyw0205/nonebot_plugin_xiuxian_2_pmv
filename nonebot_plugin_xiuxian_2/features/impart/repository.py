@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import IMPART_PROJECTION_READ_OWNER
 from ...core.errors import DomainError
 from .._service_port import ServicePort
 from .catalog import card_definitions
@@ -35,7 +36,10 @@ class ImpartRepository(ServicePort):
         validate_crystal_consistency: bool = False,
     ) -> dict | None:
         user_id = str(user_id)
-        with DatabaseUnitOfWork(self.database, immediate=ensure, read_only=not ensure) as uow:
+        with DatabaseUnitOfWork(
+            self.database, immediate=ensure, read_only=not ensure,
+            read_owner=IMPART_PROJECTION_READ_OWNER.when_unscoped() if not ensure else None,
+        ) as uow:
             if uow.query_one(
                 "SELECT 1 AS present FROM sqlite_master "
                 "WHERE type='table' AND name='xiuxian_impart'"

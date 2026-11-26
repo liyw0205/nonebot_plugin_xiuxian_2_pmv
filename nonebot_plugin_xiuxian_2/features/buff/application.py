@@ -15,6 +15,7 @@ from ...infrastructure.database import (
     OutboxStore,
 )
 from ...infrastructure.database.ledger import request_hash
+from ...infrastructure.database.uow import STONE_TRAINING_WRITE_OWNER
 from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
@@ -62,7 +63,10 @@ class BuffApplication(LegacyApplication):
 
     def _asset_request(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
         if table == "stone_training_operations":
-            with DatabaseUnitOfWork.connection_scope():
+            owner = STONE_TRAINING_WRITE_OWNER.when_unscoped()
+            with DatabaseUnitOfWork.connection_scope(
+                write_owner=owner, write_database=self.game_database if owner else None,
+            ):
                 return self._asset_request_scoped(
                     operation_id=operation_id, user_id=user_id, action=action, kwargs=kwargs,
                     identity=identity, table=table, extra=extra, transient=transient, call=call,
