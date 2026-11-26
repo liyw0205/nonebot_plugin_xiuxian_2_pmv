@@ -46,6 +46,7 @@ ACTIVE = ContextVar("mixed_command_request", default=None)
 BACKGROUND_SQL = ContextVar("mixed_command_background_sql", default=None)
 CHECKED_ATTACH = ContextVar("mixed_command_checked_attach", default=None)
 SQL_CPU_START = ContextVar("mixed_command_sql_cpu_start", default=None)
+SQL_DIAGNOSTIC = ContextVar("mixed_command_sql_diagnostic", default=None)
 BOUND_ATTACH = re.compile(r'^\s*ATTACH\s+(?:DATABASE\s+)?\?\s+AS\s+(?:[a-zA-Z_]\w*|"(?:[^"]|"")+")\s*;?\s*$', re.IGNORECASE)
 def bulk_probe(context, managers, fixture_identity):
     return measure_rank_generation_cost(context.paths.game_db)
@@ -97,6 +98,46 @@ class QueryRouter:
         self.background_errors = []
         self.phase_active = False
         self.lock = threading.Lock()
+        self.connection_serial = 0
+
+    def connection_entry(self, connection):
+        row = ACTIVE.get()
+        diagnostic = getattr(connection, "_mixed_diagnostic", None)
+        if row is None or diagnostic is None:
+            return None
+        serial = diagnostic["serial"]
+        entries = row["_connection_entries"]
+        if serial not in entries:
+            if len(entries) >= 32:
+                row["connection_diagnostic_omitted_touches"] += 1
+                return None
+            entry = {"connection": serial, "database": diagnostic["database"],
+                     "opened_in_request": diagnostic["opened_by"] is row["_connection_owner"],
+                     "open_ms": diagnostic["open_ms"] if diagnostic["opened_by"] is row["_connection_owner"] else 0.0,
+                     "udf_calls": 0, "udf_ms": 0.0, "statements": [],
+                     "statements_omitted": 0}
+            entries[serial] = entry
+            row["connection_diagnostics"].append(entry)
+        return entries[serial]
+
+    def begin_statement(self, connection, sql):
+        diagnostic = getattr(connection, "_mixed_diagnostic", None)
+        if diagnostic is None:
+            return
+        diagnostic["ordinal"] += 1
+        diagnostic["statement"] = None
+        entry = self.connection_entry(connection)
+        if entry is None:
+            return
+        if len(entry["statements"]) >= 12:
+            entry["statements_omitted"] += 1
+            return
+        statement = {"ordinal": diagnostic["ordinal"],
+                     "sql": matrix._normalized_sql(str(sql)), "authorizer_calls": 0,
+                     "execute_ms": 0.0, "fetch_ms": 0.0, "cpu_ms": 0.0}
+        entry["statements"].append(statement)
+        diagnostic["statement"] = statement
+        return statement
 
     def check_path(self, value, *, operation):
         path = database_path(value)
@@ -157,6 +198,11 @@ class QueryRouter:
             recorder = row["_recorder"]
             recorder.connections = self.connections
             recorder.record(connection, sql, phase, elapsed_ms)
+            diagnostic = getattr(connection, "_mixed_diagnostic", None)
+            statement = SQL_DIAGNOSTIC.get()
+            if statement is not None:
+                statement["execute_ms" if phase == "execute" else "fetch_ms"] += elapsed_ms
+                statement["cpu_ms"] += cpu_ms or 0.0
             name = threading.current_thread().name
             totals = row["sql_threads"].setdefault(name, {"calls": 0, "wall_ms": 0.0, "cpu_ms": 0.0})
             totals["calls"] += phase == "execute"
@@ -239,14 +285,17 @@ class MixedCursor(matrix.TimedCursor):
     @contextmanager
     def cpu_clock(self):
         token = SQL_CPU_START.set(time.thread_time())
+        diagnostic_token = SQL_DIAGNOSTIC.set(getattr(self, "_mixed_statement", None))
         try:
             yield
         finally:
+            SQL_DIAGNOSTIC.reset(diagnostic_token)
             SQL_CPU_START.reset(token)
 
     def execute(self, sql, parameters=()):
         token = None
         try:
+            self._mixed_statement = ROUTER.begin_statement(self.connection, sql)
             if BOUND_ATTACH.fullmatch(str(sql)):
                 if not isinstance(parameters, (tuple, list)) or len(parameters) != 1:
                     ROUTER.deny("bound ATTACH must supply exactly one database path")
@@ -263,6 +312,7 @@ class MixedCursor(matrix.TimedCursor):
 
     def executemany(self, sql, parameters):
         try:
+            self._mixed_statement = ROUTER.begin_statement(self.connection, sql)
             with self.cpu_clock():
                 return super().executemany(sql, parameters)
         except sqlite3.Error as exc:
@@ -271,6 +321,7 @@ class MixedCursor(matrix.TimedCursor):
 
     def executescript(self, sql):
         try:
+            self._mixed_statement = ROUTER.begin_statement(self.connection, sql)
             with self.cpu_clock():
                 return super().executescript(sql)
         except sqlite3.Error as exc:
@@ -298,25 +349,41 @@ class MixedConnection(matrix.TimedConnection):
     def cursor(self, factory=None):
         return sqlite3.Connection.cursor(self, factory or MixedCursor)
 
-    def commit(self):
+    def create_function(self, *args, **kwargs):
         started = time.perf_counter()
         try:
-            return super().commit()
+            return super().create_function(*args, **kwargs)
+        finally:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            entry = ROUTER.connection_entry(self)
+            if entry is not None:
+                entry["udf_calls"] += 1
+                entry["udf_ms"] += elapsed_ms
+
+    @contextmanager
+    def control_statement(self, sql):
+        started = time.perf_counter()
+        cpu_token = SQL_CPU_START.set(time.thread_time())
+        diagnostic_token = SQL_DIAGNOSTIC.set(ROUTER.begin_statement(self, sql))
+        try:
+            yield
         except sqlite3.Error as exc:
-            ROUTER.failure(exc, "COMMIT")
+            ROUTER.failure(exc, sql)
             raise
         finally:
-            ROUTER.record(self, "COMMIT", "execute", (time.perf_counter() - started) * 1000)
+            try:
+                ROUTER.record(self, sql, "execute", (time.perf_counter() - started) * 1000)
+            finally:
+                SQL_DIAGNOSTIC.reset(diagnostic_token)
+                SQL_CPU_START.reset(cpu_token)
+
+    def commit(self):
+        with self.control_statement("COMMIT"):
+            return super().commit()
 
     def rollback(self):
-        started = time.perf_counter()
-        try:
+        with self.control_statement("ROLLBACK"):
             return super().rollback()
-        except sqlite3.Error as exc:
-            ROUTER.failure(exc, "ROLLBACK")
-            raise
-        finally:
-            ROUTER.record(self, "ROLLBACK", "execute", (time.perf_counter() - started) * 1000)
 
 
 def install_sql_timing(root):
@@ -331,11 +398,27 @@ def install_sql_timing(root):
         kwargs["factory"] = MixedConnection
         started = time.perf_counter()
         connection = matrix.ORIGINAL_CONNECT(database, *args, **kwargs)
-        connection.set_authorizer(ROUTER.authorizer)
-        ROUTER.connections[id(connection)] = str(path) if path else ":memory:"
+        opened_ms = (time.perf_counter() - started) * 1000
         row = ACTIVE.get()
+        with ROUTER.lock:
+            ROUTER.connection_serial += 1
+            serial = ROUTER.connection_serial
+        diagnostic = {"serial": serial, "database": str(path) if path else ":memory:",
+                      "opened_by": row["_connection_owner"] if row is not None else None,
+                      "open_ms": opened_ms, "ordinal": 0, "statement": None}
+        connection._mixed_diagnostic = diagnostic
+
+        def authorize(action, first, second, database, trigger):
+            statement = SQL_DIAGNOSTIC.get()
+            if statement is not None:
+                statement["authorizer_calls"] += 1
+            return ROUTER.authorizer(action, first, second, database, trigger)
+
+        connection.set_authorizer(authorize)
+        ROUTER.connections[id(connection)] = diagnostic["database"]
         if row is not None:
-            row["connect_ms"] += (time.perf_counter() - started) * 1000
+            row["connect_ms"] += opened_ms
+            ROUTER.connection_entry(connection)
         return connection
 
     sqlite3.connect = connect
@@ -419,6 +502,8 @@ def request_row(request, number):
             "number": request.get("number", number), "replies": [], "errors": [],
             "blocked": [], "logs": [], "sql_errors": [], "sqlite_busy_locked": 0,
             "transaction_begin_ms": [], "connect_ms": 0.0,
+            "connection_diagnostics": [], "_connection_entries": {}, "_connection_owner": object(),
+            "connection_diagnostic_omitted_touches": 0,
             "sql_threads": {}, "sql_timeline": [], "sql_timeline_omitted": 0,
             "_recorder": recorder, "_tasks": []}
 
@@ -736,6 +821,8 @@ async def run_phase(plan, entries, *, concurrency, arrival_rate, data_dir, class
     for row in rows:
         recorder = row.pop("_recorder")
         row.pop("_tasks")
+        row.pop("_connection_entries")
+        row.pop("_connection_owner")
         metrics = recorder_metrics(recorder)
         row["sql"] = metrics
         row["db_query_count"] = sum(db["query_count"] for db in metrics["by_database"].values())
@@ -921,6 +1008,7 @@ async def run(args, identity):
         "legacy-v1": "tests.mixed_command_fixture",
         "rank-gameplay-v2": "tests.mixed_rank_gameplay_fixture",
         "rank-range-v3": "tests.mixed_rank_range_fixture",
+        "read-strata-v4": "tests.mixed_read_strata_fixture",
     }[args.scenario])
     specs = (fixture_support.phase_specs() if args.scenario != "legacy-v1" else [
         {"mode": mode, "concurrency": concurrency, "requests": args.requests_per_phase,
@@ -946,6 +1034,7 @@ async def run(args, identity):
             "cache_attribution": "exact phase counter deltas; per-command cache counters not measured",
               "background_sql_attribution": "actual message-db queue consumer context and exact DB path; measured per phase including drain, never assigned to a command",
               "sql_count_definition": "execute/executemany/executescript calls plus commit/rollback; fetch time counted separately",
+              "connection_diagnostic_definition": "at most 32 connections/request and first 12 statements/connection/request; stable connection ID and lifetime ordinal; raw open, UDF registration, authorizer callbacks, execute/fetch CPU and wall time; omitted touches/statements counted",
               "transaction_wait_definition": "BEGIN execution time is an upper bound including SQL execution; not a pure lock-wait timer",
               "resource_before": resource_state(data_dir)}
     try:
@@ -988,6 +1077,7 @@ async def run(args, identity):
             cache_after = process_read_cache.stats()
             generation_after = rank_generation_state(managers[0])
             phase["mode"] = mode
+            phase["label"] = spec.get("label", mode)
             phase["request_order"] = spec.get("order", "original")
             phase["setup_s"] = round(setup_s, 3)
             phase["fixture_manifest"] = manifest
@@ -1063,7 +1153,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

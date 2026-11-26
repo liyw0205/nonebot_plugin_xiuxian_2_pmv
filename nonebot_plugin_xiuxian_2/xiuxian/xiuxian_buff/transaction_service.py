@@ -89,8 +89,34 @@ class PartnerProtectionService:
         return cls.normalize(row[0] if row is not None else "off")
 
     def get_status(self, user_id) -> str:
-        with self._lock, db_backend.transaction(self._player_database) as conn:
-            return self.read_status(conn, user_id)
+        with self._lock:
+            try:
+                connection = db_backend.connect_readonly(self._player_database)
+            except db_backend.OperationalError:
+                try:
+                    self._player_database.stat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise
+            else:
+                with closing(connection) as conn:
+                    try:
+                        row = conn.execute(
+                            "SELECT status.two_exp_protect FROM status WHERE user_id=%s",
+                            (str(user_id),),
+                        ).fetchone()
+                    except db_backend.OperationalError as exc:
+                        # Only legacy schema gaps retain the initializing read.
+                        if str(exc) not in {
+                            "no such table: status",
+                            "no such column: status.two_exp_protect",
+                        }:
+                            raise
+                    else:
+                        return self.normalize(row[0] if row is not None else "off")
+            with db_backend.transaction(self._player_database) as conn:
+                return self.read_status(conn, user_id)
 
     def set_status(
         self, operation_id, user_id, expected_status, new_status

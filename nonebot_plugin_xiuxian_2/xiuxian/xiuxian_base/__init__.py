@@ -14,6 +14,7 @@ from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.database import DatabaseUnitOfWork
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import get_bot
 from ..on_compat import on_command
@@ -1538,15 +1539,16 @@ async def power_breakdown_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def assets_overview_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的资产总览：一次展示本人灵石、灵庄、宗门、背包与竞技场规模（只读）。"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
+    with DatabaseUnitOfWork.connection_scope():
+        isUser, user_info, msg = check_user(event)
+        if isUser:
+            payload = assets_overview_application.overview(
+                str(user_info["user_id"]), profile=user_info
+            )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await assets_overview.finish()
 
-    # 只使用登录会话里的 user_id；不接受任何参数指定他人资产。
-    payload = assets_overview_application.overview(
-        str(user_info["user_id"]), profile=user_info
-    )
     text = format_assets_overview(payload, format_number=number_to)
     await handle_send(
         bot,

@@ -15,11 +15,13 @@ and the migrated `bank_accounts`/`arena` shape), the real
 from __future__ import annotations
 
 import ast
+import asyncio
 import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
+from types import SimpleNamespace
 
 import nonebot
 
@@ -30,6 +32,8 @@ from nonebot_plugin_xiuxian_2.features.base.assets_overview import (
     format_assets_overview,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.infrastructure.database.uow import _CONNECTION_SCOPE
+from nonebot_plugin_xiuxian_2.features.info.profile_repository import PlayerProfileSqlRepository
 
 # Authoritative legacy shapes (xiuxian2_handle DDL + XiuConfig().sql_user_xiuxian).
 USER_XIUXIAN_DDL = (
@@ -162,6 +166,70 @@ class AssetsOverviewTests(unittest.TestCase):
             )
             self.assertEqual(mismatched["stone"], 123456)
             self.assertEqual(mismatched["sect_name"], "青云宗")
+
+    def _dispatch_handler(self, application, check_user):
+        path = (Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
+                / "xiuxian" / "xiuxian_base" / "__init__.py")
+        handler = next(node for node in ast.parse(path.read_text(encoding="utf-8")).body
+                       if isinstance(node, ast.AsyncFunctionDef) and node.name == "assets_overview_")
+        handler.decorator_list = []
+        replies = []
+
+        class Finished(Exception):
+            pass
+
+        async def assign_bot(**kwargs):
+            self.assertIsNone(_CONNECTION_SCOPE.get())
+            return kwargs["bot"], 1
+
+        async def send(bot, event, text, **kwargs):
+            self.assertIsNone(_CONNECTION_SCOPE.get(), "a connection scope must never span await")
+            replies.append(text)
+
+        async def finish():
+            self.assertIsNone(_CONNECTION_SCOPE.get())
+            raise Finished
+
+        namespace = {"DatabaseUnitOfWork": DatabaseUnitOfWork, "assign_bot": assign_bot,
+                     "check_user": check_user, "handle_send": send,
+                     "assets_overview_application": application,
+                     "format_assets_overview": format_assets_overview, "number_to": _fmt,
+                     "assets_overview": SimpleNamespace(finish=finish)}
+        exec(compile(ast.Module(body=[handler], type_ignores=[]), str(path), "exec"), namespace)
+        with self.assertRaises(Finished):
+            asyncio.run(namespace["assets_overview_"](object(), object()))
+        self.assertIsNone(_CONNECTION_SCOPE.get())
+        return replies
+
+    def test_handler_reuses_one_read_connection_and_refreshes_assets_between_requests(self):
+        with tempfile.TemporaryDirectory() as temp:
+            game, player = self.build(temp)
+            application = PlayerAssetsOverviewApplication(game, player)
+            repository = PlayerProfileSqlRepository(game)
+
+            def check_user(event):
+                profile = repository.get_user_profile("u1", raise_errors=True)
+                return True, profile, ""
+
+            for attempt in range(2):
+                with self.subTest(attempt=attempt), patch("sqlite3.connect", wraps=sqlite3.connect) as connect:
+                    replies = self._dispatch_handler(application, check_user)
+                    self.assertEqual(connect.call_count, 1)
+                expected = ("123,456", "500,000", "1,520", "17") if attempt == 0 else (
+                    "123,457", "500,001", "1,521", "18")
+                for amount in expected:
+                    self.assertIn(amount, replies[0])
+                if attempt == 0:
+                    with DatabaseUnitOfWork(game) as uow:
+                        uow.execute("UPDATE user_xiuxian SET stone=stone+1 WHERE user_id='u1'")
+                        uow.execute("UPDATE bank_accounts SET saved_stone=saved_stone+1 WHERE user_id='u1'")
+                        uow.execute("UPDATE back SET goods_num=goods_num+1 WHERE user_id='u1' AND goods_id=1")
+                    with DatabaseUnitOfWork(player) as uow:
+                        uow.execute("UPDATE arena SET score=score+1 WHERE user_id='u1'")
+
+    def test_handler_rejected_user_does_not_read_assets_or_hold_scope_for_reply(self):
+        application = SimpleNamespace(overview=lambda *args, **kwargs: self.fail("rejected user read"))
+        self.assertEqual(self._dispatch_handler(application, lambda event: (False, None, "blocked")), ["blocked"])
 
     def test_schema_metadata_cache_tracks_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

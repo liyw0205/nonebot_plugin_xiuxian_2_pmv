@@ -1347,3 +1347,162 @@ training/read initialization and event-loop blocking at higher arrival rates,
 plus broader gameplay/table populations and multi-process contention not yet
 measured. Freeze any next workload before another baseline/code/after batch;
 do not rerun unchanged phases to improve the displayed numbers.
+
+## Live Asset And Protection Reads (2026-11-26)
+
+- Parent `7af5c793b23685ee31c797df498ce75eddaf44fd` passed CI `45742957236`
+  (quality and both unittest shards). This batch uses frozen `read-strata-v4`,
+  `read-strata-before-20261126-r02.json` and
+  `read-strata-after-20261126-r01.json` in the retained fixture's `data/`.
+  Runtime SHA256 changes from
+  `92a33d76a54a6a1f909841d1d91c12ff279e53f9fbafba704137a9f8db9bdbb8` to
+  `519d5a4b95af9fc7d804b372fac254b085733c0e7220554d4fb4ec5e2f0aaafa`;
+  exactly two runtime files differ. The main-checkout harness and fixture
+  support stayed identical; `--source-repo` selects runtime only. Baseline
+  completed before runtime edits, and after ran once without replacing results.
+- Asset handler scopes the synchronous `check_user`/`overview` section to one
+  idle game RO connection. Both UOW transactions still finish independently;
+  ATTACH/DETACH and every live asset query remain. Scope closes before any
+  send/finish await. Rejected users never read assets. No broader pool or cache.
+- Protection `get_status` uses a single live RO SELECT without WAL/DDL on mature
+  schema. Only a truly missing file or exact missing status table/protection
+  column closes the reader and falls back to the existing initializer. Other
+  open/query errors propagate. Setters and settlement `read_status` are unchanged.
+
+### Frozen Population And Correctness
+
+- Each version executes 1,024 real matcher/DI/handler requests on one shared
+  instance and isolated database: 919 successes, 32 expected precision refusals
+  and 73 cooldowns. Exception/timeout/busy/locked/boundary/unclassified counts
+  are zero; system error rate is 0%. Cooldowns are 22 backpack, 30 cultivation,
+  21 equipment; neither refusal category contributes to successful throughput.
+  Every ordered request, outcome/reason, complete seed manifest, frozen phase
+  spec and fixture identity matches, compared with exact Python JSON integers.
+- The sole 1M user fixture is retained. Of 128 participants, 64 low-score actors
+  perform real training (`exp+100`, `stone-1000`); 32 preserve original REAL
+  background values; 32 readonly actors use exact overflow-safe BLOBs around
+  int64/large-neighbor/tie boundaries. Cold dispatches all 128 profiles; later
+  profiles use only the exact group. Each of 183 successful profile replies per
+  version independently matches both expected dense ranks. Setup oracle uses
+  indexed next-distinct seeks (141 exp/106 stone, cap512/column), not the product
+  COUNT query, and does no request-time work. Mixed readonly ranks are provably
+  above the training ceiling; mutable low ranks during writes are not checked.
+- Original million-row data contains large REAL tie groups, not a million
+  distinct numeric values. Historical lost precision cannot be reconstructed.
+  The retained first baseline attempt `read-strata-before-20261126-r01.json`
+  stopped at cold96 successes/32 unclassified precision refusals and restored
+  the fixture. The fixture classifier was corrected before valid baseline/code
+  edits; the product precision guard was not weakened. Those 32 refusals never
+  reach rank computation and are not successful cold-rank coverage.
+- Actual feature rows: back2,560, BuffInfo128, activity_user8,192;
+  point/pass/boss32,768 each, bank/status/arena/impart128 each, sects4. No claim
+  about million-row feature scans. Every phase passes exact training deltas,
+  receipts/ledger identity, no duplicate rewards, inventory/readonly raw values,
+  attributes/features unchanged, sole1M count and DB checks. Rank generations
+  remain unchanged in cold/pure; all tasks drain before restore. Final original
+  rank digest restoration passes on both versions.
+
+### Phase And Command Results
+
+Milliseconds before -> after; E2E includes planned-arrival, dispatch and queue
+delay. Labels cold/pure mean no exp/stone writes; existing status timestamp and
+message persistence still execute. Writes by phase are0/0/22/66/112.
+
+| Phase | Limit / arrivals per s | n; success / precision / cooldown | E2E p50 | E2E p95 | E2E p99 | Success/s | Handler overlap | Loop p95 |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Cold | 10 / 20 | 128; 96 / 32 / 0 | 227.940 -> 38.463 | 820.627 -> 271.011 | 948.982 -> 298.941 | 14.997 -> 14.963 | 10 -> 5 | 36.317 -> 19.601 |
+| Pure | 20 / 35 | 224; 198 / 0 / 26 | 44.421 -> 26.668 | 233.431 -> 179.846 | 356.508 -> 274.525 | 30.543 -> 30.606 | 9 -> 8 | 27.759 -> 20.180 |
+| Read-mostly | 10 / 20 | 224; 207 / 0 / 17 | 27.572 -> 27.672 | 218.852 -> 222.585 | 267.733 -> 269.225 | 18.520 -> 18.522 | 5 -> 4 | 22.893 -> 23.232 |
+| Mixed | 20 / 35 | 224; 210 / 0 / 14 | 1226.642 -> 881.310 | 1909.922 -> 1292.109 | 1968.190 -> 1390.491 | 25.599 -> 27.618 | 20 -> 19 | 154.148 -> 145.626 |
+| Same-actor contention | 20 / 50 | 224; 208 / 0 / 16 | 2956.070 -> 2854.592 | 5062.585 -> 5292.066 | 5151.356 -> 5405.219 | 21.707 -> 21.208 | 20 -> 20 | 143.044 -> 173.896 |
+
+Cold uses only profiles and does not execute either changed path: its faster
+latency/rank SQL is variation, not evidence of a direct runtime improvement.
+Read-mostly tails and final contention tails/throughput regress. Final queue
+p95 rises4193.205 -> 4274.399ms and producer delay p95 rises6.884 -> 41.805ms;
+dispatch p95 falls199.799 -> 151.056ms. Mixed queue p95 falls1197.767 ->
+677.220ms. The producer's scheduled-vs-posted delay is measured independently;
+arrival rate, concurrency cap, overlapping handler wall intervals and success
+throughput are distinct. The final224 arrivals span about4.5s, then drain;
+neither sustained50 successes/s nor50 concurrent processing is established.
+One ordered comparison gives no statistical significance or universal speedup;
+earlier accepted regressions remain valid.
+
+Read-only followup found an additional driver limitation: `run_phase` first
+calls `_check_matcher`, then `check_and_run_matcher`, whose installed NoneBot
+implementation checks the matcher again with a separate dependency cache.
+Both versions execute this same extra rule/permission check, and the recorded
+handler interval includes the second check. This is offline-driver overhead;
+neither its21/s throughput nor the interval outside SQL measures pure production
+handler capacity. Correcting the driver requires a newly frozen before/after,
+not replacing this run or comparing a single-check after to this baseline.
+
+Pooled command E2E combines different load phases and refusal outcomes; use
+phase rows for load comparison. DB calls include execute/commit/rollback;
+SQL wall sums may overlap across threads. All values are per version.
+
+| Command | n; success / precision / cooldown | E2E p50 | E2E p95 | E2E p99 | Success-only p95 | DB calls | SQL wall ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 我的修仙信息 | 215; 183 / 32 / 0 | 222.190 -> 69.918 | 2025.383 -> 1926.369 | 4683.396 -> 4545.207 | 2118.065 -> 2106.652 | 10451 -> 10451 | 17203.091 -> 15044.071 |
+| 我的资产总览 | 175; 175 / 0 / 0 | 60.755 -> 37.215 | 3842.178 -> 3677.760 | 4956.981 -> 4939.543 | 3842.178 -> 3677.760 | 5155 -> 4805 | 2408.545 -> 1762.433 |
+| 我的状态 | 175; 175 / 0 / 0 | 81.573 -> 44.122 | 3802.554 -> 3775.809 | 4988.539 -> 5005.586 | 3802.554 -> 3775.809 | 5966 -> 5094 | 2465.265 -> 2368.925 |
+| 我的修为 | 44; 14 / 0 / 30 | 48.176 -> 36.985 | 3414.015 -> 3546.596 | 4828.463 -> 4817.507 | 791.646 -> 565.716 | 432 -> 432 | 248.174 -> 258.119 |
+| 我的背包 | 44; 22 / 0 / 22 | 43.290 -> 29.159 | 3728.930 -> 3662.974 | 4968.787 -> 4917.576 | 1806.045 -> 1261.225 | 528 -> 528 | 287.617 -> 277.421 |
+| 我的装备 | 43; 22 / 0 / 21 | 55.352 -> 53.082 | 3740.544 -> 4086.170 | 5131.442 -> 5289.379 | 1866.095 -> 1266.358 | 522 -> 522 | 276.489 -> 310.627 |
+| 活动排行 | 44; 44 / 0 / 0 | 52.472 -> 43.139 | 3709.184 -> 3622.886 | 5087.988 -> 4975.347 | 3709.184 -> 3622.886 | 968 -> 968 | 687.639 -> 688.464 |
+| 排行榜 | 42; 42 / 0 / 0 | 41.302 -> 28.744 | 3796.981 -> 4101.257 | 5138.852 -> 5405.219 | 3796.981 -> 4101.257 | 256 -> 256 | 153.064 -> 161.508 |
+| 灵石排行榜 | 42; 42 / 0 / 0 | 27.517 -> 23.688 | 3994.195 -> 4060.767 | 5141.529 -> 5366.298 | 3994.195 -> 4060.767 | 256 -> 256 | 173.836 -> 154.875 |
+| 灵石修炼 | 200; 200 / 0 / 0 | 1643.214 -> 1308.590 | 4914.153 -> 4975.514 | 5151.356 -> 5387.417 | 4914.153 -> 4975.514 | 9400 -> 9400 | 3847.359 -> 3664.963 |
+
+- Assets open700 -> 525 connections (4 -> 3/request); the isolated handler test
+  proves profile+overview share one game connection. Actual dispatch also has
+  live blacklist/avatar reads. ATTACH still executes175 times but wall sum
+  falls772.816 -> 191.430ms; profile SELECT remains175 calls,618.005 ->
+  612.829ms. Removed initialization is350 DB calls; no personal SELECT removed.
+- State protection removes175 WAL settings and schema initialization. Its
+  necessary SELECT remains175 times: recorded cost moves from WAL190.219ms +
+  SELECT9.040ms to the first RO SELECT203.782ms. Thus WAL timing alone is not
+  saved wall time; state total SQL only falls3.9%. The overall state call delta
+  is872:875 removed calls plus3 from one newly opened game BuffInfo reader
+  (WAL/busy_timeout/synchronous), not a timestamp-write change. Status timestamp
+  updates and BEGIN IMMEDIATE remain175 each. New connections875 -> 876 reflect
+  this reader; the protection getter still opens one live reader/request.
+  Per-SQL top20 sums are lower bounds when omitted, not full query counts.
+- Foreground DB calls33934 -> 32712; with asynchronous message persistence,
+  total38754 -> 37559 and SQL30002.449 -> 26908.102ms. Cold-only variation
+  accounts for much of rank SQL difference; no rank runtime code changed here.
+  Exact rank cache hits/misses by phase remain9/183,35/49,22/52,16/42,12/30.
+  Partial range reuse171/38/6/2/0 -> 171/38/6/0/0 is SQL, not a result hit.
+  Field generations advance0/0/22/66/112 on both sides. Contention still has
+  no partial reuse; no full score map, TOP-slice rank or stale eligibility.
+  Cache stays32 entries, maximum59,614 estimated bytes within1MiB. Cache counters
+  are phase-level; per-command cache attribution is not measured.
+
+### Resources And Acceptance
+
+- Same exclusive lock, two CPU affinity,1GiB AS,600 CPU/1200 wall seconds and
+  `MALLOC_ARENA_MAX=2`; available-memory768MiB/disk2GiB preflight and continuous
+  RSS900MiB/WAL256MiB stop thresholds remain. Process wall107.882 -> 106.765s,
+  CPU102.095 -> 99.157s; traffic CPU49.046 -> 46.726s. Peak RSS rises346.867 ->
+  367.172MiB; sampled VmSize924.863 -> 936.453MiB. Available memory minimum
+  1575 -> 1740MiB; disk minimum6834569216 -> 6684901376 bytes. Maximum single
+  WAL15,355,272 bytes is unchanged; sampled total20,670,168 -> 20,666,048 bytes,
+  final restored WAL zero. No threshold exceeded or extra retained million DB.
+- Setup/phase-restore sum26.214 -> 26.564s, checks5.848 -> 5.449s and final
+  restore12.547 -> 12.446s are outside request E2E. Sampled traffic write bytes
+  rise155877376 -> 161300480; final process write bytes are about6.2GB/version,
+  dominated by snapshots/restoration. Test/setup IO is not application traffic.
+  BEGIN timing remains an upper bound including SQL, not pure transaction wait.
+- Code-only acceptance:85 tests plus31 subtests pass, covering live external
+  asset/protection changes, missing legacy schema, real error propagation,
+  close-before-fallback/await, connection isolation/rollback and bounded SQL
+  diagnostics/oracle/fixture behavior. Compile, architecture, inventory and
+  whitespace pass. Ordinary tests have no benchmark address-space cap. Old
+  green shards, old serial matrices and unchanged mixed stages were not rerun;
+  the scoped delivery must pass its exact-SHA CI.
+
+The overall performance goal remains active. These ten commands and bounded
+strata do not exhaust674 matchers/41 background entries or establish sustained
+capacity. The50-arrival contention backlog, first-schema/read initialization,
+write-driven rank recomputation and broader real gameplay remain unresolved;
+freeze the next evidence-based workload before another baseline/code/after.

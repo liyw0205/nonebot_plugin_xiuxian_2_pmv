@@ -19,6 +19,48 @@ def request(key="profile", actor="900001"):
 
 
 class MixedProbeHelperTests(unittest.TestCase):
+    def test_connection_diagnostics_bound_setup_and_keep_cursor_fetch_attribution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            old_connect, old_router, old_recorder = sqlite3.connect, probe.ROUTER, probe.matrix.RECORDER
+            connections = []
+            first, second = probe.request_row(request(), 1), probe.request_row(request(), 2)
+            token = probe.ACTIVE.set(first)
+            try:
+                probe.install_sql_timing(directory)
+                connection = sqlite3.connect(":memory:")
+                connections.append(connection)
+                connection.create_function("identity", 1, lambda value: value)
+                cursor = connection.execute("SELECT identity(7)")
+                connection.execute("SELECT 8").fetchone()
+                self.assertEqual(cursor.fetchone()[0], 7)
+                entry = first["connection_diagnostics"][0]
+                self.assertTrue(entry["opened_in_request"])
+                self.assertGreaterEqual(entry["open_ms"], 0)
+                self.assertEqual(entry["udf_calls"], 1)
+                self.assertGreater(entry["statements"][0]["authorizer_calls"], 0)
+                self.assertGreater(entry["statements"][0]["fetch_ms"], 0)
+                self.assertEqual([item["ordinal"] for item in entry["statements"]], [1, 2])
+                probe.ACTIVE.set(second)
+                connection.execute("SELECT 9").fetchone()
+                reused = second["connection_diagnostics"][0]
+                self.assertEqual(reused["connection"], entry["connection"])
+                self.assertFalse(reused["opened_in_request"])
+                self.assertEqual(reused["open_ms"], 0)
+                self.assertEqual(reused["statements"][0]["ordinal"], 3)
+                for _ in range(20):
+                    connection.execute("SELECT 10").fetchone()
+                self.assertEqual(len(reused["statements"]), 12)
+                self.assertEqual(reused["statements_omitted"], 9)
+                for _ in range(35):
+                    connections.append(sqlite3.connect(":memory:"))
+                self.assertEqual(len(second["connection_diagnostics"]), 32)
+                self.assertGreater(second["connection_diagnostic_omitted_touches"], 0)
+            finally:
+                for connection in connections:
+                    connection.close()
+                probe.ACTIVE.reset(token)
+                sqlite3.connect, probe.ROUTER, probe.matrix.RECORDER = old_connect, old_router, old_recorder
+
     def test_report_streaming_does_not_build_a_second_full_json_string(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "report.json"
