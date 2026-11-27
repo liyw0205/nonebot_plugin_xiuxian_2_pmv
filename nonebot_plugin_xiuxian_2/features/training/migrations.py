@@ -158,11 +158,21 @@ def apply_training_leaderboard_indexes(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_training_exact_rank_indexes(uow: DatabaseUnitOfWork) -> None:
+    """Add exact range-count indexes without changing legacy training rows."""
+    from ..base.indexed_ranking import TRAINING_RANK_INDEXES
+
+    apply_training_state(uow)
+    for spec in TRAINING_RANK_INDEXES.values():
+        uow.execute(spec.create_sql)
+
+
 __all__ = [
     "apply_training",
     "apply_training_event_operations",
     "apply_training_event_player",
     "apply_training_event_resolutions",
+    "apply_training_exact_rank_indexes",
     "apply_training_leaderboard_indexes",
     "apply_training_purchase_operations",
     "apply_training_reset_operations",

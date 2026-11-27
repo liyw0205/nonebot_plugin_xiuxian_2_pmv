@@ -5,6 +5,11 @@ from typing import Any
 from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.indexed_ranking import (
+    TRAINING_RANK_INDEXES,
+    indexed_personal_rank,
+    rank_index_available,
+)
 from ..base.public_display_snapshot import (
     shared_display_snapshot,
     shared_display_snapshot_with_live_value,
@@ -135,7 +140,9 @@ class TrainingLeaderboardSqlRepository:
                 f'ORDER BY xiuxian_int_text(COALESCE(t."{field}",0)) COLLATE xiuxian_integer DESC,t.rowid ASC LIMIT ?',
                 (limit,),
             )
-            rank = self._rank_in_uow(uow, field, user_id)
+            rank = self._rank_in_uow(
+                uow, field, user_id, database_path=self.player_database
+            )
         return [{**row, "value": as_int_like(row["value"])} for row in rows], rank
 
     def rank_of(self, field: str, user_id: str) -> PersonalRank:
@@ -153,16 +160,26 @@ class TrainingLeaderboardSqlRepository:
                 )
                 if not {"user_id", field}.issubset(training_columns):
                     return PersonalRank()
-                return self._rank_in_uow(uow, field, user_id, schema="main")
+                return self._rank_in_uow(
+                    uow, field, user_id, schema="main",
+                    database_path=self.player_database,
+                )
         except (OSError, ValueError, TypeError, KeyError):
             return PersonalRank()
 
     @staticmethod
     def _rank_in_uow(
-        uow: DatabaseUnitOfWork, field: str, user_id: str, *, schema: str = "player_data"
+        uow: DatabaseUnitOfWork, field: str, user_id: str, *,
+        schema: str = "player_data", database_path: str | Path | None = None,
     ) -> PersonalRank:
         if schema not in {"main", "player_data"}:
             raise ValueError("unsupported SQLite schema")
+        if database_path is not None:
+            spec = TRAINING_RANK_INDEXES[field]
+            if rank_index_available(
+                uow, database_path, spec, schema=schema, require_unique_user=True,
+            ):
+                return indexed_personal_rank(uow, spec, user_id, schema=schema)
         deduped = (
             'SELECT t.user_id AS user_id,'
             f'COALESCE(t."{field}",0) AS value '

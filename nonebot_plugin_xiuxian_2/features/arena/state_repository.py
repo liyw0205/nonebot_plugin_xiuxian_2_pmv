@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.indexed_ranking import (
+    ARENA_SCORE_ORDER_INDEX,
+    ARENA_SCORE_RANK_INDEX,
+    indexed_personal_rank,
+    rank_index_available,
+)
 from ..base.ranking_position import PersonalRank
 from .schema import ArenaSchemaMissing, table_ready
 
@@ -205,12 +211,22 @@ class ArenaStateRepository:
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                 return ()
-            rows = uow.query_all(
+            rows = self._ranking_in_uow(uow, limit)
+        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows)
+
+    def _ranking_in_uow(self, uow: DatabaseUnitOfWork, limit: int) -> list[dict[str, Any]]:
+        if rank_index_available(uow, self.player_database, ARENA_SCORE_ORDER_INDEX):
+            return uow.query_all(
                 "SELECT user_id,COALESCE(score,0) AS score "
-                "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) COLLATE xiuxian_integer DESC LIMIT ?",
+                f'FROM arena INDEXED BY "{ARENA_SCORE_ORDER_INDEX.name}" '
+                f"ORDER BY {ARENA_SCORE_ORDER_INDEX.key} DESC,rowid ASC LIMIT ?",
                 (max(0, int(limit)),),
             )
-        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows)
+        return uow.query_all(
+            "SELECT user_id,COALESCE(score,0) AS score "
+            "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) COLLATE xiuxian_integer DESC LIMIT ?",
+            (max(0, int(limit)),),
+        )
 
     def ranking_with_rank(
         self, limit: int, user_id: str
@@ -223,12 +239,7 @@ class ArenaStateRepository:
             with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                     return (), PersonalRank()
-                rows = uow.query_all(
-                    "SELECT user_id,COALESCE(score,0) AS score "
-                    "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) "
-                    "COLLATE xiuxian_integer DESC LIMIT ?",
-                    (max(0, int(limit)),),
-                )
+                rows = self._ranking_in_uow(uow, limit)
                 rank = self._rank_in_uow(uow, user_id)
         except (OSError, ValueError, TypeError, KeyError):
             return (), PersonalRank()
@@ -249,6 +260,8 @@ class ArenaStateRepository:
 
     @staticmethod
     def _rank_in_uow(uow: DatabaseUnitOfWork, user_id: str) -> PersonalRank:
+        if rank_index_available(uow, uow.database, ARENA_SCORE_RANK_INDEX):
+            return indexed_personal_rank(uow, ARENA_SCORE_RANK_INDEX, user_id)
         row = uow.query_one(
             "WITH target AS ("
             "SELECT EXISTS(SELECT 1 FROM arena WHERE user_id=?) AS present,"

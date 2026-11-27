@@ -3728,3 +3728,191 @@ battle/refining/fusion/automatic-listing latency and writer contention,
 training full aggregates, remaining honor sorts, unsampled command chains
 and sustained capacity. Continue from these shared patterns and saved SQL
 evidence; do not repeat an unchanged million-user fixture per caller.
+
+## V20: Shared Indexed Ranking Reads (2026-11-27)
+
+V19 is delivered at `9a6425130730626b7cb778919ae136da87999637`, with
+exact-SHA CI45925825136 successful. This batch addresses a shared expensive
+numeric comparison/materialization pattern across training and arena, rather
+than removing Python call layers or adding personal-value caching. Six
+runtime files and three regression files implement the following changes.
+
+| Shared entry / verified matcher callers | Database work reduced | Live/transaction boundary |
+| --- | --- | --- |
+| Training `_rank_in_uow`: completed and points leaderboards (2 matchers) | Replace full MATERIALIZED deduplication/numeric comparisons with a target lookup and two exact expression-index range COUNTs, when schema evidence proves a unique user identity | Both counts and target use one SQL statement in the current readonly main/attached transaction. Missing or mismatched indexes, nonunique identity, unknown collation and unsupported schemas retain the original query. Blank/null identities and earliest-row duplicate semantics remain. |
+| Arena `_ranking_in_uow`: honor preview and public arena leaderboard (2 matchers) | Use controlled compact integer ordering index for live TOP reads, removing repeated Python numeric collation sorts | Honor still uses TOP1000, Python string identity, first match, ordinal ties and zero outside the slice. This is its existing preview contract, not an exact personal competition rank derived from a cached TOP slice. |
+| Arena `_rank_in_uow`, used by the public leaderboard | Two exact index range COUNTs replace per-row numeric UDF comparisons | Invalid numeric values remain excluded from competition rank but sort as zero in TOP ordering; separate controlled indexes preserve this distinction. Duplicate rows still count and the target remains the earliest row. This compatibility API is not another matcher. |
+
+Thus four matcher entrypoints benefit statically. The paired load measures
+three optimized surfaces (training completed/points and honor); public arena
+leaderboard latency is not measured here and has behavior/SQL-plan coverage
+only. Arena info, personal profile and stone training are unchanged controls.
+Range COUNT still traverses matching B-tree entries; this is not an O(logN)
+order-statistics rank implementation. Cold training public snapshots still
+join display names and retain the established public TTL; personal rank is
+live. No reward, CAS, ledger, replay, balance or commit boundary changes.
+
+New player-owned migrations `training.007` and `arena.011` create two training
+and two arena expression indexes, without editing published migration bodies.
+Catalog/player inclusion/game exclusion are all registered. The shared schema
+helper accepts only controlled table/field/index specifications. It reads
+table/index definitions from the actual connection, hashes those definitions,
+and caches only the proof of schema suitability in the existing bounded
+32-entry/1MiB process cache. This avoids pathname/file replacement and
+rollback/reused-schema-version proof contamination. LIMIT65 and rejection
+above64 objects or64KiB of fetched representation bound eligible evidence;
+the byte check occurs after fetch, not as an absolute database-fetch memory
+limit. Cold proof checks table/index PRAGMAs; failures propagate. No player
+values or ranks are cached by this helper, including across writes.
+
+### Frozen Pair and Coverage
+
+- Reused the sole retained 1M fixture at
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`, with original
+  rank digest `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  Before is a code-only archive of9a642513, not another million-user DB.
+  Reports in `data/` are `indexed-ranking-before-v20-20261127-r01.json`,
+  `indexed-ranking-after-v20-20261127-r01.json` and offline
+  `indexed-ranking-comparison-v20-20261127-r01.json`.
+- Runtime tree hashes
+  `5908632b5f5b2c66c151112bff69a956039fe6350fde372323f3ee9c10134e98`
+  -> `6a5caf2324b4f7bc187f236980d3c1ebcd282f1762f6118abab210f752362d38`
+  differ in exactly six scoped runtime files. Driver, fixture, limits, phase
+  specs, every actor/request/argument and business manifests match; diagnostic
+  compatibility-hit JSON and its derived seed hash are excluded from business
+  equality. Current runtime and test bytes match the accepted tree; runtime
+  bytes also match the after report.
+- One unchanged `arena-training-v18` scenario supplies384 requests per version
+  in three128-request phases: pure cap10 at20 arrivals/s, mixed cap20 at35/s,
+  contention cap20 at50/s. Each has56 personal profiles; pure has18 each of
+  honor, arena info and the two training boards; mixed phases have10 each
+  plus32 real distinct-user stone-training writes (exp+100, stone-1000).
+  The shared instance/isolated database serves128 actors,8192 populated arena
+  and8192 training rows, plus the retained1M main users. Only QQ delivery is
+  mocked. Tasks drain and consistency checks precede snapshot restoration.
+- This is a new source pair for a changed index/query pattern, reusing existing
+  workload/data instead of repeating V19 or constructing per-caller fixtures.
+  New indexes bootstrap before the disk snapshot; final restoration therefore
+  preserves the migrated schema. Business-row restoration is checked
+  separately; the player schema is not claimed to return to pre-migration.
+  Four bounded8192-row feature refreshes exercise setup/index maintenance;
+  arena/training rows do not change during traffic. Actual feature-score writer
+  throughput, independently measured index bytes and startup cost remain gaps.
+- Both versions succeed384/384, with0 business/cooldown refusals, exceptions,
+  timeouts, SQL errors, busy/locked or boundary violations (0%). Live exact
+  profile/rank output, exp/stone/power, generation, durable receipts/ledger,
+  nonwriter and full arena/training business hashes, and original1M restore
+  all pass. No duplicate debit/reward, negative balance, lost update or deadlock
+  is observed. These checks do not establish unsampled feature settlements or
+  same-feature writer contention correctness/performance.
+
+E2E includes planned-arrival, dispatch and admission queues. Values below are
+p50/p95/p99 milliseconds before -> after; SQL calls/wall include observed
+execute/fetch/control API work. All rows have0% errors/refusals/timeouts.
+Seventeen phase/path rows cover six commands, not all674 matchers or41
+background entries. With n10/18, p95/p99 are sample maxima, not stable tails.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / honor |18|45.899/177.230/177.230 ->21.649/198.615/198.615|558 ->579|634.231 ->150.846|
+| pure / arena info control |18|11.934/70.928/70.928 ->11.716/20.425/20.425|344 ->344|41.570 ->39.947|
+| pure / profile control |56|16.095/171.484/195.470 ->15.707/79.222/149.427|2256 ->2256|121.112 ->114.382|
+| pure / training points |18|44.167/133.740/133.740 ->14.157/38.869/38.869|311 ->337|737.383 ->83.906|
+| pure / training completed |18|43.806/144.656/144.656 ->13.783/98.955/98.955|313 ->339|700.335 ->85.979|
+| mixed / honor |10|60.438/329.112/329.112 ->21.542/165.449/165.449|310 ->323|262.747 ->81.844|
+| mixed / arena info control |10|74.342/357.430/357.430 ->11.650/193.941/193.941|192 ->192|23.623 ->23.527|
+| mixed / profile control |56|76.731/303.380/388.537 ->21.447/126.920/224.444|2271 ->2267|393.552 ->174.512|
+| mixed / stone training control |32|80.948/402.089/418.971 ->37.228/173.000/252.215|1219 ->1219|182.918 ->158.599|
+| mixed / training points |10|74.488/441.959/441.959 ->18.583/142.135/142.135|175 ->193|359.104 ->64.636|
+| mixed / training completed |10|77.088/272.693/272.693 ->13.572/125.261/125.261|177 ->195|359.083 ->53.513|
+| contention / honor |10|727.343/1408.370/1408.370 ->415.817/630.683/630.683|312 ->323|256.559 ->109.313|
+| contention / arena info control |10|743.147/1428.438/1428.438 ->386.626/650.798/650.798|190 ->192|23.373 ->26.274|
+| contention / profile control |56|652.292/1476.552/1546.102 ->354.145/634.942/686.242|2264 ->2261|351.664 ->313.109|
+| contention / stone training control |32|692.220/1486.028/1505.924 ->373.948/628.593/647.862|1216 ->1216|182.937 ->179.978|
+| contention / training points |10|708.799/1446.792/1446.792 ->395.628/627.413/627.413|175 ->194|364.643 ->63.042|
+| contention / training completed |10|726.871/1466.267/1466.267 ->416.361/608.078/608.078|177 ->194|380.134 ->74.359|
+
+### Benefits, Regressions and Limits
+
+- The repeated hot-player training query runs35 times per field across the
+  pair's phases: points1250.192 ->65.154ms, completed1247.677 ->66.818ms.
+  Three additional cold attached queries per field are separate. Honor's38
+  repeated sort/order queries fall903.461 ->52.861ms. SQL plans/regressions
+  confirm index order/ranges instead of temp ordering/numeric full scans.
+  Schema proof adds queries: whole-phase calls4426/4957/4907 ->
+  4500/5020/4963, despite wall2511.970/2005.201/1913.194 ->
+  721.267/800.328/1117.018ms. The benefit is less expensive work per query,
+  not a universal reduction in query count. After cold attached connection
+  diagnostics truncate4/5 statements per training command/phase under the
+  first12 diagnostic cap; before omits0. Complete per-command SQL totals
+  remain intact; saved statement diagnostics are not an exhaustive SQL trace.
+- Pure honor p95/p99 regresses177.230 ->198.615ms despite lower median/SQL.
+  Contention arena-info SQL wall23.373 ->26.274ms also regresses. No retiming,
+  GC suppression, load reduction or selective exclusion was performed. A
+  single small paired sample does not prove all commands became faster, nor
+  causally explain every control-path improvement or tail.
+- Successful short-window throughput pure/mixed/contention19.965/32.910/
+  32.418 ->20.091/34.610/41.443 requests/s. Contention window3.948438 ->
+  3.088593s still does not prove sustained50 successful requests/s. Peak
+  admitted in-flight4/13/20 ->4/9/20 and handler-wall overlap3/8/15 ->3/6/15
+  distinguish offered rate, cap, overlap and successful throughput; neither
+  shows20 simultaneous CPU/SQLite executions.
+- Contention admission p95/p99 falls622.585/752.785 ->186.461/230.878ms.
+  Dispatch p95/p99 is36.919/65.397 ->1.070/3.999 pure,
+  49.181/89.535 ->31.741/52.642 mixed,76.993/89.139 ->65.889/85.928
+  contention; loop lag48.279/76.203 ->6.686/23.198,
+  47.847/186.755 ->42.687/69.547,114.053/197.916 ->68.005/112.451ms.
+  Producer pure p95 regresses.551 ->1.445ms and contention p95/p99
+  2.330/5.661 ->2.954/5.892ms. Queuing/loop delay remains material.
+- Main-user exp/stone generation deltas are0/32/32 in both versions; no global
+  rank invalidation algorithm changes. Rank-worker calls323/353/346 ->
+  323/349/343, wall34.894/293.636/190.130 ->35.018/80.712/163.981ms.
+  COUNT calls0/4/3 ->0/0/3, seeks98/112/110 ->98/112/108 and plans4/8/8
+  both reflect scheduling/generation overlap, not a new personal-rank cache.
+  BEGIN828/908/908 counts match, p95/p99 .026/.126 ->.024/.308,
+  .031/.082 ->.019/.046, .052/.328 ->.047/.453ms; pure/contention p99
+  regress. BEGIN execution includes observer/SQL time and is only an upper
+  bound on transaction wait, not an isolated lock-wait measurement.
+- Cache phase hits/misses225/105,139/119,141/117 ->274/110,164/124,168/120;
+  evictions73/87/85 ->78/92/88, partial hits91/30/58 ->89/32/43. Waits,
+  expiry, explicit invalidation, bypass and oversized counts remain0. End
+  entries32, after max77269 estimated bytes under1MiB. Added schema-proof
+  traffic changes the aggregate hit mix; it is not personal-value caching or
+  evidence that public display freshness changed.
+- The same shared lock,2/4 CPUs,1GiB address space,600CPU/1200wall seconds,
+  `MALLOC_ARENA_MAX=2`, available-RAM768MiB/disk2GiB floors and RSS900MiB,
+  single/total WAL256MiB stops apply. No guard fires. Sampled minimum RAM
+  1503 ->1609MiB, free disk13517574144 ->13490802688 bytes; process peak
+  RSS231.977 ->240.039MiB increases. Sampled/final virtual peak646.016 ->
+  614.367MiB, max single WAL18321672 both, total27019088 ->27591768
+  bytes increases; final WAL0. Phase CPU4.595/3.946/4.169 ->
+  2.713/3.171/3.253s; whole-process CPU67.913 ->66.166s includes setup
+  and restoration. Process wall80.840 ->81.281s and restore13.529 ->14.887s
+  regress; neither is application throughput. Preflight setup4.980 ->5.042s;
+  phase setup7.723/6.818/6.850 ->6.720/7.835/7.116s. Final cumulative
+  read984956928 ->884723712 and write4267466752 ->4271636480 bytes
+  include fixture refresh/restore IO; writes increase. Index maintenance and
+  migration cost are included but not independently isolated. Instrumentation
+  overhead is uncalibrated; overlapping CPU/SQL timings must not be summed.
+- Consolidated affected regression passes183 tests/170 subtests, covering
+  huge/legacy numbers, invalid/null/blank identities, duplicate earliest-row
+  fallback, ties and TOP1000, live updates/inserts/deletes, readonly and
+  missing-table boundaries, denied-read recovery, controlled schema proofs,
+  same-path/different-connection evidence and DDL rollback, player-only
+  idempotent new migrations and published-checksum compatibility. Compile,
+  architecture (`ok=true/errors=[]`), inventory and scoped whitespace pass in
+  `/tmp/xiu-v20-accept-YVzPu1Ai`. Initial static-tree setup omitted export-ignored
+  frozen manifests and git index metadata; exact HEAD manifests/index were
+  supplied in that isolated tree, without restoring the user's deletion.
+  These were validation-setup failures, not product failures. No old full
+  suites, accepted phases or unchanged matrices were rerun. Delivered-SHA CI
+  remains the clean complete gate; document-only closeout does not repeat
+  accepted runtime tests.
+
+The repository-wide goal remains active. This batch provides evidence for
+three optimized runtime surfaces and regression evidence for a fourth, not
+exhaustive674-matcher coverage. Remaining shared-query work must be selected
+from saved call paths/SQL rather than another taxonomy audit. Feature-score
+writer contention/index-maintenance cost, unsampled battle/material/trade
+latency, residual queue/DI pauses and sustained50-success/s capacity remain
+unverified; retain earlier regressions rather than replacing their evidence.

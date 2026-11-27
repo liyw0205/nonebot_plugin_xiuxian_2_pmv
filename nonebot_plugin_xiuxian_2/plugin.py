@@ -187,6 +187,7 @@ from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
 from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_daily_reward_player, apply_arena_purchase, apply_arena_purchase_receipt, apply_arena_season_reward, apply_arena_settlement, apply_arena_state, apply_arena_weekly_rank_reduction
+from .features.arena.migrations import apply_arena_exact_rank_indexes
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -226,6 +227,7 @@ from .features.tianti_settlement.migrations import apply_tianti_settlement, appl
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations, apply_training_state
 from .features.training.migrations import apply_training_event_operations, apply_training_event_player, apply_training_event_resolutions, apply_training_leaderboard_indexes, apply_training_purchase_operations, apply_training_reset_operations
+from .features.training.migrations import apply_training_exact_rank_indexes
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -382,6 +384,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.008", "arena_daily_reward_player_schema", apply_arena_daily_reward_player),
         Migration("arena.009", "arena_state_operations", apply_arena_state),
         Migration("arena.010", "arena_purchase_receipt", apply_arena_purchase_receipt),
+        Migration("arena.011", "arena_exact_rank_indexes", apply_arena_exact_rank_indexes),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("auction.002", "auction_session_settlement_schema", apply_auction_settlement),
         Migration("auction.003", "auction_queue_operations", apply_auction_queue_operations),
@@ -621,6 +624,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("training.004", "training_reset_operations", apply_training_reset_operations),
         Migration("training.005", "training_event_resolutions", apply_training_event_resolutions),
         Migration("training.006", "training_leaderboard_indexes", apply_training_leaderboard_indexes),
+        Migration("training.007", "training_exact_rank_indexes", apply_training_exact_rank_indexes),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
@@ -644,6 +648,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "arena.011",
         "past_life.002",
         "pet.005",
         "tower.004",
@@ -706,6 +711,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tasks.004",
         "training.002",
         "training.006",
+        "training.007",
         "world_events.002",
         "world_events.004",
         "world_events.005",
@@ -734,6 +740,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "arena.011",
         "auction.006",
         "auction.008",
         "info.avatar.001",
@@ -791,6 +798,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tasks.004",
         "training.002",
         "training.006",
+        "training.007",
         "world_events.002",
         "world_events.004",
         "world_events.005",

@@ -1,4 +1,5 @@
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.indexed_ranking import ARENA_SCORE_ORDER_INDEX, ARENA_SCORE_RANK_INDEX
 
 
 def apply_arena(uow: DatabaseUnitOfWork) -> None:
@@ -118,4 +119,10 @@ def apply_arena_state(uow: DatabaseUnitOfWork) -> None:
     )
 
 
-__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_purchase", "apply_arena_purchase_receipt", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_state", "apply_arena_weekly_rank_reduction"]
+def apply_arena_exact_rank_indexes(uow: DatabaseUnitOfWork) -> None:
+    apply_arena_state(uow)
+    uow.execute(ARENA_SCORE_ORDER_INDEX.create_sql)
+    uow.execute(ARENA_SCORE_RANK_INDEX.create_sql)
+
+
+__all__ = ["apply_arena", "apply_arena_challenge_purchase", "apply_arena_challenge_ticket", "apply_arena_daily_reward_player", "apply_arena_exact_rank_indexes", "apply_arena_purchase", "apply_arena_purchase_receipt", "apply_arena_season_reward", "apply_arena_settlement", "apply_arena_state", "apply_arena_weekly_rank_reduction"]
