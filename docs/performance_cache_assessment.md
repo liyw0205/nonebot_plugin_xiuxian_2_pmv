@@ -4455,3 +4455,161 @@ matchers have direct regressions only. Cold precise-rank/global invalidation,
 wider exp/stone write patterns, directory owner affinity and this contention
 tail regression remain unresolved. This is not exhaustive674 matcher/41
 background coverage or validation of all feature-table sizes.
+
+## V24: Reuse Complete Natal/Impart Rows Within One Read Stage
+
+This batch follows shared query patterns across 15 confirmed matcher callers,
+without another repository classification pass. Seven natal callers are
+awaken, reshape, info, grow, slot upgrade, engrave and forget; seven virtual
+world callers are project, list, duel, train, info, explore and leave closing.
+The fifteenth is confirm-lunhui, which imports `impart_uitls.impart_check`.
+The similarly named, unused helper in `xiuxian2_handle.py` is unchanged and
+does not count as an optimized caller.
+
+- Complete natal records: `exists()` and first `get_data()` each previously
+  reread the row after `_ensure_record`; each now uses its already-decoded
+  record, reducing two SELECTs to one. An exists/data pair still uses two
+  separate live reads. Missing/NULL/schema repairs retain the previous scalar
+  or full-row readback API; strict battle reads and the existing object cache
+  are unchanged. This adds no personal cache or schema/index.
+- Impart helpers: retain initialization, repository ensure, exact balance
+  validation, canonical first-row identity and legacy repair. The legacy
+  getter's opt-in `read_back_repairs` preserves a real read after repair writes,
+  including trigger changes; its default behavior is unchanged. Complete
+  virtual-world helpers go from five to four SELECTs; the actual lunhui helper
+  from two to one. Repair/missing/schema paths can use more queries.
+- Virtual-world training: its successful calculation stage does not suspend
+  or write impart state. Reuse the initial repaired row instead of a second
+  ensure/helper and third legacy getter (normal legacy reads eleven to four,
+  also removing one ensure transaction). Leave-closing reuses its impart row,
+  Buff object and normal CD read, saving two legacy reads, one Buff read and
+  one CD read. The fallback CD recheck remains. Settlement transactions still
+  check current exp, time/daily tokens and closing identity; rewards, cooldown,
+  receipts, replay, precise numeric rules and post-write boundaries remain.
+
+The new minimal load composes the existing harness and sole 1M fixture, adding
+128 complete nonempty natal/impart/daily participant records. Six real matcher
+routes sample four changed callers plus unchanged assets/stone-training
+controls. Three phases each have 128 requests: pure cap10 at20 arrivals/s,
+mixed cap20 at20/s, contention cap20 at35/s. Each version plans 304 successes
+and 80 already-awakened business refusals, with 32 real virtual-world training
+and 32 stone-training writes. Refusals are excluded from successful throughput.
+Contention overlaps display/writer identities, not two concurrent writers.
+No natal action write, other eleven changed matchers, exact-rank, activity
+traffic, all674/41 or sustained50successful/s capacity is inferred.
+
+### V24 Accepted Evidence and Limits
+
+Affected regression was run once in an isolated code tree: **89 passed,
+43 subtests passed, 27.68s**. Compile, architecture, inventory and whitespace
+gates passed. The later classifier-only repair has its own **12 passed,
+13 subtests passed, 1.44s**; the runtime regression and old loads were not
+repeated. No local full unittest or CI/workflow changes were made.
+
+Evidence directory remains
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+
+- Raw baseline: `impart-natal-before-v24-20261127-r01.json`, SHA256
+  `f1e4ce8a5f019c3923e1130df7c9e11a9c70a7316033ccd7ef221373a8a19cc8`.
+- Raw after: `impart-natal-after-v24-20261127-r02.json`, SHA256
+  `d0adc12132b8e724e1a39bb325b2d7a2292a1e60b7b3d22e4270bec245a613cf`.
+- Derived comparison: `impart-natal-comparison-v24-20261127-r01.json`, SHA256
+  `f054769d39529387135297eda449d700538d98d6c6c602a4dac3de06ef587b03`;
+  status `comparison_valid_with_offline_classification_recovery`.
+
+The raw reports deliberately retain `status=failed`: the archived classifier
+counted identical rounded pre/post wallet candidates twice. All 16 contention
+asset replies were consequently `unclassified`, although every other live DB
+invariant passed. Both versions used the **same archived timing driver**;
+classification runs after each request's completion timestamp, and can still
+perturb subsequent arrivals equally. The corrected classifier deduplicates
+only display candidates, retaining rejection of wrong/duplicate wallet lines.
+Offline analysis checks all stored replies, proves this is the only source
+change and the only 16 errors per report, recomputes outcomes/success throughput,
+and preserves every latency, SQL measurement and live DB check. It does not
+recreate a live DB invariant offline or overwrite either raw report. Exact
+balances remain checked against full persisted rows/receipts, not rounded text.
+Classifier/driver/report hashes and each corrected request are in the derived
+provenance. An initial after-r01 sample is retained but **excluded**: an extra
+outer CPU affinity constraint was halved again by the harness (1 vs 2 CPUs).
+The comparison rejected it; only after was supplemented under matching caps.
+The baseline and previously accepted gates were not rerun.
+
+Fixture, participant manifests, every request, all limits and raw driver
+identity match. Both runs restore the original rank digest. The sole 1M user
+fixture also contains 2,560 bag rows, 128 Buff rows, 128 selected complete
+natal/impart/daily rows, 8,192 activity users and 32,768 rows in each of three
+activity balance/damage tables. Activity traffic is not sampled. All phases
+use one shared instance/DB set; restore occurs only after task/worker drain.
+Each version has 384 requests: **304 successes, 80 already-awakened refusals,
+32 virtual-world writes and 32 stone-training writes**. Exceptions, timeouts,
+boundary failures and unexpected outcomes after documented correction are
+zero; per-path error rate is zero. The natal-exists samples are all business
+refusals and never successful throughput. Selected full rows, exact crystal
+balances, daily/time/gain tokens, receipts/ledger, inventory/frozen tables,
+legacy daily JSON and exp/stone generation deltas pass. SQLite busy/locked is
+zero. BEGIN timing remains an SQL-time upper bound, not pure lock wait.
+
+All latency cells below are **p50/p95/p99 milliseconds, before -> after**.
+SQL counts include execute/executemany/script/commit/rollback API calls;
+they are not just SELECT statements. SQL time includes measured fetches.
+
+| Phase | Path | n/version | E2E before | E2E after | DB calls | DB ms |
+| --- | --- | ---: | --- | --- | --- | --- |
+| pure | assets (control) | 32 | 17.562/22.740/25.467 | 17.921/25.904/43.090 | 775 -> 775 | 224.813 -> 229.684 |
+| pure | natal exists (refusal) | 32 | 9.080/16.230/33.347 | 8.712/28.602/110.481 | 480 -> 416 | 20.079 -> 18.587 |
+| pure | natal info | 32 | 8.541/9.529/69.376 | 8.422/63.175/143.675 | 438 -> 406 | 30.821 -> 30.563 |
+| pure | world info | 32 | 18.536/22.593/32.470 | 18.484/31.226/77.886 | 1091 -> 1059 | 213.555 -> 220.279 |
+| mixed | assets (control) | 16 | 25.287/188.554/188.554 | 25.378/44.671/44.671 | 391 -> 391 | 110.259 -> 114.873 |
+| mixed | natal exists (refusal) | 24 | 9.214/10.977/89.179 | 8.844/10.395/10.767 | 360 -> 312 | 15.177 -> 14.609 |
+| mixed | natal info | 24 | 8.513/22.045/138.912 | 8.588/13.648/23.038 | 325 -> 301 | 26.488 -> 28.777 |
+| mixed | stone training (control) | 16 | 55.141/239.942/239.942 | 59.972/77.842/77.842 | 611 -> 611 | 90.229 -> 90.490 |
+| mixed | world info | 32 | 18.631/22.274/58.950 | 18.518/22.164/24.373 | 1088 -> 1056 | 206.113 -> 215.344 |
+| mixed | world training | 16 | 67.207/227.508/227.508 | 59.266/85.199/85.199 | 976 -> 784 | 339.770 -> 344.145 |
+| contention | assets (control) | 16 | 55.761/101.484/101.484 | 57.481/84.667/84.667 | 391 -> 391 | 120.450 -> 126.794 |
+| contention | natal exists (refusal) | 24 | 11.229/48.309/53.426 | 9.400/32.435/43.088 | 360 -> 312 | 17.964 -> 15.766 |
+| contention | natal info | 24 | 29.843/72.662/76.983 | 27.916/59.041/65.232 | 325 -> 301 | 31.093 -> 27.082 |
+| contention | stone training (control) | 16 | 85.408/131.323/131.323 | 64.365/114.378/114.378 | 608 -> 608 | 79.158 -> 72.907 |
+| contention | world info | 32 | 18.376/43.420/43.556 | 17.933/23.294/28.926 | 1056 -> 1024 | 224.915 -> 210.439 |
+| contention | world training | 16 | 62.726/99.678/99.678 | 55.545/87.535/87.535 | 976 -> 784 | 356.462 -> 342.521 |
+
+| Phase | Whole-phase E2E before -> after | Foreground DB calls | All SQL ms | Successful/s | Peak admitted requests | Peak active handler intervals |
+| --- | --- | --- | --- | --- | --- | --- |
+| pure cap10 @20 arrivals/s | 16.698/22.281/33.347 -> 17.151/28.602/110.481 | 2784 -> 2656 | 711.344 -> 727.066 | 15.071 -> 15.077 | 2 -> 3 | 1 -> 2 |
+| mixed cap20 @20 arrivals/s | 18.456/83.608/227.508 -> 18.452/68.572/77.842 | 3751 -> 3455 | 1032.928 -> 1052.249 | 16.329 -> 16.331 | 5 -> 2 | 4 -> 1 |
+| contention cap20 @35 arrivals/s | 34.090/95.381/125.541 -> 27.916/85.557/98.633 | 3716 -> 3420 | 1088.683 -> 1025.558 | 28.422 -> 28.520 | 5 -> 4 | 3 -> 3 |
+
+The deterministic gain is **10,251 -> 9,531 foreground DB API operations**
+(720 removed, 7.02%). Training removes 12 operations per ordinary request,
+including the repeated ensure transaction. Background message writer calls
+are separately attributed: 646/638/620 -> 645/639/624 across phases. Public
+cache hits/misses and recomputation counts are zero; invalidation counters
+are 32/16/16 in both versions. No new cross-request cache is involved.
+
+Do not generalize the faster mixed/contended tails into universal speedup:
+pure p95/p99 **regress**, aggregate pure/mixed SQL time rises slightly, and
+process peak RSS rises **201.305 -> 220.039 MiB**. The pure after producer has
+88.156ms max arrival delay and 112.431ms max loop lag; these are observed
+timing disturbances, not proof of a product or harness root cause. Queue
+p95 is 0.011/0.011/0.011 -> 0.013/0.012/0.010ms; loop dispatch p95 is
+0.178/24.539/33.457 -> 0.243/15.829/29.142ms; loop lag p95 is
+5.268/37.413/41.804 -> 8.442/37.284/40.697ms. The complete connection/SQL,
+GC, queue, observer CPU and arrival samples remain available. Instrumentation
+overhead is uncalibrated and cannot be subtracted to claim production capacity.
+Active intervals measure overlap, not simultaneous SQLite/CPU execution;
+neither cap20 nor 35 arrivals/s proves 20 actual concurrent requests or
+50 successful/s. Small per-path tails, especially n=16 p95=p99=max, are noisy.
+
+Both valid versions use the shared lock and identical limits: 2 of 4 CPUs,
+AS1GiB, CPU600s, wall1200s, RSS stop900MiB, RAM preflight/stop768MiB,
+disk minimum2GiB, per/total WAL256MiB, `MALLOC_ARENA_MAX=2`. Minimum observed
+phase available RAM is 1509/1684MiB; free disk exceeds 12.5GB in both; maximum
+phase WAL is 18,321,672 bytes in both. Process wall is 77.705 -> 71.923s,
+CPU(user+system) 57.084 -> 55.433s, including startup/setup/restore rather than
+only application traffic. Preflight setup is 3.229 -> 3.172s; final restore
+13.296 -> 13.428s is separate from response latency. No additional lasting
+million-user fixture, production writes, QQ service or deployment is involved.
+Overall performance work remains open: this four-changed-route sample does
+not settle cold exact ranks/global invalidation, directory affinity or prior
+contention regressions, and does not exhaust the other 11 changed matchers,
+674-command inventory or 41 background entries.

@@ -19,11 +19,11 @@ def random_bullet() -> List[int]:
 
 async def impart_pk_check(user_id):
     ImpartRepository(get_paths().impart_db).state(str(user_id), ensure=True)
-    if xiuxian_impart.get_user_impart_info_with_id(user_id) is None:
+    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id, read_back_repairs=True)
+    if impart_data is None:
         xiuxian_impart._create_user(user_id)
         return xiuxian_impart.get_user_impart_info_with_id(user_id)
-    else:
-        return xiuxian_impart.get_user_impart_info_with_id(user_id)
+    return impart_data
 
 
 msg_pass = {

@@ -1222,6 +1222,8 @@ async def run(args, identity):
     context, managers = await probe.prepare(seed=False, skip_training_wait=False)
     for module in (*matrix.MATRIX_MATCHER_MODULES, "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"):
         importlib.import_module(module)
+    if args.scenario == "impart-natal-v24":
+        importlib.import_module("nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure")
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import message_db
     prepare_message_writer(message_db, context.paths.message_db)
     fixture_support = importlib.import_module({
@@ -1242,6 +1244,7 @@ async def run(args, identity):
         "sect-shared-v21": "tests.mixed_sect_shared_fixture",
         "sect-directory-v22": "tests.mixed_sect_directory_fixture",
         "read-stage-v23": "tests.mixed_read_stage_fixture",
+        "impart-natal-v24": "tests.mixed_impart_natal_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1403,7 +1406,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

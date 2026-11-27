@@ -49,11 +49,11 @@ async def impart_check(user_id):
     data_manager = _impart_data_manager()
     manager = _impart_manager()
     data_manager.find_user_impart(user_id)
-    if manager.get_user_impart_info_with_id(user_id) is None:
+    impart_data = manager.get_user_impart_info_with_id(user_id, read_back_repairs=True)
+    if impart_data is None:
         manager._create_user(user_id)
         return manager.get_user_impart_info_with_id(user_id)
-    else:
-        return manager.get_user_impart_info_with_id(user_id)
+    return impart_data
 
 async def re_impart_data(user_id):
     """重新计算传承属性"""

@@ -3994,7 +3994,7 @@ class XIUXIAN_IMPART_BUFF:
 
         return user_dict
 
-    def get_user_impart_info_with_id(self, user_id):
+    def get_user_impart_info_with_id(self, user_id, *, read_back_repairs=False):
         """根据USER_ID获取用户impart_buff信息"""
         user_id = str(user_id)
         with self._conn_lock:
@@ -4014,7 +4014,14 @@ class XIUXIAN_IMPART_BUFF:
                 from ...features.impart.legacy_state import crystal_balance
 
                 user_dict["stone_num"] = crystal_balance(user_dict, subject="actor")
-                return self._repair_user_impart_info(user_id, user_dict)
+                needs_read_back = read_back_repairs and any(
+                    user_dict.get(field) in (None, "") for field in self._default_fields
+                )
+                user_dict = self._repair_user_impart_info(user_id, user_dict)
+                if needs_read_back:
+                    # A repair is a write boundary; preserve the check helpers' reread.
+                    return self.get_user_impart_info_with_id(user_id)
+                return user_dict
             else:
                 return None
 

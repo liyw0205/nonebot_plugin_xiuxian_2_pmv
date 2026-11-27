@@ -148,6 +148,8 @@ class NatalTreasure:
         if return_record:
             # Read back repairs instead of substituting unverified defaults.
             return manager.get_fields(self.user_id, self.table, raise_errors=True) if repaired else record
+        # Callers retain their legacy read-back API after a repair.
+        return None if repaired else record
 
     def read_battle_data(self) -> dict | None:
         """Resolve one fresh battle projection, retaining legacy repairs."""
@@ -161,8 +163,11 @@ class NatalTreasure:
         检查本命法宝是否已觉醒。
         :return: True如果已觉醒 (form不为0)，False否则。
         """
-        self._ensure_record() # 确保字段存在
-        form = _player_data_manager().get_field_data(self.user_id, self.table, "form")
+        record = self._ensure_record() # 确保字段存在
+        form = (
+            record.get("form") if record is not None
+            else _player_data_manager().get_field_data(self.user_id, self.table, "form")
+        )
         return form is not None and form != 0
 
     def get_data(self) -> dict | None:
@@ -173,8 +178,9 @@ class NatalTreasure:
         if self._natal_data_cache:
             return self._natal_data_cache # 返回缓存数据
 
-        self._ensure_record() # 确保字段存在
-        data = _player_data_manager().get_fields(self.user_id, self.table)
+        data = self._ensure_record() # 确保字段存在
+        if data is None:
+            data = _player_data_manager().get_fields(self.user_id, self.table)
         if not data:
             return None
 
