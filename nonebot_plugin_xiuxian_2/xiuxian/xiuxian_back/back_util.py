@@ -1204,7 +1204,9 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
             msg = f"丹药：{goods_name}的使用境界为{goods_info['境界']}以上，道友不满足使用条件！"
         else:
             exp = goods_info['buff'] * num
-            root_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+            root_rate = _sql_message().get_root_rate(
+                user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+            )
             level_spend = jsondata.level_data()[user_info['level']]["spend"]
             result = _cultivation_item_application().apply(
                 operation_id or f"elixir-exp:{user_id}:{goods_id}:{datetime.now().timestamp()}",

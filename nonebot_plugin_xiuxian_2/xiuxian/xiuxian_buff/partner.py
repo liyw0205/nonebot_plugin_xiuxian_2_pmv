@@ -325,8 +325,9 @@ def _relation_operation_id(event, action, *user_ids):
     return f"relation:{action}:{event_id or runtime_ids.new_id()}:{suffix}"
 
 
-def _relation_power(user_info, new_exp):
-    root_rate = _sql_message().get_root_rate(user_info["root_type"], user_info["user_id"])
+def _relation_power(user_info, new_exp, *, root_rate=None):
+    if root_rate is None:
+        root_rate = _sql_message().get_root_rate(user_info["root_type"], user_info["user_id"])
     # new_exp / rates may exceed SQLite INTEGER; service binds via number_count
     return round(safe_int(new_exp) * root_rate * jsondata.level_data()[user_info["level"]]["spend"], 0)
 
@@ -643,8 +644,10 @@ async def direct_two_exp(
     impart_two_exp_1 = impart_data_1["impart_two_exp"] if impart_data_1 else 0
     impart_two_exp_2 = impart_data_2["impart_two_exp"] if impart_data_2 else 0
 
-    main_two_data_1 = UserBuffDate(user_id_1).get_user_main_buff_data()
-    main_two_data_2 = UserBuffDate(user_id_2).get_user_main_buff_data()
+    user_buff_data_1 = UserBuffDate(user_id_1)
+    user_buff_data_2 = UserBuffDate(user_id_2)
+    main_two_data_1 = user_buff_data_1.get_user_main_buff_data()
+    main_two_data_2 = user_buff_data_2.get_user_main_buff_data()
 
     main_two_1 = main_two_data_1["two_buff"] if main_two_data_1 else 0
     main_two_2 = main_two_data_2["two_buff"] if main_two_data_2 else 0
@@ -702,14 +705,20 @@ async def direct_two_exp(
     # 关键：临时修为，用于多次双修逐次重新计算上限（兼容科学计数法 TEXT）
     temp_exp_1 = safe_int(user_1["exp"])
     temp_exp_2 = safe_int(user_2["exp"])
+    # No await or write occurs in these rounds; settlement rechecks live exp/usage.
+    buff_inputs = (
+        main_two_data_1, main_two_data_2,
+        user_buff_data_1.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_1.BuffInfo else 0,
+        user_buff_data_2.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_2.BuffInfo else 0,
+    )
 
     for _ in range(actual_count):
-        exp_1, exp_2, event_desc = await process_two_exp(
-            user_id_1,
-            user_id_2,
+        exp_1, exp_2, event_desc = _process_two_exp_from_profiles(
+            user_1, user_2, user_1, user_2,
             is_partner=is_partner,
             current_exp_1=temp_exp_1,
-            current_exp_2=temp_exp_2
+            current_exp_2=temp_exp_2,
+            buff_inputs=buff_inputs,
         )
 
         # 双方都无法获得修为时停止
@@ -758,7 +767,10 @@ async def direct_two_exp(
         user_id_1, user_id_2,
         expected_exp_1=safe_int(user_1["exp"]), expected_exp_2=safe_int(user_2["exp"]),
         exp_1=total_exp_1, exp_2=total_exp_2, used_count=actual_used_count,
-        power_1=_relation_power(user_1, new_exp_1), power_2=_relation_power(user_2, new_exp_2),
+        power_1=_relation_power(user_1, new_exp_1, root_rate=_sql_message().get_root_rate(
+            user_1["root_type"], user_id_1, root_level=user_1.get("root_level", 0))),
+        power_2=_relation_power(user_2, new_exp_2, root_rate=_sql_message().get_root_rate(
+            user_2["root_type"], user_id_2, root_level=user_2.get("root_level", 0))),
         hp_1=hp_1, mp_1=mp_1, atk_1=atk_1, hp_2=hp_2, mp_2=mp_2, atk_2=atk_2,
         level_rate_1=special_count * 2, level_rate_2=special_count * 2,
         expected_affection_1=safe_int(partner_data_1.get("affection"), 0) if valid_partner else None,
@@ -853,6 +865,16 @@ async def process_two_exp(
     if not user_mes_1 or not user_mes_2:
         return 0, 0, f"{'发起人' if not user_mes_1 else '受邀人'}的修炼资料不存在，请联系管理员检查角色资料。"
 
+    return _process_two_exp_from_profiles(
+        user_1, user_2, user_mes_1, user_mes_2,
+        is_partner=is_partner, current_exp_1=current_exp_1, current_exp_2=current_exp_2,
+    )
+
+
+def _process_two_exp_from_profiles(
+    user_1, user_2, user_mes_1, user_mes_2, *, is_partner=False,
+    current_exp_1=None, current_exp_2=None, buff_inputs=None,
+):
     level_1 = user_mes_1["level"]
     level_2 = user_mes_2["level"]
 
@@ -875,26 +897,23 @@ async def process_two_exp(
             limits.append(f"受邀人{user_2['user_name']}修为{calc_exp_2}/本境上限{max_exp_2_limit}")
         return 0, 0, "；".join(limits) + "，已达上限，请先突破境界。"
 
-    user_buff_data_1 = UserBuffDate(user_id_1)
-    user_buff_data_2 = UserBuffDate(user_id_2)
-
-    mainbuffdata_1 = user_buff_data_1.get_user_main_buff_data()
-    mainbuffdata_2 = user_buff_data_2.get_user_main_buff_data()
+    if buff_inputs is None:
+        user_buff_data_1 = UserBuffDate(user_mes_1["user_id"])
+        user_buff_data_2 = UserBuffDate(user_mes_2["user_id"])
+        buff_inputs = (
+            user_buff_data_1.get_user_main_buff_data(),
+            user_buff_data_2.get_user_main_buff_data(),
+            user_buff_data_1.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_1.BuffInfo else 0,
+            user_buff_data_2.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_2.BuffInfo else 0,
+        )
+    (mainbuffdata_1, mainbuffdata_2,
+     user_blessed_spot_data_1, user_blessed_spot_data_2) = buff_inputs
 
     mainbuffratebuff_1 = mainbuffdata_1["ratebuff"] if mainbuffdata_1 else 0
     mainbuffcloexp_1 = mainbuffdata_1["clo_exp"] if mainbuffdata_1 else 0
 
     mainbuffratebuff_2 = mainbuffdata_2["ratebuff"] if mainbuffdata_2 else 0
     mainbuffcloexp_2 = mainbuffdata_2["clo_exp"] if mainbuffdata_2 else 0
-
-    user_blessed_spot_data_1 = (
-        user_buff_data_1.BuffInfo["blessed_spot"] * 0.5
-        if user_buff_data_1.BuffInfo else 0
-    )
-    user_blessed_spot_data_2 = (
-        user_buff_data_2.BuffInfo["blessed_spot"] * 0.5
-        if user_buff_data_2.BuffInfo else 0
-    )
 
     # 基础修为计算使用当前临时修为
     exp_base = int((calc_exp_1 + calc_exp_2) * 0.005)

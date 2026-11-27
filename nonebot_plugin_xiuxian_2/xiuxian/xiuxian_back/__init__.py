@@ -1907,7 +1907,9 @@ async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | Privat
     current_exp = user_mes['exp']
 
     # 获取单次修炼的修为
-    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)           # 灵根倍率
+    level_rate = _sql_message().get_root_rate(
+        user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]                               # 境界倍率
 
     user_buff_data = UserBuffDate(user_id)

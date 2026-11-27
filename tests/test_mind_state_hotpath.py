@@ -43,6 +43,7 @@ class MindStateHotpathTests(unittest.TestCase):
             "level": "筑基",
             "level_up_rate": 4,
             "root_type": "天灵根",
+            "root_level": 4,
             "exp": 100,
         }
 
@@ -77,7 +78,7 @@ class MindStateHotpathTests(unittest.TestCase):
             asyncio.run(module.my_exp.handlers[0].call(bot, SimpleNamespace()))
 
         manager.get_user_info_with_id.assert_not_called()
-        manager.get_root_rate.assert_called_once_with("天灵根", "u-1")
+        manager.get_root_rate.assert_called_once_with("天灵根", "u-1", root_level=4)
         buff_factory.assert_called_once_with("u-1")
         self.assertEqual(buff.buff_info_reads, 1)
         self.assertIn("筑基", handle_send.await_args.args[2])

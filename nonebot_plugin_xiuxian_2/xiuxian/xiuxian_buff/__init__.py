@@ -209,7 +209,9 @@ def _closing_reward_inputs(user_id, user_mes, user_cd_message):
     exp_time = elapsed_minutes_from_cd_time(
         user_cd_message.get("create_time"), on_error=0
     )
-    level_rate = _sql_message().get_root_rate(user_mes["root_type"], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_mes["root_type"], user_id, root_level=user_mes.get("root_level", 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)
     blessed_rate = user_buff_data.BuffInfo["blessed_spot"] * 0.5
@@ -647,10 +649,12 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="重置修炼", v3="重置修炼状态")
         await up_exp.finish()
     else:
-        level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
+        level_rate = _sql_message().get_root_rate(
+            user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+        )
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
-        user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
+        user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5
         mainbuffdata = user_buff_data.get_user_main_buff_data()
         mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
         mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
@@ -760,7 +764,9 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await stone_exp.finish()
     stone_num = int(stone_num[0])
     # 先 settle：成功后灵石减少，前置“灵石不足”会挡住同事件重放。
-    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
     outcome = buff_application.stone_training(
@@ -962,7 +968,9 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     }
     current_status_display = status_map.get(current_status, "🔒 关闭")
 
-    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
@@ -1136,7 +1144,9 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
         main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
         main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
-        level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+        level_rate = _sql_message().get_root_rate(
+            user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+        )
         realm_rate = jsondata.level_data()[user_info['level']]["spend"]
         blessed = 0.0
         try:

@@ -4126,10 +4126,15 @@ joining:174 business SELECTs per directory request become1;48 requests remove
 8304 business SELECTs and138240 full-member row transfers/normalizations.
 The240 sampled catalog views remove another240 same-stage sect SELECTs.
 
-Existing user/sect indexes serve correlated owner/count seeks; COUNT still
+Existing user/sect indexes serve correlated owner/count lookups; COUNT still
 traverses matching index entries, not O(1) metadata. No new index/cache is
 needed. Owner/count subqueries inside one SQL are not described as zero
 fanout: work still scales with displayed sects and their matching members.
+The owner seek-plan regression uses a TEXT owner fixture. It does not prove
+an indexed seek for the production INTEGER owner affinity: that comparison
+plan remains unverified and may contribute to the saved ~60ms projection.
+Do not change equality with CAST or infer equivalence for legacy numeric
+spellings without evidence. V23 leaves this schema/query boundary unchanged.
 The legacy five-tuple directory API remains unchanged for the inactive-owner
 background task. The live compatibility join-display helper also uses COUNT.
 Actual join eligibility/settlement does not consume the display projection.
@@ -4289,3 +4294,164 @@ regressions but no runtime-load claim here. This is not exhaustive674 matcher/
 41 background coverage, nor validation of all function-table scales. Continue
 from saved shared-call/query evidence, retaining personal realtime semantics,
 known regressions, unmeasured boundaries and the unverified50success/s target.
+
+## V23 Shared Read-Stage Reuse (2026-11-27)
+
+This batch removes repeated database work in shared synchronous calculation
+stages across EIGHT distinct matchers: `出关`, `修炼`, `灵石修炼`, `我的状态`,
+`我的修为`, `使用`, `双修`, `同意双修`. It is not a reduction in Python call
+depth or a repository-wide completion claim. V22 at92a2cafd and its exact-SHA
+CI45950034770 are already green; their accepted gates/load were not repeated.
+
+### Shared Work and Live Boundaries
+
+- `get_root_rate` accepts an explicit same-stage `root_level`. Seven buff/back
+  call sites reuse their existing player row instead of loading the full
+  profile again for fate roots. The two pill branches share the `使用` matcher;
+  the five buff entries plus that matcher are SIX distinct callers. Ordinary
+  roots previously had no nested query, so no such benefit is claimed for them.
+  Explicit None/zero retains the old conversion/rate rules without a fallback
+  read; the existing two-argument API still reads live. Normal training also
+  reuses its existing Buff reader instead of constructing a second one.
+- Both dual-cultivation entries reach `direct_two_exp`. It reuses the two
+  existing profiles/Buff readers/main-skill inputs across K synchronous rounds
+  and supplies same-stage root levels to both final power calculations. Each
+  round still recalculates from accumulated temporary exp and keeps the same
+  cap, random draws and special events. Three rounds remove18 loop SELECTs
+  plus2 nested root SELECTs; transaction/fetch APIs also fall. The standalone
+  async round wrapper stays live, including missing-player reasons and the
+  cap path that avoids Buff reads. Other relation-power callers retain their
+  live defaults because their read/write boundaries were not reviewed here.
+- No await/write separates the reused calculation inputs. Authoritative
+  exp/usage/protection/invite/affection/CAS/replay and settlement boundaries
+  remain unchanged, including both post-settlement profile rereads. No
+  cross-request personal cache, arbitrary table/column API, balance cache or
+  TOP-slice approximation of exact rank is added. Callers crossing await,
+  breakthrough or reentry boundaries were deliberately left unchanged.
+
+### Frozen Pair and Coverage
+
+- Reuses the sole1M synthetic fixture at
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`, original rank
+  digest `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  No persistent second million-user DB. Code-only baseline
+  `/tmp/xiu-v23-baseline-Dnvouule` is exact92a2cafd; accepted source
+  `/tmp/xiu-v23-accept-0N4CPdsK` adds exactly FIVE runtime-file changes.
+  Runtime trees are
+  `53f45a39afc78f73e80837c8fc874840686288cd6713a9d31b71e63d9f26934c`
+  -> `a9f8b9bc8b12c871a153ab5ce29c3fef8c80432c87c6584e28af770603eaf71e`.
+- Reports in fixture `data/`: `read-stage-before-v23-20261127-r01.json`,
+  `read-stage-after-v23-20261127-r01.json` and offline
+  `read-stage-comparison-v23-20261127-r01.json`. This is ONE frozen pair,
+  384/384 successful requests per version, with equal driver, fixture, limits,
+  request plans, business/phase manifests and original digest. All phase
+  invariants and final restoration pass. No retry to select better timings.
+- 128 actual actors have2560 bag rows and128 Buff rows. All selected roots
+  are fate roots at level4; main-skill IDs and blessing are0, so nonempty
+  skill behavior has direct regressions but is not sampled under load.
+  Impart population is not quantified here. Inherited8192 activity rows and
+  three32768-row balance populations only reuse base setup: there is NO new
+  activity/table-scan performance conclusion from these requests.
+- Three128-request phases: pure cap10 at20 arrivals/s has64 `我的修为`,32
+  status and32 unchanged asset controls. Mixed/contention cap20 at20/35/s
+  each have32 cultivation-value reads,32 status,32 assets,16 stone-training
+  writes and16 three-round dual-cultivation writes. Writer groups differ;
+  contention shares display/writer identities, not competing write/write
+  resources. Actor/command cooldown keys do not repeat across phases and
+  cooldowns stay enabled. Real named-target, off-protection, nonpartner dual
+  cultivation uses seeded real RNG `Random(20261127)`; gains are checked by
+  an independent enumeration of normal/special three-round combinations.
+- One shared instance/isolated DB per phase executes real matcher/provider/
+  rule/DI/handler; only message transport is mocked. All tasks drain before
+  phase restore. Exact exp/stone/power, usage/statistics/stamina, relationship/
+  affection, receipt identity/attribute payload, bags,1M count and quick_check
+  pass. Invite/partner/cap/replay have direct regression coverage, not this
+  load coverage. No cold exact-rank traffic or50success/s capacity claim.
+- Business refusals, cooldown refusals, exceptions, timeouts, SQLite errors,
+  busy/locked and boundary violations are all0 (0%). This establishes the
+  selected consistency checks, not every feature/table/concurrency boundary.
+
+E2E includes scheduled-arrival, dispatch and admission queue delay. Values
+below are p50/p95/p99 milliseconds; SQL calls/time include execute, fetch and
+transaction/setup APIs. Every row has0% errors/refusals/timeouts.
+
+| Phase | Command | n/version | E2E before | E2E after | SQL calls before ->after | SQL wall ms before ->after |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pure | 我的资产总览 (control) | 32 | 17.536/25.213/25.627 | 17.060/24.731/26.261 | 775 ->775 | 222.202 ->215.334 |
+| Pure | 我的修为 | 64 | 9.149/10.777/68.966 | 9.149/10.910/59.809 | 857 ->793 | 52.297 ->49.387 |
+| Pure | 我的状态 | 32 | 13.489/19.450/49.601 | 13.156/21.790/37.976 | 903 ->871 | 77.966 ->78.818 |
+| Mixed | 我的资产总览 (control) | 32 | 17.504/27.112/138.798 | 17.485/24.131/65.075 | 775 ->775 | 220.491 ->212.796 |
+| Mixed | 我的修为 | 32 | 54.207/88.817/206.213 | 46.829/96.046/164.699 | 429 ->397 | 38.566 ->42.737 |
+| Mixed | 双修 | 16 | 99.620/118.744/118.744 | 93.675/128.420/128.420 | 2770 ->2258 | 488.671 ->438.876 |
+| Mixed | 我的状态 | 32 | 18.635/38.879/188.730 | 13.353/46.125/114.780 | 900 ->868 | 83.925 ->81.809 |
+| Mixed | 灵石修炼 | 16 | 32.964/127.987/127.987 | 34.456/172.056/172.056 | 627 ->611 | 75.829 ->77.219 |
+| Contention | 我的资产总览 (control) | 32 | 38.359/103.688/113.042 | 43.672/242.038/245.295 | 775 ->775 | 217.335 ->223.520 |
+| Contention | 我的修为 | 32 | 79.136/160.581/170.134 | 98.289/274.561/296.431 | 429 ->397 | 39.018 ->34.532 |
+| Contention | 双修 | 16 | 104.244/134.186/134.186 | 106.013/244.837/244.837 | 2658 ->2146 | 480.548 ->478.101 |
+| Contention | 我的状态 | 32 | 50.727/141.497/145.047 | 71.833/246.049/269.613 | 788 ->756 | 76.117 ->78.514 |
+| Contention | 灵石修炼 | 16 | 62.977/85.840/85.840 | 70.146/328.683/328.683 | 624 ->608 | 75.805 ->71.847 |
+
+### Attribution, Regressions and Resources
+
+- Complete foreground DB operations13310 ->12030 (-1280). Per phase:
+  2535/5501/5274 ->2439/4909/4682; including background3181/6134/5886 ->
+  3084/5547/5287. SQL wall569.660/1274.468/1139.077 ->571.780/1088.557/
+  1140.179ms: pure and contention INCREASE despite fewer operations. Each
+  sampled three-round dual request removes32 total foreground APIs. For16
+  dual requests per writing phase, full-profile SELECTs336 ->112 (-224).
+  Top-query diagnostics retain only20 patterns and connection diagnostics
+  the first12 statements/connection; a missing Buff entry is not zero reads.
+  Complete operation counts are independent of those clipped diagnostics.
+  Selected connection diagnostics show128 opens in both versions; no reduction
+  in physical connection creation is claimed.
+- Phase E2E p95 19.450/115.701/122.009 ->18.659/96.046/245.295ms. Successful
+  throughput20.098/20.052/34.649 ->20.101/20.054/33.980 requests/s. Preserve
+  the contention regression, all command-tail regressions in the table and
+  RSS203.781 ->216.852MiB. This pair proves reduced repeated SQL work, NOT
+  unconditional E2E improvement or statistical stability of short tails.
+- Handler wall-overlap peaks1/4/4 ->1/3/7; admitted inflight peaks2/5/6 ->
+  2/4/12; multiple-active time0/145.427/634.796 ->0/70.790/1457.721ms.
+  Arrival rates20/20/35 and caps10/20/20 differ from actual overlap and
+  success throughput; none proves20 simultaneous execution or sustained50/s.
+  Queue p95 .010/.010/.009 ->.011/.015/.009ms; loop-dispatch p95
+  .198/49.400/71.269 ->.168/41.036/71.185ms. Loop lag p95/p99 is
+  4.749/12.527,80.535/88.409,81.954/110.400 ->3.460/12.116,
+  73.823/100.568,89.342/132.618ms. Producer max .178/96.214/2.082 ->
+  .228/105.183/4.108ms is test-side arrival deviation, not application SQL.
+- Slowest after contention stone request: E2E328.683ms, service323.987ms,
+  matcher-check142.616ms, handler179.192ms, SQL3.309ms, owned-drain.039ms,
+  summed BEGIN.094ms. Later unchanged asset/read handlers also spend about
+  155-165ms wall with SQL<7ms. Samples locate wall delay in dispatch/DI/
+  handler intervals, but have no complete CPU profile: they do NOT establish
+  GC, host scheduling or a particular product-code root cause. Fewer SQL
+  calls cannot dismiss the observed E2E regression; no rerun selects it away.
+- Shared-cache hits/misses/invalidations/recomputations/entries all0. General
+  and exp generations0/48/48, stone0/16/16 in both versions. There are no
+  exact-rank requests, so this does not measure invalidation-driven cold-rank
+  recomputation. BEGIN execution p95 .0293/.0425/.0334 ->.0412/.0368/.0425ms
+  is an upper bound on transaction waiting, not an independent lock timer.
+  MainThread contention CPU3081.450 ->3100.584ms also regresses; observer
+  timers overlap/omit work and cannot be subtracted to infer application CPU.
+- Serial shared-lock pair uses2/4 CPUs, AS1024MiB, RSS900MiB,600CPU/1200wall
+  seconds, MALLOC_ARENA_MAX=2, RAM>=768MiB, disk>=2GiB and single/total WAL
+  <=256MiB. No guard fires. Minimum RAM1675 ->1641MiB, disk12620550144 ->
+  12599795712 bytes; peak virtual535.879 ->534.508MiB; max single WAL18321672
+  bytes both, total23282248 ->23265768, final WAL0. Process wall72.674 ->
+  68.321s and CPU55.406 ->53.363s include setup/observer/restore. Preflight
+  2.665 ->2.092s; phase setup5.300/4.572/4.594 ->4.522/4.884/4.423s (mixed
+  INCREASES); restore14.025 ->13.394s. Cumulative read748208128 ->531116032
+  and write4250996736 ->4235735040 bytes include fixture IO and cannot all
+  be attributed to runtime application traffic.
+- ONE affected acceptance in the isolated accepted tree:100 tests and70
+  subtests pass in27.60s; compileall, architecture, inventory `--check` and
+  scoped whitespace pass. Coverage retains independent root/live-stage/error,
+  dual accumulated gains/cap/special/big-number/post-write/rejection, invite/
+  transaction/replay, closing, normal/stone training and both pill assertions.
+  No local fullsuite, CI workflow change, old accepted gate or old load rerun.
+
+The total performance goal remains ACTIVE. Eight matchers benefit; four
+changed matchers plus one unchanged control were load-sampled. Remaining
+matchers have direct regressions only. Cold precise-rank/global invalidation,
+wider exp/stone write patterns, directory owner affinity and this contention
+tail regression remain unresolved. This is not exhaustive674 matcher/41
+background coverage or validation of all feature-table sizes.

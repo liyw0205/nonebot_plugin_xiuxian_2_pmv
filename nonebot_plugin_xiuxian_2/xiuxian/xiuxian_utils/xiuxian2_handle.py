@@ -60,6 +60,7 @@ impart_num = "123451234"
 trade_num = "123451234"
 player_num = "123451234"
 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+_ROOT_LEVEL_UNSET = object()
 
 
 _USER_CD_TEXT_COLUMNS = {"user_id", "create_time", "scheduled_time", "last_check_info_time"}
@@ -1258,17 +1259,18 @@ class XiuxianDateManage:
             self.update_power2(user_id)
             return f"逆天之行，重获新生，新的灵根为：{lg}，类型为：{type}"
 
-    def get_root_rate(self, name, user_id):
-        """获取灵根倍率（命运道果走 numeric_bind 阶梯累加，与 Web 一致）"""
+    def get_root_rate(self, name, user_id, *, root_level=_ROOT_LEVEL_UNSET):
+        """获取灵根倍率；root_level 仅复用同一读取阶段的玩家投影。"""
         from .numeric_bind import compute_fate_root_rate
 
         data = jsondata.root_data()
         if name == '命运道果':
             base_rate = data['永恒道果']['type_speeds']
             fate_step = data[name]['type_speeds']
-            user_info = self.get_user_info_with_id(user_id)
-            root_level = int((user_info or {}).get('root_level', 0) or 0)
-            return compute_fate_root_rate(root_level, base_rate, fate_step)
+            if root_level is _ROOT_LEVEL_UNSET:
+                user_info = self.get_user_info_with_id(user_id)
+                root_level = (user_info or {}).get('root_level', 0)
+            return compute_fate_root_rate(int(root_level or 0), base_rate, fate_step)
         else:
             return data[name]['type_speeds']
 
