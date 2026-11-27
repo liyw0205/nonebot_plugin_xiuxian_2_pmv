@@ -5685,3 +5685,15 @@ The existing fixture identity/rank digest is retained in every raw report.
 This seven-matcher static/four-route timed batch is a bounded improvement,
 not exhaustive674-matcher/41-background coverage or completion of the active
 repository performance goal. Previously accepted V29 gates/load were reused.
+
+CI closeout: the19-file batch08ee05ec was pushed once. Exact-SHA run
+46040983514 passed quality, but each3665-test unittest shard failed one
+assertion of the same source-progress flag. Both failures reproduced locally
+in0.86s: the checker required at least six direct profile calls, while V30
+correctly leaves four plus the two shops reusing `check_user`'s profile. The
+checker now recognizes those two named handler/checked-source relationships,
+rejects reassigned/unrelated profiles and retains the legacy-read prohibition.
+The two old assertions remain. Consolidated checker/progress/shop regression:
+34passed/6subtests in5.16s. This diagnostic-only correction changes no runtime
+or load driver, so accepted timings, correctness checks and static baseline
+remain valid without rerunning the pair or full local unittest.

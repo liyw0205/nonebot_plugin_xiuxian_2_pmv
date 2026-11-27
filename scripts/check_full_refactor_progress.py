@@ -59,6 +59,41 @@ def _walk(tree: ast.AST) -> tuple[ast.AST, ...]:
     return tuple(ast.walk(tree))
 
 
+def _sect_shop_checked_profile_reuse(source: str) -> int:
+    """Count the two shop entrypoints that reuse check_user's current profile."""
+    matched = set()
+    for handler in _parse_source(source).body:
+        if not isinstance(handler, ast.AsyncFunctionDef):
+            continue
+        matchers = {
+            decorator.func.value.id
+            for decorator in handler.decorator_list
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "handle" and isinstance(decorator.func.value, ast.Name)
+            and decorator.func.value.id in {"sect_shop", "sect_buy"}
+        }
+        if not matchers:
+            continue
+        statements = handler.body
+        for index, statement in enumerate(statements):
+            if not (isinstance(statement, ast.Assign) and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Name) and statement.value.func.id == "check_user"
+                    and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Tuple)
+                    and len(statement.targets[0].elts) == 3
+                    and isinstance(statement.targets[0].elts[1], ast.Name)
+                    and statement.targets[0].elts[1].id == "user_info"):
+                continue
+            following = tuple(node for later in statements[index + 1:] for node in _walk(later))
+            if any(isinstance(node, ast.Name) and node.id == "user_info" and isinstance(node.ctx, ast.Store)
+                   for node in following):
+                continue
+            if any(isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                   and node.value.id == "user_info" and isinstance(node.slice, ast.Constant)
+                   and node.slice.value == "sect_id" for node in following):
+                matched.update(matchers)
+    return len(matched)
+
+
 _FOLDED_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -4369,7 +4404,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "sect_member_utils_info_reads_feature_owned": sect_member_utils.count("sect_application.get_sect_info(") >= 4,
             "sect_member_utils_join_count_feature_owned": "sect_application.count_sect_members(sect_id)" in sect_member_utils,
             "sect_user_profile_repository_owned": "def get_user_profile(" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
-            "sect_user_profile_facade_owned": sect_facade.count("sect_application.get_user_profile(") >= 6 and "_sql_message().get_user_info_with_id(" not in sect_facade,
+            "sect_user_profile_facade_owned": (sect_facade.count("sect_application.get_user_profile(") + _sect_shop_checked_profile_reuse(sect_facade)) >= 6 and "_sql_message().get_user_info_with_id(" not in sect_facade,
             "sect_user_profile_helper_default_owned": "sect_application.get_user_profile(user_id)" in sect_member_utils and "_sql_message().get_user_info_with_id(user_id)" not in sect_member_utils,
             "sect_user_name_profile_repository_owned": "def get_user_profile_by_name(" in sect_member_repository and "WHERE user_name=?" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
             "sect_user_name_profile_facade_owned": sect_facade.count("sect_application.get_user_profile_by_name(") == 2 and "_sql_message().get_user_info_with_name(" not in sect_facade,
