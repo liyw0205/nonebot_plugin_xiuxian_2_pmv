@@ -56,7 +56,7 @@ from .sect_member_utils import (
     get_secname_list,
     get_secnameid,
     get_sect_contribution_level,
-    get_sect_level,
+    sect_level_from_scale,
     get_sect_mainbuff_id_list,
     get_sect_member_limit,
     get_sect_secbuff_id_list,
@@ -1625,14 +1625,15 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await upatkpractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         useratkpractice = int(user_info['atkpractice'])  # 当前等级
         if useratkpractice == 100:
             msg = f"道友的攻击修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upatkpractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -1711,14 +1712,15 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await uphppractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         userhppractice = int(user_info['hppractice'])  # 当前等级
         if userhppractice == 100:
             msg = f"道友的元血修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await uphppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -1797,14 +1799,15 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await upmppractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         usermppractice = int(user_info['mppractice'])  # 当前等级
         if usermppractice == 100:
             msg = f"道友的灵海修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upmppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -3268,7 +3271,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         max_members = get_sect_member_limit(sect_info['sect_scale'])
         
         # 获取当前宗门人数
-        current_members = len(sect_application.list_sect_members(sect_id))
+        current_members = sect_application.count_sect_members(sect_id)
         
         fairyland_level = _get_sect_fairyland_level(sect_info)
         fairyland_conf = _get_sect_fairyland_config(fairyland_level)
@@ -3355,12 +3358,12 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     fairyland_name = "未建设" if fairyland_level <= 0 else f"{fairyland_level}级【{fairyland_conf['name']}】"
     task = sect_application.get_active_task(user_info["user_id"])
     task_msg = "未接取，发送【宗门任务】获取" if not task else f"{task['任务名称']}：{task['任务内容'].get('desc', '')}"
-    members = sect_application.list_sect_members(sect_id)
+    member_count = sect_application.count_sect_members(sect_id)
     max_members = get_sect_member_limit(sect_info["sect_scale"])
 
     msg = (
         f"【宗门建设】\n"
-        f"宗门：{sect_info['sect_name']}（{len(members)}/{max_members}人）\n"
+        f"宗门：{sect_info['sect_name']}（{member_count}/{max_members}人）\n"
         f"建设度：{number_to(sect_info['sect_scale'])}\n"
         f"宗门储备：{number_to(sect_info['sect_used_stone'])}灵石\n"
         f"宗门资材：{number_to(sect_info['sect_materials'])}\n"
@@ -3368,7 +3371,7 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         f"\n当前建筑：\n"
         f"丹房：{elixir_room_name}\n"
         f"炼体堂：{fairyland_name}\n"
-        f"修炼上限：{get_sect_level(sect_id)[0]}级\n"
+        f"修炼上限：{sect_level_from_scale(sect_info['sect_scale'])[0]}级\n"
         f"\n当前任务：\n{task_msg}\n"
         f"\n可执行操作：宗门任务、宗门周常、宗门捐献、宗门商店、宗门丹房建设、宗门炼体堂升级"
     )

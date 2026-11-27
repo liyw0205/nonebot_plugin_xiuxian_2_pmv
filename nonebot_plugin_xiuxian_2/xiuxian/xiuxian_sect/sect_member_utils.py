@@ -239,7 +239,11 @@ def get_sectbufftxt(sect_scale, config_):
 
 def get_sect_level(sect_id):
     sect = sect_application.get_sect_info(sect_id)
-    return divmod(sect['sect_scale'], config["等级建设度"])
+    return sect_level_from_scale(sect['sect_scale'])
+
+
+def sect_level_from_scale(sect_scale):
+    return divmod(sect_scale, config["等级建设度"])
 
 
 def get_sect_contribution_level(sect_contribution):

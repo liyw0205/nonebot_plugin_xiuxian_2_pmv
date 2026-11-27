@@ -125,6 +125,9 @@ class SectApplication:
     def list_sect_members(self, sect_id: int | str) -> list[dict[str, Any]]:
         return self.member_repository.list_by_sect_id(sect_id)
 
+    def count_sect_members(self, sect_id: int | str) -> int:
+        return self.member_repository.count_by_sect_id(sect_id)
+
     def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
         return self.member_repository.get_user_profile(user_id)
 

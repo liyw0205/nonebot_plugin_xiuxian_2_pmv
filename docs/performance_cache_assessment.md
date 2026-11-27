@@ -3916,3 +3916,188 @@ from saved call paths/SQL rather than another taxonomy audit. Feature-score
 writer contention/index-maintenance cost, unsampled battle/material/trade
 latency, residual queue/DI pauses and sustained50-success/s capacity remain
 unverified; retain earlier regressions rather than replacing their evidence.
+
+## V21: Shared Sect Read Stages and Live Member Counts (2026-11-27)
+
+### Shared Work and Transaction Boundaries
+
+This batch changes five distinct matcher callers, selected from existing
+call paths rather than a new repository audit. Static associations with the
+sect helpers are not all proven duplicate-query callers.
+
+| Shared entry | Actual callers | Work removed | Live boundary |
+| --- | --- | --- | --- |
+| `sect_level_from_scale` over an already-read sect row | `升级攻击修炼`, `升级元血修炼`, `升级灵海修炼` | Repeated sect SELECTs in the same preliminary read stage: ordinary level <=100 has3 ->1; this load's level >100 has2 ->1 | Authoritative transaction rereads, balance/material checks, CAS, receipts and replay remain unchanged |
+| Same scale calculation in buildings | `宗门建设` | Two sect reads ->one | No value reused across requests or after settlement |
+| `SectApplication.count_sect_members` ->readonly repository COUNT | `我的宗门`, `宗门建设` | Complete member lists, transfer and Python normalization replaced with one scalar | Live `COUNT(*)`, including duplicate/NULL user identities as the old list length did |
+
+The existing `idx_user_xiuxian_sect_id` supplies a covering-index plan; no
+duplicate index is added. COUNT still traverses matching index entries, not
+constant-time metadata. The standalone live `get_sect_level` wrapper remains
+compatible. Physical connection-open savings are not claimed: request scope
+already reuses connections. The measured benefit is less repeated SQL and
+full-row processing, not fewer Python function calls. No individual player
+values are cached. Personal sect ordinal ranking retains the previous full
+ordering: tie order and mixed identity comparison semantics have not been
+proved equivalent to a replacement SQL rank, so that hotspot remains.
+
+### Frozen Pair and Representative Data
+
+- Sole original fixture:
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`,1M existing
+  synthetic main users, original exp/stone digest
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  Before uses a code-only d8fab80a archive, without another million-user DB.
+  Valid reports in `data/`: `sect-shared-before-v21-20261127-r02.json`,
+  `sect-shared-after-v21-20261127-r01.json` and offline
+  `sect-shared-comparison-v21-20261127-r01.json`.
+- Runtime tree hashes
+  `6a5caf2324b4f7bc187f236980d3c1ebcd282f1762f6118abab210f752362d38`
+  -> `a92a1d2e7eb2cb1382d9e348c87eb1c886a72aa6b0a946df560b9311f8c589e2`
+  differ in exactly four runtime files. Driver, fixture, limits, phase specs,
+  every request/actor/argument and all business/phase manifests match. All
+  identity, consistency, resource-stop and original-digest restoration checks
+  pass. Setup, traffic and restoration share the same isolated target instance
+  and DB; restoration occurs only after requests drain and invariants pass.
+- 128 actors across128 sects, each with64 existing members:8192 populated
+  members and8192 accepted current-period task rows. Roles are owner0 and
+  ordinary member11, respecting real role capacities and practice eligibility.
+  Scale4b+ supports100 members; hence the measured upgrade branch is2 ->1
+  reads, not3 ->1. Actors have exact1e9 wallets;8064 background members have
+  exact `10**30 + ordinal` wallets through production exact binding. All8192
+  rows pass production normalization before dispatch and during invariants.
+  No new main-user rows or larger million-user fixture are introduced.
+- The retained `before-r01` report is INVALID performance evidence: the old
+  list normalizer rejected inherited ambiguous huge REAL background wallets,
+  giving128 pure-phase exceptions. Later phases stopped and original digest
+  restoration passed. Only synthetic fixture setup was corrected; the exact
+  integer product rule was retained, with a small real-SQLite regression.
+  No invalid after or per-command retry was run. The corrected pair above is
+  the sole valid before/after comparison for this batch.
+- Reuses the mixed harness with a minimal `sect-shared-v21` scenario to cover
+  the previously missing populated membership/shared-materials write pattern.
+  Each version has384 requests in three128-request phases: pure cap10 at20
+  arrivals/s has64 each of my-sect/buildings; mixed cap20 at35/s has32 each
+  display,32 asset-overview controls and32 upgrades (attack11/health11/mana10)
+  from32 writers across4 sects. Contention cap20 at50/s has the same command
+  mix,32 upgrades sharing one sect and11 users across three practice matchers.
+  User/matcher write pairs do not repeat across phases; cooldowns stay enabled.
+  Matcher, provider, permission, rule, DI and handler are real; only QQ delivery
+  is mocked. Existing asset-control feature data is reused, without claiming
+  newly populated backpack/arena scale.
+- Both versions succeed384/384,0 business/cooldown refusals, exceptions,
+  timeouts, SQL errors, busy/locked or boundary violations (0%). Each upgrade
+  has an exact durable receipt for0 ->1 and deductions5m stone/50m materials.
+  Full actor rows,8064 full background rows, all sect fields/exact materials,
+  bounded selected non-user table signatures and generation checks pass.
+  No duplicate debit, lost update, negative balance or deadlock is observed.
+  The remaining991808 users do not have traffic-time full-column invariants;
+  final1M exp/stone restoration does. Unselected non-user tables and tables
+  above32768 rows are explicitly excluded, not claimed as whole-DB zero-write.
+
+E2E includes planned-arrival, event-loop dispatch and admission queues.
+Values are p50/p95/p99 milliseconds before ->after; SQL calls/wall include
+execute/fetch/control APIs. All rows have0% errors/refusals/timeouts. Fourteen
+phase/path rows cover six commands, including one unchanged control. For
+n10/11, p95/p99 are sample maxima, not stable population tails.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / my-sect |64|30.405/143.261/260.453 ->28.207/38.497/81.498|2006 ->2006|1080.240 ->1005.368|
+| pure / buildings |64|29.703/93.511/309.218 ->23.081/31.477/64.130|2112 ->1792|1026.956 ->727.231|
+| mixed / assets control |32|23.550/168.444/266.553 ->17.658/163.760/277.044|807 ->807|214.829 ->219.068|
+| mixed / my-sect |32|34.046/209.650/323.303 ->28.414/218.331/220.382|1005 ->1005|533.177 ->489.457|
+| mixed / attack upgrade |11|29.916/252.776/252.776 ->23.363/251.941/251.941|429 ->374|164.795 ->120.064|
+| mixed / buildings |32|35.624/181.707/294.988 ->24.466/188.928/192.192|1056 ->896|501.902 ->351.088|
+| mixed / health upgrade |11|28.611/163.569/163.569 ->24.324/163.097/163.097|429 ->374|166.291 ->134.644|
+| mixed / mana upgrade |10|28.097/188.812/188.812 ->23.152/134.301/134.301|390 ->340|151.113 ->107.401|
+| contention / assets control |32|587.768/940.435/959.475 ->308.041/490.946/491.012|807 ->807|228.965 ->219.309|
+| contention / my-sect |32|580.410/975.095/980.765 ->281.732/499.578/517.378|1005 ->1005|551.205 ->500.945|
+| contention / attack upgrade |11|673.809/992.267/992.267 ->408.642/574.452/574.452|429 ->374|164.014 ->120.204|
+| contention / buildings |32|585.057/956.776/960.548 ->314.615/509.847/509.896|1056 ->896|505.381 ->346.734|
+| contention / health upgrade |11|722.095/1075.788/1075.788 ->422.171/572.943/572.943|429 ->374|172.789 ->127.736|
+| contention / mana upgrade |10|633.625/1031.129/1031.129 ->301.426/569.636/569.636|390 ->340|152.307 ->114.526|
+
+### SQL Evidence, Regressions and Resource Limits
+
+- Complete foreground calls pure/mixed/contention4118/4116/4116 ->
+  3798/3796/3796:320 fewer per phase,960 fewer overall (12350 ->11390).
+  Including background work, phase calls4760/4749/4694 ->4444/4427/4385;
+  phase SQL wall2335.554/2014.411/2100.494 ->1957.936/1693.659/1758.591ms.
+  Counts include transaction/control APIs, not just SELECTs.
+- Saved connection diagnostics show sect SELECTs192/160/160 ->128/96/96,
+  wall679.764/553.569/556.364 ->461.797/328.614/324.565ms. Member lists
+  128/64/64 calls, wall555.566/273.100/292.314ms become COUNTs with
+  wall431.184/204.852/204.841ms. Across256 member queries,16384 full-row
+  transfers/normalizations become256 scalars. Diagnostics retain only first12
+  statements/connection: omitted statements per version are pure my-sect4;
+  mixed/contention my-sect1, assets103, attack66, health66, mana60;
+  buildings0. These are truncated diagnostics, not an exhaustive SQL trace;
+  complete per-command/phase totals above remain valid.
+- Pure overall p95143.261 ->36.154ms; contention overall
+  p50/p95/p99639.168/960.548/1031.129 ->323.280/509.896/572.943ms.
+  Mixed overall p95 REGRESSES181.707 ->186.778ms. Mixed my-sect p95
+  209.650 ->218.331 and buildings181.707 ->188.928 also regress;
+  asset-control mixed p99266.553 ->277.044ms and SQL214.829 ->219.068ms
+  regress. No selective rerun, lower load or exclusion was used to improve
+  these numbers; a single short pair cannot establish universal speedups or
+  causally explain every tail/control improvement.
+- Successful throughput pure/mixed/contention20.064/33.754/37.221 ->
+  20.084/35.058/43.106 requests/s; traffic windows6.379528/3.792141/
+  3.438915 ->6.373162/3.651090/2.969398s. Offered20/35/50 arrivals/s,
+  admission cap10/20/20, peak admitted7/8/20 ->2/10/20 and handler-wall
+  overlap4/7/14 ->1/6/13 are distinct measures. This does not prove20
+  simultaneous CPU/SQLite executions or sustained50 successful requests/s.
+- Contention admission p95/p99433.009/501.455 ->69.283/88.556ms. Dispatch
+  p95/p992.853/52.693 ->.201/10.345 pure,17.347/24.628 ->18.589/48.258
+  mixed (regresses),72.943/86.697 ->49.039/56.016 contention. Loop-lag
+  p95/p9927.707/59.165 ->21.846/24.719,20.104/97.029 ->18.022/55.927,
+  87.085/90.027 ->44.013/61.831ms. Producer p95/p99.219/68.133 ->
+  .122/.178,4.821/118.964 ->2.364/115.879,3.556/6.362 ->2.541/4.830ms.
+  Event-loop/queue stalls remain; the harness exposes them in E2E.
+- BEGIN counts896/768/768 ->832/704/704; p95/p99 .022/.087 ->.027/.278,
+  .021/.095 ->.021/.052, .026/.148 ->.024/.075ms. Pure tails regress;
+  mixed maximum .345 ->1.095ms and contention .556 ->.696ms regress.
+  BEGIN execution includes SQL/observer time and is only an upper bound on
+  transaction wait, not a separately measured lock wait. Cache hits, misses,
+  invalidations and recomputations are0, entries0 in every phase. Main-user
+  stone/general generation deltas0/32/32, exp0 in both versions; there are no
+  personal-rank requests here, so this cannot quantify rank recomputation or
+  frequent exp-write invalidation cost.
+- Heavy work remained serial under the shared validation lock,2/4 CPUs,
+  1GiB address space,600 CPU/1200 wall seconds, `MALLOC_ARENA_MAX=2`,
+  available-RAM768MiB/disk2GiB floors and RSS900MiB/single+total WAL256MiB
+  stops. No guard fires. Sampled minimum RAM1540 ->1645MiB, disk
+  13170016256 ->13155225600 bytes; process peak RSS214.301 ->219.828MiB
+  INCREASES. Sampled/final virtual peak582.805 ->571.840MiB, max single
+  WAL7090552 both, total11292984 ->11305344 bytes increases; final WAL0.
+  Whole-process wall69.170 ->66.628s and CPU58.480 ->56.463s include setup,
+  observation and restoration. Preflight setup2.440 ->2.551s regresses;
+  phase setup6.278/6.102/5.990 ->5.285/5.506/5.251s and restore13.842 ->
+  13.683s are separate from application traffic. Final cumulative read
+  869199872 ->324116480 and write4134727680 ->4135325696 bytes include
+  fixture refresh/restore; writes increase. Observer overhead is uncalibrated;
+  overlapping CPU/SQL timings must not be summed or called application-only IO.
+- Affected acceptance covers93 unique tests/78 subtests, including all three
+  upgrades, ordinary-level repeated reads, level100 cap, large exact divmod,
+  write-time balance/material changes, duplicate/NULL counts, readonly and
+  covering-index behavior, denied-read recovery and next-request freshness;
+  fixture regressions cover real command resolution, role capacity, reply and
+  receipt oracles, injected inconsistency and exact large-wallet preflight.
+  Compile, architecture (`ok=true/errors=[]`), inventory and scoped whitespace
+  pass in `/tmp/xiu-v21-accept-j5hHhW5j`. The initial86-pass run's five failed
+  progress checks were caused by export-ignored docs missing in the isolated
+  tree; exact HEAD docs were supplied there only. Three tracked-but-ignored
+  invitation JSON index entries were also supplied only there for inventory
+  parity. Changed fixture/progress checks were verified without rerunning the
+  accepted86-test group. No user deletion was restored and no full local
+  unittest or accepted older load was repeated. Exact delivered-SHA CI is the
+  remaining complete gate.
+
+The repository-wide goal remains ACTIVE: this is evidence for five optimized
+callers plus one control, not exhaustive674-matcher/41-background coverage.
+Exp-changing gameplay, task/reward settlement, membership/scale writes,
+personal exact-rank recalculation, unsampled feature data and sustained50
+successful requests/s remain outside this batch. Next work must reuse saved
+SQL/call paths to batch shared query patterns; this report neither replaces
+previous regressions nor claims the overall performance target is complete.

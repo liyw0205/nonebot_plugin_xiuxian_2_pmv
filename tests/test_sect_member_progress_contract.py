@@ -10,6 +10,7 @@ class SectMemberProgressContractTests(unittest.TestCase):
         sect = _slice_status()["sect"]
         self.assertTrue(sect["sect_member_list_application_owned"])
         self.assertTrue(sect["sect_member_list_repository_owned"])
+        self.assertTrue(sect["sect_member_count_repository_owned"])
         self.assertTrue(sect["sect_member_list_read_only"])
         self.assertTrue(sect["sect_member_utils_application_injected"])
         self.assertTrue(sect["sect_member_utils_info_reads_feature_owned"])
