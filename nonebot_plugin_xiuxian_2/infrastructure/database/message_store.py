@@ -155,6 +155,25 @@ def apply_season_rank_schema(uow: DatabaseUnitOfWork) -> None:
         uow.execute(statement)
 
 
+def apply_season_rank_exact_indexes(uow: DatabaseUnitOfWork) -> None:
+    """Add game-owned exact partition/range indexes outside request handling."""
+    from ...features.base.indexed_ranking import SEASON_SCORE_ORDER_INDEX, SEASON_SCORE_RANK_INDEX
+
+    if not table_columns(uow, "season_rank"):
+        apply_season_rank_schema(uow)
+    columns = uow.query_all('PRAGMA table_info("season_rank")')
+    primary_key = tuple(row["name"] for row in sorted(columns, key=lambda row: row["pk"]) if row["pk"])
+    definition = uow.query_one("SELECT sql FROM sqlite_master WHERE type='table' AND name='season_rank'")
+    table_sql = str((definition or {}).get("sql") or "").casefold()
+    if (not set(SEASON_RANK_COLUMNS).issubset(row["name"] for row in columns)
+            or primary_key != ("rank_key", "user_id", "sect_id") or "collate" in table_sql
+            or "without rowid" in table_sql or any(
+                str(row["name"]).casefold() in {"rowid", "_rowid_", "oid"} for row in columns)):
+        return
+    for spec in (SEASON_SCORE_RANK_INDEX, SEASON_SCORE_ORDER_INDEX):
+        uow.execute(spec.create_sql)
+
+
 def table_columns(connection: Any, table: str) -> frozenset[str]:
     """Return the live column set of ``table`` for a UoW or a raw connection."""
     if hasattr(connection, "query_all"):
@@ -206,6 +225,7 @@ __all__ = [
     "MESSAGE_TABLES",
     "apply_message_store_schema",
     "apply_season_rank_schema",
+    "apply_season_rank_exact_indexes",
     "schema_ready",
     "table_columns",
     "table_ready",

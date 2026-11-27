@@ -7,6 +7,10 @@ from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ..base.first_user_rows import first_user_rows
+from ..base.indexed_ranking import (
+    BOSS_INTEGRAL_ORDER_INDEX, BOSS_INTEGRAL_RANK_INDEX,
+    indexed_personal_rank, rank_index_available,
+)
 from ..base.ranking_position import PersonalRank
 from ..base.public_display_snapshot import (
     shared_display_snapshot,
@@ -69,6 +73,14 @@ class BossIntegralSqlRepository:
     def _top_integrals_in_uow(
         uow: DatabaseUnitOfWork, limit: int
     ) -> list[tuple[str, int]]:
+        spec = BOSS_INTEGRAL_ORDER_INDEX
+        if rank_index_available(uow, uow.database, spec, require_unique_user=True):
+            rows = uow.query_all(
+                "SELECT user_id,COALESCE(integral,0) AS integral FROM boss_limit "
+                f"WHERE {spec.predicate} ORDER BY {spec.key} DESC,rowid ASC LIMIT ?",
+                (limit,),
+            )
+            return [(str(row["user_id"]), as_int_like(row["integral"])) for row in rows]
         rows = uow.query_all(
             "SELECT entry.user_id AS user_id,"
             "COALESCE(entry.integral,0) AS integral "
@@ -143,6 +155,9 @@ class BossIntegralSqlRepository:
     def _integral_rank_in_uow(
         uow: DatabaseUnitOfWork, user_id: str
     ) -> PersonalRank:
+        spec = BOSS_INTEGRAL_RANK_INDEX
+        if rank_index_available(uow, uow.database, spec, require_unique_user=True):
+            return indexed_personal_rank(uow, spec, user_id)
         deduped = (
             "SELECT entry.user_id AS user_id,"
             "COALESCE(entry.integral,0) AS value "

@@ -32,6 +32,11 @@ class MixedProbeHelperTests(unittest.TestCase):
             "season_batch": "WITH targets AS MATERIALIZED (SELECT * FROM season_rank) SELECT * FROM targets",
             "boss_rank": "WITH ranked AS MATERIALIZED (SELECT * FROM boss_limit AS entry) SELECT * FROM ranked",
             "training_rank": "WITH top AS MATERIALIZED (SELECT * FROM player_data.training t LIMIT ?) SELECT * FROM top",
+            "season_top": "SELECT r.rank_key FROM season_rank AS r WHERE r.rank_key=? LIMIT ?",
+            "boss_rank_indexed": 'WITH target AS (SELECT integral FROM main."boss_limit" WHERE user_id=?) SELECT * FROM target',
+            "boss_top_indexed": "SELECT user_id,COALESCE(integral,0) AS integral FROM boss_limit WHERE user_id IS NOT NULL LIMIT ?",
+            "season_score_write": "UPDATE season_rank SET score=score+? WHERE rank_key=? AND user_id=?",
+            "boss_score_write": 'UPDATE player_data."boss_limit" SET integral=xiuxian_int_sub(integral,?) WHERE user_id=?',
         }
         for sql in statements.values():
             recorder.record(connection, sql, "execute", .5)

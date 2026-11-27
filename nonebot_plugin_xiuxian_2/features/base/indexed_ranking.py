@@ -19,10 +19,13 @@ class _RankIndex:
     name: str
     valid_numeric: bool = True
     predicate: str = ""
+    partition: tuple[str, ...] = ()
+    coalesce: bool = True
+    tie_fields: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
-        value = f'COALESCE("{self.field}",0)'
+        value = f'COALESCE("{self.field}",0)' if self.coalesce else f'"{self.field}"'
         key = f"xiuxian_int_sort_key_compact({value})"
         if self.valid_numeric:
             return f"CASE WHEN xiuxian_int_cmp({value},0) IS NOT NULL THEN {key} END"
@@ -31,9 +34,11 @@ class _RankIndex:
     @property
     def create_sql(self) -> str:
         predicate = f" WHERE {self.predicate}" if self.predicate else ""
+        terms = [*(f'"{field}"' for field in self.partition), f"{self.key} DESC",
+                 *(f'"{field}" ASC' for field in self.tie_fields)]
         return (
             f'CREATE INDEX IF NOT EXISTS "{self.name}" '
-            f'ON "{self.table}" ({self.key} DESC){predicate}'
+            f'ON "{self.table}" ({",".join(terms)}){predicate}'
         )
 
 
@@ -46,7 +51,23 @@ ARENA_SCORE_RANK_INDEX = _RankIndex("arena", "score", "arena_score_exact_rank_v1
 ARENA_SCORE_ORDER_INDEX = _RankIndex(
     "arena", "score", "arena_score_exact_order_v1", valid_numeric=False
 )
-_INDEXES = (*TRAINING_RANK_INDEXES.values(), ARENA_SCORE_RANK_INDEX, ARENA_SCORE_ORDER_INDEX)
+BOSS_INTEGRAL_RANK_INDEX = _RankIndex(
+    "boss_limit", "integral", "boss_integral_exact_rank_v1", predicate=_TRAINING_USER,
+)
+BOSS_INTEGRAL_ORDER_INDEX = _RankIndex(
+    "boss_limit", "integral", "boss_integral_exact_order_v1", valid_numeric=False,
+    predicate=_TRAINING_USER,
+)
+SEASON_SCORE_RANK_INDEX = _RankIndex(
+    "season_rank", "score", "season_score_exact_rank_v1", partition=("rank_key",), coalesce=False,
+)
+SEASON_SCORE_ORDER_INDEX = _RankIndex(
+    "season_rank", "score", "season_score_exact_order_v1", valid_numeric=False,
+    partition=("rank_key",), coalesce=False, tie_fields=("updated_at", "user_id", "sect_id"),
+)
+_INDEXES = (*TRAINING_RANK_INDEXES.values(), ARENA_SCORE_RANK_INDEX, ARENA_SCORE_ORDER_INDEX,
+            BOSS_INTEGRAL_RANK_INDEX, BOSS_INTEGRAL_ORDER_INDEX,
+            SEASON_SCORE_RANK_INDEX, SEASON_SCORE_ORDER_INDEX)
 
 
 def _validate(spec: _RankIndex, schema: str) -> None:
@@ -90,9 +111,15 @@ def rank_index_available(
         table_sql = " ".join(str(table[2]).split()).casefold()
         if "without rowid" in table_sql or "create virtual" in table_sql:
             return False
+        if spec.partition and "collate" in table_sql:
+            return False
         columns = connection.execute(f'PRAGMA {schema}.table_info("{spec.table}")').fetchall()
         if any(str(row[1]).casefold() in {"rowid", "_rowid_", "oid"} for row in columns):
             return False
+        if spec in (SEASON_SCORE_ORDER_INDEX, SEASON_SCORE_RANK_INDEX):
+            primary_key = tuple(row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5])
+            if primary_key != ("rank_key", "user_id", "sect_id"):
+                return False
         indexes = connection.execute(f'PRAGMA {schema}.index_list("{spec.table}")').fetchall()
         matching = next((row for row in indexes if str(row[1]) == spec.name), None)
         if matching is None or bool(matching[4]) != bool(spec.predicate):
@@ -102,7 +129,11 @@ def rank_index_available(
             return False
         parts = connection.execute(f'PRAGMA {schema}.index_xinfo("{spec.name}")').fetchall()
         indexed = [row for row in parts if row[5]]
-        if len(indexed) != 1 or tuple(indexed[0][1:5]) != (-2, None, 1, "BINARY"):
+        actual_parts = [(row[1] == -2, row[2], row[3], row[4]) for row in indexed]
+        expected_parts = [(False, field, 0, "BINARY") for field in spec.partition]
+        expected_parts += [(True, None, 1, "BINARY")]
+        expected_parts += [(False, field, 0, "BINARY") for field in spec.tie_fields]
+        if actual_parts != expected_parts:
             return False
         if not require_unique_user:
             return True
@@ -130,7 +161,7 @@ def indexed_personal_rank(
 ) -> PersonalRank:
     """Read one target and count two exact index ranges in the same transaction."""
     _validate(spec, schema)
-    if not spec.valid_numeric:
+    if not spec.valid_numeric or spec.partition:
         raise ValueError("personal rank requires a validated numeric key")
     table = f'{schema}."{spec.table}"'
     predicate = f"{spec.predicate} AND " if spec.predicate else ""
@@ -150,5 +181,7 @@ def indexed_personal_rank(
 
 __all__ = [
     "ARENA_SCORE_ORDER_INDEX", "ARENA_SCORE_RANK_INDEX", "TRAINING_RANK_INDEXES",
+    "BOSS_INTEGRAL_ORDER_INDEX", "BOSS_INTEGRAL_RANK_INDEX",
+    "SEASON_SCORE_ORDER_INDEX", "SEASON_SCORE_RANK_INDEX",
     "indexed_personal_rank", "rank_index_available",
 ]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -17,6 +18,9 @@ from .season_service import build_season_rank_key, normalize_season_mode
 from .xiuxian2_handle import XiuxianDateManage
 from ...infrastructure.database import DatabaseUnitOfWork, message_store
 from ...core.numeric import as_int_like
+from ...features.base.indexed_ranking import (
+    SEASON_SCORE_ORDER_INDEX, SEASON_SCORE_RANK_INDEX, rank_index_available,
+)
 from .shared_read_cache import process_read_cache, shared_snapshot_key
 
 _sql_message_instance = None
@@ -288,6 +292,31 @@ def _hydrate_rank_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return hydrated
 
 
+@contextmanager
+def _season_rank_reader(spec):
+    manager = _sql_message()
+    database = getattr(manager, "database_path", None)
+    factory = getattr(manager, "_repository_read_connection", None)
+    if database is None or not callable(factory):
+        yield False, manager._read_query
+        return
+    # The proof and business query must inspect the same open database file,
+    # including readers retained across an atomic pathname replacement.
+    with factory() as connection:
+        indexed = rank_index_available(connection, database, spec)
+
+        def read(sql, params=(), *, dict_row=True):
+            cursor = connection.cursor()
+            try:
+                cursor.execute(sql, params)
+                columns = [column[0] for column in cursor.description]
+                return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            finally:
+                cursor.close()
+
+        yield indexed, read
+
+
 def get_top_season_rank(
     rank_type: str,
     mode: str = "monthly",
@@ -306,8 +335,35 @@ def get_top_season_rank(
     manager = _sql_message()
 
     def load_rows():
-        rows = manager._read_query(
-            """
+        with _season_rank_reader(SEASON_SCORE_ORDER_INDEX) as (indexed_order, read):
+            return _load_top_season_rank(read, indexed_order, rank_key, limit_value)
+
+    database = getattr(manager, "database_path", None)
+    if database is None:
+        return load_rows()
+    key = shared_snapshot_key(
+        database, "season-rank-v1", rank_key, limit_value
+    )
+    return process_read_cache.get_or_load(
+        key,
+        database_path=database,
+        ttl=60 * 60,
+        loader=load_rows,
+        snapshot=True,
+    )
+
+
+def _load_top_season_rank(read, indexed_order, rank_key, limit_value):
+    order_key = (
+        SEASON_SCORE_ORDER_INDEX.key.replace('"score"', 'r."score"')
+        if indexed_order
+        else "xiuxian_int_text(r.score) COLLATE xiuxian_integer"
+    )
+    # The legacy rank-key primary-index traversal resolves otherwise equal
+    # score/time rows by subject, then sect. Keep that order explicitly.
+    tie_order = ", r.user_id ASC, r.sect_id ASC" if indexed_order else ""
+    rows = read(
+        """
             SELECT
                 r.rank_key,
                 r.mode,
@@ -324,27 +380,13 @@ def get_top_season_rank(
             LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
             LEFT JOIN sects AS s ON s.sect_id = r.sect_id AND r.sect_id <> 0
             WHERE r.rank_key = %s
-            ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
+            ORDER BY {order_key} DESC, r.updated_at ASC{tie_order}
             LIMIT %s
-            """,
-            (rank_key, limit_value),
-            dict_row=True,
-        )
-        return _hydrate_rank_rows(rows)
-
-    database = getattr(manager, "database_path", None)
-    if database is None:
-        return load_rows()
-    key = shared_snapshot_key(
-        database, "season-rank-v1", rank_key, limit_value
+        """.format(order_key=order_key, tie_order=tie_order),
+        (rank_key, limit_value),
+        dict_row=True,
     )
-    return process_read_cache.get_or_load(
-        key,
-        database_path=database,
-        ttl=60 * 60,
-        loader=load_rows,
-        snapshot=True,
-    )
+    return _hydrate_rank_rows(rows)
 
 
 def get_user_season_rank(
@@ -369,7 +411,19 @@ def _read_live_user_ranks(
     rank_keys: Iterable[str],
 ) -> dict[str, dict[str, Any]]:
     keys = tuple(dict.fromkeys(rank_keys))
+    if not keys:
+        return {}
+    with _season_rank_reader(SEASON_SCORE_RANK_INDEX) as (indexed, read):
+        return _read_live_user_rank_batch(user_id, keys, indexed, read)
+
+
+def _read_live_user_rank_batch(user_id, keys, indexed, read):
     result: dict[str, dict[str, Any]] = {}
+    target_tie = ", r.sect_id ASC" if indexed else ""
+    comparison = "xiuxian_int_cmp(ranked.score, targets._rank_score) > 0"
+    if indexed:
+        key = SEASON_SCORE_RANK_INDEX.key.replace('"score"', 'ranked."score"')
+        comparison = f"{key} > xiuxian_int_sort_key_compact(targets._rank_score)"
     for start in range(0, len(keys), _PERSONAL_RANK_BATCH_SIZE):
         branches: list[str] = []
         params: list[Any] = []
@@ -388,7 +442,7 @@ def _read_live_user_ranks(
                         ON u.user_id = r.user_id AND r.user_id <> ''
                     WHERE r.rank_key = %s AND r.user_id = %s
                     ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC,
-                        r.updated_at ASC
+                        r.updated_at ASC{target_tie}
                     LIMIT 1
                 ) AS selected
                 """
@@ -401,12 +455,12 @@ def _read_live_user_ranks(
             SELECT targets.*, (
                 SELECT COUNT(1) + 1 FROM season_rank AS ranked
                 WHERE ranked.rank_key = targets.rank_key
-                    AND xiuxian_int_cmp(ranked.score, targets._rank_score) > 0
+                    AND {comparison}
             ) AS rank
             FROM targets
             ORDER BY _rank_ordinal
-        """.format(branches=" UNION ALL ".join(branches))
-        rows = _sql_message()._read_query(sql, tuple(params), dict_row=True)
+        """.format(branches=" UNION ALL ".join(branches), comparison=comparison)
+        rows = read(sql, tuple(params), dict_row=True)
         for row in rows:
             hydrated = dict(row)
             requested_key = keys[start + hydrated.pop("_rank_ordinal")]

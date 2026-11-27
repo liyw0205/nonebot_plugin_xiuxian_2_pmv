@@ -5885,3 +5885,119 @@ are a bounded sample, not exhaustive674/41coverage. Mixed-stage latency,
 season internal scan cost, broad cold exact ranks/global invalidation,
 feature-score write traffic and sustained capacity remain open. The overall
 repository performance goal stays **ACTIVE**.
+
+## V32: Shared Exact Feature-Rank Indexes
+
+V31 left a shared SQL bottleneck across season and BOSS reads: fewer API
+calls did not remove population-level Python numeric conversion, grouping
+and sorting. Its season business SQL took279.818/170.999/149.806ms across
+pure/mixed/contention, while BOSS rank SQL took246.996/135.339/163.027ms.
+These are accumulated path times from that finite pair, not per-request
+latencies or proof that every similar command is slow.
+
+This batch covers three actual matcher callers across two feature modules:
+`我的赛季`, `赛季榜`, and `世界BOSS积分排行榜`. Season single-board and
+fifteen-board APIs share the same live target/range reader. BOSS TOP and
+personal position share the existing bounded display/live-value facade.
+Training and arena only receive compatibility regression coverage through
+the existing controlled-index helper; they are not claimed as newly
+optimized runtime paths.
+
+Two additive startup migrations store exact compact integer keys, separating
+valid numeric rank ranges from legacy display sorting. Season keys are
+partitioned by the fixed `rank_key` column; the public-order index preserves
+the old primary-key traversal for equal score/time rows. Personal counts
+use the same live SQLite statement as their selected targets. Schema proof
+and the season query use the same borrowed connection. Only bounded schema
+evidence is cached; no player value, balance, eligibility or personal rank
+is cached. Public display TTL and write/receipt/CAS boundaries stay intact.
+
+Unsupported identity/collation/schema, duplicate BOSS identities and missing
+or untrusted indexes retain the legacy readers. New season indexes are
+installed only on the supported primary-key shape, so they cannot change
+an unsupported table's incidental tie traversal. Incomplete existing tables
+are skipped rather than repaired by the new index migration. Independent
+legacy SQL regressions cover malformed/NULL/BLOB/oversized numbers, ties,
+duplicate name joins, external writes, attached purchase rollback/retry/
+replay, index plans and absence of population numeric callbacks.
+
+V31 feature scores were read-only during traffic. V32 therefore adds one
+new bounded scenario, not a repeat of the old load:288requests/version,
+three96-request stages. Pure reads use the three target matchers32times
+each; mixed and contention each use16reads/path plus24real sect donations
+and24real BOSS purchases. These two additional matcher callers measure
+maintenance of the changed feature indexes; their settlement rules are
+unchanged. Mixed writes use24distinct users/type; contention repeats four
+operations on six users/type. Existing8192sect members, fifteen256-row
+season partitions and2048BOSS rows reuse the sole1M main fixture.
+Normal-integer writers have separated score intervals; oversized values
+remain read-only. The existing season increment's REAL conversion is not
+changed here: this sample cannot establish arbitrary oversized season-score
+write precision. Public snapshots keep natural cold/warm behavior, with no
+request-time cache clearing. Full affected/static acceptance, real-ingress
+preflight and the sole capped same-data pair remain pending at this point;
+implementation and passing small tests alone are not performance results.
+
+### V32 Acceptance And Same-Data Pair Results
+
+Affected/static acceptance ran once on the frozen accept tree: fifteen
+affected test modules `154 passed, 166 subtests passed`; compileall,
+architecture (`ok=true`, `errors=[]`), inventory and `git diff --check`
+passed. The only failure before that run was a test oracle that hard-coded
+`extra_data={}`; it now independently parses stored extra JSON like the
+unchanged product hydrator. No product code changed for it and the tie
+assertions were not weakened. The first non-timing preflight launch
+deadlocked because an outer `flock` duplicated the driver's own validation
+lock (python 0 CPU, empty log, no report). Only that launch was stopped; the
+preflight then passed with the driver-internal lock and unchanged limits.
+
+The sole serial pair `feature-rank-index-{before,after}-v32-20261128-phase{0,1,2}-r01`
+and `feature-rank-index-comparison-v32-20261128-r01.json` are valid: same
+driver/fixture/limits/phase specs/requests, full seed manifests byte-identical
+across all six processes (no telemetry normalisation needed), only the six
+runtime files differ, every phase 96/96 success, invariants and DB boundary
+coverage pass, 24/24 donations and purchases in mixed/contention, no
+busy/locked, SQL, background or unattributed errors, original rank digest
+restored. Baseline is unmodified V31 `30e6054e`.
+
+Removed repeated work (accumulated path SQL time, before -> after):
+
+| path | pure | mixed | contention |
+|---|---|---|---|
+| season batch (`我的赛季`) | 414.357 -> 24.009ms (32 stmts) | 228.647 -> 16.302ms | 201.258 -> 16.292ms |
+| BOSS rank (`世界BOSS积分排行榜`) | 378.705 -> 27.605ms | 210.018 -> 14.925ms | 212.492 -> 13.712ms |
+| season TOP (`赛季榜`) | 1.537 -> 0.350ms | 1.664 -> 0.455ms | 1.595 -> 0.453ms |
+
+Phase SQL total 1050.743/2340.886/2441.942 -> 372.983/2006.020/1990.914ms,
+but query counts RISE 1665/5255/5262 -> 1746/5307/5303 (proof/target/count
+statements): this batch reduces scan and numeric-conversion cost, not SQL
+call count. Main-thread CPU 1886.297/3266.031/3210.016 ->
+1389.292/2989.545/2967.810ms. Whole-phase e2e p95 46.853/1293.891/2010.963 ->
+49.010/1070.419/1648.182ms; successful throughput 20.176/24.713/24.673 ->
+20.173/26.658/27.167/s at configured cap/arrival 10/20, 20/35, 20/50.
+
+Retained regressions and limits (not hidden or re-run for a better sample):
+
+- Pure whole-phase p95 46.853 -> 49.010ms and p99 90.804 -> 147.157ms.
+  Pure `我的赛季` e2e p95 58.243 -> 79.141ms, p99 90.804 -> 147.157ms;
+  `赛季榜` p95 11.892 -> 17.955ms, p99 45.548 -> 71.278ms; BOSS e2e p95
+  45.030 -> 49.010ms, p99 78.158 -> 115.025ms although its service p95 fell
+  43.865 -> 22.901ms. With 32 samples these tails are single requests and
+  include loop/GC effects; they remain regressions until disproven.
+- Mixed p50 regresses for `世界BOSS积分排行榜` 707.526 -> 713.153ms and
+  `我的赛季` 727.003 -> 776.022ms. Contention service p95 regresses for BOSS
+  rank 809.813 -> 825.996, `我的赛季` 852.512 -> 874.166, BOSS purchase
+  823.784 -> 834.384 (p99 826.751 -> 871.444) and donation 825.868 ->
+  830.481ms (p99 829.085 -> 872.533).
+- Index write cost: mixed purchase DB time 819.334 -> 843.276ms and donation
+  785.798 -> 801.900ms (same 2112 queries); season score writes 6.770 ->
+  7.609ms. Contention write DB time fell (869.096 -> 821.902, 811.117 ->
+  806.065ms). Write-index overhead is small but not proven zero.
+- Mixed/contention latency remains dominated by queueing and shared write
+  service time (~0.6-0.9s service), not the optimised read SQL.
+- Resources: peak RSS <= 221.664MiB, minimum available RAM 1395MiB, disk free
+  >= 9532067840 bytes, max WAL 7090552 bytes, all within guards.
+- One finite serial pair; observer overhead uncalibrated; setup/restore
+  excluded; three read matchers across two modules plus two write controls.
+  No sustained-capacity claim, no oversized season-write precision claim, not
+  exhaustive 674/41 coverage. The overall goal stays **ACTIVE**.

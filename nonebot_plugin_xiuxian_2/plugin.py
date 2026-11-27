@@ -158,6 +158,7 @@ from .features.map.manifest import FEATURE as MAP_FEATURE
 from .infrastructure.database.message_store import (
     apply_message_store_schema,
     apply_season_rank_schema,
+    apply_season_rank_exact_indexes,
 )
 from .features.map.migrations import (
     apply_map,
@@ -268,6 +269,7 @@ from .features.boss.migrations import (
     apply_boss_battle_player_schema,
     apply_boss_full_refresh_player_schema,
     apply_boss_player_schema,
+    apply_boss_exact_rank_indexes,
     apply_boss_punishment_operations,
     apply_boss_purchase,
     apply_boss_settlement,
@@ -435,6 +437,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("boss.005", "world_boss_full_refresh_player_schema", apply_boss_full_refresh_player_schema),
         Migration("boss.006", "world_boss_battle_player_schema", apply_boss_battle_player_schema),
         Migration("boss.007", "world_boss_punishment_operations", apply_boss_punishment_operations),
+        Migration("boss.008", "world_boss_exact_rank_indexes", apply_boss_exact_rank_indexes),
         Migration("buff.001", "buff_feature_migrations", apply_buff),
         Migration("buff.002", "partner_token_operations", apply_partner_token_operations),
         Migration("buff.003", "partner_two_exp_usage", apply_partner_token_usage),
@@ -553,6 +556,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("rift.008", "rift_settlement_operations", apply_rift_settlement_operations),
         Migration("rift.009", "rift_entry_schema", apply_rift_entry_schema),
         Migration("season_rank.001", "season_rank_player_leaderboard", apply_season_rank_schema),
+        Migration("season_rank.002", "season_rank_exact_indexes", apply_season_rank_exact_indexes),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect.002", "sect_rename_operations", apply_sect_rename),
         Migration("sect.003", "sect_member_join_operations", apply_sect_join),
@@ -725,6 +729,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "base.007",
         "boss.004",
         "boss.006",
+        "boss.008",
         "buff.009",
         "buff.011",
         "buff.013",
@@ -812,6 +817,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "base.011",
         "boss.004",
         "boss.006",
+        "boss.008",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "trade.015", "auction.004"})
