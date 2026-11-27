@@ -6001,3 +6001,23 @@ Retained regressions and limits (not hidden or re-run for a better sample):
   excluded; three read matchers across two modules plus two write controls.
   No sustained-capacity claim, no oversized season-write precision claim, not
   exhaustive 674/41 coverage. The overall goal stays **ACTIVE**.
+
+### V32 Exact-SHA CI Failure And Fix
+
+Exact-SHA CI `46067501276` for `4b89d01f` failed in `unittest (1/2)` only
+(quality and shard 0/2 passed; 3689 tests, failures=1):
+`test_world_boss_parameter_dispatch.test_purchase_player_lifecycle_and_write_recovery`.
+Root cause is real: the new `boss.008`/`season_rank.002` expression indexes
+call the project numeric UDF, so any raw `sqlite3` connection that writes to
+`boss_limit`/`season_rank` (or rebuilds the database) without registering the
+UDFs gets `unknown function: xiuxian_int_sort_key_compact()`. The failing
+probe seeded `boss_limit` through such a connection. A local isolated probe
+confirmed the same class affects product `VACUUM` (space reclaim) and the
+Python salvage rebuild of indexes; `quick_check` and backup-API copies are
+unaffected. Fix, as one batch: register numeric functions on the probe seed
+connection, the `reclaim_space` VACUUM connection and the salvage destination
+connection; add a regression that VACUUM succeeds with a numeric expression
+index. Affected modules `test_receipt_compaction_startup` +
+`test_world_boss_parameter_dispatch` 19 passed; compile, architecture
+(`ok=true`) and whitespace pass. No ranking/runtime logic changed, so the V32
+pair and its results above stay valid and were not re-run.
