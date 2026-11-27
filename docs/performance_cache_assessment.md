@@ -4101,3 +4101,191 @@ personal exact-rank recalculation, unsampled feature data and sustained50
 successful requests/s remain outside this batch. Next work must reuse saved
 SQL/call paths to batch shared query patterns; this report neither replaces
 previous regressions nor claims the overall performance target is complete.
+
+## V22: Shared Catalog Read Stages and Live Directory Fanout (2026-11-27)
+
+### Shared Work and Live Boundaries
+
+This batch changes SIX distinct matcher callers selected from the existing
+call-path inventory. Five callers of the same catalog parser already hold a
+sect row: `宗门功法查看`, `宗门神通查看`, `宗门功法搜寻`,
+`宗门神通搜寻`, `学习宗门神通`. They now parse that field without a second
+SELECT/UoW. Standalone helpers continue to read live. The exact legacy
+`str(value)[1:-1].split(',')` behavior is retained, including whitespace and
+empty/malformed values; this is not a catalog-cleanup change. Search/learning
+still recheck membership, catalog CAS, balances/materials and receipts in
+their original authoritative transactions. Nothing is reused after a write
+or across requests; no player-value cache or generic table/column API is added.
+
+The sixth caller, `宗门列表`, replaces the aggregate plus per-sect state and
+complete-member queries with ONE readonly projected SQL statement. It reads
+name/identity/scale/status, first-owner name and indexed `COUNT(*)`. This
+removes repeated SQL, UoW setup and transfer/normalization of full member rows,
+not Python function-call depth. The populated sample has128 sects,45 open to
+joining:174 business SELECTs per directory request become1;48 requests remove
+8304 business SELECTs and138240 full-member row transfers/normalizations.
+The240 sampled catalog views remove another240 same-stage sect SELECTs.
+
+Existing user/sect indexes serve correlated owner/count seeks; COUNT still
+traverses matching index entries, not O(1) metadata. No new index/cache is
+needed. Owner/count subqueries inside one SQL are not described as zero
+fanout: work still scales with displayed sects and their matching members.
+The legacy five-tuple directory API remains unchanged for the inactive-owner
+background task. The live compatibility join-display helper also uses COUNT.
+Actual join eligibility/settlement does not consume the display projection.
+
+`COUNT(*)` retains NULL/duplicate user rows as the old list length did. Status
+priority/truthiness and exact large-scale arithmetic remain unchanged. A NULL
+sect identity displays missing, and SQL equality does not match NULL members.
+Real sect IDs are primary keys; for legacy schemas without that constraint,
+the projection explicitly selects first rowid per sect ID and owner. The old
+GROUP BY bare-column selection had no stable duplicate-row guarantee, so this
+does not claim byte equivalence under every malformed duplicate-sect plan.
+Unused financial/member fields are not read; required read failures propagate.
+
+### Frozen Pair and Coverage
+
+- Sole1M fixture remains
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`; original exp/stone
+  digest `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  Before is code-only8e17ca00; no second persistent million-user DB was made.
+  Reports in `data/`: `sect-directory-before-v22-20261127-r02.json`,
+  `sect-directory-after-v22-20261127-r01.json`, offline
+  `sect-directory-comparison-v22-20261127-r01.json`.
+- Runtime tree hashes
+  `a92a1d2e7eb2cb1382d9e348c87eb1c886a72aa6b0a946df560b9311f8c589e2`
+  -> `53f45a39afc78f73e80837c8fc874840686288cd6713a9d31b71e63d9f26934c`
+  differ in exactly four runtime files. Driver, fixture identity, all request
+  plans/actors/arguments, business/phase manifests and limits match. Both
+  versions PASS384/384, all preflight/phase invariants and final digest restore.
+- Reuses V21 population:128 actors,128 sects with64 members each,8192 actual
+  current-period task rows, exact1e9 actor and1e30+ordinal background wallets.
+  Only catalogs/statuses add coverage: each sect has two real main and two
+  secondary items from different ranks, stored in reverse order without spaces
+  and verified against Items' legacy rank/level normalization. Four actor
+  sects stay open; background states alternate. Every directory reply verifies
+  all128 ordered entries/owners/counts/statuses/scale by an independent complete
+  oracle; both catalog replies verify every item and order. This is populated
+  directory fanout under live writes, not an empty-feature-table claim.
+- Three128-request phases per version: pure cap10 at10 arrivals/s contains
+  16 directory/56 main/56 secondary reads; mixed cap20 at20/s and contention
+  cap20 at35/s each contain16 directory/32 main/32 secondary,32 practice writes
+  and16 asset controls. Mixed writes use32 users across4 sects; contention
+  uses11 users sharing one sect across three actual practice matchers.
+  User/matcher pairs do not repeat between phases; cooldowns remain enabled.
+  Practice/asset code is unchanged. Real matcher/provider/permission/rule/DI/
+  handler executes on one shared target instance and isolated DB per phase;
+  only QQ transport is mocked. Restore follows request/worker drain and checks.
+- All business/cooldown refusals, exceptions, timeouts, SQLite errors,
+  busy/locked and boundary violations are0 (0%). Exact durable receipts match
+  32 successful writes per mixed/contention phase and their exact debits.
+  Full128 actor rows,8064 background rows, all sect fields, bounded frozen
+  non-user tables and generation deltas pass. Remaining991808 users lack
+  traffic-time full-column invariants; final1M exp/stone restoration is checked.
+  Unselected/oversized tables remain explicit exclusions, not whole-DB proof.
+- Startup archive Git metadata failure occurred before DB access. Then
+  before-r01 stopped in seed/preflight because the new fixture incorrectly
+  compared normalized skill level with raw level:0 phases/requests, restore
+  TRUE. It is retained and EXCLUDED from performance evidence; no after ran.
+  Fix only fixture normalization, add actual bundled JSON/config preflight,
+  freeze again, and execute the sole valid pair above. No per-command retry,
+  accepted V21 load rerun or number-selection run was performed.
+
+E2E includes planned-arrival, dispatch and admission queue delays. Values are
+p50/p95/p99 milliseconds before ->after; SQL calls/time include execute,
+fetch and transaction/setup APIs. All rows have0% errors/refusals/timeouts.
+
+| Phase | Command | n/version | E2E before | E2E after | SQL calls before ->after | SQL wall ms before ->after |
+| --- | --- | --- | --- | --- | --- | --- |
+| Pure | 宗门列表 | 16 | 2995.293/5386.491/5386.491 | 69.739/115.520/115.520 | 13996 ->156 | 11060.604 ->974.204 |
+| Pure | 宗门功法查看 | 56 | 3218.816/5083.390/5283.189 | 12.937/22.453/150.757 | 1186 ->906 | 448.097 ->244.640 |
+| Pure | 宗门神通查看 | 56 | 3192.544/5182.781/5383.290 | 12.832/21.012/65.742 | 1176 ->896 | 431.440 ->242.880 |
+| Mixed | 宗门列表 | 16 | 6196.189/11437.842/11437.842 | 71.603/90.376/90.376 | 13984 ->144 | 10891.991 ->967.542 |
+| Mixed | 宗门功法查看 | 32 | 6185.011/11533.402/11733.251 | 12.811/24.380/31.690 | 685 ->525 | 250.131 ->140.903 |
+| Mixed | 宗门神通查看 | 32 | 6245.998/11482.717/11682.459 | 13.110/16.911/18.150 | 672 ->512 | 246.033 ->139.021 |
+| Mixed | 升级攻击修炼 (control) | 11 | 6769.094/11981.812/11981.812 | 43.630/60.485/60.485 | 374 ->374 | 125.816 ->138.217 |
+| Mixed | 升级元血修炼 (control) | 11 | 7617.581/11783.693/11783.693 | 30.653/71.397/71.397 | 374 ->374 | 135.091 ->137.041 |
+| Mixed | 升级灵海修炼 (control) | 10 | 5855.523/11587.652/11587.652 | 23.577/55.973/55.973 | 340 ->340 | 114.505 ->126.722 |
+| Mixed | 我的资产总览 (control) | 16 | 6085.218/11632.321/11632.321 | 18.450/26.981/26.981 | 407 ->407 | 104.792 ->116.920 |
+| Contention | 宗门列表 | 16 | 7139.532/13973.542/13973.542 | 71.889/79.136/79.136 | 13984 ->144 | 10877.053 ->961.263 |
+| Contention | 宗门功法查看 | 32 | 7088.882/14027.545/14141.643 | 25.041/54.157/56.260 | 685 ->525 | 253.907 ->139.114 |
+| Contention | 宗门神通查看 | 32 | 7167.909/13999.088/14113.756 | 14.342/38.295/38.297 | 672 ->512 | 248.194 ->125.700 |
+| Contention | 升级攻击修炼 (control) | 11 | 7986.121/14283.452/14283.452 | 73.902/83.595/83.595 | 374 ->374 | 126.118 ->120.494 |
+| Contention | 升级元血修炼 (control) | 11 | 8921.656/14171.095/14171.095 | 34.770/82.024/82.024 | 374 ->374 | 122.966 ->127.011 |
+| Contention | 升级灵海修炼 (control) | 10 | 7224.470/14061.567/14061.567 | 22.497/80.452/80.452 | 340 ->340 | 117.931 ->110.666 |
+| Contention | 我的资产总览 (control) | 16 | 7075.861/14084.396/14084.396 | 21.779/24.758/24.758 | 407 ->407 | 109.830 ->107.216 |
+
+### Attribution, Regressions and Limits
+
+- Foreground SQL50030 ->7310. Per-phase foreground16358/16836/16836 ->
+  1958/2676/2676; total including message writer16662/17248/17244 ->
+  2348/3156/3150, SQL wall12042.942/12126.046/12061.967 ->
+  1654.732/1970.383/1864.268ms. Every phase's16 directory calls remove2048
+  full sect reads and720 full member-list reads. Their before SQL wall totals
+  6961.719+2966.614,6851.575+2906.801,6852.585+2902.459ms; after the16
+  projection statements take965.534/962.859/956.937ms. New directory SQL is
+  still about60ms/request in this instrumented sample, a remaining hotspot.
+  Old directory connection diagnostics omit54912 touches/phase due to the
+  existing bounded cap; after omits0. Top-query counts above are separate
+  exact aggregates. Do not infer full physical open counts from clipped traces.
+- Phase E2E p95 is5090.165/11533.402/14027.545 ->70.532/71.906/77.335ms;
+  success throughput7.321/7.266/7.293 ->10.067/20.085/34.941 requests/s.
+  Arrival rates10/20/35 are distinct from concurrency caps10/20/20.
+  Peak admitted intervals10/20/20 ->2/2/3; actual handler wall-overlap peaks
+  10/20/20 ->1/1/2. After contention has349.335ms with multiple active
+  handler intervals; this proves some overlap, not parallel SQLite/CPU or
+  20 simultaneously executing handlers, sustained capacity, or50success/s.
+- Admission queue p95/p99 before3507.394/3513.887,7890.756/8954.457,
+  10992.389/12024.767 ->.012/.022,.011/.013,.009/.010ms. Event-loop lag
+  p95/p99 1061.481/1077.061,1025.567/1155.453,1052.975/1920.174 ->
+  4.742/57.976,43.213/58.077,59.336/63.572ms. Loop-dispatch p95
+  961.312/948.103/992.838 ->.189/19.311/40.670ms. This explains control
+  E2E gains without claiming the unchanged control SQL itself became faster.
+- Retain regressions: all four mixed controls' SQL wall INCREASE (table);
+  contention health SQL122.966 ->127.011ms. Background message SQL counts
+  304/412/408 ->390/480/474 increase as commit batching changes with timing;
+  pure background SQL wall102.801 ->193.008ms increases. Producer delay max
+  pure1.048 ->47.447ms and contention4.825 ->8.837ms increase; these are
+  test-side arrival deviations, not application SQL. Preflight setup2.513 ->
+  2.544s and contention setup5.494 ->5.621s increase. A single short pair
+  does not establish statistical stability of any tail or isolated SQL timing.
+- BEGIN execution p95 .017/.021/.021 ->.054/.041/.021ms, increases in the
+  first two phases; counts3360/3344/3344 ->480/512/512. It is an execution
+  upper bound on transaction waiting, not a separate lock-wait measurement.
+  Shared-cache hits/misses/invalidations/recomputations and entries are0 in
+  all phases. Stone/general generations0/32/32, exp0, both versions; no
+  exact-rank request is sampled. This cannot quantify exp+stone invalidation
+  or cold exact-rank recalculation; earlier coverage/limits remain in force.
+- MainThread CPU17281.836/17297.196/17274.271 ->2742.338/2899.797/
+  2731.132ms. Measured observer record CPU528.565/561.793/563.342 ->
+  83.128/113.176/110.917ms also drops with fewer SQL calls. Instrumentation
+  is uncalibrated, partially overlapping and incomplete; neither these timers
+  nor total SQL can be summed/subtracted to claim application-only cost.
+- Serial shared-lock execution kept2/4 CPUs,1GiB AS,600CPU/1200wall seconds,
+  MALLOC_ARENA_MAX=2, RAM>=768MiB/disk>=2GiB, RSS<=900MiB and single/total
+  WAL<=256MiB. No guard fires. Sampled minimum RAM1659 ->1748MiB, disk
+  12940808192 ->12924833792 bytes; process peak RSS222.668 ->215.828MiB,
+  sampled/final virtual759.793 ->483.133MiB, max single WAL7090552 both,
+  total11276504 ->11272384 bytes; final WAL0. Process wall106.612 ->75.040s,
+  CPU101.118 ->55.313s include setup/observer/restore. Phase setup
+  5.498/6.506/5.494 ->5.401/5.356/5.621s, final restore13.518 ->13.449s.
+  Cumulative process read666038272 ->42479616 bytes and write4105621504 ->
+  4118814720 bytes include fixture setup/restore IO; writes INCREASE, and
+  these totals cannot be attributed wholly to runtime application traffic.
+- Affected acceptance covers66 unique tests, preserving independent status,
+  NULL/duplicate, big-integer, index/readonly, deny/recovery, next-request,
+  search/learning write-time CAS/assets, rollback/replay and actual parameter
+  assertions. Initial62 tests passed; three failing methods were new fixture
+  missing the secondary receipt migration and a source ownership gate missing
+  helper COUNT. Fixed only fixture/gate; affected7 tests and19 subtests then
+  passed without rerunning accepted groups. Catalog normalization correction
+  adds actual bundled-data preflight (1 passed); changed fixture group8 passed
+  with15 subtests. Compile/architecture/inventory/scoped whitespace pass in
+  `/tmp/xiu-v22-accept-MP1gPaio`. No full local unittest, old load or CI change.
+
+The repository-wide goal remains ACTIVE. Six callers were optimized, three
+of them sampled with four unchanged controls; search/learning have direct
+regressions but no runtime-load claim here. This is not exhaustive674 matcher/
+41 background coverage, nor validation of all function-table scales. Continue
+from saved shared-call/query evidence, retaining personal realtime semantics,
+known regressions, unmeasured boundaries and the unverified50success/s target.

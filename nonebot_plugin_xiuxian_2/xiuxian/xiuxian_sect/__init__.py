@@ -45,7 +45,7 @@ from .sect_weekly_commands import sect_weekly, sect_weekly_claim, sect_weekly_ra
 from .sect_member_utils import (
     _md_cmd_link,
     bind_sect_member_dependencies as _bind_sect_member_dependencies,
-    can_join_sect,
+    sect_join_display_status,
     count_sect_positions,
     create_user_sect_task,
     filter_sect_member_rows,
@@ -57,9 +57,8 @@ from .sect_member_utils import (
     get_secnameid,
     get_sect_contribution_level,
     sect_level_from_scale,
-    get_sect_mainbuff_id_list,
+    sect_catalog_ids,
     get_sect_member_limit,
-    get_sect_secbuff_id_list,
     get_sectbufftxt,
     get_user_sect_task,
     isUserTask,
@@ -1178,7 +1177,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await sect_buff_info.finish()
 
     # 获取功法列表
-    mainbuff_list = get_sect_mainbuff_id_list(sect_id)
+    mainbuff_list = sect_catalog_ids(sect_info['mainbuff'])
     if not mainbuff_list:
         msg = f"本宗功法列表为空！"
         await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="捐献", v3="宗门捐献")
@@ -1225,7 +1224,7 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await sect_buff_info2.finish()
 
     # 获取神通列表
-    secbuff_list = get_sect_secbuff_id_list(sect_id)
+    secbuff_list = sect_catalog_ids(sect_info['secbuff'])
     if not secbuff_list:
         msg = f"本宗神通列表为空！"
         await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="捐献", v3="宗门捐献")
@@ -1361,7 +1360,7 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 success_count = 0
                 fail_count = 0
                 repeat_count = 0
-                mainbuffidlist = get_sect_mainbuff_id_list(sect_id)
+                mainbuffidlist = sect_catalog_ids(sect_info['mainbuff'])
                 results = []
 
                 for i in range(100):  # 每次搜寻尝试100次
@@ -1459,7 +1458,7 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 success_count = 0
                 fail_count = 0
                 repeat_count = 0
-                secbuffidlist = get_sect_secbuff_id_list(sect_id)
+                secbuffidlist = sect_catalog_ids(sect_info['secbuff'])
                 results = []
 
                 for i in range(100):  # 每次搜寻尝试100次
@@ -1548,7 +1547,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
 
-            sectsecbuffidlist = get_sect_secbuff_id_list(sect_id)
+            sectsecbuffidlist = sect_catalog_ids(sect_info['secbuff'])
 
             if msg not in get_secname_list(sectsecbuffidlist):
                 msg = f"本宗还没有该神通，请发送本宗有的神通进行学习！"
@@ -1985,15 +1984,17 @@ async def sect_task_history_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门列表：显示宗门人数信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sect_lists_with_members = sect_application.list_sects_with_member_count()
+    sect_lists_with_members = sect_application.list_sect_join_display()
 
     msg_list = []
     for sect in sect_lists_with_members:
-        sect_id, sect_name, sect_scale, user_name, member_count = sect
+        sect_id, sect_name, sect_scale = sect['sect_id'], sect['sect_name'], sect['sect_scale']
+        user_name = sect['owner_name']
         if user_name is None:
             user_name = "暂无"
         
-        can_join, reason = can_join_sect(sect_id)
+        can_join, reason = sect_join_display_status(
+            sect if sect_id is not None else None, sect['member_count'])
         
         msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门状态：{reason}\n建设度：{number_to(sect_scale)}\n")
 

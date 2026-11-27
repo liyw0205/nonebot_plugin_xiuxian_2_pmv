@@ -124,15 +124,17 @@ def isUserTask(user_id):
 def get_sect_mainbuff_id_list(sect_id):
     """获取宗门功法id列表"""
     sect_info = sect_application.get_sect_info(sect_id)
-    mainbufflist = str(sect_info['mainbuff'])[1:-1].split(',')
-    return mainbufflist
+    return sect_catalog_ids(sect_info['mainbuff'])
 
 
 def get_sect_secbuff_id_list(sect_id):
     """获取宗门神通id列表"""
     sect_info = sect_application.get_sect_info(sect_id)
-    secbufflist = str(sect_info['secbuff'])[1:-1].split(',')
-    return secbufflist
+    return sect_catalog_ids(sect_info['secbuff'])
+
+
+def sect_catalog_ids(value):
+    return str(value)[1:-1].split(',')
 
 
 def set_sect_list(bufflist):
@@ -426,6 +428,12 @@ def get_sect_member_limit(sect_scale):
 def can_join_sect(sect_id):
     """检查宗门是否可以加入"""
     sect_info = sect_application.get_sect_info(sect_id)
+    count = (sect_application.count_sect_members(sect_id)
+             if sect_info and not sect_info['closed'] and sect_info['join_open'] else 0)
+    return sect_join_display_status(sect_info, count)
+
+
+def sect_join_display_status(sect_info, current_members):
     if not sect_info:
         return False, "宗门不存在"
 
@@ -437,7 +445,6 @@ def can_join_sect(sect_id):
 
     # 检查人数上限
     max_members = get_sect_member_limit(sect_info['sect_scale'])
-    current_members = len(sect_application.list_sect_members(sect_id))
 
     if current_members >= max_members:
         return False, f"人数已满 ({current_members}/{max_members})"

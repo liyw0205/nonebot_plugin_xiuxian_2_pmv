@@ -104,6 +104,9 @@ class SectApplication:
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
         return self.directory_repository.list_with_member_count()
 
+    def list_sect_join_display(self) -> list[dict[str, Any]]:
+        return self.directory_repository.list_join_display()
+
     def list_active_sect_names(self) -> list[str | None]:
         return self.directory_repository.list_active_sect_names()
 
