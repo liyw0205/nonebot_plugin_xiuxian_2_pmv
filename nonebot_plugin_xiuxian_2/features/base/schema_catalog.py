@@ -9,6 +9,16 @@ from ...xiuxian.xiuxian_utils.shared_read_cache import (
 )
 
 
+def read_sqlite_table_names(connection: Any) -> frozenset[str]:
+    """Read table names live within the caller's current transaction."""
+    return frozenset(
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    )
+
+
 def sqlite_table_names(connection: Any, database_path: str | Path) -> frozenset[str]:
     """Read a bounded table-name snapshot keyed by the live SQLite schema version."""
     version_row = connection.execute("PRAGMA schema_version").fetchone()
@@ -21,12 +31,7 @@ def sqlite_table_names(connection: Any, database_path: str | Path) -> frozenset[
         database_path=database_path,
         ttl=60 * 60,
         snapshot=True,
-        loader=lambda: frozenset(
-            str(row[0])
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        ),
+        loader=lambda: read_sqlite_table_names(connection),
     )
 
 
@@ -71,4 +76,4 @@ def sqlite_table_columns(
     )
 
 
-__all__ = ["sqlite_table_columns", "sqlite_table_names"]
+__all__ = ["read_sqlite_table_names", "sqlite_table_columns", "sqlite_table_names"]

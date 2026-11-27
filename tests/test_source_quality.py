@@ -2506,7 +2506,7 @@ class SourceQualityTests(unittest.TestCase):
         source = (SOURCE_ROOT / "xiuxian" / "xiuxian_mixelixir" / "__init__.py").read_text(encoding="utf-8")
         start = source.index("@mix_make.handle")
         handler = source[start:source.index("async def check_yaocai_name_in_back", start)]
-        self.assertIn("mixelixir_application.latest_ready_refine_task(", handler)
+        self.assertIn("mixelixir_application.refine_recovery_state(", handler)
         self.assertIn("mixelixir_application.refine_cost(", handler)
         self.assertIn("mixelixir_application.refine_reward(", handler)
         self.assertNotIn("_mixelixir_refine_reward_service()", handler)

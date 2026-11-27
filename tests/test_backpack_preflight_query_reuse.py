@@ -81,8 +81,7 @@ class MixelixirPreflightQueryReuseTests(unittest.TestCase):
 
     def _reject_recipe(self, rows, recipe="主药草1药引引1辅药辅1丹炉炉"):
         application = SimpleNamespace(
-            refine_cost_replay=Mock(return_value=None),
-            latest_ready_refine_task=Mock(return_value=None),
+            refine_recovery_state=Mock(return_value=(None, None)),
             refine_cost=Mock(side_effect=AssertionError("unexpected settlement")),
         )
         manager = SimpleNamespace(get_back_msg=Mock(return_value=rows))
@@ -99,6 +98,7 @@ class MixelixirPreflightQueryReuseTests(unittest.TestCase):
             with self.assertRaises(FinishedException):
                 asyncio.run(self.module.mix_make_(bot, event, mode=recipe))
         manager.get_back_msg.assert_called_once_with("u", goods_types=("药材", "炼丹炉"))
+        application.refine_recovery_state.assert_called_once()
         application.refine_cost.assert_not_called()
         send.assert_awaited_once()
         return send.await_args.args[2]

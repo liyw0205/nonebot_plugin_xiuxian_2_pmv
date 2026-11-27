@@ -4987,3 +4987,176 @@ few herbs, a missing furnace and64training writes do not characterize large
 recipe search, successful concurrent refinement, cold precise ranks/global
 invalidation or the full674-matcher/41-background-entry inventory. The overall
 performance goal remains ACTIVE; old tail/global-invalidation limits remain.
+
+## V27 Shared Recovery Read Stages (2026-11-27)
+
+This batch changes **two matcher entrypoints, three shared read functions,
+two feature modules**: recipe initial cost replay/latest-ready recovery and
+bank unified/legacy command receipt lookup. Bank has four business modes,
+not four matchers. The existing inventory/call-path evidence selected this
+pattern; no new repository-wide taxonomy or exhaustive runtime audit was run.
+V26 is delivered at `244cf6bcc1fb0d6213ac4c32c140014d3c034920`, whose exact-SHA
+CI45984241087 passed. None of its accepted gates or old workloads were rerun.
+
+### Runtime Change and Boundaries
+
+Recipe's initial recovery stage now opens **one readonly transaction instead
+of two**, reads a live table directory once, then reads the ledger and, only
+when needed, the latest ready task in that same stage. Terminal replay skips
+the task query; no stable event identity skips the ledger data query. Recipe
+hash conflicts, pending conflicts, failed/reconcile retry, actor/recipe/task
+ordering and missing tables retain their previous behavior. Standalone read
+APIs open fresh transactions, and write/failure recovery still rereads after
+settlement. There is no await or write inside the combined read stage.
+
+Bank reads the live directory once instead of up to five table-existence
+queries. Unified receipt precedence, all legacy rows/conflict detection,
+exact-case live column validation, exact numeric identity and SQL errors
+remain unchanged. The full five-table miss/legacy search removes four
+metadata calls; a successful unified receipt does **not** save four calls.
+Account balances, current eligibility, rewards, ledger/CAS/replay and all
+write/commit boundaries remain live and unchanged. No cache/index or generic
+table/column mutation API is added.
+
+The small shared `read_sqlite_table_names` helper performs a fixed live SQL
+query. Existing bounded cached schema APIs retain their policies. A candidate
+cache integration failed existing legacy-receipt tests: deleted/recreated
+temporary databases can reuse path/inode/schema_version. A file timestamp
+alone also cannot bind metadata from an already-open old connection to its
+replacement path. The final implementation therefore uses the live helper,
+with an active-old-connection replacement regression, and leaves that broader
+existing cache identity limitation explicit. No assertion was weakened and
+no candidate code was benchmarked or pushed.
+
+Final affected acceptance passed **169 tests +176 subtests in27.35s**,
+including registered recipe success/replay/failure recovery, bank command
+application/handler/legacy/CAS/double-interest behavior, large-number receipts,
+read failures, missing/changed schema, task ordering and query/transaction
+counts. Compile, architecture, inventory and scoped whitespace passed.
+Local full unittest and CI/test-sharding changes were not repeated.
+
+### Frozen Same-Data Comparison
+
+The sole retained1M synthetic fixture remains
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`.
+Baseline source is `244cf6bc`; accepted code is archived at
+`/tmp/xiu-v27-accept-Q2gK7q5u`. Driver/fixture/oracle, requests, manifests,
+rank digest and limits match exactly across both versions. Runtime hashes:
+`86417951c9fb0fc4e0e71d6fedb102b66d4b976db7100abafd650cb16a99317c`
+before and
+`cd91aae5cb572bb067b0b4ac8d09ecc40244cb950ca3f589f03c85092db9b2dd`
+after. Only the five runtime files in this batch differ.
+
+Reuse of the existing inventory scenario measures the **new recipe recovery
+IO change**, not another claim for V26 inventory optimization. Per version,
+three serial stages each execute128 requests: four display controls,32 real
+absent-furnace recipe refusals and, in mixed/contention,32 real exp+stone
+training writes.128 actors retain213 positive items each,27,264 total back
+rows,128 BuffInfo,8192 activity users and32,768 rows in each activity balance/
+damage control table. Recipe task/specific replay data are empty in the timed
+sample; populated claim/replay/conflict has regressions only. Bank has
+query-count/correctness evidence only, not measured mixed-bank latency or
+capacity. No new million-user population or persistent fixture copy exists.
+
+Six raw reports all pass without offline outcome corrections:
+`recovery-stage-{before,after}-v27-20261127-phase{0,1,2}-r01.json`, under fixture
+`data/`; derived report
+`recovery-stage-comparison-v27-20261127-r01.json` records their hashes, all
+commands, diagnostics and resources. Every phase runs once. Each version has
+288 success+96 furnace-absent business refusals, zero exceptions/timeouts/
+cooldowns/unclassified/boundary/SQLite busy/locked errors. Refusals are excluded
+from successful throughput. All exact wallet/exp/power, inventory/BuffInfo,
+receipt/ledger/generation,1M population and original-rank restoration checks
+pass after drain; no restore occurs between concurrent requests.
+
+### All Measured Paths
+
+E2E milliseconds include arrival/dispatch/admission delay. Each entry is
+before -> after; DB totals are execute+fetch milliseconds, and query counts
+include the harness's transaction/PRAGMA API calls, not only SELECTs.
+
+|Stage/path|n/version|E2E p50|E2E p95|E2E p99|DB calls|DB total ms|
+|---|---:|---:|---:|---:|---:|---:|
+|pure/equipment|24|8.583 ->8.422|11.124 ->10.442|18.895 ->18.669|288 ->288|14.141 ->12.500|
+|pure/herb|24|8.895 ->8.791|10.295 ->9.841|37.921 ->27.211|288 ->288|13.931 ->14.841|
+|pure/herb detail|24|8.724 ->8.481|13.724 ->10.629|15.714 ->16.176|288 ->288|15.025 ->14.117|
+|pure/pill|24|9.019 ->8.627|11.873 ->9.562|73.780 ->62.564|313 ->313|27.716 ->27.304|
+|pure/recipe|32|19.250 ->14.991|26.652 ->22.772|30.044 ->25.558|768 ->608|255.081 ->160.055|
+|mixed/equipment|16|8.679 ->8.574|17.350 ->16.550|17.350 ->16.550|192 ->192|8.995 ->10.116|
+|mixed/herb|16|9.048 ->9.188|31.226 ->28.872|31.226 ->28.872|192 ->192|10.270 ->10.968|
+|mixed/herb detail|16|8.394 ->8.568|23.466 ->29.132|23.466 ->29.132|192 ->192|11.389 ->12.327|
+|mixed/pill|16|8.847 ->9.048|66.977 ->64.378|66.977 ->64.378|217 ->217|24.037 ->21.425|
+|mixed/recipe|32|19.337 ->14.906|28.359 ->15.944|29.276 ->25.131|768 ->608|249.189 ->150.145|
+|mixed/training|32|35.041 ->34.361|63.215 ->56.573|63.616 ->60.548|1219 ->1219|163.541 ->156.742|
+|contention/equipment|16|8.884 ->8.658|211.632 ->42.564|211.632 ->42.564|192 ->192|9.212 ->7.414|
+|contention/herb|16|9.527 ->8.457|307.735 ->59.922|307.735 ->59.922|192 ->192|8.629 ->7.147|
+|contention/herb detail|16|13.490 ->14.075|222.612 ->70.866|222.612 ->70.866|192 ->192|12.459 ->10.858|
+|contention/pill|16|15.939 ->13.497|336.179 ->69.297|336.179 ->69.297|204 ->217|15.558 ->22.488|
+|contention/recipe|32|18.877 ->14.239|188.712 ->25.496|278.790 ->46.196|781 ->608|260.151 ->153.050|
+|contention/training|32|37.135 ->35.913|248.318 ->67.244|250.979 ->69.699|1219 ->1219|149.292 ->150.132|
+
+All path execution error rates are0%; recipe's100% business refusal rate is
+reported separately. Foreground calls total7505 ->7025, saving480. Recipe
+recovery connections192 ->96 and directory calls192 ->96 across96 requests.
+Complete-path DB time764.421 ->463.250ms; recovery metadata time
+656.420 ->373.267ms. The metadata interval includes first-query SQLite schema
+parsing; it is not all directory scanning, nor Python function-call savings.
+Per-stage metadata p50/p95 is6.767/7.891 ->3.833/5.456,
+6.733/7.298 ->3.744/3.998 and6.657/8.163 ->3.685/3.914ms.
+Connections/metadata attribution uses complete, untruncated opened recovery
+connection diagnostics; the separate guard's cold catalog is not charged to
+recovery. In contention its13 guard calls move from recipe to pill attribution;
+both full phases still save exactly160 foreground calls. Message-writer
+background batching573 ->580 calls varies independently of foreground work.
+Process cache counters (hits/misses/invalidations/recomputations) are all0
+in these stages; no cache-hit benefit is claimed and no exact-rank work occurs.
+
+Mixed herb-detail p95 **regresses23.466 ->29.132ms**, mixed herb/detail/pill
+medians rise, pure herb SQL/p99 detail and contention pill/training SQL also
+retain regressions. The larger contention tail improvement accompanies
+unchanged controls improving too: this one short sequential sample does not
+isolate all application/scheduler/observer variance or prove every path faster.
+The measured recipe SQL/query/connection reduction is the narrower result.
+
+### Load, Resources and Limits
+
+|Stage/cap/arrivals per second|Whole E2E p95|Successful/s|Handler overlap peak|Inflight peak|
+|---|---:|---:|---:|---:|
+|pure/10/20|20.590 ->17.017|15.098 ->15.096|1 ->1|2 ->2|
+|mixed/20/20|43.241 ->35.561|15.040 ->15.039|1 ->1|2 ->2|
+|contention/20/35|222.612 ->65.450|26.209 ->26.205|7 ->2|12 ->3|
+
+Successful throughput is **not improved** and does not establish20 active
+handlers or sustained50 successful requests/s. Producer delay p95/p99:
+pure.138/.201 ->.136/.156ms, mixed.127/.156 ->.139/.309ms (regression),
+contention8.957/78.836 ->.249/3.630ms. Loop-dispatch p95/p99:
+.190/5.993 ->.179/.254, .251/9.666 ->.202/6.979,
+29.805/63.809 ->20.706/33.861ms. Event-loop lag p95/p99:
+6.527/12.072 ->2.298/8.473,16.658/28.742 ->19.665/38.842 (regression),
+37.466/63.434 ->28.277/44.814ms. Admission queue p95 remains.010-.011ms.
+BEGIN timing is an upper bound including execution, not a pure lock-wait
+measurement; raw per-request waits and zero busy/locked counts are retained.
+
+The shared validation lock serializes all heavy work. Every process enforces
+2/4 CPU,AS1GiB,CPU600s,wall1200s,`MALLOC_ARENA_MAX=2`,RSS900MiB stop,
+RAM>=768MiB,disk>=2GiB and single/total WAL<=256MiB; no outer taskset or
+second load group is used. Phase minimum RAM1533MiB,disk11,143,176,192bytes,
+single WAL18,321,672bytes,total WAL22,507,624bytes; no guard is reached.
+Phase RSS208.434/221.035/221.742 ->218.723/218.957/219.148MiB retains
+the pure increase. Whole-process peak231.367MiB includes setup/check/restore.
+Phase user+system CPU1.919/2.761/2.764 ->1.764/2.590/2.522s;
+main-thread CPU1450.785/2244.730/2327.998 ->1301.001/2080.434/2065.603ms.
+
+Phase setup5.154-5.541s before/5.218-5.314s after, startup5.529-6.630s
+and final restore13.703-14.875s are outside request E2E. Sampled phase disk
+writes13,594,624/21,266,432/20,365,312 ->13,594,624/21,270,528/20,824,064bytes
+retain increases. Per-process writes around1.93-1.94GB include temporary
+snapshot/restore IO; do not attribute them to application transactions.
+Profiler sections remain incomplete, perturb timing and cannot be subtracted
+to manufacture uninstrumented throughput.
+
+This covers six measured routes and two changed matcher entrypoints, not
+all674 matchers/41 background entries. Large successful refinement/replay
+datasets, bank latency, broader exp+stone global-invalidation contention,
+cold exact ranks and sustained50 successful/s remain unproven. The overall
+repository performance goal remains **ACTIVE** after this bounded delivery.

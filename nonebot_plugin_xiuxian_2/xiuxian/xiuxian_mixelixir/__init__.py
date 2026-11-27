@@ -632,10 +632,10 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
 
-        replay = mixelixir_application.refine_cost_replay(
-            operation_id=operation_id,
-            recipe_key=recipe_key,
-        ) if event_id else None
+        replay, ready_task_id = mixelixir_application.refine_recovery_state(
+            operation_id=operation_id if event_id else None,
+            user_id=user_id, recipe_key=recipe_key,
+        )
         if replay is not None:
             started = _mixelixir_result(replay)
             if started.succeeded:
@@ -644,9 +644,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="药材", v3="药材背包")
             await mix_make.finish()
 
-        ready_task_id = mixelixir_application.latest_ready_refine_task(
-            user_id=user_id, recipe_key=recipe_key
-        )
         if ready_task_id:
             await claim_and_finish(ready_task_id, recovery=True)
 
