@@ -455,7 +455,7 @@ async def auto_handle_inactive_sect_owners():
     failures = []
     
     try:
-        all_sects = sect_application.list_sects_with_member_count()
+        all_sects = sect_application.list_maintenance_sects()
         auto_change_sect_owner_cd = XiuConfig().auto_change_sect_owner_cd
         logger.info(f"获取到宗门总数：{len(all_sects)}个")
         
@@ -466,7 +466,6 @@ async def auto_handle_inactive_sect_owners():
         for sect in all_sects:
             sect_id = sect[0]  # 宗门ID
             sect_name = sect[1]  # 宗门名称
-            member_count = sect[4]  # 成员数量
             
             try:
                 logger.info(f"处理宗门：{sect_name}(ID:{sect_id})")
@@ -520,9 +519,12 @@ async def auto_handle_inactive_sect_owners():
                     logger.info(f"符合条件的候选人数量：{len(candidates)}")
                     
                     # 检查候选人活跃状态：必须最近30天内有活跃
+                    last_active_by_user = sect_application.get_last_check_info_times(
+                        str(candidate['user_id']) for candidate in candidates
+                    )
                     active_candidates = []
                     for candidate in candidates:
-                        last_active = sect_application.get_last_check_info_time(candidate['user_id'])
+                        last_active = last_active_by_user[str(candidate['user_id'])]
                         if last_active and (maintenance_checked_at - last_active).days <= auto_change_sect_owner_cd:
                             active_candidates.append(candidate)
                     

@@ -4613,3 +4613,194 @@ Overall performance work remains open: this four-changed-route sample does
 not settle cold exact ranks/global invalidation, directory affinity or prior
 contention regressions, and does not exhaust the other 11 changed matchers,
 674-command inventory or 41 background entries.
+
+## V25: Sect Traversal, Owner Seeks and Candidate Activity Batches (2026-11-27)
+
+### Shared Work and Boundaries
+
+This bounded batch benefits **one matcher (`宗门列表`) and one scheduled
+entry (`auto_handle_inactive_sect_owners`)**. It follows the saved V22 SQL
+evidence rather than a new inventory audit. It removes repeated database
+work, not Python function layers:
+
+- Directory owner equality compares TEXT user IDs with the production
+  INTEGER-affinity owner column. The former correlated predicate can scan
+  the entire user table even when the TEXT identity index exists. A fixed
+  native index on `CAST(user_id AS NUMERIC)` now supplies a necessary seek
+  condition. The original `user_id=s.sect_owner` predicate and first-rowid
+  selection remain, rejecting numeric-cast collisions. There is no conversion
+  of stored identities, balances or exact ranks and no display cache.
+- The scheduled entry initially consumes only sect ID/name. Its dedicated
+  readonly projection avoids the unused owner lookup and member aggregate;
+  the existing five-tuple API remains available to other callers. Legacy
+  duplicate sect IDs explicitly select first rowid, not an unspecified bare
+  GROUP BY row. Required read errors still propagate.
+- Its closed-sect candidate loop now reads activity times once per stage:
+  N readonly UoWs/SELECTs become one UoW and ceil(N/500) SELECTs. Empty input
+  opens no database. A VALUES CTE with no column affinity preserves the old
+  string-parameter comparison, distinct requested spellings, first duplicate
+  row, missing/invalid timestamps and local-time conversion. It is discarded
+  after this stage; no cross-request personal cache is added.
+
+Candidate ordering, final writes, ledger/CAS/replay and transaction boundaries
+are unchanged. The disband transaction rechecks live activity and membership;
+the actual read-then-activity-change regression verifies `candidates_changed`,
+no disband receipt and later successful recovery. Inheritance retains its
+existing boundary: its transaction rechecks sect/membership/position/priority
+and uses the caller's `eligible_user_ids`; it does **not** newly re-read
+`user_cd`. Do not generalize the disband regression into a claim that all
+inheritance activity eligibility is transactionally reread. No old projection
+is substituted for balances, rewards, exact ranks or target selection.
+
+### Frozen Evidence and Coverage
+
+- Baseline code is `0c546505`; after is the accepted V25 five-file runtime
+  tree. Runtime hashes are
+  `d0d8f0452a437fce41aad2bed5bffad650fc599daf4a72ffa744eef6765ce2c1`
+  -> `7aa46eaecb8a1cf74985fd3eeb2afa3b428df68437b92bc61e19d4ebca23a9a4`.
+  Driver hashes, fixture identity, all business/phase manifests, requests,
+  limits and original rank digests match exactly. Both reports pass without
+  offline outcome correction or a discarded load attempt.
+- Reports under the sole retained
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+  `sect-seek-before-v25-20261127-r01.json`,
+  `sect-seek-after-v25-20261127-r01.json`,
+  `sect-seek-comparison-v25-20261127-r01.json`.
+  The original 1M exp/stone digest remains
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+- Reuses V22's 128 actors, 128 sects, 8192 members/current-period tasks,
+  exact wallets, catalog definitions and receipt/full-row invariants.
+  New coverage changes only 16 background sect owners: four last-row numeric
+  IDs, four absent numeric IDs, four leading-zero spellings canonicalized by
+  the INTEGER column, four absent opaque IDs. Gameplay actors' four sects
+  remain unchanged. These deliberately malformed directory-only owner/member
+  relationships exercise lookup boundaries; they are not ordinary gameplay
+  population estimates. This is why new load was needed rather than rerunning
+  the previously accepted V22 fixture unchanged.
+- Each version executes 384 real matcher/DI/handler requests, all successful:
+  48 directory targets, 240 unchanged catalog views, 32 asset controls and
+  64 real practice writes. Pure has 16/56/56 directory/main/secondary;
+  mixed/contention each have 16 directory, 32+32 catalog, 16 assets and
+  11+11+10 attack/health/mana writes. There are zero business refusals,
+  cooldown refusals, exceptions, timeouts, boundary failures or busy/locked
+  errors. All 128 actor rows, 8064 background member rows, complete sect rows,
+  exact practice receipts/material debits, bounded frozen feature tables and
+  generation deltas pass; original fixture restoration passes after drain.
+- Background throughput is not measured by command traffic. Real scheduler
+  regression covers 17 candidates in one batch, unused-query exclusion,
+  actual inheritance, stale disband and failure/recovery paths. The
+  consolidated affected suite passed 96 tests +29 subtests (11.50s).
+  Architecture initially found a dynamic CTE literal misclassified as a
+  physical table; a complete SQL template fixed it without taxonomy changes.
+  The seven affected activity/scheduler tests +2 subtests then passed (1.62s).
+  Compile, architecture, inventory and scoped whitespace checks pass. No
+  local full unittest, old accepted suite or old load was repeated.
+
+### Same-Load Results
+
+Each E2E cell is p50/p95/p99 in milliseconds, including admission and loop
+queueing. DB calls include execute/executemany/commit/rollback; they are not
+counts of internal correlated seeks. All listed paths have error rate zero.
+Catalog, asset and practice rows are unchanged controls, not additional
+optimized callers.
+
+| Phase | Path | n | E2E before | E2E after | DB calls before -> after | DB ms before -> after |
+| --- | --- | --- | --- | --- | --- | --- |
+| pure | directory |16|11066.620/21778.226/21778.226|15.390/155.042/155.042|156 ->156|32181.631 ->103.048|
+| pure | main catalog |56|11943.995/21244.016/21643.689|13.213/21.575/28.328|906 ->906|244.175 ->258.681|
+| pure | secondary catalog |56|12044.201/21343.810/21743.550|13.140/18.179/66.578|896 ->896|234.536 ->246.598|
+| mixed | assets |16|14851.698/28836.396/28836.396|18.551/26.741/26.741|407 ->407|108.150 ->114.788|
+| mixed | attack practice |11|17890.583/29182.345/29182.345|24.535/32.375/32.375|374 ->374|137.290 ->128.443|
+| mixed | directory |16|14700.435/29033.202/29033.202|15.152/18.840/18.840|144 ->144|32616.734 ->90.128|
+| mixed | health practice |11|18285.270/28990.508/28990.508|23.580/31.710/31.710|374 ->374|123.268 ->130.303|
+| mixed | main catalog |32|14951.495/28738.965/28934.810|12.991/14.366/26.865|525 ->525|152.259 ->143.793|
+| mixed | mana practice |10|14849.091/29382.191/29382.191|23.685/32.865/32.865|340 ->340|123.659 ->114.048|
+| mixed | secondary catalog |32|14902.122/28886.525/29084.344|12.902/15.318/16.793|512 ->512|134.585 ->130.307|
+| contention | assets |16|15489.544/31080.495/31080.495|17.055/18.963/18.963|407 ->407|110.211 ->104.572|
+| contention | attack practice |11|17428.725/31282.856/31282.856|23.128/24.716/24.716|374 ->374|134.582 ->125.311|
+| contention | directory |16|15372.317/30970.129/30970.129|14.108/21.964/21.964|144 ->144|32335.473 ->85.275|
+| contention | health practice |11|19428.087/31168.203/31168.203|23.898/30.255/30.255|374 ->374|143.419 ->135.741|
+| contention | main catalog |32|15543.561/31025.977/31138.127|11.994/14.948/24.665|525 ->525|153.555 ->137.040|
+| contention | mana practice |10|15366.701/31057.268/31057.268|23.282/29.732/29.732|340 ->340|114.862 ->121.906|
+| contention | secondary catalog |32|15514.717/30997.254/31109.187|12.122/13.568/13.739|512 ->512|140.979 ->127.315|
+
+The 48 actual directory business SQL statements have execute+fetch
+p50/p95/p99 **2018.678/2071.613/2135.048 ->5.068/6.389/10.367ms**, total
+97117.187 ->259.952ms. Full directory-request DB time is
+97133.838 ->278.451ms. Foreground DB API calls stay **7310 ->7310**:
+this command gain is removal of internal full scans, not fewer API calls.
+The batch's N+1 reduction is separately proven in the scheduled caller.
+EXPLAIN regressions require the real INTEGER-owner numeric seek and indexed
+activity CTE for both TEXT primary-key and legacy INTEGER-index schemas.
+
+| Phase / cap / arrivals per second | Whole E2E before -> after | All SQL ms | Successful/s | Peak admitted | Peak active handler intervals |
+| --- | --- | --- | --- | --- | --- |
+| pure /10/10 |12044.201/21244.016/21743.550 ->13.311/21.575/66.578|32752.049 ->783.383|3.782 ->10.066|10 ->2|10 ->1|
+| mixed /20/20 |17824.936/28886.525/29182.345 ->14.639/26.741/32.375|33610.849 ->1029.960|3.677 ->20.083|20 ->1|20 ->1|
+| contention /20/35 |17283.775/31025.977/31168.203 ->13.757/25.149/29.732|33358.222 ->1006.769|3.707 ->35.031|20 ->1|20 ->1|
+
+Before, directory scans block the shared event loop, delaying unchanged
+commands as well. Admission queue p95 is
+17130.980/21635.872/23599.914 ->0.013/0.011/0.010ms; loop dispatch p95
+1960.247/1942.665/1964.713 ->0.201/0.186/0.177ms; loop lag p95
+2123.557/2186.607/2089.178 ->1.723/7.534/12.559ms. Producer delay p95
+is .139/.155/.143 ->.140/.140/.117ms, while pure maximum regresses
+4.301 ->48.726ms. Actual handler overlap is measured, but wall intervals
+are not parallel CPU/SQLite execution. After serves this short35-arrival/s
+sample with peak handler overlap1; it does not prove20 simultaneous handlers
+or sustained50 successful/s. Small n=10/11/16 tails often equal maxima.
+
+Public cache hits/misses/invalidations/recomputations are zero in both
+versions. Generation deltas are unchanged: pure0, mixed/contention each
+32 stone and zero exp. No personal exact-rank request or broad exp+stone
+gameplay invalidation is sampled. Message-writer DB calls are separately
+attributed and increase 298/403/402 ->390/480/480; none is hidden inside
+foreground gains. Observer CPU remains recorded, uncalibrated, and cannot
+be subtracted to claim production capacity.
+
+### Costs, Limits and Remaining Work
+
+The new index occupies **3600 pages /14,745,600 bytes (14.0625MiB)**.
+Actual CREATE INDEX execute time is560.889ms (thread CPU527.442ms), excluding
+commit; total runtime preparation is5.835 ->7.090s and is not described as
+pure index-building time. Idempotent maintenance guards old/missing schemas
+and propagates actual build failures. Existing migration callbacks and
+published versions are unchanged. The restored isolated fixture retains the
+new index; its million-user population/exp/stone data remains unchanged.
+
+A drained rollback-only control updates32 existing synthetic rows, three
+repetitions each, preserving exact original data, generation and index.
+Within after, exp+stone update p50 is5.927ms indexed vs5.405ms with this
+index temporarily dropped; same-value identity update is5.674 vs2.363ms.
+Baseline no-index medians are2.395/.178ms respectively. These noisy tiny
+controls do not show zero cost or characterize committed gameplay/registration
+throughput. The minimal EXPLAIN regression confirms score-only writes do not
+maintain this identity expression index; other existing score indexes/triggers
+still operate. Index drop/rollback cost is excluded from update timers, and
+the index-free variant is never a gameplay mode.
+
+Material regressions are retained: process peak RSS197.059 ->211.898MiB;
+pure catalog, mixed asset/health and contention mana SQL totals rise as shown
+above; background writer calls rise. Raw process read/write bytes are
+1,018,322,944/4,101,955,584 ->544,358,400/4,326,039,552; the write total rises
+and includes setup, snapshot/restore and diagnostic cost, not just commands.
+Process wall159.331 ->78.182s and CPU(user+system)154.702 ->54.913s also
+include startup/setup/check/restore. Phase setup7.403/5.592/5.681 ->
+5.531/6.023/5.738s and final restore13.736 ->13.541s are outside latency.
+
+The serial pair holds `/tmp/nonebot-project-validation.lock` and identical
+limits:2 of4 CPUs,AS1GiB,CPU600s,wall1200s,RSS stop900MiB,
+RAM preflight/stop768MiB,disk minimum2GiB,per/total WAL256MiB,
+`MALLOC_ARENA_MAX=2`. Minimum phase RAM1624/1680MiB; minimum disk exceeds
+12.2GB. Maximum phase WAL7,090,552bytes in both; after-startup WAL14,840,272
+bytes is recorded separately. No stop threshold is reached. One temporary
+restore snapshot is removed after checks; no lasting duplicate1M database,
+production database, real QQ/OneBot connection, deployment or release is used.
+
+Coverage remains partial: many opaque user IDs would share the NUMERIC0
+bucket and may still be slow; tiny differential tests prove semantics, not
+that population's performance. Large scheduler throughput and >17 candidate
+timing are unmeasured. This batch does not settle cold exact-rank scans,
+global invalidation under broader exp+stone writes, old tail regressions,
+all674 matchers/41 background entries or sustained50 successful/s.
+The overall repository performance goal remains ACTIVE.

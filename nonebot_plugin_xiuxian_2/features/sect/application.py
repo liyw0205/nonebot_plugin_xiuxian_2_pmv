@@ -104,6 +104,9 @@ class SectApplication:
     def list_sects_with_member_count(self) -> list[tuple[Any, ...]]:
         return self.directory_repository.list_with_member_count()
 
+    def list_maintenance_sects(self) -> list[tuple[Any, ...]]:
+        return self.directory_repository.list_maintenance_sects()
+
     def list_sect_join_display(self) -> list[dict[str, Any]]:
         return self.directory_repository.list_join_display()
 
@@ -316,6 +319,9 @@ class SectApplication:
 
     def get_last_check_info_time(self, user_id: str):
         return self.activity_repository.get_last_check_info_time(str(user_id))
+
+    def get_last_check_info_times(self, user_ids):
+        return self.activity_repository.get_last_check_info_times(user_ids)
 
     def _repository(self) -> SectRepository:
         return self.repository or SectRenameSqlRepository(self.database, clock=self.clock)

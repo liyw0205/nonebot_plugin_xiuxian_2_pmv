@@ -204,6 +204,7 @@ class QueryRouter:
         self.lock = threading.Lock()
         self.connection_serial = 0
         self.observer_cpu = ObserverCPU()
+        self.owner_index_setup = []
 
     def connection_entry(self, connection):
         row = ACTIVE.get()
@@ -294,6 +295,9 @@ class QueryRouter:
 
     def _record(self, connection, sql, phase, elapsed_ms, row, ended, cpu_ms):
         with self.lock:
+            if (phase == "execute" and str(sql).startswith(
+                    "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_id_numeric_v1 ")):
+                self.owner_index_setup.append({"wall_ms": elapsed_ms, "cpu_ms": cpu_ms})
             if row is None:
                 if not self.phase_active:
                     return
@@ -1219,7 +1223,9 @@ async def run(args, identity):
     probe.isolate_source(args.source_repo)
     probe.install_boundary(root)
     router = install_sql_timing(root)
+    prepare_started = time.perf_counter()
     context, managers = await probe.prepare(seed=False, skip_training_wait=False)
+    prepare_s = time.perf_counter() - prepare_started
     for module in (*matrix.MATRIX_MATCHER_MODULES, "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_trade"):
         importlib.import_module(module)
     if args.scenario == "impart-natal-v24":
@@ -1245,11 +1251,14 @@ async def run(args, identity):
         "sect-directory-v22": "tests.mixed_sect_directory_fixture",
         "read-stage-v23": "tests.mixed_read_stage_fixture",
         "impart-natal-v24": "tests.mixed_impart_natal_fixture",
+        "sect-seek-v25": "tests.mixed_sect_seek_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
     driver_files.extend(Path(module.__file__) for name, module in list(sys.modules.items())
                         if name.startswith("tests.mixed_") and getattr(module, "__file__", None))
+    if args.scenario == "sect-seek-v25":
+        driver_files.append(ROOT / "scripts/mixed_sect_seek_probe.py")
     driver_identity = {path.relative_to(ROOT).as_posix(): matrix._sha256(path)
                        for path in sorted(set(driver_files))}
     specs = (fixture_support.phase_specs() if args.scenario != "legacy-v1" else [
@@ -1278,6 +1287,8 @@ async def run(args, identity):
               "coverage": "bounded stratified mixed sample; not exhaustive of 674 matchers or background jobs",
               "phases": [], "bulk_probe": None, "preflight_only": args.preflight_only,
               "scenario": args.scenario, "frozen_phase_specs": specs,
+              "runtime_prepare_s": prepare_s,
+              "owner_index_setup": router.owner_index_setup,
               "selected_phase_indices": [index for index, _spec in selected_phases],
               "bulk_only": args.bulk_only,
             "cache_attribution": "exact phase counter deltas; per-command cache counters not measured",
@@ -1360,6 +1371,9 @@ async def run(args, identity):
             result["bulk_probe"] = await bulk if inspect.isawaitable(bulk) else bulk
             if result["bulk_probe"].get("status") != "pass":
                 raise RuntimeError("bounded generation bulk probe did not pass")
+        if args.scenario == "sect-seek-v25" and not args.preflight_only and "failure_reason" not in result:
+            from scripts.mixed_sect_seek_probe import measure_owner_index_cost
+            result["owner_index_cost"] = measure_owner_index_cost(context.paths.game_db)
     except Exception as exc:
         result["failure_reason"] = str(exc)
         result["traceback"] = traceback.format_exc()
@@ -1406,7 +1420,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

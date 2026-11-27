@@ -190,6 +190,20 @@ def _create_public_rank_indexes(conn) -> None:
     _create_root_rank_index(conn)
 
 
+def _create_sect_owner_numeric_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if "user_id" not in available:
+        return
+
+    # Owner IDs have INTEGER affinity; retain the original equality after this seek.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_id_numeric_v1 "
+        "ON user_xiuxian(CAST(user_id AS NUMERIC))"
+    )
+
+
 def _create_numeric_rank_generation(conn) -> None:
     """Track score-set changes so cached exact personal ranks stay current."""
     if not conn.table_exists("user_xiuxian"):
@@ -283,6 +297,7 @@ def _ensure_core_indexes(conn):
     ):
         _create_index(conn, index_name, table_name, columns)
 
+    _create_sect_owner_numeric_index(conn)
     _create_numeric_rank_index(
         conn,
         "idx_user_xiuxian_exp_numeric_rank",

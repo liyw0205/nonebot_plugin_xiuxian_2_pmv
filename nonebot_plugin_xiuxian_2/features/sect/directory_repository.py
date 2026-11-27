@@ -39,14 +39,27 @@ class SectDirectorySqlRepository:
             )
             return [row["sect_name"] for row in rows]
 
+    def list_maintenance_sects(self) -> list[tuple[Any, ...]]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "WITH first_sects AS ("
+                "SELECT MIN(rowid) AS first_rowid FROM sects GROUP BY sect_id) "
+                "SELECT s.sect_id,s.sect_name FROM first_sects f "
+                "JOIN sects s ON s.rowid=f.first_rowid ORDER BY s.sect_id"
+            )
+        return [(row["sect_id"], row["sect_name"]) for row in rows]
+
     def list_join_display(self) -> list[dict[str, Any]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             # Legacy schemas may lack the sect primary key; choose one stable row per ID.
+            # The original equality rejects collisions in the indexed NUMERIC seek.
             rows = uow.query_all(
                 "WITH first_sects AS ("
                 "SELECT MIN(rowid) AS first_rowid FROM sects GROUP BY sect_id) "
                 "SELECT s.sect_id,s.sect_name,s.sect_scale,s.closed,s.join_open,"
-                "(SELECT user_name FROM user_xiuxian WHERE user_id=s.sect_owner "
+                "(SELECT user_name FROM user_xiuxian "
+                "WHERE CAST(user_id AS NUMERIC)=CAST(s.sect_owner AS NUMERIC) "
+                "AND user_id=s.sect_owner "
                 "ORDER BY rowid ASC LIMIT 1) AS owner_name,"
                 "(SELECT COUNT(*) FROM user_xiuxian WHERE sect_id=s.sect_id) AS member_count "
                 "FROM first_sects f JOIN sects s ON s.rowid=f.first_rowid ORDER BY s.sect_id"
