@@ -32,6 +32,7 @@ SeasonNow = date | datetime | None
 
 SEASON_RANK_MODES = ("weekly", "monthly", "quarterly")
 DEFAULT_SEASON_RANK_TYPES = ("交易活跃", "讨伐", "宗门贡献", "试炼", "战力")
+_PERSONAL_RANK_BATCH_SIZE = 80
 
 EVENT_SEASON_RANK_TYPES: dict[str, tuple[str, ...]] = {
     "trade_buy": ("交易活跃",),
@@ -360,48 +361,61 @@ def get_user_season_rank(
         return None
 
     rank_key, _, _ = _build_rank_identity(rank_type_text, mode, now)
-    user_id_text = str(user_id)
-    row = _sql_message()._read_query(
-        """
-        SELECT
-            r.rank_key,
-            r.mode,
-            r.period_key,
-            r.rank_type,
-            r.user_id,
-            r.sect_id,
-            r.score,
-            r.extra,
-            r.updated_at,
-            COALESCE(u.user_name, r.user_id) AS user_name
-        FROM season_rank AS r
-        LEFT JOIN user_xiuxian AS u ON u.user_id = r.user_id AND r.user_id <> ''
-        WHERE r.rank_key = %s AND r.user_id = %s
-        ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC, r.updated_at ASC
-        LIMIT 1
-        """,
-        (rank_key, user_id_text),
-        one=True,
-        dict_row=True,
-    )
-    if not row:
-        return None
+    return _read_live_user_ranks(str(user_id), (rank_key,)).get(rank_key)
 
-    rank_value_row = _sql_message()._read_query(
-        """
-        SELECT COUNT(1) + 1 AS rank_value
-        FROM season_rank
-        WHERE rank_key = %s AND xiuxian_int_cmp(score,%s)>0
-        """,
-        (rank_key, _to_int(row.get("score"))),
-        one=True,
-        dict_row=True,
-    )
-    row = dict(row)
-    row["rank"] = _to_int((rank_value_row or {}).get("rank_value"), 1)
-    row["score"] = _to_int(row.get("score"))
-    row["extra_data"] = _json_loads(row.get("extra"), {})
-    return row
+
+def _read_live_user_ranks(
+    user_id: str,
+    rank_keys: Iterable[str],
+) -> dict[str, dict[str, Any]]:
+    keys = tuple(dict.fromkeys(rank_keys))
+    result: dict[str, dict[str, Any]] = {}
+    for start in range(0, len(keys), _PERSONAL_RANK_BATCH_SIZE):
+        branches: list[str] = []
+        params: list[Any] = []
+        for ordinal, rank_key in enumerate(keys[start:start + _PERSONAL_RANK_BATCH_SIZE]):
+            branches.append(
+                f"""
+                SELECT {ordinal} AS _rank_ordinal, selected.*,
+                    COALESCE(xiuxian_int_text(selected.score), '0') AS _rank_score
+                FROM (
+                    SELECT
+                        r.rank_key, r.mode, r.period_key, r.rank_type,
+                        r.user_id, r.sect_id, r.score, r.extra, r.updated_at,
+                        COALESCE(u.user_name, r.user_id) AS user_name
+                    FROM season_rank AS r
+                    LEFT JOIN user_xiuxian AS u
+                        ON u.user_id = r.user_id AND r.user_id <> ''
+                    WHERE r.rank_key = %s AND r.user_id = %s
+                    ORDER BY xiuxian_int_text(r.score) COLLATE xiuxian_integer DESC,
+                        r.updated_at ASC
+                    LIMIT 1
+                ) AS selected
+                """
+            )
+            params.extend((rank_key, user_id))
+        # Keep each selected score and its exact competition rank in one live
+        # SQL snapshot; bounded branches retain legacy duplicate-row selection.
+        sql = """
+            WITH targets AS MATERIALIZED ({branches})
+            SELECT targets.*, (
+                SELECT COUNT(1) + 1 FROM season_rank AS ranked
+                WHERE ranked.rank_key = targets.rank_key
+                    AND xiuxian_int_cmp(ranked.score, targets._rank_score) > 0
+            ) AS rank
+            FROM targets
+            ORDER BY _rank_ordinal
+        """.format(branches=" UNION ALL ".join(branches))
+        rows = _sql_message()._read_query(sql, tuple(params), dict_row=True)
+        for row in rows:
+            hydrated = dict(row)
+            requested_key = keys[start + hydrated.pop("_rank_ordinal")]
+            hydrated.pop("_rank_score", None)
+            hydrated["rank"] = _to_int(hydrated.get("rank"), 1)
+            hydrated["score"] = _to_int(hydrated.get("score"))
+            hydrated["extra_data"] = _json_loads(hydrated.get("extra"), {})
+            result[requested_key] = hydrated
+    return result
 
 
 def get_user_current_season_entries(
@@ -411,12 +425,23 @@ def get_user_current_season_entries(
     rank_types: Iterable[str] | None = None,
     now: SeasonNow = None,
 ) -> list[dict[str, Any]]:
+    selected_types = tuple(rank_types) if rank_types else DEFAULT_SEASON_RANK_TYPES
+    selected_modes = _normalize_modes(modes)
+    if not selected_types or not ensure_season_rank_table():
+        return []
+    rank_keys: list[str] = []
+    for mode in selected_modes:
+        for rank_type in selected_types:
+            rank_type_text = str(rank_type or "").strip()
+            if rank_type_text:
+                rank_keys.append(_build_rank_identity(rank_type_text, mode, now)[0])
+    rows = _read_live_user_ranks(str(user_id), rank_keys)
     result: list[dict[str, Any]] = []
-    for mode in _normalize_modes(modes):
-        for rank_type in (tuple(rank_types) if rank_types else DEFAULT_SEASON_RANK_TYPES):
-            row = get_user_season_rank(user_id, rank_type, mode, now=now)
-            if row:
-                result.append(row)
+    for key in rank_keys:
+        if key in rows:
+            row = dict(rows[key])
+            row["extra_data"] = _json_loads(row.get("extra"), {})
+            result.append(row)
     return result
 
 

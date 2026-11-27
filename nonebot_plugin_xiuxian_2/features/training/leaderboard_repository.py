@@ -5,6 +5,7 @@ from typing import Any
 from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.first_user_rows import first_user_rows
 from ..base.indexed_ranking import (
     TRAINING_RANK_INDEXES,
     indexed_personal_rank,
@@ -57,14 +58,7 @@ class TrainingLeaderboardSqlRepository:
                 or not {"user_id", field}.issubset(training_columns)
             ):
                 raise RuntimeError("历练排行榜 schema 尚未迁移。")
-            rows = uow.query_all(
-                f'SELECT t.user_id,COALESCE(t."{field}",0) AS value,'
-                "(SELECT ux.user_name FROM user_xiuxian ux "
-                "WHERE ux.user_id=t.user_id ORDER BY ux.rowid ASC LIMIT 1) AS user_name "
-                "FROM player_data.training t "
-                f'ORDER BY xiuxian_int_text(COALESCE(t."{field}",0)) COLLATE xiuxian_integer DESC,t.rowid ASC LIMIT ?',
-                (limit,),
-            )
+            rows = self._top_in_uow(uow, field, limit)
         return [{**row, "value": as_int_like(row["value"])} for row in rows]
 
     def top_snapshot(self, field: str, *, limit: int = 50) -> dict[str, Any]:
@@ -79,6 +73,26 @@ class TrainingLeaderboardSqlRepository:
             normalized_limit,
             loader=lambda: self.top(normalized_field, limit=normalized_limit),
             dependency_databases=(self.player_database,),
+        )
+
+    @staticmethod
+    def _top_in_uow(uow: DatabaseUnitOfWork, field: str, limit: int) -> list[dict[str, Any]]:
+        if field not in TrainingLeaderboardSqlRepository._FIELDS:
+            raise ValueError("unsupported training leaderboard field")
+        return uow.query_all(
+            """
+            WITH top AS MATERIALIZED (
+                SELECT t.rowid AS ordinal,t.user_id,COALESCE(t."{field}",0) AS value
+                FROM player_data.training t
+                ORDER BY xiuxian_int_text(COALESCE(t."{field}",0)) COLLATE xiuxian_integer DESC,
+                    t.rowid ASC LIMIT ?
+            )
+            SELECT top.user_id,top.value,
+                (SELECT ux.user_name FROM user_xiuxian ux WHERE ux.user_id=top.user_id
+                    ORDER BY ux.rowid ASC LIMIT 1) AS user_name
+            FROM top ORDER BY xiuxian_int_text(top.value) COLLATE xiuxian_integer DESC,top.ordinal ASC
+            """.format(field=field),
+            (limit,),
         )
 
     def top_snapshot_with_rank(
@@ -132,14 +146,7 @@ class TrainingLeaderboardSqlRepository:
                 or not {"user_id", field}.issubset(training_columns)
             ):
                 raise RuntimeError("历练排行榜 schema 尚未迁移。")
-            rows = uow.query_all(
-                f'SELECT t.user_id,COALESCE(t."{field}",0) AS value,'
-                "(SELECT ux.user_name FROM user_xiuxian ux "
-                "WHERE ux.user_id=t.user_id ORDER BY ux.rowid ASC LIMIT 1) AS user_name "
-                "FROM player_data.training t "
-                f'ORDER BY xiuxian_int_text(COALESCE(t."{field}",0)) COLLATE xiuxian_integer DESC,t.rowid ASC LIMIT ?',
-                (limit,),
-            )
+            rows = self._top_in_uow(uow, field, limit)
             rank = self._rank_in_uow(
                 uow, field, user_id, database_path=self.player_database
             )
@@ -184,10 +191,10 @@ class TrainingLeaderboardSqlRepository:
             'SELECT t.user_id AS user_id,'
             f'COALESCE(t."{field}",0) AS value '
             f"FROM {schema}.training AS t "
+            f"JOIN ({first_user_rows('training', schema=schema)}) AS first "
+            "ON first.user_id=t.user_id AND first.first_rowid=t.rowid "
             "WHERE t.user_id IS NOT NULL "
-            "AND TRIM(CAST(t.user_id AS TEXT))<>'' "
-            f"AND t.rowid=(SELECT MIN(c.rowid) FROM {schema}.training AS c "
-            "WHERE c.user_id=t.user_id)"
+            "AND TRIM(CAST(t.user_id AS TEXT))<>''"
         )
         row = uow.query_one(
             f"WITH ranked AS MATERIALIZED ({deduped}), "

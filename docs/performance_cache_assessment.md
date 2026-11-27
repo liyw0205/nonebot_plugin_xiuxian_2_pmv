@@ -5697,3 +5697,191 @@ The two old assertions remain. Consolidated checker/progress/shop regression:
 34passed/6subtests in5.16s. This diagnostic-only correction changes no runtime
 or load driver, so accepted timings, correctness checks and static baseline
 remain valid without rerunning the pair or full local unittest.
+
+## V31: Shared Live Rank Batches and First-User Projections
+
+The shared-query batch has **four distinct matcher callers in three feature
+modules**: `我的赛季`, `世界BOSS积分排行榜`, `历练排行榜` and
+`历练积分排行榜`. It reuses the existing674-matcher/41-background inventory;
+it does not restart the taxonomy or infer whole-repository coverage from
+these four callers. V30's final SHA `d8c6896f` and exact-SHA CI46043351288
+are accepted and are not rerun.
+
+|Shared entry and actual callers|Repeated database work reduced|Live/transaction boundary|
+|---|---|---|
+|Season personal API, one15-board matcher plus the single-board API|15schema checks and up to30business SQL calls become one schema check and one bounded live statement;80distinct keys per chunk|Each key retains the original target JOIN/order/LIMIT1 and exact competition COUNT; target and rank share one SQL snapshot, no personal cache|
+|Fixed first-user projection, BOSS board and two training boards' legacy fallback|Per-row correlated MIN(rowid) lookups become one grouped original-identity projection|Keep first-record selection, raw affinity/collation and blank filtering; modern indexed training rank stays unchanged|
+|Training cold public TOP, two board callers|Materialize exact ordered TOP50 before name projection|Keep exact numeric/rowid ordering and first-name/missing-name behavior; personal rank is live and public TTL stays unchanged|
+
+The projection helper accepts only the fixed `training`/`boss_limit` tables
+and `main`/`player_data` schemas. It does not offer arbitrary table/column
+interpolation. Identity grouping precedes blank filtering and does not CAST
+the grouping key; NOCASE/RTRIM and numeric-affinity duplicate behavior are
+checked against independent legacy SQL. Season batching keeps requested-key
+ordinals separate from stored keys, including historical NOCASE/RTRIM key
+schemas, while preserving the stored output and duplicate request order.
+Large/BLOB, malformed and NULL scores retain the previous integer conversion.
+No balance, qualification, reward, target selection, CAS, ledger or settlement
+path changes. One fewer SQL API call is not one fewer internal rank scan:
+the season statement still sorts/selects and counts each requested board.
+SQLite could already defer some old TOP name reads, so no fixed8192-to50
+improvement is claimed; the new direct regression proves exactly50 observed
+name projections for a50-row TOP on a200-row nonempty fixture.
+
+The frozen `rank-projection-v31` load reuses the sole1M primary-user fixture,
+128existing actors and the accepted real exp/stone-write control. It adds
+only the missing selected feature population:15current season keys x256
+owners=3840rows and2048BOSS integral rows, alongside8192existing training
+rows. Activity users8192, feature point/pass/damage tables32768each,
+avatar/title8192each and existing inventories/relationships remain bounded
+feature populations, not million-row tables. Six selected tables have full
+streamed hashes; season competition ranks and BOSS TOP/ranks use independent
+Python exact-integer setup oracles, with no request-time oracle SQL.
+
+Each version has384requests across three128-request phases:
+
+|Stage|Cap / scheduled arrivals per second|Season / BOSS / training complete / training points|Profile control / real cultivation writes|
+|---|---|---|---|
+|pure|10 /20|24 /24 /12 /12|56 /0|
+|mixed|20 /35|14 /13 /6 /7|56 /32|
+|contention|20 /50|14 /13 /7 /6|56 /32|
+
+Requests in each phase share one instance and one isolated DB, using real
+matcher/DI/handlers. The phase drains and all checks run before restoration.
+No per-user database, per-request restore or forced traffic-time cache clear
+is used. Season/BOSS values are read-only during traffic; the live writes
+change game exp/stone only. This sample therefore does not measure season
+score writes or solve the general rank-generation invalidation question.
+The modern training fixture may take its existing indexed rank path; grouped
+legacy fallback benefits have direct semantic/SQL-plan evidence, not a claim
+that this load timed that fallback.
+
+Validation reuses the consolidated affected group's140passes/146subtests;
+its one harness-test `context=None` setup failure was corrected and the
+affected case passed. SQL-template-only follow-up14passes/38subtests and
+compile/architecture/inventory/whitespace passed. Non-timing1Mpreflight
+verified all384routes, isolation, initial invariants and original restoration.
+The first timed baseline phase stopped at104success/24unclassified season
+replies: the strict oracle omitted the real correct-recipient CQ:at prefix.
+The failed r01report is retained as invalid performance evidence. Only that
+transport prefix handling was corrected; all15scores/ranks/order remain
+checked. Offline replay passes all72captured target replies and rejects24
+deliberately corrupted season ranks. Together with the legacy key fix,
+affected regressions21passes/5subtests and updated static gates pass. No
+full local unittest or unchanged old matrix was rerun.
+
+### V31 Frozen Pair Results
+
+The complete r02pair uses unmodified `d8c6896f` product code as baseline and
+the same repaired frozen driver for both versions. Only the four runtime
+files above differ. All six reports pass:384/384successful requests per
+version, no business/cooldown refusals, exceptions, timeouts, unclassified
+replies, SQLite busy/locked or safety stops. Exact personal values/ranks,
+64real exp+stone settlements/version, receipts/ledgers, full selected-table
+hashes and original fixture restoration pass. No favorable stage was rerun.
+
+All gameplay/DB/config/JSON seed fields match across processes. Full seed
+hashes are validated, but full manifests are **not byte-identical**: the
+compatibility startup marker increments once before the restore snapshot.
+The sole differing JSON hash is independently reproduced by serializing
+`{"runtime:legacy_package_load":123}` through128, exactly matching all six
+hashes. Only this proven startup-only telemetry hash and its validated
+aggregate seed hash are normalized for cross-process business comparison.
+Each phase's full unnormalized manifest equals its own preflight, and every
+traffic-time JSON invariant remains enforced. This is a disclosed setup
+metadata difference, not permission to ignore business-data differences.
+
+Every latency below is milliseconds; query counts and DB milliseconds are
+per-path totals for that stage, including driver-counted transaction/PRAGMA
+calls. All paths have0%errors. Small n makes p95/p99 sensitive to individual
+requests; all raw samples are retained.
+
+|Stage/path|n/version|E2E p50 before -> after|p95|p99|DB calls|DB total ms|
+|---|---:|---:|---:|---:|---:|---:|
+|pure/season|24|29.436 ->26.489|74.373 ->59.529|75.920 ->81.120|1348 ->316|254.835 ->302.794|
+|pure/BOSS integral|24|19.994 ->20.339|25.622 ->34.378|35.617 ->36.957|434 ->434|250.011 ->272.351|
+|pure/training complete|12|13.804 ->13.985|133.178 ->42.486|133.178 ->42.486|231 ->231|64.026 ->63.451|
+|pure/training points|12|14.101 ->14.276|45.758 ->40.645|45.758 ->40.645|229 ->229|62.954 ->61.504|
+|pure/profile control|56|15.614 ->15.387|84.580 ->25.572|183.741 ->131.658|2261 ->2259|125.270 ->125.730|
+|mixed/season|14|73.518 ->210.826|325.366 ->480.590|325.366 ->480.590|788 ->186|193.814 ->199.247|
+|mixed/BOSS integral|13|139.364 ->213.180|396.212 ->364.118|396.212 ->364.118|236 ->236|175.726 ->159.931|
+|mixed/training complete|6|47.290 ->178.739|292.286 ->327.274|292.286 ->327.274|136 ->143|54.509 ->85.900|
+|mixed/training points|7|51.622 ->213.173|252.770 ->351.947|252.770 ->351.947|159 ->165|73.821 ->94.581|
+|mixed/profile control|56|187.460 ->274.934|354.819 ->441.886|437.397 ->462.807|2282 ->2281|284.734 ->338.768|
+|mixed/cultivation control|32|169.765 ->251.848|341.544 ->397.454|398.897 ->399.617|1219 ->1219|173.334 ->171.371|
+|contention/season|14|780.844 ->822.930|1019.506 ->1012.600|1019.506 ->1012.600|785 ->183|123.425 ->171.298|
+|contention/BOSS integral|13|761.145 ->790.847|969.881 ->969.602|969.881 ->969.602|236 ->236|181.957 ->190.398|
+|contention/training complete|7|817.542 ->829.955|953.900 ->955.201|953.900 ->955.201|150 ->150|56.274 ->77.404|
+|contention/training points|6|722.403 ->781.263|949.194 ->949.121|949.194 ->949.121|130 ->144|56.177 ->79.804|
+|contention/profile control|56|742.366 ->747.688|986.352 ->991.764|1009.864 ->1068.355|2280 ->2280|334.203 ->521.984|
+|contention/cultivation control|32|751.536 ->802.151|1020.270 ->1042.971|1026.944 ->1069.549|1219 ->1219|163.514 ->182.258|
+
+Complete SQL aggregation confirms season target+COUNT calls720/420/420
+become24/14/14batch calls, exactly30to1per request. The associated SQL
+time231.764/168.242/109.408 becomes279.818/170.999/149.806ms: **API work
+decreases but SQL elapsed time does not improve in this pair**. This retains
+the cost of per-board target sorts/counts and adds a materialized batch.
+BOSS aggregate rank calls25/14/14remain unchanged; SQL225.311/154.409/157.889
+becomes246.996/135.339/163.027ms. Training cold-TOP calls1+1/2+3/2+2become
+1+1/3+3/2+3as natural eviction/scheduling changes; it is not a per-request
+cache-clear experiment. Those few modern indexed fixture misses cannot
+establish the grouped legacy fallback's runtime benefit.
+
+Whole-stage SQL calls5148/5432/5380 become4115/4832/4807. Across the pair,
+foreground calls14123 ->11911 and all calls15960 ->13754, but total SQL
+time1000.368/1284.913/1293.093 ->1085.079/1394.303/1565.161ms increases.
+Main-thread CPU2519.616/3059.058/2964.932 ->2325.185/3088.275/2922.818ms
+also retains a mixed-stage regression. Fewer SQL calls and improved pure-read
+tails are measured; broad mixed-load or SQL-time improvement is not.
+
+|Stage/cap/arrivals per second|Whole E2E p50|p95|p99|Successful/s|Handler interval overlap peak|Inflight peak|
+|---|---:|---:|---:|---:|---:|---:|
+|pure/10/20|17.945 ->16.379|55.067 ->36.957|133.178 ->81.120|20.113 ->20.102|3 ->2|4 ->3|
+|mixed/20/35|162.909 ->250.755|341.544 ->397.454|398.897 ->462.807|34.910 ->35.000|11 ->11|15 ->16|
+|contention/20/50|761.145 ->782.741|992.094 ->1008.537|1020.270 ->1068.355|36.861 ->37.179|16 ->19|20 ->20|
+
+Queue p95 is0.011/0.010/501.310 ->0.010/0.011/508.340ms, producer arrival
+delay p99 is28.346/104.310/98.703 ->0.152/90.833/117.242ms, and loop
+dispatch p95 is0.992/45.792/78.034 ->0.188/48.481/72.217ms.
+Event-loop lag p95 is14.352/54.782/81.484
+->17.048/63.182/86.154ms worsens in all three stages. Contention exact-rank
+seek SQL, an unchanged control, grows84.271 ->254.475ms elapsed while its
+CPU36.623 ->38.654ms changes much less; scheduling/wait effects remain in
+the evidence. One short sequential pair cannot assign every regression to
+the new SQL or dismiss it as noise. Windows are only3.443-6.368s; overlap is
+wall-interval overlap, not parallel CPU/SQLite execution. Cap20/arrivals50
+does not prove20simultaneous CPU work or sustained50successful requests/s.
+
+Process display-cache hits538/312/321 ->202/113/119 include removal of14
+redundant season-schema lookups per season request. Misses110/131/122
+->110/134/128 and evictions78/99/90 ->78/102/96 retain increases; waits,
+expirations, invalidations, oversized values and bypasses are all0. End state
+stays32entries, at most85359estimated bytes, under existing32-entry/1MiB
+bounds. Counters are phase totals, not per-command hit rates. Each mixed
+stage advances exp/stone generation32in both versions; pure advances0.
+No new personal cache or general invalidation improvement is inferred.
+
+All six processes serialize under `/tmp/nonebot-project-validation.lock`,
+with2of4CPU, AS1GiB, RSS900MiBstop, CPU600s, wall1200s and
+`MALLOC_ARENA_MAX=2`. RAM>=768MiB, disk>=2GiB and single/total WAL<=256MiB
+prechecks and continuous guards remain. Observed full-process peakRSS226.215MiB,
+minimum phase availableRAM1568MiB, disk10180415488bytes, singleWAL18321672
+and totalWAL27707128bytes stay within guards. Whole-process wall50.120-57.841s
+and CPU45.713-46.679s include imports/setup/restore; runtime preparation
+5.608-5.975s and final restore13.756-14.944s are outside request timing.
+Approximately1.95GBpost-prepare process writes per stage include controlled
+snapshot/restore IO, not just gameplay. Measured observer CPU
+524.119/538.182/511.765 ->467.015/514.945/456.127ms is uncalibrated and
+partly overlaps SQL instrumentation; it cannot be subtracted to infer
+production capacity. No long-lived million-row fixture copy was created.
+
+Evidence remains under
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+`rank-projection-{before,after}-v31-20261128-phase{0,1,2}-r02.json`,
+`rank-projection-comparison-v31-20261128-r02.json` and the non-timing
+`rank-projection-preflight-v31-20261128-r01.json`. The failed r01baseline
+is retained separately. Four changed matchers and two unchanged controls
+are a bounded sample, not exhaustive674/41coverage. Mixed-stage latency,
+season internal scan cost, broad cold exact ranks/global invalidation,
+feature-score write traffic and sustained capacity remain open. The overall
+repository performance goal stays **ACTIVE**.

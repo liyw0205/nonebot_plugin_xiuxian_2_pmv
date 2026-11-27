@@ -20,6 +20,27 @@ def request(key="profile", actor="900001"):
 
 
 class MixedProbeHelperTests(unittest.TestCase):
+    def test_rank_projection_io_aggregates_beyond_top_query_diagnostics(self):
+        recorder = probe.matrix.QueryRecorder()
+        recorder.active = True
+        connection = object()
+        for index in range(25):
+            recorder.record(connection, f"SELECT {index}", "execute", 10)
+        statements = {
+            "season_target": "SELECT r.rank_key FROM season_rank r WHERE r.user_id=? LIMIT 1",
+            "season_count": "SELECT COUNT(1) + 1 AS rank_value FROM season_rank WHERE rank_key=?",
+            "season_batch": "WITH targets AS MATERIALIZED (SELECT * FROM season_rank) SELECT * FROM targets",
+            "boss_rank": "WITH ranked AS MATERIALIZED (SELECT * FROM boss_limit AS entry) SELECT * FROM ranked",
+            "training_rank": "WITH top AS MATERIALIZED (SELECT * FROM player_data.training t LIMIT ?) SELECT * FROM top",
+        }
+        for sql in statements.values():
+            recorder.record(connection, sql, "execute", .5)
+            recorder.record(connection, sql, "fetch", .25)
+        metrics = probe.recorder_metrics(recorder)
+        self.assertEqual(20, len(metrics["top_queries"]))
+        self.assertEqual({key: {"statements": 1, "total_ms": .75} for key in statements},
+                         metrics["rank_projection_io"])
+
     def test_phase_selection_requires_real_nonlegacy_traffic(self):
         base = ["--fixture", "/tmp/fixture", "--report", "/tmp/report"]
         args = probe.parse_args(base + ["--scenario", "activity-rank-v12", "--phase-index", "2"])

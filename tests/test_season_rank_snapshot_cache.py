@@ -110,7 +110,7 @@ class SeasonRankSnapshotCacheTests(unittest.TestCase):
 
                 personal = season_rank_service.get_user_season_rank("u1", "战力", "weekly")
                 self.assertEqual((1, 30), (personal["rank"], personal["score"]))
-                self.assertEqual(3, len(calls))
+                self.assertEqual(2, len(calls))
                 self.assertGreaterEqual(process_read_cache.stats()["hits"], 1)
 
 

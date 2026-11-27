@@ -6,6 +6,7 @@ from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_intege
 from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.first_user_rows import first_user_rows
 from ..base.ranking_position import PersonalRank
 from ..base.public_display_snapshot import (
     shared_display_snapshot,
@@ -72,10 +73,10 @@ class BossIntegralSqlRepository:
             "SELECT entry.user_id AS user_id,"
             "COALESCE(entry.integral,0) AS integral "
             "FROM boss_limit AS entry "
+            f"JOIN ({first_user_rows('boss_limit')}) AS first "
+            "ON first.user_id=entry.user_id AND first.first_rowid=entry.rowid "
             "WHERE entry.user_id IS NOT NULL "
             "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
-            "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
-            "WHERE candidate.user_id=entry.user_id) "
             "ORDER BY xiuxian_int_text(COALESCE(entry.integral,0)) COLLATE xiuxian_integer DESC,entry.rowid ASC "
             "LIMIT ?",
             (limit,),
@@ -146,10 +147,10 @@ class BossIntegralSqlRepository:
             "SELECT entry.user_id AS user_id,"
             "COALESCE(entry.integral,0) AS value "
             "FROM boss_limit AS entry "
+            f"JOIN ({first_user_rows('boss_limit')}) AS first "
+            "ON first.user_id=entry.user_id AND first.first_rowid=entry.rowid "
             "WHERE entry.user_id IS NOT NULL "
-            "AND TRIM(CAST(entry.user_id AS TEXT))<>'' "
-            "AND entry.rowid=(SELECT MIN(candidate.rowid) FROM boss_limit AS candidate "
-            "WHERE candidate.user_id=entry.user_id)"
+            "AND TRIM(CAST(entry.user_id AS TEXT))<>''"
         )
         row = uow.query_one(
             f"WITH ranked AS MATERIALIZED ({deduped}), "
