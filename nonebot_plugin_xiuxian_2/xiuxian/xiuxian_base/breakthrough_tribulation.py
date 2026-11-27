@@ -1047,7 +1047,9 @@ async def level_up_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     if user_info['hp'] is None:
         # 判断用户气血是否为空
         _initialize_player_state(user_id, user_info)
-    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     user_leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     level_cd = user_msg['level_up_cd']
     if level_cd:
@@ -1217,8 +1219,9 @@ async def level_up_lx_continuous(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         _initialize_player_state(user_id, user_info)
-    
-    user_msg = _sql_message().get_user_info_with_id(user_id)
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1341,7 +1344,9 @@ async def level_up_drjd_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     if user_info['hp'] is None:
         # 判断用户气血是否为空
         _initialize_player_state(user_id, user_info)
-    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     level_cd = user_msg['level_up_cd']
     if level_cd:
         # 校验是否存在CD
@@ -1464,7 +1469,9 @@ async def level_up_dr_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     if user_info['hp'] is None:
         # 判断用户气血是否为空
         _initialize_player_state(user_id, user_info)
-    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     level_cd = user_msg['level_up_cd']
     if level_cd:
         # 校验是否存在CD
@@ -1582,8 +1589,9 @@ async def level_up_dr_lx_continuous(bot: Bot, event: GroupMessageEvent | Private
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         _initialize_player_state(user_id, user_info)
-    
-    user_msg = _sql_message().get_user_info_with_id(user_id)
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1729,8 +1737,9 @@ async def level_up_drjd_lx_continuous(bot: Bot, event: GroupMessageEvent | Priva
     user_id = user_info['user_id']
     if user_info['hp'] is None:
         _initialize_player_state(user_id, user_info)
-    
-    user_msg = _sql_message().get_user_info_with_id(user_id)
+        user_msg = _sql_message().get_user_info_with_id(user_id)
+    else:
+        user_msg = dict(user_info)
     level_cd = user_msg['level_up_cd']
     
     # 检查突破CD
@@ -1909,7 +1918,7 @@ async def user_leveluprate_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         await handle_send(bot, event, msg, md_type="我要修仙")
         await user_leveluprate.finish()
     user_id = user_info['user_id']
-    user_msg = _sql_message().get_user_info_with_id(user_id)  # 用户信息
+    user_msg = dict(user_info)
     leveluprate = int(user_msg['level_up_rate'])  # 用户失败次数加成
     level_name = user_msg['level']  # 用户境界
     level_rate = jsondata.level_rate_data()[level_name]  # 

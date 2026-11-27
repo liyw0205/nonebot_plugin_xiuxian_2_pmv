@@ -455,7 +455,9 @@ class BackItemViewSearchTests(unittest.TestCase):
             patch.object(module, "check_user", lambda event: (True, {"user_id": "u1"}, "")),
             patch.object(module, "assign_bot", AsyncMock(return_value=(BOT, None))),
             patch.object(module.items, "get_data_by_item_type", fake.get_data_by_item_type),
-            patch.object(module, "get_item_msg", lambda item_id: f"效果{item_id}"),
+            patch.object(module, "get_item_msg", lambda item_id, **kwargs: f"效果{item_id}"),
+            patch.object(module, "_sql_message", lambda: SimpleNamespace(
+                goods_max_nums=lambda ids: dict.fromkeys(ids, 0))),
             patch.object(module, "send_msg_handler", send_msg),
             patch.object(module, "handle_send", handle_send),
         ):

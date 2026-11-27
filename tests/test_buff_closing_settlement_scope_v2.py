@@ -56,7 +56,7 @@ def test_out_closing_replays_before_legacy_snapshot_reads() -> None:
     handler = _closing_handler_source()
 
     replay_index = handler.index("buff_application.closing_replay(")
-    snapshot_index = handler.index("_sql_message().get_user_info_with_id(")
+    snapshot_index = handler.index("user_mes = dict(user_info)")
     assert replay_index < snapshot_index
 
 

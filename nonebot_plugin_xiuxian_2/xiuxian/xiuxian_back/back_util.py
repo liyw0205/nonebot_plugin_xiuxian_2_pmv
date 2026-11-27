@@ -35,6 +35,8 @@ _permanent_atk_item_service_instance = None
 _blessed_flag_replace_service_instance = None
 _blessed_flag_replace_application_instance = None
 ADDED_RANKS = get_added_ranks()
+_UNREAD = object()
+_GLOBAL_HOLDING_TYPES = frozenset({"神物", "神通", "身法", "瞳术", "功法", "辅修功法", "防具", "法器"})
 
 
 def _sql_message():
@@ -855,7 +857,7 @@ def get_accessory_info_msg(accessory_info):
         f"part：{accessory_info.get('part', '未知部位')}"
     )
 
-def get_item_msg(goods_id, user_id=None):
+def get_item_msg(goods_id, user_id=None, *, user_info=_UNREAD, goods_total=_UNREAD):
     """
     获取单个物品的消息
     """
@@ -863,9 +865,12 @@ def get_item_msg(goods_id, user_id=None):
     if item_info['item_type'] == '饰品':
         return get_accessory_info_msg(item_info)
 
-    user_info = _sql_message().get_user_info_with_id(user_id) if user_id else None
+    if user_info is _UNREAD:
+        user_info = _sql_message().get_user_info_with_id(user_id) if user_id else None
     required_rank_name, _ = get_required_rank_name(item_info, user_info)
-    goods_max_num = _sql_message().goods_max_num(goods_id)
+    goods_max_num = 0
+    if item_info['type'] != '丹药' and item_info['item_type'] in _GLOBAL_HOLDING_TYPES:
+        goods_max_num = _sql_message().goods_max_num(goods_id) if goods_total is _UNREAD else goods_total
     msg = ''
     if item_info['type'] == '丹药':
         msg = f"名字：{item_info['name']}\n"
@@ -971,8 +976,9 @@ def get_yaocai_info_msg(goods_id, item_info):
     return msg
 
 
-def check_use_elixir(user_id, goods_id, num, operation_id=None):
-    user_info = _sql_message().get_user_info_with_id(user_id)
+def check_use_elixir(user_id, goods_id, num, operation_id=None, *, user_info=_UNREAD):
+    if user_info is _UNREAD:
+        user_info = _sql_message().get_user_info_with_id(user_id)
     user_rank = convert_rank(user_info['level'])[0]
     goods_info = items.get_data_by_item_id(goods_id)
     goods_rank = goods_info['rank'] + ADDED_RANKS - 2
@@ -1230,9 +1236,10 @@ def check_use_elixir(user_id, goods_id, num, operation_id=None):
     return msg
 
 
-def get_use_jlq_msg(user_id, goods_id, operation_id=None):
+def get_use_jlq_msg(user_id, goods_id, operation_id=None, *, user_info=_UNREAD):
     """Use a blessed-spot flag through the feature-owned application."""
-    user_info = _sql_message().get_user_info_with_id(user_id)
+    if user_info is _UNREAD:
+        user_info = _sql_message().get_user_info_with_id(user_id)
     if user_info['blessed_spot_flag'] == 0:
         return "道友还未拥有洞天福地，无法使用该物品"
     item_info = items.get_data_by_item_id(goods_id)

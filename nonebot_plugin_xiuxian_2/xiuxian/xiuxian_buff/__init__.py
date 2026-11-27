@@ -523,7 +523,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         give_qq = give_info['user_id'] if give_info else None
 
     # Raw profile rows seed CAS values; dynamic attributes are only an availability check.
-    base1 = _sql_message().get_user_info_with_id(user_id)
+    base1 = dict(user_info)
     base2 = _sql_message().get_user_info_with_id(give_qq) if give_qq else None
     user1 = get_player_attributes(user_id)
     user2 = get_player_attributes(give_qq) if give_qq else None
@@ -631,7 +631,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await up_exp.finish()
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = dict(user_info)
     level = user_mes['level']
     use_exp = user_mes['exp']
 
@@ -871,7 +871,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             v3="我的修为",
         )
         await out_closing.finish()
-    user_mes = _sql_message().get_user_info_with_id(user_id)
+    user_mes = dict(user_info)
     user_cd_message = _sql_message().get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 1)
     if not is_type or not user_cd_message:

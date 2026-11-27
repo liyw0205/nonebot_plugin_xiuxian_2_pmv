@@ -5160,3 +5160,169 @@ all674 matchers/41 background entries. Large successful refinement/replay
 datasets, bank latency, broader exp+stone global-invalidation contention,
 cold exact ranks and sustained50 successful/s remain unproven. The overall
 repository performance goal remains **ACTIVE** after this bounded delivery.
+
+## V28 Shared Live Profiles and Catalog Aggregation (2026-11-27)
+
+This batch benefits **13 distinct matchers across three feature modules**.
+Seven breakthrough entrypoints (six breakthrough variants and the probability
+view), three Buff entrypoints (PvP, training and closing), and two inventory
+entrypoints (item detail and use) reuse the normalized earliest-row profile
+already read by `check_user` in the same synchronous reading stage. The
+thirteenth matcher, the item catalog, batches global item-holding aggregates.
+Selection used the existing inventory, caller paths and SQL evidence; no new
+repository-wide taxonomy or exhaustive audit was performed. V27 at
+`251705761e46e54fc4f9dfa3596b1b2a2702d4c6` has exact-SHA CI45995184723 success;
+its accepted gates and loads were not rerun.
+
+### Shared IO and Semantic Boundaries
+
+Normal profile stages remove one full-profile SELECT per request, **two to
+one**, without a cross-request player cache. Breakthrough HP initialization
+still rereads after its write. Direct breakthrough is excluded because pending
+recovery can write. Closing replay that recovers state returns its outcome
+before continuing; a nonreplay path may reuse the initial profile. PvP still
+reads the target live and rereads after actor HP repair. Existing auxiliary
+attribute initialization is unchanged; the entire PvP chain is not zero-write.
+Item helpers accept explicit keyword-only stage inputs while standalone calls
+read fresh; the stamina-pill branch retains its explicit refresh. Balances,
+eligibility, rewards, targets, exact ranks, CAS/ledger/replay, settlement and
+post-write read boundaries remain unchanged.
+
+Catalog formatting still processes all K matches before slicing pages of15,
+preserving order, page count and existing description newline accumulation.
+`goods_max_nums` reads the fixed `back` table in one live readonly transaction,
+at most400 requested IDs per query. Bound parameters, a VALUES-derived table
+and ordinal grouping preserve original keys, SQLite numeric-affinity aliases,
+missing/NULL=0, negative values and SUM overflow/SQL errors. The existing
+`idx_back_goods_id` is used: the removed work is K separate indexed aggregates
+and connection borrows, **not K unconditional full-table scans**. Item kinds
+that do not display global holdings avoid that query; personal pill resistance
+stays live. No new cache/index or arbitrary table/column API is added.
+
+Affected acceptance initially reported104 passed +27 subtests; three PvP
+subcases failed before handler execution because the AST fixture omitted
+`CommandArg`. The repaired method passed1 test +3 subtests. A column-list CTE
+was represented as an equivalent VALUES-derived table after inventory treated
+the CTE alias as a table; four SQL API tests passed again. Architecture-final
+(`ok=true`, no errors), inventory, compile and scoped whitespace passed without
+taxonomy or generated-inventory edits. Complete-SQL diagnostic and empty-seed
+preflight regressions each passed1 test. These are separate recorded runs,
+not an inflated unique-test total. No local full unittest or CI/sharding
+changes were made, and passed gates were reused.
+
+### Frozen Fixture and Valid Evidence
+
+The sole1M synthetic fixture remains
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`; no second persistent
+million-user fixture was made. Baseline source is archived at
+`/tmp/xiu-v28-baseline-KRvY658u`, accepted source at
+`/tmp/xiu-v28-accept-kMheTmvE`. Runtime tree hashes before/after are
+`cd91aae5cb572bb067b0b4ac8d09ecc40244cb950ca3f589f03c85092db9b2dd` and
+`49a635206d54db03c3a71206c275ec4e4a956a658efce88a629f485e76fd669c`;
+exactly five runtime files differ. Driver/fixture hashes, limits, phase specs,
+seed manifests and every request match across both versions.
+
+There are128 actors, each with213 positive inventory rows (27,264 total),128
+BuffInfo rows,88 real main skills across six catalog pages, an owned main skill
+9910 at number3 and varying breakthrough bonuses1..13. Existing activity
+controls retain8192 users and32,768 balance/damage rows each; this batch does
+not claim activity optimization. Pure reads are43 detail +43 catalog +42
+probability requests. Mixed and contention each have32 of each read plus32
+real training commands changing both exp and stone. Contention targets one
+writer. All requests in a stage share one instance/database, with no restore
+between requests; restoration occurs only after drain and consistency checks.
+
+One initial report, `live-read-before-v28-20261127-phase0-r01.json`, failed at
+seed preflight: all four real routes resolved, but empty initial results were
+incorrectly required to contain128 traffic rows. It executed **zero phases,
+zero requests**, restored the original1M digest, and is not benchmark evidence.
+Only that fixture contract was repaired, with an empty/partial-traffic
+regression; runtime code did not change. The final frozen r02 comparison uses
+the same repaired harness for both sources. No timed stage was retried.
+
+Six valid raw reports in fixture `data/` are
+`live-read-{before,after}-v28-20261127-phase{0,1,2}-r02.json`;
+`live-read-comparison-v28-20261127-r02.json` retains their SHA256 hashes and
+complete diagnostics. Each version executes **384 requests, all successful**,
+including64 real dual-field writes. Exceptions, timeouts, cooldown/business
+refusals, SQLite busy/locked and boundary/resource errors are all zero.
+Independent output oracles check player ID/name/realm, holdings SUM, catalog
+order/pages and probability. Full back/BuffInfo hashes, profile inputs, exact
+wallet/exp/power, receipts/ledger/generation,1M population and original-rank
+restoration checks pass. Real matcher/DI/handler and business logic execute;
+outbound messaging is isolated from real accounts.
+
+### All Measured Paths
+
+E2E includes scheduled-arrival, dispatch and admission delay, in milliseconds.
+Every entry is before -> after; SQL counts include transaction/PRAGMA API calls
+and DB time includes execute+fetch. Counts/times below total all path samples.
+Four timed routes do not constitute runtime coverage of all13 changed matchers.
+
+|Stage/path|n/version|E2E p50|E2E p95|E2E p99|DB calls|DB total ms|
+|---|---:|---:|---:|---:|---:|---:|
+|pure/probability|42|8.651 ->8.602|10.570 ->13.143|27.651 ->16.571|546 ->504|26.942 ->24.277|
+|pure/catalog|43|36.499 ->23.489|44.159 ->35.655|64.021 ->43.583|3956 ->301|280.478 ->215.929|
+|pure/item detail|43|9.158 ->9.410|10.593 ->13.518|70.240 ->64.255|584 ->541|40.223 ->42.876|
+|mixed/probability|32|8.336 ->8.515|10.149 ->13.377|28.382 ->23.690|416 ->384|18.391 ->18.819|
+|mixed/catalog|32|36.828 ->23.895|48.695 ->26.884|64.387 ->58.911|2944 ->224|218.313 ->173.546|
+|mixed/item detail|32|9.013 ->9.075|19.960 ->45.690|69.715 ->74.210|441 ->409|46.449 ->42.733|
+|mixed/training control|32|34.782 ->35.225|61.346 ->56.466|63.084 ->88.010|1219 ->1219|190.127 ->170.827|
+|contention/probability|32|18.881 ->8.350|73.575 ->42.817|81.550 ->64.774|416 ->384|20.860 ->14.787|
+|contention/catalog|32|40.292 ->23.557|86.602 ->62.385|95.184 ->75.644|2944 ->224|220.736 ->176.087|
+|contention/item detail|32|15.820 ->16.418|90.351 ->70.894|95.727 ->74.496|441 ->409|40.614 ->41.051|
+|contention/training control|32|37.469 ->38.051|79.680 ->75.504|95.568 ->83.783|1219 ->1219|171.950 ->171.214|
+
+Execution error rate is0% for every path. Catalog holdings SQL falls from88
+single SUMs to1 batch per request, **9416 ->107** across107 catalog requests;
+complete catalog DB time is719.527 ->565.562ms. Detail/probability remove213
+duplicate full-profile reads. Complete foreground calls across the three
+stages fall **15126 ->5818** (5086/5020/5020 ->1346/2236/2236). Including message
+writer background work, phase SQL time is655.623/774.672/759.946
+->596.922/699.371/727.047ms. Attribution uses complete SQL aggregation rather
+than a truncated top20. Cache hits/misses/invalidations/recomputations are0;
+there is no cache-hit benefit or exact-rank claim in this batch.
+
+Retained regressions include pure probability/detail p95, mixed probability
+p95 and especially **mixed item-detail p95 19.960 ->45.690ms**. Mixed whole-stage
+p99 rises64.387 ->74.210ms and max69.715 ->88.010ms; the unchanged training
+control also has a worse p99. Detail SQL total rises in pure/contention.
+Query reduction is demonstrated; every path becoming faster is not.
+
+### Load, Resource Caps and Remaining Limits
+
+|Stage/cap/arrivals per second|Whole E2E p95|Successful/s|Handler overlap peak|Inflight peak|
+|---|---:|---:|---:|---:|
+|pure/10/20|40.827 ->25.656|20.023 ->20.045|1 ->1|2 ->2|
+|mixed/20/20|51.107 ->43.561|20.048 ->20.030|1 ->1|2 ->2|
+|contention/20/35|81.550 ->67.095|34.938 ->34.772|3 ->2|4 ->3|
+
+Successful throughput is essentially unchanged. Contention overlap duration
+is307.789 ->119.136ms; wall-interval overlap does not imply parallel CPU/SQL
+execution. These short6.39/6.39/3.67s windows do not establish20 simultaneously
+active handlers or sustained50 successful requests/s. Event-loop lag p95 is
+25.283/31.852/31.994 ->11.714/13.926/30.453ms. Mixed producer p99 worsens
+.709 ->3.403ms; dispatch p99 worsens11.794 ->16.279ms (max14.601 ->33.386ms).
+Contention producer p99 also worsens4.274 ->5.508ms. Queue and BEGIN timings
+remain in raw reports; BEGIN is an execution-inclusive upper bound, not pure
+transaction-lock waiting. Observer cost is uncalibrated and cannot be
+subtracted or used to assign all non-SQL tail delay to application code.
+
+All six serial processes use the shared validation lock and enforce2/4CPU,
+AS1GiB,CPU600s,wall1200s,`MALLOC_ARENA_MAX=2`,RSS900MiB stop,available RAM>=768MiB,
+disk>=2GiB and single/total WAL<=256MiB. Phase RSS peaks are
+220.402/219.066/221.242 ->220.188/220.621/218.797MiB; mixed retains an increase.
+Whole-process peak230.352MiB, minimum available1563MiB,
+disk11,158,482,944bytes,single WAL18,321,672bytes,total WAL22,507,624bytes.
+No guard is reached. Main-thread CPU is2335.778/2840.227/2851.756
+->1803.716/2400.533/2435.455ms. Runtime preparation5.738-6.497s and final
+restore13.944-15.058s are outside request timing. Whole-process disk IO includes
+temporary snapshots/restoration and is not application transaction IO.
+
+The batch measures one populated catalog/inventory shape, three changed read
+routes and one write control. Other changed handlers have focused regression
+and static caller evidence, not individual load results. The674 matchers and
+41 background entries remain an inventory with known static-analysis limits,
+not exhaustive runtime coverage. Cold precise ranks/global invalidation,
+non-SQL tail delays, broader inventory shapes and sustained capacity remain
+open. The overall repository performance goal remains **ACTIVE**.

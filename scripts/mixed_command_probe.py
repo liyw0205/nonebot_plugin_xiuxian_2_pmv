@@ -738,6 +738,8 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                              "total_ms": 0.0,
                              "cpu_ms": rank_cpu_ms[operation] if rank_cpu_ms is not None else None}
                   for operation in RANK_OPERATIONS}
+    live_reads = {name: {"statements": 0, "total_ms": 0.0} for name in
+                  ("full_profile", "single_goods_total", "batch_goods_totals")}
     for (_, sql), values in recorder.by_sql.items():
         operation = rank_operation(sql)
         if operation is not None:
@@ -747,6 +749,16 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                 totals[phase] += values[phase]
             totals["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         upper = sql.upper()
+        category = None
+        if upper.startswith("SELECT * FROM USER_XIUXIAN WHERE USER_ID"):
+            category = "full_profile"
+        elif upper.startswith("SELECT SUM(GOODS_NUM) FROM BACK WHERE GOODS_ID"):
+            category = "single_goods_total"
+        elif upper.startswith("SELECT REQUESTED.COLUMN1,SUM(BACK.GOODS_NUM)"):
+            category = "batch_goods_totals"
+        if category is not None:
+            live_reads[category]["statements"] += values["count"]
+            live_reads[category]["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         columns = [column for column in ("exp", "stone")
                    if f'COUNT(DISTINCT XIUXIAN_INT_SORT_KEY_COMPACT("{column.upper()}"))' in upper]
         if columns and operation == "count":
@@ -756,6 +768,8 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                 ranks[f"{column}_recomputations"] += values["count"]
     ranks["total_ms"] = round(ranks["total_ms"], 3)
     metrics["exact_rank_scans"] = ranks
+    metrics["live_read_io"] = {name: {field: round(value, 3) for field, value in counts.items()}
+                               for name, counts in live_reads.items()}
     metrics["exact_rank_operations"] = {
         operation: {field: round(value, 3) if value is not None else None
                     for field, value in totals.items()}
@@ -1255,6 +1269,7 @@ async def run(args, identity):
         "impart-natal-v24": "tests.mixed_impart_natal_fixture",
         "sect-seek-v25": "tests.mixed_sect_seek_fixture",
         "inventory-projection-v26": "tests.mixed_inventory_projection_fixture",
+        "live-read-v28": "tests.mixed_live_read_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1423,7 +1438,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26", "live-read-v28"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)

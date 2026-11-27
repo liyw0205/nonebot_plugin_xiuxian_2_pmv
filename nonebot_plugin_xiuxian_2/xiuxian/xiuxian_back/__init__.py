@@ -580,7 +580,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
         return
-    item_msg = get_item_msg(goods_id, user_info['user_id'])
+    item_msg = get_item_msg(goods_id, user_info['user_id'], user_info=user_info)
     if goods_id == 15053 or input_str == "补偿": # 某些特定物品可能不需要显示效果
         await check_item_effect.finish()
     # 构造返回消息：> 放在 ID 下，后续整段缩小（多行每行带 >）
@@ -1352,6 +1352,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             goods_id,
             num,
             _cultivation_item_operation_id(event, user_id, goods_id),
+            user_info=user_info,
         )
 
     elif goods_type == "特殊道具":
@@ -1367,7 +1368,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await use.finish()
-        user_info_full = _sql_message().get_user_info_with_id(user_id)
+        user_info_full = user_info
         if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
             msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
         else:
@@ -1431,7 +1432,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
 
     elif goods_type == "聚灵旗":
-        msg = get_use_jlq_msg(user_id, goods_id)
+        msg = get_use_jlq_msg(user_id, goods_id, user_info=user_info)
 
     else:
         msg = "该类型物品暂不支持使用。"
@@ -2014,12 +2015,15 @@ async def chakan_wupin_(
             await handle_send(bot, event, empty_notice(keyword, item_type))
             await chakan_wupin.finish()
     
+    goods_totals = {}
+    if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具"] and item_data:
+        goods_totals = _sql_message().goods_max_nums(item_data)
     msg_list = []
     
     for item_id, item_info in item_data.items():
         name = item_info['name']
         if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具", "饰品"]:
-            desc = get_item_msg(item_id)  # 获取详细描述
+            desc = get_item_msg(item_id, goods_total=goods_totals.get(item_id, 0))
             # 列表走 send_msg_handler 代码框：> 不会当 MD 缩小，勿整段加 >
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":

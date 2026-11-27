@@ -2433,6 +2433,32 @@ class XiuxianDateManage:
             return result[0]
         return 0
 
+    def goods_max_nums(self, goods_ids):
+        """Read requested global holdings in one live snapshot, without a cache."""
+        requested = list(dict.fromkeys(goods_ids))
+        if not requested:
+            return {}
+        totals = {}
+        with self._repository_read_connection() as conn:
+            try:
+                conn.execute("BEGIN")
+                for start in range(0, len(requested), 400):
+                    chunk = requested[start:start + 400]
+                    # Preserve each requested key, including numeric-affinity aliases.
+                    values = ",".join(f"({index},%s)" for index in range(len(chunk)))
+                    rows = conn.execute(
+                        "SELECT requested.column1,SUM(back.goods_num) "
+                        "FROM (VALUES " + values + ") AS requested "
+                        "LEFT JOIN back ON back.goods_id=requested.column2 "
+                        "GROUP BY requested.column1 ORDER BY requested.column1",
+                        tuple(chunk),
+                    ).fetchall()
+                    for ordinal, total in rows:
+                        totals[chunk[ordinal]] = total if total is not None else 0
+            finally:
+                conn.rollback()
+        return totals
+
     def unbind_item(self, user_id, goods_id, quantity=1):
         """解绑物品，减少绑定数量"""
         with self._business_lock, self._conn_lock:
