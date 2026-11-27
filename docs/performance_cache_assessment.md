@@ -5348,3 +5348,150 @@ CI/shard or fixture/load change. Accepted runtime gates and the sole V28
 comparison above remain valid and were not repeated. The repair's exact-SHA
 CI is the remaining delivery gate; passing tests alone is not new performance
 evidence or completion of the overall goal.
+
+## V29 Shared Inventory and Activity Read Stages (2026-11-27)
+
+This batch benefits **nine distinct matchers in two feature modules** through
+shared query patterns. V28's checker repair is delivered at
+`8f9d8660f03d8a5f8c92ad04cf31d34eaf03ceba`; exact-SHA CI46006718568 passed quality
+and both unittest shards. Accepted V28 tests and loads were not repeated.
+
+### Shared Work Removed and Live Boundaries
+
+Inventory reuses the existing fixed-six-field `compact=True` projection at
+five sites across three matchers: main backpack plain/Markdown, fast alchemy
+HP/general branches, and equipment removal selection. Positive-row filtering,
+ordering, duplicates, empty states and unknown catalog behavior remain the
+same. Equipment removal keeps its authoritative live point read and settlement
+checks. A fourth matcher, item use, skips an unused inventory pre-read for five
+replay-safe item IDs (20001/20007/20012/20013/20018). Their services still check
+live inventory, replay and transactions. Other items retain live quantity
+checking/clamping; item20005's existing exemption is unchanged.
+
+Activity overview's four matchers (activity, center, rewards and gameplay)
+reuse sign and boss-own rows from their existing readonly UOW. A request-local
+`(source,key)` map avoids repeating the same exact rank COUNT. Boss status, the
+fifth activity matcher, calculates positions in its boss snapshot rather than
+opening an additional UOW and rereading own damage for each boss. Existing
+native COUNT/tie SQL is unchanged. Optional stage projections fall back to
+live reads when absent; normalized UID/key fallback, missing/zero/negative
+values and independently keyed bosses retain regression coverage. No personal
+cross-request cache, new index, arbitrary identifier API or write is added.
+Balances, eligibility, rewards, exact ranks, ledger/CAS/replay and post-write
+read boundaries remain live and unchanged.
+
+Affected consolidated acceptance passed **212 tests +60 subtests in19.29s**;
+compile, architecture, inventory and scoped whitespace passed. An initial
+baseline pure-read run executed128 requests but misclassified42 real Markdown
+backpack replies as unexpected; all other state checks and1M restoration
+passed. Its r01 timing is excluded. Only the fixture oracle was repaired to
+validate both native plain and Markdown fallback fields, with negative-field
+regressions and explicit standalone NoneBot initialization: **7 tests +8
+subtests passed in3.43s**. All128 saved replies then classified correctly
+offline, without dispatching them again. Unchanged product/static gates were
+reused. No local full unittest, CI/sharding change or old-load rerun occurred.
+
+### Frozen Same-Data Evidence
+
+The sole1M fixture remains
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`. Baseline source is
+`/tmp/xiu-v29-baseline-42FIH0Ms`, accepted source
+`/tmp/xiu-v29-accept-fnggmixl`; runtime hashes are
+`49a635206d54db03c3a71206c275ec4e4a956a658efce88a629f485e76fd669c` and
+`ad5fc8a52cd3a18da7a1565dc4c3d0d8fa37dc0e307a7fbc2522612202641320`.
+Exactly four runtime files differ. Driver/fixture hashes, limits, seed/phase
+manifests and every request match across both versions. The valid six reports
+are `data/overview-stage-{before,after}-v29-20261127-phase{0,1,2}-r02.json`;
+`overview-stage-comparison-v29-20261127-r02.json` preserves their hashes and
+complete SQL/queue/observer/resource diagnostics. No valid stage was retried.
+
+There are128 actors with213 positive inventory rows each (27,264 total), and
+two populated boss boards with8192 participants each. The second board reuses
+an existing populated activity key with reversed score order. Pure traffic is
+43 rewards +43 boss status +42 backpack requests. Mixed and contention each
+use32 of each read plus32 real training requests changing both exp and stone;
+contention uses the same writer. Each stage shares one instance/database;
+restore follows complete drain and consistency checks, never a request.
+
+Each version completed **384/384 successfully**, including64 real dual-field
+writes. Business/cooldown refusals, exceptions, timeouts, busy/locked and
+resource/boundary errors are zero. Independent oracles check four reward
+positions (sign/first boss/first boss/second boss), both bosses' damage/claim
+hints, and backpack names/quantities/bound/equipped/page fields. Full activity,
+back/BuffInfo/profile projections, wallets, receipts, ledger, generation and
+original1M digest restoration pass. Real matcher/DI/handler executes with
+outbound messaging isolated from actual accounts.
+
+### All Timed Paths
+
+E2E includes scheduled-arrival, dispatch and admission delay, in milliseconds.
+All entries are before -> after; DB calls include transaction/PRAGMA APIs and
+DB times include execute+fetch, totaled across each path's samples.
+
+|Stage/path|n/version|E2E p50|E2E p95|E2E p99|DB calls|DB total ms|
+|---|---:|---:|---:|---:|---:|---:|
+|pure/boss status|43|29.380 ->19.194|55.063 ->41.003|143.122 ->145.916|1290 ->774|617.115 ->320.595|
+|pure/rewards|43|32.825 ->26.773|76.348 ->74.682|192.980 ->195.758|2216 ->1657|624.167 ->509.835|
+|pure/backpack|42|14.964 ->14.825|76.928 ->23.580|165.611 ->186.797|507 ->507|54.279 ->47.228|
+|mixed/boss status|32|29.259 ->19.369|89.537 ->70.713|181.383 ->152.994|960 ->576|463.292 ->251.152|
+|mixed/rewards|32|32.821 ->26.842|97.977 ->76.424|231.076 ->92.833|1655 ->1239|470.060 ->386.622|
+|mixed/backpack|32|14.970 ->14.988|61.720 ->43.734|132.780 ->151.541|387 ->387|39.684 ->35.397|
+|mixed/training control|32|34.868 ->35.665|115.582 ->59.729|207.003 ->101.646|1219 ->1219|146.120 ->142.298|
+|contention/boss status|32|395.662 ->80.837|537.733 ->365.999|563.305 ->399.137|960 ->576|466.688 ->245.608|
+|contention/rewards|32|403.206 ->109.251|566.642 ->393.683|592.219 ->413.939|1655 ->1239|467.053 ->400.563|
+|contention/backpack|32|456.590 ->87.340|574.614 ->365.112|666.439 ->378.140|387 ->387|51.352 ->36.207|
+|contention/training control|32|456.399 ->87.586|613.142 ->349.985|637.779 ->428.627|1219 ->1219|150.651 ->138.261|
+
+Every path has0% execution errors. Complete-SQL aggregation verifies each
+rewards request changes own-sign reads2->1, own-boss reads4->0 and boss better
+COUNTs4->2; boss status changes own-boss reads2->0, keeping two COUNTs. Backpack
+changes one full-row SELECT to one compact SELECT, not fewer calls. Across
+all phases, foreground calls fall **12455 ->9780**; phase SQL time including
+message-writer background work is1550.556/1372.323/1592.949
+->1112.625/1052.440/1111.259ms. Reductions are measured IO work, not a claim
+about Python call depth. Existing table-directory cache hits are
+429/319/319 ->85/63/63 with one miss per phase, one bounded entry and no
+invalidation/expiration/eviction/wait: fewer repeated directory lookups reduce
+hits. Personal rank cache recomputation is not exercised. Each mixed phase's
+32 writes still advances exp/stone generation32 in both versions.
+
+Keep the regressions: all three pure paths have worse p99, pure whole p99
+165.611 ->186.797ms, mixed backpack p50/p99 worsen, and unchanged mixed
+training p50 rises. Contention event-loop p99 worsens136.195 ->173.587ms;
+producer p99 rises98.024 ->114.287ms. No retry selected a better sample.
+
+### Load, Resources and Remaining Limits
+
+|Stage/cap/arrivals per second|Whole E2E p95|Successful/s|Handler overlap peak|Inflight peak|
+|---|---:|---:|---:|---:|
+|pure/10/20|76.928 ->69.702|20.063 ->20.091|3 ->3|4 ->4|
+|mixed/20/20|95.337 ->59.729|20.047 ->20.045|4 ->3|5 ->4|
+|contention/20/35|574.031 ->365.112|31.334 ->34.626|13 ->9|20 ->15|
+
+These short3.70-6.39s windows do not prove20 simultaneously active handlers
+or sustained50 successful requests/s. Handler wall-interval overlap is not
+parallel CPU/SQLite execution. Loop-lag p95 is27.475/28.619/85.112
+->19.521/19.353/57.087ms; pure dispatch p99 worsens23.353 ->32.554ms.
+Queue, BEGIN and observer CPU remain in raw reports. BEGIN is an
+execution-inclusive upper bound, not pure lock wait; observer overhead is
+uncalibrated and cannot be subtracted to assign all remaining delay to code.
+
+All six processes serialize under the shared validation lock with2/4CPU,
+AS1GiB, CPU600s, wall1200s, `MALLOC_ARENA_MAX=2`, RSS900MiB stop,
+available RAM>=768MiB, disk>=2GiB and single/total WAL<=256MiB. Phase RSS peaks
+238.422/243.105/242.488 ->241.547/243.457/241.645MiB retain two increases.
+Whole-process peak243.457MiB, observed minimum available1578MiB,
+disk10,744,336,384bytes, single WAL18,321,672bytes and total WAL22,524,104bytes
+stay below guards. Main-thread CPU3422.217/3656.130/3738.308
+->2707.018/3130.743/3217.606ms. Runtime preparation5.926-6.655s and final
+restore13.658-15.642s are outside request timing. Whole-process disk IO
+includes controlled snapshots/restoration, not just application transactions.
+
+Three optimized read routes plus one unchanged write control are timed; nine
+matchers have static/affected-regression evidence. Fast alchemy, equipment
+removal, special-item replay and activity score writes/claims are not timed
+capacity claims. This populated shape does not exhaust674 matchers/41
+background entries or resolve known static-analysis limits. Fifteen-board
+personal-season fanout, cold precise ranks/global invalidation, broader shapes
+and sustained capacity remain open. The overall performance goal stays
+**ACTIVE** after this bounded delivery.

@@ -16,11 +16,13 @@ class BackpackMarkdownQueryReuseTests(unittest.TestCase):
         class Manager:
             def __init__(self, include_state):
                 self.back_reads = 0
+                self.back_options = []
                 self.include_state = include_state
                 self.point_reads = []
 
-            def get_back_msg(self, user_id):
+            def get_back_msg(self, user_id, *, compact=False):
                 self.back_reads += 1
+                self.back_options.append(compact)
                 rows = [
                     {
                         "user_id": user_id,
@@ -72,6 +74,7 @@ class BackpackMarkdownQueryReuseTests(unittest.TestCase):
 
                 manager_back_rows = sections[0][1]
                 self.assertEqual(manager.back_reads, 1)
+                self.assertEqual(manager.back_options, [True])
                 self.assertEqual(
                     [(row["name"], row["is_equipped"]) for row in manager_back_rows],
                     [("青锋剑", True), ("玄铁剑", False)],

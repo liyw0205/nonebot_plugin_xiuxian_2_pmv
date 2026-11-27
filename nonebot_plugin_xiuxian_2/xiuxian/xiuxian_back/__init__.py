@@ -771,7 +771,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # === 特殊处理回血丹 ===
     if len(args) > 0 and args[0] == "回血丹":
-        back_msg = _sql_message().get_back_msg(user_id)
+        back_msg = _sql_message().get_back_msg(user_id, compact=True)
         if not back_msg:
             msg = "💼 道友的背包空空如也！"
             await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -854,7 +854,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await fast_alchemy.finish()
     
     # === 获取背包物品 ===
-    back_msg = _sql_message().get_back_msg(user_id)
+    back_msg = _sql_message().get_back_msg(user_id, compact=True)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -960,7 +960,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()
 
-    back_msg = _sql_message().get_back_msg(user_id)  # 背包sql信息,list(back)
+    back_msg = _sql_message().get_back_msg(user_id, compact=True)
     if not back_msg:
         msg = "道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1564,8 +1564,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     # 祈愿石由结算服务按原始请求数量校验库存，确保同一消息可以幂等重放。
     if goods_id != 20005:
         replay_safe_item_ids = {20001, 20007, 20012, 20013, 20018}
-        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_id not in replay_safe_item_ids:
+            goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
             if goods_num <= 0:
                 msg = f"背包中没有足够的 {item_name} ！"
                 await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -2079,7 +2079,7 @@ async def chakan_wupin_(
     await chakan_wupin.finish()
 
 def _build_main_backpack_sections_for_md(user_id: str):
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, compact=True)
     if not back_data:
         return []
 

@@ -365,7 +365,7 @@ def get_user_main_back_msg(user_id):
     获取背包内的所有物品信息（已装备的装备会显示在前面）
     """
     l_msg = []
-    user_backs = _sql_message().get_back_msg(user_id)  # list(back)
+    user_backs = _sql_message().get_back_msg(user_id, compact=True)
     if not user_backs:
         return l_msg
     

@@ -1177,11 +1177,11 @@ class ActivityReadModelApplication:
         if selected is not None:
             key = str(selected["key"])
             rows = self.repository.boss_snapshot(str(user_id), [key], today)
-            position, _ = self.repository.board_position("boss", key, str(user_id))
+            row = rows.get(key, {})
             return self._status_block(
                 selected,
-                rows.get(key, {}),
-                rank_position=max(0, int(position)),
+                row,
+                rank_position=max(0, int(row.get("rank_position") or 0)),
                 multiple_active=multiple,
             )
         active = self._active_bosses(activities)
@@ -1193,12 +1193,12 @@ class ActivityReadModelApplication:
         blocks = []
         for activity in active:
             key = str(activity["key"])
-            position, _ = self.repository.board_position("boss", key, str(user_id))
+            row = rows.get(key, {})
             blocks.append(
                 self._status_block(
                     activity,
-                    rows.get(key, {}),
-                    rank_position=max(0, int(position)),
+                    row,
+                    rank_position=max(0, int(row.get("rank_position") or 0)),
                     multiple_active=multiple,
                 )
             )

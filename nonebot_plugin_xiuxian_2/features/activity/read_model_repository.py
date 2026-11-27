@@ -432,6 +432,16 @@ class ActivityReadModelSqlRepository:
                 f"WHERE activity_key IN ({placeholders}) AND user_id=?",
                 (*keys, str(user_id)),
             )
+            own_damage = {str(row["activity_key"]): row for row in damage_rows}
+            positions = {
+                key: self.board_position_in_uow(
+                    uow, "boss", key, str(user_id), tables=tables,
+                    own_row=(own_damage.get(key, {})
+                             if key == key.strip() and str(user_id) == str(user_id).strip()
+                             else None),
+                )[0]
+                for key in keys
+            }
             fight_rows = uow.query_all(
                 "SELECT activity_key,COUNT(*) AS fight_count FROM activity_boss_fight_log "
                 f"WHERE activity_key IN ({placeholders}) AND user_id=? AND fight_date=? "
@@ -501,6 +511,9 @@ class ActivityReadModelSqlRepository:
             result.setdefault(str(row["activity_key"]), {}).setdefault(
                 "rank_claimed", set()
             ).add(str(row["tier_key"]))
+        for key, position in positions.items():
+            if key in result or position > 0:
+                result.setdefault(key, {})["rank_position"] = position
         return result
 
     def boss_rank(self, activity_key: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -707,21 +720,27 @@ class ActivityReadModelSqlRepository:
         source: str,
         activity_key: str,
         user_id: str,
+        *,
+        tables: set[str] | None = None,
+        own_row: Mapping[str, Any] | None = None,
     ) -> tuple[int, int]:
         """``board_position`` inside the caller's already-open read-only unit.
 
         ``overview_snapshot`` uses this so the whole personal overview stays
-        ONE read-only unit of work instead of one per board.
+        ONE read-only unit of work instead of one per board. Optional sign or
+        boss rows must come from that same unit; an empty mapping means absent.
         """
         source = str(source or "").strip()
         uid = str(user_id or "").strip()
         key = str(activity_key).strip()
         if not uid or not self.database.is_file():
             return 0, 0
+        if tables is None:
+            tables = self._table_names(uow)
         if source == "sign":
-            if "activity_user" not in self._table_names(uow):
+            if "activity_user" not in tables:
                 return 0, 0
-            mine = uow.query_one(
+            mine = own_row if own_row is not None else uow.query_one(
                 "SELECT sign_days,total_sign_days,last_sign_date FROM activity_user "
                 "WHERE user_id=?",
                 (uid,),
@@ -744,9 +763,9 @@ class ActivityReadModelSqlRepository:
         if source == "boss":
             if not key:
                 return 0, 0
-            if "activity_boss_damage" not in self._table_names(uow):
+            if "activity_boss_damage" not in tables:
                 return 0, 0
-            mine = uow.query_one(
+            mine = own_row if own_row is not None else uow.query_one(
                 "SELECT total_damage FROM activity_boss_damage "
                 "WHERE activity_key=? AND user_id=?",
                 (key, uid),
@@ -764,7 +783,7 @@ class ActivityReadModelSqlRepository:
         if spec is None or not key:
             return 0, 0
         table, self_sql, better_sql, _total_sql = spec
-        if table not in self._table_names(uow):
+        if table not in tables:
             return 0, 0
         mine = uow.query_one(self_sql, (key, uid))
         value = max(0, as_int_like((mine or {}).get("value")))
@@ -1057,8 +1076,7 @@ class ActivityReadModelSqlRepository:
             required.add("activity_point_balance")
 
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            self._assert_tables(uow, required)
-            tables = self._table_names(uow)
+            tables = self._assert_tables(uow, required)
             sign = uow.query_one(
                 "SELECT sign_days,last_sign_date,total_sign_days FROM activity_user "
                 "WHERE user_id=?",
@@ -1170,6 +1188,7 @@ class ActivityReadModelSqlRepository:
                     )
                 }
             boss_progress: dict[str, dict[str, Any]] = {}
+            own_damage: dict[str, dict[str, Any]] = {}
             boss_keys = tuple(
                 dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
             )
@@ -1203,6 +1222,7 @@ class ActivityReadModelSqlRepository:
                         f"WHERE activity_key IN ({boss_placeholders}) AND user_id=?",
                         (*boss_keys, str(user_id)),
                     ):
+                        own_damage[str(row["activity_key"])] = row
                         boss_progress[str(row["activity_key"])]["damage"] = max(
                             0, int(row["total_damage"] or 0)
                         )
@@ -1265,6 +1285,23 @@ class ActivityReadModelSqlRepository:
             boss_board_keys = tuple(
                 dict.fromkeys(str(key) for key in boss_activity_keys if str(key))
             )
+            positions: dict[tuple[str, str], int] = {}
+
+            def position_for(source: str, key: str) -> int:
+                identity = str(source or "").strip(), str(key).strip()
+                if identity not in positions:
+                    own_row = None
+                    if identity[0] == "sign" and str(user_id) == str(user_id).strip():
+                        own_row = sign
+                    elif (identity[0] == "boss" and identity[1] in boss_progress
+                          and str(user_id) == str(user_id).strip()):
+                        own_row = own_damage.get(identity[1], {})
+                    position, _ = self.board_position_in_uow(
+                        uow, source, key, str(user_id), tables=tables, own_row=own_row
+                    )
+                    positions[identity] = max(0, int(position))
+                return positions[identity]
+
             for source in board_sources:
                 # The boss damage tables are keyed by the boss gameplay
                 # activity's own key, not the main activity key; without this
@@ -1275,19 +1312,13 @@ class ActivityReadModelSqlRepository:
                     if str(source) == "boss" and boss_board_keys
                     else str(activity_key)
                 )
-                position, _ = self.board_position_in_uow(
-                    uow, str(source), source_key, str(user_id)
-                )
-                board_positions[str(source)] = max(0, int(position))
+                board_positions[str(source)] = position_for(str(source), source_key)
             # Per-boss-activity rank positions: with multiple boss activities
             # one shared "boss" position would match one boss's rank against
             # another boss's reward tiers.
             boss_board_positions: dict[str, int] = {}
             for boss_key in boss_board_keys:
-                position, _ = self.board_position_in_uow(
-                    uow, "boss", boss_key, str(user_id)
-                )
-                boss_board_positions[boss_key] = max(0, int(position))
+                boss_board_positions[boss_key] = position_for("boss", boss_key)
             # Optional per-event daily totals for the points progress line;
             # the event log is optional so older databases get None (the
             # progress segment then renders without the 今日 part).

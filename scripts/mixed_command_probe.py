@@ -740,6 +740,8 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                   for operation in RANK_OPERATIONS}
     live_reads = {name: {"statements": 0, "total_ms": 0.0} for name in
                   ("full_profile", "single_goods_total", "batch_goods_totals")}
+    stage_reads = {name: {"statements": 0, "total_ms": 0.0} for name in
+                   ("sign_own", "boss_own", "boss_better", "inventory_full", "inventory_compact")}
     for (_, sql), values in recorder.by_sql.items():
         operation = rank_operation(sql)
         if operation is not None:
@@ -749,6 +751,20 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                 totals[phase] += values[phase]
             totals["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         upper = sql.upper()
+        stage_category = None
+        if upper.startswith("SELECT SIGN_DAYS,") and "FROM ACTIVITY_USER WHERE USER_ID" in upper:
+            stage_category = "sign_own"
+        elif upper.startswith("SELECT TOTAL_DAMAGE FROM ACTIVITY_BOSS_DAMAGE"):
+            stage_category = "boss_own"
+        elif upper.startswith("SELECT COUNT(*) AS BETTER FROM ACTIVITY_BOSS_DAMAGE"):
+            stage_category = "boss_better"
+        elif upper.startswith("SELECT * FROM BACK WHERE USER_ID") and "GOODS_NUM >= 1" in upper:
+            stage_category = "inventory_full"
+        elif upper.startswith("SELECT GOODS_ID,GOODS_NAME,GOODS_TYPE,GOODS_NUM,BIND_NUM,STATE FROM BACK"):
+            stage_category = "inventory_compact"
+        if stage_category is not None:
+            stage_reads[stage_category]["statements"] += values["count"]
+            stage_reads[stage_category]["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         category = None
         if upper.startswith("SELECT * FROM USER_XIUXIAN WHERE USER_ID"):
             category = "full_profile"
@@ -770,6 +786,8 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
     metrics["exact_rank_scans"] = ranks
     metrics["live_read_io"] = {name: {field: round(value, 3) for field, value in counts.items()}
                                for name, counts in live_reads.items()}
+    metrics["stage_read_io"] = {name: {field: round(value, 3) for field, value in counts.items()}
+                                for name, counts in stage_reads.items()}
     metrics["exact_rank_operations"] = {
         operation: {field: round(value, 3) if value is not None else None
                     for field, value in totals.items()}
@@ -1270,6 +1288,7 @@ async def run(args, identity):
         "sect-seek-v25": "tests.mixed_sect_seek_fixture",
         "inventory-projection-v26": "tests.mixed_inventory_projection_fixture",
         "live-read-v28": "tests.mixed_live_read_fixture",
+        "overview-stage-v29": "tests.mixed_overview_stage_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1438,7 +1457,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26", "live-read-v28"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26", "live-read-v28", "overview-stage-v29"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)
