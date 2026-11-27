@@ -133,7 +133,7 @@ def test_auto_listing_reason_is_not_raised_as_unknown_status():
             patch.object(trade, "_sql_message", return_value=message_store), \
             patch.object(trade.items, "get_data_by_item_id", return_value={"type": "装备", "level": "下品法器"}), \
             patch.object(trade, "get_trade_forbid_reason", return_value=""), \
-            patch.object(trade, "get_xianshi_min_price", return_value=600000), \
+            patch.object(trade.trade_application, "xianshi_minimum_prices", return_value={"法器": 600000}), \
             patch.object(trade.trade_application, "xianshi_list_plan", return_value=rejected), \
             patch.object(trade, "handle_send", captured):
         with pytest.raises(FinishedException):
@@ -141,3 +141,57 @@ def test_auto_listing_reason_is_not_raised_as_unknown_status():
     reply = captured.call_args.args[2]
     assert "仙肆自动上架回执保存失败" in reply
     assert "auto-op" in reply
+
+
+def test_auto_listing_reuses_equipment_rows_and_batches_only_tradable_names():
+    bot, event = _bot(), _event()
+    bag = [
+        {"goods_id": 1001, "goods_name": "equipped", "goods_type": "装备",
+         "goods_num": 3, "bind_num": 1, "state": 1},
+        {"goods_id": 1002, "goods_name": "spare", "goods_type": "装备",
+         "goods_num": 4, "bind_num": 1, "state": 0},
+        {"goods_id": 1003, "goods_name": "forbidden", "goods_type": "装备",
+         "goods_num": 4, "bind_num": 0, "state": 0},
+    ]
+    names_read = []
+    huge = 10 ** 40
+
+    def minimums(names):
+        names_read.append(list(names))
+        return {"equipped": huge}
+
+    message_store = SimpleNamespace(get_back_msg=lambda _: bag)
+    rejected = XianshiPlanListingResult(
+        "state_changed", "seller", 2,
+        reason="xianshi_plan_listing_receipt_write_rejected", subject="auto-op",
+    )
+    with patch.object(trade, "assign_bot", new=AsyncMock(return_value=(bot, None))), \
+            patch.object(trade, "check_user", return_value=(True, {"user_id": "seller", "stone": 10 ** 50}, "")), \
+            patch.object(trade, "_sql_message", return_value=message_store), \
+            patch.object(trade.items, "get_data_by_item_id", return_value={"type": "装备", "item_type": "法器", "level": "下品法器"}), \
+            patch.object(trade, "get_trade_forbid_reason", side_effect=lambda key, _: "forbidden" if key == 1003 else ""), \
+            patch.object(trade, "check_equipment_use_msg", wraps=trade.check_equipment_use_msg) as equipped, \
+            patch.object(trade.trade_application, "xianshi_minimum_prices", side_effect=minimums) as prices, \
+            patch.object(trade, "get_recover", return_value=321) as recover, \
+            patch.object(trade.trade_application, "xianshi_list_plan", return_value=rejected) as list_plan, \
+            patch.object(trade, "handle_send", new=AsyncMock()):
+        with pytest.raises(FinishedException):
+            asyncio.run(trade.xianshi_auto_add_(bot, event, SimpleNamespace(extract_plain_text=lambda: "装备 法器 2")))
+    assert names_read == [["equipped", "spare"]]
+    prices.assert_called_once()
+    assert [call.kwargs["back_item"] for call in equipped.call_args_list] == bag
+    recover.assert_called_once_with(1002, 1)
+    assert list_plan.call_args.kwargs["stamina_cost"] == 30
+    assert list_plan.call_args.kwargs["listing_plan"] == [
+        {"goods_id": 1001, "name": "equipped", "goods_type": "装备", "price": huge, "quantity": 1},
+        {"goods_id": 1002, "name": "spare", "goods_type": "装备", "price": 1000321, "quantity": 2},
+    ]
+
+
+def test_single_minimum_price_uses_fresh_projection_and_keeps_missing_none():
+    with patch.object(trade.trade_application, "xianshi_minimum_prices",
+                      side_effect=[{"item": 10 ** 40}, {"item": 9}, {}]) as query:
+        assert trade.get_xianshi_min_price("item") == 10 ** 40
+        assert trade.get_xianshi_min_price("item") == 9
+        assert trade.get_xianshi_min_price("missing") is None
+    assert [call.args for call in query.call_args_list] == [(("item",),), (("item",),), (("missing",),)]

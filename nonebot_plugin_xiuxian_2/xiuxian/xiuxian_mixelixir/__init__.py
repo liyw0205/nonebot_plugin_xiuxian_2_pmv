@@ -655,35 +655,46 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await handle_send(bot, event, msg, md_type="炼丹", k1="丹药", v1="丹药背包", k2="药材", v2="药材背包", k3="帮助", v3="炼丹帮助")
             await mix_make.finish()
 
-        check, zhuyao_goods_id = await check_yaocai_name_in_back(user_id, zhuyao_name, zhuyao_num)
+        user_back = _sql_message().get_back_msg(user_id) or []
+        check, zhuyao_goods_id = await check_yaocai_name_in_back(
+            user_id, zhuyao_name, zhuyao_num, back_rows=user_back
+        )
         if not check:
             msg = f"请检查主药：{zhuyao_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
-        check, yaoyin_goods_id = await check_yaocai_name_in_back(user_id, yaoyin_name, yaoyin_num)
+        check, yaoyin_goods_id = await check_yaocai_name_in_back(
+            user_id, yaoyin_name, yaoyin_num, back_rows=user_back
+        )
         if not check:
             msg = f"请检查药引：{yaoyin_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
-        check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num)
+        check, fuyao_goods_id = await check_yaocai_name_in_back(
+            user_id, fuyao_name, fuyao_num, back_rows=user_back
+        )
         if not check:
             msg = f"请检查辅药：{fuyao_name} 是否在背包中，或者数量是否足够！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
             await mix_make.finish()
         if zhuyao_name == fuyao_name:
-            check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num + zhuyao_num)
+            check, fuyao_goods_id = await check_yaocai_name_in_back(
+                user_id, fuyao_name, fuyao_num + zhuyao_num, back_rows=user_back
+            )
             if not check:
                 msg = f"请检查主药：{zhuyao_name} 是否在背包中，或者数量是否足够！"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()
         if yaoyin_name == fuyao_name:
-            check, fuyao_goods_id = await check_yaocai_name_in_back(user_id, fuyao_name, fuyao_num + yaoyin_num)
+            check, fuyao_goods_id = await check_yaocai_name_in_back(
+                user_id, fuyao_name, fuyao_num + yaoyin_num, back_rows=user_back
+            )
             if not check:
                 msg = f"请检查药引：{yaoyin_name} 是否在背包中，或者数量是否足够！"
                 await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
                 await mix_make.finish()
 
-        check, ldl_info = await check_ldl_name_in_back(user_id, ldl_name)
+        check, ldl_info = await check_ldl_name_in_back(user_id, ldl_name, back_rows=user_back)
         if not check:
             msg = f"请检查炼丹炉：{ldl_name} 是否在背包中！"
             await handle_send(bot, event, msg, md_type="炼丹", k1="炼丹", v1="配方", k2="信息", v2="我的炼丹信息", k3="丹药", v3="丹药背包")
@@ -712,7 +723,6 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 furnace_id = int(ldl_info.get("goods_id") or 0)
             if furnace_id <= 0:
                 # 从背包反查丹炉 id
-                user_back = _sql_message().get_back_msg(user_id) or []
                 for back in user_back:
                     if back.get("goods_type") == "炼丹炉" and str(back.get("goods_name")) == ldl_name:
                         furnace_id = int(back["goods_id"])
@@ -741,10 +751,8 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 else:
                     main_dan = 0
                 # 功法炼丹经验加成
-                main_dan_exp = UserBuffDate(user_id).get_user_main_buff_data()
-
-                if main_dan_exp != None:  # 功法炼丹经验加成
-                    main_exp = main_dan_exp['dan_exp']
+                if main_dan_data != None:  # 功法炼丹经验加成
+                    main_exp = main_dan_data['dan_exp']
                 else:
                     main_exp = 0
 
@@ -822,10 +830,10 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
                 await mix_make.finish()
 
 
-async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
+async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num, *, back_rows=None):
     flag = False
     goods_id = 0
-    user_back = _sql_message().get_back_msg(user_id) or []
+    user_back = back_rows if back_rows is not None else (_sql_message().get_back_msg(user_id) or [])
     for back in user_back:
         if back['goods_type'] == '药材':
             if Items().get_data_by_item_id(back['goods_id'])['name'] == yaocai_name:
@@ -840,10 +848,10 @@ async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num):
     return flag, goods_id
 
 
-async def check_ldl_name_in_back(user_id, ldl_name):
+async def check_ldl_name_in_back(user_id, ldl_name, *, back_rows=None):
     flag = False
     goods_info = {}
-    user_back = _sql_message().get_back_msg(user_id) or []
+    user_back = back_rows if back_rows is not None else (_sql_message().get_back_msg(user_id) or [])
     for back in user_back:
         if back['goods_type'] == '炼丹炉':
             if back['goods_name'] == ldl_name:

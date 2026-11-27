@@ -86,7 +86,7 @@ class NatalTreasure:
             return None
         return {**row, "form": form}
 
-    def _ensure_record(self):
+    def _ensure_record(self, *, return_record=False):
         """
         确保用户在本命法宝表中的记录存在，并检查/添加所有必要的字段。
         此方法会在每次访问法宝数据前调用，以兼容旧数据结构更新。
@@ -120,10 +120,15 @@ class NatalTreasure:
         }
         
         # 逐个检查字段是否存在并添加，以兼容旧数据
-        record = _player_data_manager().get_fields(self.user_id, self.table)
+        manager = _player_data_manager()
+        record = (
+            manager.get_fields(self.user_id, self.table, raise_errors=True)
+            if return_record else manager.get_fields(self.user_id, self.table)
+        )
         
         # 记录是否存在（判断是否是首次创建）
         is_new_record = not bool(record)
+        repaired = is_new_record
 
         if is_new_record: # 如果用户在表中完全没有记录，则创建
             for field, default_value in default_data.items():
@@ -135,10 +140,21 @@ class NatalTreasure:
                 # 如果这个字段在数据库中不存在或值为None，则设置默认值
                 # 这里get_fields会尝试反序列化，所以如果存的是JSON字符串，会返回字典
                 if field not in record or record.get(field) is None: 
+                    repaired = True
                     # 只有当字段不存在于record中，或者其值为None时，才设置默认值
                     store_value = json.dumps(default_value) if isinstance(default_value, dict) else default_value
                     _player_data_manager().update_or_write_data(self.user_id, self.table, field, store_value, data_type=type(default_value).__name__.upper() if not isinstance(default_value, dict) else 'TEXT')
         self._natal_data_cache = None # 清除缓存，以便下次从数据库加载最新数据
+        if return_record:
+            # Read back repairs instead of substituting unverified defaults.
+            return manager.get_fields(self.user_id, self.table, raise_errors=True) if repaired else record
+
+    def read_battle_data(self) -> dict | None:
+        """Resolve one fresh battle projection, retaining legacy repairs."""
+        data = self._ensure_record(return_record=True)
+        if not data or data.get("form") is None or data.get("form") == 0:
+            return None
+        return self._decode_data(data)
 
     def exists(self) -> bool:
         """
@@ -161,7 +177,11 @@ class NatalTreasure:
         data = _player_data_manager().get_fields(self.user_id, self.table)
         if not data:
             return None
-        
+
+        self._natal_data_cache = self._decode_data(data)
+        return self._natal_data_cache
+
+    def _decode_data(self, data):
         # 将从数据库读取的字符串类型数字转换为实际的int/float类型
         processed_data = {}
         for k, v in data.items():
@@ -178,8 +198,7 @@ class NatalTreasure:
             else:
                 processed_data[k] = v
         
-        self._natal_data_cache = {k: v for k, v in processed_data.items() if v is not None} # 过滤掉值为None的字段并缓存
-        return self._natal_data_cache
+        return {k: v for k, v in processed_data.items() if v is not None}
 
     def update_data(self, field: str, value):
         """

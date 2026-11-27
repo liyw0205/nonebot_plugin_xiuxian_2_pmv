@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import importlib
 from pathlib import Path
+from unittest.mock import patch
 
 import nonebot
 
@@ -44,8 +45,18 @@ def test_mixelixir_facade_defers_sql_manager_construction():
     ).read_text(encoding="utf-8")
     assert "_sql_message_instance = None" in source
     assert "def _sql_message(" in source
-    assert source.count("_sql_message().get_back_msg(") == 4
     assert "sql_message = XiuxianDateManage()" not in source
+    mixelixir = importlib.import_module(
+        "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_mixelixir"
+    )
+    with (
+        patch.object(mixelixir, "_sql_message_instance", None),
+        patch.object(mixelixir, "XiuxianDateManage") as constructor,
+    ):
+        constructor.assert_not_called()
+        assert mixelixir._sql_message() is constructor.return_value
+        assert mixelixir._sql_message() is constructor.return_value
+        constructor.assert_called_once_with()
 
 
 class MixelixirHarvestLevelUpgradeTests(unittest.TestCase):

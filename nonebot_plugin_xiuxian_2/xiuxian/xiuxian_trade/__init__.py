@@ -543,10 +543,7 @@ AUCTION_ACTIVITY_BUTTONS = {
 # 获取仙肆物品的最低价格
 def get_xianshi_min_price(item_name: str) -> int | None:
     """获取仙肆中指定物品的最低价格"""
-    items_in_xianshi = trade_application.xianshi_get_items(name=item_name)
-    if not items_in_xianshi:
-        return None
-    return min(item['price'] for item in items_in_xianshi)
+    return trade_application.xianshi_minimum_prices((item_name,)).get(item_name)
 
 
 # 计算仙肆手续费
@@ -1032,7 +1029,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         if type_match and rank_match:
             # 对于装备类型，检查是否已被使用
             if item['goods_type'] == "装备":
-                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
+                is_equipped = check_equipment_use_msg(user_id, item['goods_id'], back_item=item)
                 if is_equipped:
                     # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
                     available_num = item['goods_num'] - item['bind_num'] - 1
@@ -1062,12 +1059,15 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     # === 批量处理逻辑 ===
     processed_items_summary = []
     total_fees_to_deduct = 0
+
+    items_to_add = [item for item in items_to_add
+                    if not get_trade_forbid_reason(item['id'], item['info'])]
+    minimum_prices = trade_application.xianshi_minimum_prices(
+        item['name'] for item in items_to_add
+    )
     
     for item in items_to_add:
-        if get_trade_forbid_reason(item['id'], item['info']): # 跳过禁止交易的物品
-            continue
-
-        min_price_in_xianshi = get_xianshi_min_price(item['name'])
+        min_price_in_xianshi = minimum_prices.get(item['name'])
         
         if min_price_in_xianshi is None: # 如果仙肆中没有该物品，则根据炼金价+100万设定价格
             price_for_item = int(get_recover(item['id'], 1) + 1000000)

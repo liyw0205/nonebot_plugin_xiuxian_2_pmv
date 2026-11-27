@@ -913,16 +913,15 @@ class XiuxianDateManage:
         """根据USER_ID获取用户信息,获取属性"""
         player = {"user_id": None, "道号": None, "气血": None, "攻击": None, "真元": None, '会心': None, '防御': 0}
         userinfo = sql_message.get_user_real_info(user_id)
-        user_weapon_data = UserBuffDate(userinfo['user_id']).get_user_weapon_data()
+        user_buff = UserBuffDate(userinfo['user_id'])
+        user_weapon_data = user_buff.get_user_weapon_data()
 
-        impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-        boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
-        impart_atk_per = impart_data['impart_atk_per'] if impart_data is not None else 0
-        user_armor_data = UserBuffDate(userinfo['user_id']).get_user_armor_buff_data()
-        user_main_data = UserBuffDate(userinfo['user_id']).get_user_main_buff_data()
-        user1_sub_buff_data = UserBuffDate(userinfo['user_id']).get_user_sub_buff_data()
-        integral_buff = user1_sub_buff_data['integral'] if user1_sub_buff_data is not None else 0
-        exp_buff = user1_sub_buff_data['exp'] if user1_sub_buff_data is not None else 0
+        boss_atk = 0
+        if boss:
+            impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
+            boss_atk = impart_data['boss_atk'] if impart_data and impart_data['boss_atk'] is not None else 0
+        user_armor_data = user_buff.get_user_armor_buff_data()
+        user_main_data = user_buff.get_user_main_buff_data()
 
         if user_main_data != None:
             main_crit_buff = user_main_data['crit_buff']
@@ -4571,7 +4570,14 @@ def final_user_data(user_data, columns):
     if not user_id:
         return user_dict
 
-    final_attr = get_final_attributes(user_id, ratio=1.0, include_current=True)
+    final_attr = get_final_attributes(
+        user_id,
+        ratio=1.0,
+        include_current=True,
+        base_provider=lambda current_user_id: get_base_attributes(
+            current_user_id, user_info=user_dict
+        ),
+    )
     if not final_attr:
         return user_dict
 

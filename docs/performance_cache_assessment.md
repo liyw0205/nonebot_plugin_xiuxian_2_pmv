@@ -3560,3 +3560,171 @@ execute/fetch and observer effects, not SQLite engine time alone.
   complete gate. This batch leaves repository-wide performance goal active:
   training full aggregates, remaining honor sorts, arena-write/history loads,
   unsampled commands and sustained capacity still require separate evidence.
+
+## V19: Shared Read Stages Across Callers (2026-11-27)
+
+This batch follows shared query patterns across modules, using the existing
+674-matcher inventory and SQL/call-chain evidence. It adds no personal-value
+cache, generic table/column interpolation, reward unification or connection
+pool. V18 is delivered at `f070512f3003f0826ed494098dac343929fd2792`;
+its exact-SHA CI45917262107 passed and its accepted gates were not repeated.
+
+| Shared entry and actual callers | Removed database work | Live/transaction boundary |
+| --- | --- | --- |
+| `get_players_attributes`: 8 direct caller functions across PvE/PvP/BOSS, arena, dungeon, rift, buff and an old transaction adapter | Default Buff reads 2 -> 1/player; natal normal awakened reads 4 -> 1, unawakened 2 -> 1 | Only synchronous assembly reuses the row. Custom provider ABI and explicit rift readonly providers remain. Missing natal records/columns are repaired then actually reread; read failures propagate. The old adapter's active status is unproved. |
+| `final_user_data` / `get_player_data`: 2 direct dynamic-player consumers (training puppet and heart-devil tribulation) | Reuse supplied full profile, 4 local Buff readers -> 1; whole chain 5 -> 2. Non-boss unused impart read removed (2 -> 1 across chain) | Boss-specific impart remains live; no reuse across requests/writes. Eight battle functions and two consumers are static function counts, not runtime command coverage. |
+| Refining preflight (1 command), fusion (2), automatic listing (1) | Refining normal 4/worst 7 whole-bag reads -> 1, main skill 2 -> 1; fusion builds one goods index, equipment checks consume already-read rows; automatic listing removes K equipment point reads | Helpers retain standalone live fallback and distinguish empty supplied rows. Material order, equipped reservations, fees, ledger/CAS, replay and authoritative transactional checks remain. Fusion's pre-existing incomplete transactional equipment-state recheck is not expanded into a concurrency guarantee. |
+| Xianshi minimum price: automatic and fast listing (2 commands, automatic overlaps preceding row) | K readonly scopes/complete listing materializations -> one readonly scope, <=256-name chunks, `id,name,price` projection and 128-row streaming | Every matched price still receives exact integer validation, including nonminimum bad REAL values; no SQL MIN shortcut, unmatched-price rejection or decision cache. Missing files/tables remain uncreated. |
+| `buffinfo_` (my skills, 1 command) | Nonempty five-slot display 9 Buff reads -> 1 (empty slots 5 -> 1) | One synchronous reader supplies slot names and description IDs; next request reads fresh. No write or await crosses that reuse stage. |
+
+Inventory/price rows cover five distinct command surfaces after overlap, plus
+one skill command; these cannot be added to battle function counts as matcher
+coverage. The inventory's 13 positively linked battle matchers are static
+reachability only, with dynamic-call uncertainty retained. Equipment display
+already passed backpack rows at V18 and is an unchanged control, not a new
+V19 N+1 saving. Fusion's artificial duplicate-row test checks indexing and
+first-row/accumulation behavior; it does not prove equivalent equipped-state
+semantics for inconsistent data bypassing the normal unique(user,goods)
+migration. Simple exp/stone domain helpers and distinct settlements remain.
+
+### Frozen Representative Pair
+
+- Reused the sole retained 1M synthetic fixture at
+  `/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05` and its rank digest
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`.
+  Before code was archived from V18 before edits, without another large DB.
+  Valid reports in `data/` are `shared-query-before-v19-20261127-r03.json`,
+  `shared-query-after-v19-20261127-r01.json` and offline
+  `shared-query-comparison-v19-20261127-r01.json`.
+- Runtime source hashes `3ad0cc47b2e9a29fb55a92554ca387b5b4ec40d02529a8cf5fbc8a1e2f77ac77`
+  -> `5908632b5f5b2c66c151112bff69a956039fe6350fde372323f3ee9c10134e98`
+  differ in exactly the ten scoped runtime files. Driver hashes, 1M manifest,
+  limits, phase specs, every request and business seed/phase manifests match.
+  Only diagnostic compatibility-hit JSON and its derived seed digest are
+  excluded from business equality. Original digests/restoration match.
+- Both versions issue384 real matcher/DI/handler requests in three128-request
+  phases: pure cap10 at20 arrivals/s, mixed cap20 at35/s, contention cap20
+  at50/s. Each retains56 exact personal profiles; skills/equipment receive
+  36 each in pure and20 each in both mixed phases; each mixed phase also has
+  32 real distinct-user training writes, exp+100 and stone-1000. One instance
+  and isolated DB serve all users in a phase; drain and invariants precede
+  snapshot restore. The QQ transport alone is mocked.
+- New feature data fills all five skill slots and eight equipment rows per
+  actor (128 actors), two equipped slots, quantity20..22 and bound0..1.
+  Actual full tables contain2688 backpack and128 BuffInfo rows; all rows and
+  columns are hashed in <=32768-row bounded streams. Retained populations
+  include8192 avatar/title rows each,4096 pending mentor applications,
+  8192 activity users and32768 rows each for point/pass/boss balances.
+  Those activity tables are not the targets here. Neither automatically
+  listing, refining/fusion actions nor actual battle latency is measured by
+  this pair: their evidence is query-count/behavior/transaction regression.
+- First before-r01 failed the new oracle's forward-envelope decoding; r02
+  then mistook ordinary `[CQ:at,...]` text for a Python list. Both stopped
+  after pure128, restored1M successfully and remain INVALID benchmark
+  reports. Only bounded known transport envelopes/CQ text were fixed, not
+  product output, workload, cooldowns or success criteria. All128 captured
+  replies from each were reclassified offline before r03; ten focused oracle
+  cases passed. These failures are retained, not counted as before evidence.
+- Valid pairs are384/384 successful each, zero business/cooldown refusals,
+  exceptions, timeouts, SQL errors, busy/locked or boundary failures (0%).
+  Exact profile/rank responses, exp/stone/power changes, generation increments,
+  durable receipts/ledger identity, unchanged nonwriters/inventory/BuffInfo/
+  other attributes/features/JSON and original1M restoration all pass. No
+  duplicate debit/reward, negative balance, lost update or deadlock observed;
+  the new equipment/skill actors are unique within each phase, not a new
+  same-inventory writer-contention proof.
+
+E2E includes producer, dispatch and admission queues; milliseconds below are
+p50/p95/p99 before -> after. All rows have0% errors/refusals/timeouts.
+SQL includes control APIs and execute/fetch observer effects. Eleven rows
+cover four commands, not all674 matchers/41 background entries. Small n20
+tails are maxima, not stable population p99 estimates.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / equipment control |36|8.632/9.492/16.471 ->8.544/10.484/16.949|432 ->432|21.882 ->23.126|
+| pure / profile |56|16.004/24.473/111.426 ->15.799/22.560/107.479|2259 ->2256|121.354 ->124.179|
+| pure / skills |36|9.825/12.877/61.043 ->8.531/14.214/38.243|723 ->435|36.991 ->28.114|
+| mixed / equipment control |20|8.533/34.253/85.187 ->8.768/28.042/34.494|240 ->240|14.290 ->15.927|
+| mixed / profile |56|20.858/82.385/105.148 ->20.462/84.546/103.723|2266 ->2266|174.279 ->162.256|
+| mixed / skills |20|9.458/25.212/29.144 ->8.157/15.291/40.626|400 ->240|15.856 ->17.549|
+| mixed / stone training |32|36.847/68.851/76.253 ->36.107/68.737/74.903|1219 ->1219|167.356 ->158.192|
+| contention / equipment control |20|121.841/197.282/207.522 ->298.759/401.337/430.084|240 ->240|22.647 ->23.002|
+| contention / profile |56|153.383/209.150/223.264 ->325.666/401.138/474.541|2268 ->2265|339.730 ->314.056|
+| contention / skills |20|126.197/164.331/179.412 ->292.984/364.342/421.462|403 ->240|36.461 ->22.746|
+| contention / stone training |32|146.205/192.894/198.168 ->322.756/389.263/449.340|1216 ->1216|180.994 ->192.646|
+
+- Direct skill SQL confirms684 ->76 Buff SELECTs across76 requests:608
+  repeated reads removed, exactly9 ->1/request, no omitted diagnostic
+  statements/touches. Total skill SQL1526 ->915 includes three fewer setup
+  PRAGMAs; wall89.308 ->68.409ms. Mixed skill SQL wall and p99 nevertheless
+  regress, as do pure skill p95 and several unchanged-control measurements.
+  Whole-phase foreground+background SQL3988/4722/4679 ->3697/4561/4500,
+  wall399.224/599.854/866.636 ->386.644/583.035/832.448ms. This supports
+  removed IO, not a claim every path or every latency improved.
+- Successful short-window throughput20.130/35.157/49.623 ->
+  20.128/35.191/47.761/s; contention load window2.579426 ->2.680008s.
+  Peak admitted in-flight3/4/11 ->2/4/20; observed handler-wall overlap
+  2/2/8 ->2/2/13. Cap20 and offered50/s do not establish20 simultaneous
+  CPU/SQLite executions or sustained50 successful requests/s.
+- Competition regression is retained: after MainThread generation2 GC at
+  planned offset0.398s lasts143.428ms; before's longest GC is1.561ms.
+  After subsequently grows to40 sampled process threads (before19), with
+  higher matcher checking/dispatch/admission delays even for unchanged
+  equipment/writes. Producer p95/p99 3.121/4.070 ->21.159/121.086ms,
+  dispatch40.901/51.739 ->60.768/90.373ms and admission.008/.010 ->
+  .256/17.457ms; loop p95/p99 43.590/55.350 ->77.736/195.162ms.
+  These correlated observations identify a pause/queue component, not proof
+  V19 caused the GC or an exhaustive explanation for the regression. No GC
+  suppression, latency subtraction, load reduction or extra timing rerun was
+  used. Pure loop p95/p99 also regresses2.476/5.435 ->2.504/7.129ms;
+  mixed improves34.710/49.056 ->26.111/45.157ms. Current data cannot prove
+  a net contention-latency improvement; diagnosis remains part of the goal.
+- Live exp/stone generation deltas remain0/32/32. Rank worker calls
+  326/348/350 ->323/348/347, wall39.924/73.423/198.988 ->
+  41.190/67.068/170.937ms; pure wall regresses. Contention count2 ->1,
+  seeks110 ->112 and plans12 ->8 reflect scheduling/generation overlap,
+  not a changed rank algorithm. Cache hit/miss69/99,55/113,57/111 ->
+  69/99,55/113,55/113; evictions67/81/79 ->67/81/81, partial hits
+  91/30/54 ->91/28/57. Waits/expiry/explicit invalidations/bypass/oversized0;
+  end32 entries, maximum33353 estimated bytes under1MiB. Counters are phase
+  aggregates, not per-command hits; no public display or exact-rank cache
+  semantics changed. BEGIN counts720/848/848 match; p95/p99 .026/.299 ->
+  .029/.298, .018/.086 ->.017/.075, .042/.401 ->.043/.335ms. BEGIN
+  includes SQL execution and is only an upper bound on transaction wait.
+- Same shared lock,2/4 CPUs,1GiB AS,600CPU/1200wall seconds and
+  `MALLOC_ARENA_MAX=2`; RAM768MiB/disk2GiB preflight floors and RSS900MiB,
+  single/total WAL256MiB stops remain. No guard fired. Sampled RAM minimum
+  1583 ->1674MiB, free disk13441626112 ->13415948288 bytes, process peak
+  RSS266.141MiB both, sampled/final virtual maximum569.785 ->738.586MiB.
+  Single WAL18321672 bytes both; total WAL25585328 ->25581208, final WAL0.
+  Traffic-window reads1134592 ->335872/writes56307712 ->53714944 bytes;
+  final cumulative reads829267968 ->635256832/writes4262387712 ->
+  4261105664 include setup/snapshot restore. CPU58.721 ->57.936s,
+  process wall74.855 ->72.255s and restore13.600 ->13.725s are not
+  application throughput. Phase MainThread CPU1453.201/2150.469/2089.921
+  ->1397.433/2078.318/2199.006ms includes instrumentation; contention
+  phase CPU2.722 ->2.814s regresses. Observer overhead is uncalibrated and
+  cannot be subtracted or added to overlapping SQL CPU.
+- One consolidated affected run passed202 tests/69 subtests; three new
+  fixture errors (lazy-proxy patch teardown, SQLite INTEGER affinity and
+  missing catalog item_type) and the frozen-owner case blocked by the
+  protected manifest deletion were resolved together. Only those four failed
+  methods were rerun in a code-only tree:4 passed/4 subtests. Driver/index
+  incremental checks passed9/5; final transport oracle passed10/10, including
+  exact captured8-item output, CQ text, literal escapes, bounds and mutated
+  quantities/labels. Battle tests retain fresh reads, narrow-provider ABI,
+  readonly rift wiring, repair/read failure and boss impart; transaction
+  regressions retain material rollback, replay and equipment reservations.
+  Compile, architecture, inventory and whitespace passed in the code-only
+  acceptance tree with exact HEAD manifests; original user files/deletion
+  stayed untouched. Final transport changes receive incremental syntax/
+  whitespace checks. No old full suite, accepted phases or prior load was
+  rerun; delivered-SHA CI remains the clean complete gate.
+
+This is one shared-query batch, not completion of repository-wide performance
+work. Remaining evidence gaps include contention pause/DI scheduling, actual
+battle/refining/fusion/automatic-listing latency and writer contention,
+training full aggregates, remaining honor sorts, unsampled command chains
+and sustained capacity. Continue from these shared patterns and saved SQL
+evidence; do not repeat an unchanged million-user fixture per caller.

@@ -1219,31 +1219,33 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await buffinfo.finish()
 
     user_id = user_info['user_id']
-    mainbuffdata = UserBuffDate(user_id).get_user_main_buff_data()
+    buff_reader = UserBuffDate(user_id)
+    buff_info = buff_reader.BuffInfo
+    mainbuffdata = buff_reader.get_user_main_buff_data()
     if mainbuffdata != None:
-        s, mainbuffmsg = get_main_info_msg(str(get_user_buff(user_id)['main_buff']))
+        s, mainbuffmsg = get_main_info_msg(str(buff_info['main_buff']))
     else:
         mainbuffmsg = ''
         
-    subbuffdata = UserBuffDate(user_id).get_user_sub_buff_data()#辅修功法13
+    subbuffdata = buff_reader.get_user_sub_buff_data()#辅修功法13
     if subbuffdata != None:
-        sub, subbuffmsg = get_sub_info_msg(str(get_user_buff(user_id)['sub_buff']))
+        sub, subbuffmsg = get_sub_info_msg(str(buff_info['sub_buff']))
     else:
         subbuffmsg = ''
         
-    effect1buffdata = UserBuffDate(user_id).get_user_effect1_buff_data()
+    effect1buffdata = buff_reader.get_user_effect1_buff_data()
     if effect1buffdata != None:
-        effect1, effect1buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect1_buff']))
+        effect1, effect1buffmsg = get_effect_info_msg(str(buff_info['effect1_buff']))
     else:
         effect1buffmsg = ''
         
-    effect2buffdata = UserBuffDate(user_id).get_user_effect2_buff_data()
+    effect2buffdata = buff_reader.get_user_effect2_buff_data()
     if effect2buffdata != None:
-        effect2, effect2buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect2_buff']))
+        effect2, effect2buffmsg = get_effect_info_msg(str(buff_info['effect2_buff']))
     else:
         effect2buffmsg = ''
         
-    secbuffdata = UserBuffDate(user_id).get_user_sec_buff_data()
+    secbuffdata = buff_reader.get_user_sec_buff_data()
     secbuffmsg = get_sec_msg(secbuffdata) if get_sec_msg(secbuffdata) != '无' else ''
     msg = f"""
 **我的功法**

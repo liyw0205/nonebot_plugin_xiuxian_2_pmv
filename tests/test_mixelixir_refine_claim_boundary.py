@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import nonebot
 from nonebot.exception import FinishedException
@@ -65,15 +65,22 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
             application = MixelixirApplication(game, player)
             fake_items = SimpleNamespace(
                 get_data_by_item_id=lambda goods_id: {
-                    1: {"主药": {"type": "阳", "power": 1, "h_a_c": 1}},
-                    2: {"药引": {"h_a_c": 1}},
-                    3: {"辅药": {"type": "阴", "power": 1}},
+                    1: {"name": "草", "主药": {"type": "阳", "power": 1, "h_a_c": 1}},
+                    2: {"name": "引", "药引": {"h_a_c": 1}},
+                    3: {"name": "辅", "辅药": {"type": "阴", "power": 1}},
+                    4: {"buff": 0},
                     20: {"name": "试炼丹", "mix_all": 10, "mix_exp": 5},
                 }[int(goods_id)]
             )
             fake_event = SimpleNamespace(message_id="refine-message-1")
             fake_bot = SimpleNamespace(self_id="bot")
-            fake_buff = SimpleNamespace(get_user_main_buff_data=lambda: None)
+            fake_buff = SimpleNamespace(
+                get_user_main_buff_data=Mock(return_value={"dan_buff": 0, "dan_exp": 2})
+            )
+            fake_manager = SimpleNamespace(get_back_msg=Mock(return_value=[
+                {"goods_id": goods_id, "goods_name": name, "goods_type": "药材", "goods_num": 2}
+                for goods_id, name in ((1, "草"), (2, "引"), (3, "辅"))
+            ] + [{"goods_id": 4, "goods_name": "炉", "goods_type": "炼丹炉", "goods_num": 1}]))
             registered_handler = next(
                 handler for handler in module.mix_make.handlers
                 if handler.call is module.mix_make_
@@ -90,16 +97,7 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                     "check_user",
                     return_value=(True, {"user_id": "u", "mixelixir_num": 0}, ""),
                 ),
-                patch.object(
-                    module,
-                    "check_yaocai_name_in_back",
-                    new=AsyncMock(side_effect=[(True, 1), (True, 2), (True, 3)]),
-                ),
-                patch.object(
-                    module,
-                    "check_ldl_name_in_back",
-                    new=AsyncMock(return_value=(True, {"id": 4, "buff": 0})),
-                ),
+                patch.object(module, "_sql_message", return_value=fake_manager),
                 patch.object(module, "Items", return_value=fake_items),
                 patch.object(module, "tiaohe", new=AsyncMock(return_value=False)),
                 patch.object(module, "check_mix", new=AsyncMock(return_value=(True, 20))),
@@ -147,6 +145,9 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                     )
 
             self.assertEqual(refine_cost.call_count, 1)
+            fake_manager.get_back_msg.assert_called_once_with("u")
+            fake_buff.get_user_main_buff_data.assert_called_once_with()
+            self.assertEqual(refine_cost.call_args.kwargs["furnace_id"], 4)
             self.assertEqual(refine_reward.call_count, 2)
             self.assertEqual(send.await_count, 3)
             self.assertIn("内部异常", str(send.await_args_list[1].args[2]))
@@ -175,7 +176,7 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                     "SELECT 炼丹记录,炼丹经验 FROM mix_elixir_info WHERE user_id='u'"
                 ).fetchone()
                 self.assertEqual(json.loads(mix_state[0]), {"20": {"name": "试炼丹", "num": 1}})
-                self.assertEqual(mix_state[1], "5")
+                self.assertEqual(mix_state[1], "7")
                 self.assertEqual(
                     conn.execute('SELECT "炼丹次数" FROM statistics WHERE user_id=\'u\'').fetchone()[0],
                     1,

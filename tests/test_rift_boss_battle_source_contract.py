@@ -115,8 +115,9 @@ def test_rift_boss_player_snapshot_wires_item_lookup_provider():
     assert "item_data = item_provider(item_id)" in player_fight
     assert "buffs[\"宠物\"] = pet_provider(user_id)" in player_fight
     assert "final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)" in player_fight
-    assert "attribute_provider=get_rift_battle_final_attributes" in source
-    assert "buff_info_provider=get_rift_battle_buff_info" in source
+    assert "attribute_provider=battle_attributes" in source
+    assert "buff_info_provider=lambda _user_id: buff_info" in source
+    assert "buff_info_provider=buff_info_provider or get_rift_battle_buff_info" in source
     assert "accessory_provider=get_rift_battle_accessory_data" in source
     assert "tianti_provider=get_rift_battle_tianti_data" in source
     assert "base_provider=get_rift_battle_base_attributes" in source

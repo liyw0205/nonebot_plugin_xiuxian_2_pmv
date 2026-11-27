@@ -268,8 +268,7 @@ async def Boss_fight(
 
 
 def get_natal_data_for_battle(user_id):
-    natal_treasure = NatalTreasure(user_id)
-    return natal_treasure.get_data() if natal_treasure.exists() else None
+    return NatalTreasure(user_id).read_battle_data()
 
 
 def get_players_attributes(
@@ -284,7 +283,6 @@ def get_players_attributes(
 ):
     item_provider = item_provider or items.get_data_by_item_id
     pet_provider = pet_provider or get_user_pet_for_battle
-    attribute_provider = attribute_provider or get_player_attributes
     natal_provider = natal_provider or get_natal_data_for_battle
     buff_info_provider = buff_info_provider or (lambda current_user_id: UserBuffDate(current_user_id).BuffInfo)
     buff_data_info = buff_info_provider(user_id) or {}
@@ -311,7 +309,15 @@ def get_players_attributes(
 
     weapon_data = buffs.get('法器', {})
 
-    final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)
+    if attribute_provider is None:
+        final_attr = get_player_attributes(
+            user_id,
+            ratio=ratio,
+            include_current=True,
+            buff_info_provider=lambda _user_id: buff_data_info,
+        )
+    else:
+        final_attr = attribute_provider(user_id, ratio=ratio, include_current=True)
     if not final_attr:
         return {"属性": {}, "其他": buff_data_info, "本命法宝": None}
 

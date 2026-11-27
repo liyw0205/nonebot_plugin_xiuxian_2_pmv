@@ -325,14 +325,23 @@ def _boss_battle_resolver() -> RiftBossBattleResolver:
 
 def get_rift_battle_player_assets(user_id):
     """Explicit compatibility provider for the Rift Boss player snapshot."""
+    buff_info = get_rift_battle_buff_info(user_id) or {}
+
+    def battle_attributes(current_user_id, *, ratio, include_current):
+        return get_rift_battle_final_attributes(
+            current_user_id,
+            ratio=ratio,
+            include_current=include_current,
+            buff_info_provider=lambda _user_id: buff_info,
+        )
+
     return get_players_attributes(
         user_id,
         item_provider=get_rift_battle_item_data,
         pet_provider=get_user_pet_for_battle,
-        attribute_provider=get_rift_battle_final_attributes,
+        attribute_provider=battle_attributes,
         natal_provider=get_rift_battle_natal_data,
-        buff_info_provider=get_rift_battle_buff_info,
-        accessory_provider=get_rift_battle_accessory_data,
+        buff_info_provider=lambda _user_id: buff_info,
     )
 
 
@@ -397,14 +406,16 @@ def get_rift_battle_impart_data(user_id):
     return dict(row) if row is not None else None
 
 
-def get_rift_battle_final_attributes(user_id, *, ratio, include_current):
+def get_rift_battle_final_attributes(
+    user_id, *, ratio, include_current, buff_info_provider=None,
+):
     """Calculate battle attributes with an explicit read-only impart provider."""
     return get_final_attributes(
         user_id,
         ratio=ratio,
         include_current=include_current,
         impart_provider=get_rift_battle_impart_data,
-        buff_info_provider=get_rift_battle_buff_info,
+        buff_info_provider=buff_info_provider or get_rift_battle_buff_info,
         item_provider=get_rift_battle_item_data,
         accessory_provider=get_rift_battle_accessory_data,
         tianti_provider=get_rift_battle_tianti_data,
