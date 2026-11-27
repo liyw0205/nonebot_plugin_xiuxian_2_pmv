@@ -6021,3 +6021,76 @@ index. Affected modules `test_receipt_compaction_startup` +
 `test_world_boss_parameter_dispatch` 19 passed; compile, architecture
 (`ok=true`) and whitespace pass. No ranking/runtime logic changed, so the V32
 pair and its results above stay valid and were not re-run.
+
+## V33: Write-Path Connection Reuse For Sect Donation And BOSS Purchase
+
+V32 left mixed/contention latency dominated by write-path service time
+(~0.6-0.9s) and queueing, not read SQL. Measurement on the real handlers
+showed each sect donation / BOSS purchase opening `xiuxian.db` several times
+per request; every fresh connection re-parses the full schema on its first
+statement and repeats schema probes. V33 wraps the synchronous application
+calls of `宗门捐献` (`sect_donate_`) and the BOSS integral purchase handler in
+the existing `DatabaseUnitOfWork.connection_scope()` (same pattern already
+used by activity/buff/base callers). No SQL, transaction boundary, CAS,
+receipt, ledger, reply or reason/subject contract changed; no `await` runs
+inside the scope. One BOSS purchase on the after tree opens game.db 5 -> 2
+times (player.db 2 -> 2) and still succeeds.
+
+Runtime files changed: `xiuxian/xiuxian_boss/__init__.py`,
+`xiuxian/xiuxian_sect/__init__.py`; regression added to
+`tests/test_boss_purchase_command_ingress.py` (one idle connection reused,
+SQL failure / known integral rejection / original replay preserved).
+
+Affected acceptance (one run, shared lock): six modules (BOSS purchase
+ingress, UoW connection scope, sect donation, sect contribution flow, shop
+limit, source quality) `330 passed, 17 subtests passed`; compile,
+architecture (`ok=true`, `errors=[]`), inventory (exit 0) and whitespace pass.
+No full local unittest.
+
+### V33 Same-Data Pair Results
+
+Before = unmodified `d725418f` export (`/tmp/xiu-v33-baseline-r01`), after =
+`d725418f` + the three whitelist files (`/tmp/xiu-v33-accept-r01`); the frozen
+V32 driver/scenario `feature-rank-index-v32`, sole 1M fixture, unchanged
+limits. The first non-timing preflight stopped before any traffic because the
+exported trees lacked git metadata required by the driver's source identity;
+git metadata was added (HEAD pinned to `d725418f`, work files untouched) and
+the preflight passed. Sole pair
+`feature-rank-index-{before,after}-v33-20261128-phase{0,1,2}-r01` and
+`feature-rank-index-comparison-v33-20261128-r01.json`: same driver/fixture/
+limits/phase specs/requests, full seed manifests byte-identical across all six
+processes, only the two runtime files differ, every phase 96/96 success,
+invariants and DB boundary coverage pass, 24/24 donations and purchases in
+mixed/contention, no busy/locked, SQL, background or unattributed errors,
+original rank digest restored.
+
+| phase | e2e p50/p95/p99 ms | SQL queries / ms | success/s | main CPU ms | queue p95 ms |
+|---|---|---|---|---|---|
+| pure 10/20 | 13.240/20.607/81.621 -> 13.562/51.348/195.905 | 1747/377.482 -> 1744/389.517 | 20.172 -> 20.174 | 1266.996 -> 1437.132 | 0.010 -> 0.010 |
+| mixed 20/35 | 629.738/1014.435/1056.619 -> 121.292/170.180/187.434 | 5312/2004.871 -> 4990/1434.323 | 26.585 -> 34.014 | 2985.183 -> 2350.864 | 282.858 -> 0.010 |
+| contention 20/50 | 1109.244/1688.910/1740.117 -> 731.069/1187.596/1264.207 | 5306/1994.517 -> 4969/1466.710 | 26.895 -> 32.128 | 2961.283 -> 2497.134 | 989.199 -> 681.745 |
+
+Write paths (24 requests each): mixed BOSS purchase service p50
+558.255 -> 110.466ms, DB 2112 -> 1872 queries / 824.023 -> 483.644ms; mixed
+donation service p50 598.140 -> 108.181ms, DB 2112 -> 2016 / 826.581 ->
+603.608ms. Contention service p95 purchase 793.327 -> 731.558ms, donation
+808.263 -> 732.745ms. Mixed peak in-flight 20 -> 7: the read paths' mixed
+gains (e.g. BOSS rank service p50 466.666 -> 77.161ms) come from less shared
+write service time/queueing, not from read SQL (read DB time unchanged).
+
+Retained regressions and limits (not re-run for a better sample):
+
+- Pure phase (no writes; read code unchanged) regresses: whole p95
+  20.607 -> 51.348ms, p99 81.621 -> 195.905ms; `赛季榜` p95 9.663 -> 51.348,
+  p99 23.537 -> 195.905ms; `我的赛季` p95 19.300 -> 73.759ms; BOSS rank p95
+  23.001 -> 43.539ms; main-thread CPU 1266.996 -> 1437.132ms. 32-sample tails
+  are single requests (loop/GC suspected, unproven) and stay regressions.
+- Mixed read DB time slightly up: `我的赛季` 41.110 -> 45.732ms, BOSS rank
+  51.171 -> 53.239ms.
+- Contention remains queue-bound (queue p95 681.745ms, service ~0.55-0.73s);
+  connection reuse does not remove shared-write serialisation.
+- Resources: peak RSS <= 218.820MiB, minimum available RAM 1316MiB, disk free
+  >= 9182728192 bytes, max WAL 7090552 bytes, all within guards.
+- One finite serial pair; observer overhead uncalibrated; setup/restore
+  excluded; two write handlers plus three read controls. No sustained-capacity
+  claim, not exhaustive 674/41 coverage. The overall goal stays **ACTIVE**.

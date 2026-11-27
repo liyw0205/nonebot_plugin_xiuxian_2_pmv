@@ -102,6 +102,7 @@ from ...features.sect.task_history import (
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.database import DatabaseUnitOfWork
 
 items = Items()
 sect_ids = UUIDGenerator()
@@ -2966,13 +2967,16 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         materials_rate = config.get("宗门捐献资材倍率", 1)
         add_materials = int(donate_stone * materials_rate)
 
-        donation_outcome = sect_application.donate(
-            operation_id=_sect_operation_id(event, "donate", user_id) or f"sect:donate:{user_id}:{sect_ids.new_id()}",
-            user_id=user_id,
-            sect_id=user_info["sect_id"],
-            stone=donate_stone,
-            materials=add_materials,
-        )
+        # Synchronous section only: ledger begin/donation/ledger finish stay
+        # separate transactions but share one idle connection (no await inside).
+        with DatabaseUnitOfWork.connection_scope():
+            donation_outcome = sect_application.donate(
+                operation_id=_sect_operation_id(event, "donate", user_id) or f"sect:donate:{user_id}:{sect_ids.new_id()}",
+                user_id=user_id,
+                sect_id=user_info["sect_id"],
+                stone=donate_stone,
+                materials=add_materials,
+            )
         donation_data = donation_outcome.data or {}
         donation = type("SectDonationView", (), donation_data)()
         donation.applied = donation_outcome.ok
@@ -3004,18 +3008,21 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 sect_materials_delta=add_materials,
                 detail={"donate_stone": donate_stone, "materials_rate": materials_rate},
             )
-            safe_record_game_event(
-                user_id,
-                "sect_donate",
-                donate_stone,
-                {
-                    "source": "sect",
-                    "action": "donate",
-                    "skip_statistics": True,
-                    "sect_id": user_info["sect_id"],
-                    "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
-                },
-            )
+            # Season weekly/monthly/quarterly writes remain independent
+            # transactions; the scope only reuses their idle connection.
+            with DatabaseUnitOfWork.connection_scope():
+                safe_record_game_event(
+                    user_id,
+                    "sect_donate",
+                    donate_stone,
+                    {
+                        "source": "sect",
+                        "action": "donate",
+                        "skip_statistics": True,
+                        "sect_id": user_info["sect_id"],
+                        "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
+                    },
+                )
 
         msg = (
             f"道友捐献灵石{donate_stone}枚，"

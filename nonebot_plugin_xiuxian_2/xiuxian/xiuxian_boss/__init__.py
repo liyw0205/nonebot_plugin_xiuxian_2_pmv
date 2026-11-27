@@ -71,6 +71,7 @@ from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.database import DatabaseUnitOfWork
 from ...features.boss.punishment_repository import WorldBossPunishmentSqlRepository
 from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
@@ -1634,9 +1635,12 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"boss-purchase:{event_id}:{user_id}" if event_id else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
     try:
-        result = boss_purchase_command_application.execute(
-            operation_id=operation_id, user_id=user_id, item_id=item_id, quantity=quantity,
-        )
+        # Synchronous section only: receipt/ledger/purchase/finish keep their
+        # own transactions but reuse one idle connection (no await inside).
+        with DatabaseUnitOfWork.connection_scope():
+            result = boss_purchase_command_application.execute(
+                operation_id=operation_id, user_id=user_id, item_id=item_id, quantity=quantity,
+            )
         message = render_boss_purchase_reply(result)
     except ConflictError:
         await handle_send(bot, event, "兑换请求冲突，本次未结算。", md_type="世界BOSS")

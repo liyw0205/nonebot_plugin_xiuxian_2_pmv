@@ -5,6 +5,7 @@ import ast
 import asyncio
 import json
 import sqlite3
+import traceback
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -134,6 +135,7 @@ def _handler(context):
         "runtime_ids": ids,
         "boss_ids": ids,
         "ConflictError": ConflictError,
+        "DatabaseUnitOfWork": DatabaseUnitOfWork,
         "logger": Mock(),
         "boss_integral_use": SimpleNamespace(finish=finish),
         "re": __import__("re"),
@@ -473,3 +475,37 @@ def test_purchase_reply_is_preserved_by_onebot_qq_markdown_and_fallback(
         md.assert_awaited_once()
         normalize_newlines = lambda value: value.replace("\r\n", "\n").replace("\r", "\n")
         assert normalize_newlines(reply) in normalize_newlines(md.call_args.args[2])
+
+
+def test_real_handler_reuses_one_idle_connection_per_database_and_closes_on_exit(tmp_path):
+    from nonebot_plugin_xiuxian_2.infrastructure.database import uow as uow_module
+
+    context = _context(tmp_path, weekly=0)
+    handler = _handler(context)
+    real_connect = uow_module.sqlite3.connect
+    opened = []
+
+    def connect(*args, **kwargs):
+        connection = real_connect(*args, **kwargs)
+        # The integral stub reads through the test-only _query helper, whose
+        # sqlite3 context manager commits but never closes; track only
+        # production connections opened by the handler path.
+        if not any(frame.name == "_query" for frame in traceback.extract_stack()):
+            opened.append((Path(str(args[0]).split("?")[0]).name, connection))
+        return connection
+
+    with patch.object(uow_module.sqlite3, "connect", side_effect=connect):
+        message = handler.run("1 1", event_id="scoped-event")
+    assert SUCCESS in message
+    names = [name for name, _ in opened]
+    # Unscoped baseline measured 5 game.db + 2 player.db connections.
+    assert names.count("game.db") <= 2 and names.count("player.db") <= 2
+    for _, connection in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            connection.execute("SELECT 1")
+    assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
+    assert _query(context.game, "SELECT goods_num,bind_num FROM back") == [(1, 1)]
+    assert _query(context.game, "SELECT status FROM operation_ledger") == [("applied",)]
+    replay = handler.run("1 1", event_id="scoped-event")
+    assert REPLAY in replay
+    assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
