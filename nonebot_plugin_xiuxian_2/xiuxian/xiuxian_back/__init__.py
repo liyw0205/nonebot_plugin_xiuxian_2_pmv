@@ -2192,7 +2192,7 @@ def _build_danyao_sections_for_md(user_id: str):
     - 按 buff_type 分类
     - 同分类按名字排序
     """
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, goods_types=("丹药",))
     if not back_data:
         return []
 
@@ -2241,7 +2241,7 @@ def _build_yaocai_sections_for_md(user_id: str):
     - 按 一~九品药材 分类
     - 同分类按名字排序
     """
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, goods_types=("药材",))
     if not back_data:
         return []
 

@@ -503,7 +503,7 @@ def get_user_equipment_msg(user_id):
     获取背包内的所有装备及其详细信息
     """
     l_msg = []
-    user_backs = _sql_message().get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id, goods_types=("装备",))
     if not user_backs:
         return l_msg
     
@@ -585,7 +585,7 @@ def get_user_danyao_back_msg(user_id):
     - 其他丹药
     """
     l_msg = []
-    user_backs = _sql_message().get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id, goods_types=("丹药",))
     if not user_backs:
         return l_msg
 
@@ -649,7 +649,7 @@ def get_user_yaocai_back_msg(user_id):
     获取药材背包信息
     """
     l_msg = []
-    user_backs = _sql_message().get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id, goods_types=("药材",))
     if not user_backs:
         return l_msg
     
@@ -684,7 +684,7 @@ def get_user_yaocai_detail_back_msg(user_id):
     获取药材背包详细信息
     """
     l_msg = []
-    user_backs = _sql_message().get_back_msg(user_id)
+    user_backs = _sql_message().get_back_msg(user_id, goods_types=("药材",))
     if not user_backs:
         return l_msg
     

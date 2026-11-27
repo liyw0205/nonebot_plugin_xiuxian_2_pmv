@@ -2340,13 +2340,25 @@ class XiuxianDateManage:
                 cur.execute(sql, (user_id,))
                 self._commit_write()
 
-    def get_back_msg(self, user_id):
-        """获取用户背包信息"""
-        result = self._read_query(
-            "SELECT * FROM back WHERE user_id=%s and goods_num >= 1",
-            (user_id,),
-            dict_row=True,
-        )
+    def get_back_msg(self, user_id, *, goods_types=None, compact=False):
+        """获取实时正库存；展示/配方读取可限制类型与固定字段。"""
+        if goods_types is not None:
+            if isinstance(goods_types, str):
+                raise ValueError("goods_types must be a collection of supported inventory types")
+            goods_types = tuple(dict.fromkeys(goods_types))
+            if any(kind not in {"丹药", "药材", "装备", "炼丹炉"} for kind in goods_types):
+                raise ValueError("unsupported inventory projection type")
+            if not goods_types:
+                return []
+        sql = ("SELECT goods_id,goods_name,goods_type,goods_num,bind_num,state FROM back "
+               "WHERE user_id=%s and goods_num >= 1" if compact or goods_types is not None else
+               "SELECT * FROM back WHERE user_id=%s and goods_num >= 1")
+        params = (user_id,)
+        if goods_types is not None:
+            # Match Python's exact type equality even on legacy NOCASE columns.
+            sql += " AND goods_type COLLATE BINARY IN (" + ",".join("%s" for _ in goods_types) + ")"
+            params += goods_types
+        result = self._read_query(sql, params, dict_row=True)
         return result or []
 
     def check_and_adjust_goods_quantity(self):

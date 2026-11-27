@@ -4804,3 +4804,186 @@ timing are unmeasured. This batch does not settle cold exact-rank scans,
 global invalidation under broader exp+stone writes, old tail regressions,
 all674 matchers/41 background entries or sustained50 successful/s.
 The overall repository performance goal remains ACTIVE.
+
+## V26: Shared Typed Inventory Projections (2026-11-27)
+
+### Scope and Semantics
+
+The shared `get_back_msg` chain benefits **six matchers across two modules**:
+`丹药背包`, `药材背包`, `药材背包详细`, `我的装备`, `炼丹` recipe generation
+and `配方` preflight. Four plain views, two Markdown views and the recipe
+helpers previously materialized every positive inventory row with `SELECT *`
+before filtering in Python. They now request a fixed six-column projection
+and bound inventory types. The allowed type names are explicit constants;
+there is no arbitrary table/column API, new index or cross-request cache.
+The existing full-row call remains unchanged by default for other callers.
+
+Generation uses the compact projection **without** a type filter, preserving
+the distinction between an entirely empty bag and a bag without herbs or a
+furnace in one read. Recipe preflight reads herbs/furnaces once and supplies
+those rows to its existing checks. Catalog herb names and stored furnace
+names remain distinct matching rules. Positive quantity, duplicates, relative
+scan order, NULL bind/state values, equipped state, first matching material
+and failure order are retained. `COLLATE BINARY` preserves the previous
+Python exact type equality even on a legacy NOCASE column. No await/write
+boundary gains an old player cache; actual material debits, balances, daily
+eligibility, ledger/CAS/replay, receipts and settlement transactions remain
+live and unchanged. Reducing Python call depth is not the claimed benefit.
+
+Affected acceptance passed **83 tests +33 subtests in20.19s**, including the
+real registered recipe success/replay/failure-recovery parameter group.
+Compile, architecture, inventory and scoped whitespace passed. The subsequent
+format-oracle correction alone passed **4 tests +10 subtests in0.88s**.
+Unchanged full unittest/old matrices were not repeated locally; the complete
+batch must still pass its exact-SHA CI before being called delivered.
+
+### Frozen Sample and Classification Provenance
+
+The sole retained1M synthetic fixture is
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05`.
+Each of128 existing actors has **213 catalog-valid positive inventory rows**:
+the original20,192 unrelated skill items and one real furnace. The complete
+`back` table has27,264 rows and `BuffInfo`128; activity controls are populated
+with8192 users and32,768 rows in each balance/damage table. Only inventory
+scaling is the new coverage gap: the old20-item/user sample could not show
+the cost of fetching many unrelated items. No new million-user population
+or per-caller DB is created.
+
+Each version executes three stages once,128 requests/stage. Pure has24 of
+each of four display commands plus32 genuine absent-specific-furnace recipe
+refusals; mixed/contention have16 of each display,32 recipe refusals and32
+real exp+stone training writes. Mixed uses32 distinct writers; contention
+uses the same writer. Display actor/command identities remain unique across
+phases, preserving real5s cooldowns. All requests within a stage share the
+same instance/database; restore happens only after drain and invariants.
+Successful refinement and recipe generation timing are **not** measured;
+their runtime changes have the affected functional regressions only.
+
+The first baseline pure stage stopped because the new oracle expected plain
+pill/herb blocks while the actual configured Markdown fallback returned
+compact quantity/binding lines.48 correct replies were marked unclassified.
+Its raw report is preserved. Nothing was replayed: baseline mixed/contention
+and after pure/mixed/contention each ran once with the **same archived timing
+driver and original classifier**. The raw reports retain the same48/32/32
+format failures per version. A strict offline correction validates every
+expected item/quantity/binding/use line, rejects all other errors, preserves
+timing/SQL and all original live database checks, and changes only those
+112 classifications/version. It does not manufacture or rerun a DB check.
+The corrected future classifier and malformed/duplicate/missing-line tests
+are included in this batch; they were not substituted into timed traffic.
+
+Raw reports under fixture `data/` are:
+
+- `inventory-projection-before-v26-20261127-r01.json` (pure)
+- `inventory-projection-before-v26-20261127-phase{1,2}-r01.json`
+- `inventory-projection-after-v26-20261127-phase{0,1,2}-r01.json`
+- `inventory-projection-comparison-v26-20261127-r01.json` (derived comparison)
+
+The comparison records every correction, raw/driver/classifier/recovery-script
+hash, exact manifests and limits, plus all commands/resources/regressions.
+Driver hashes, fixture identity, requests, business/phase manifests and
+original rank digest match. Baseline2664c39e runtime hash is
+`7aa46eaecb8a1cf74985fd3eeb2afa3b428df68437b92bc61e19d4ebca23a9a4`;
+accepted runtime hash is
+`86417951c9fb0fc4e0e71d6fedb102b66d4b976db7100abafd650cb16a99317c`.
+
+Both versions have **288 successes and96 business refusals**, zero cooldown
+refusals, system exceptions, timeouts, busy/locked errors or boundary errors
+after the explicit format correction. The96 refusals are never counted as
+successful throughput.64 real training writes/version pass exact balances,
+power, receipt/ledger identities/rewards and generation deltas. Full bounded
+inventory/BuffInfo hashes,1M population, quick_check and original exp/stone
+digest restoration pass. No raw failed status is silently rewritten.
+
+### Complete Same-Load Results
+
+E2E cells are p50/p95/p99 milliseconds including queue/loop delay. DB columns
+are all foreground API operations and cumulative execute+fetch time for that
+path, including unchanged setup/registration reads. Per-path corrected error
+rate is zero; recipe rows are known business refusals rather than successes.
+
+| Phase | Path | n | E2E before | E2E after | DB calls before -> after | DB ms before -> after |
+| --- | --- | --- | --- | --- | --- | --- |
+|pure|equipment|24|9.371/14.574/17.580|8.357/14.497/22.048|288 ->288|37.873 ->15.310|
+|pure|herbs|24|9.576/15.359/39.232|8.781/9.394/27.575|288 ->288|27.711 ->13.154|
+|pure|herb detail|24|9.527/14.933/17.081|8.383/12.787/17.028|288 ->288|39.349 ->15.230|
+|pure|pills|24|9.568/11.823/75.336|8.876/10.963/63.516|313 ->313|41.989 ->26.592|
+|pure|recipe refusal|32|20.538/29.547/30.486|19.164/25.388/28.859|768 ->768|294.139 ->255.541|
+|mixed|equipment|16|9.435/16.856/16.856|8.854/17.992/17.992|192 ->192|18.882 ->11.259|
+|mixed|herbs|16|9.684/30.844/30.844|9.125/31.875/31.875|192 ->192|31.564 ->14.861|
+|mixed|herb detail|16|9.145/27.947/27.947|8.572/23.242/23.242|192 ->192|26.785 ->11.226|
+|mixed|pills|16|9.472/65.625/65.625|8.891/66.646/66.646|217 ->217|32.344 ->25.506|
+|mixed|recipe refusal|32|20.139/31.299/34.911|19.400/26.591/31.930|768 ->768|291.930 ->251.021|
+|mixed|training control|32|35.007/57.127/57.473|35.862/54.580/55.320|1219 ->1219|161.496 ->180.304|
+|contention|equipment|16|9.033/91.597/91.597|8.602/116.034/116.034|192 ->192|23.690 ->8.396|
+|contention|herbs|16|9.600/64.293/64.293|8.609/76.094/76.094|192 ->192|20.793 ->9.812|
+|contention|herb detail|16|14.299/85.960/85.960|15.179/122.420/122.420|192 ->192|22.062 ->9.810|
+|contention|pills|16|15.076/78.340/78.340|17.460/85.582/85.582|217 ->217|41.122 ->27.158|
+|contention|recipe refusal|32|20.148/62.779/72.000|20.200/81.992/87.920|768 ->768|282.594 ->269.052|
+|contention|training control|32|36.076/70.354/94.262|37.434/103.692/114.351|1219 ->1219|162.762 ->161.129|
+
+Every optimized request has exactly one timed inventory SELECT in the
+recorded SQL. Total inventory SQL time is **293.281 ->37.279ms** over320
+requests/version; SQL p50 ranges .641-.689 ->.081-.138ms. Pure per-path
+inventory p50/p95 is equipment .662/1.042 ->.098/.185, herbs .664/.966 ->
+.083/.091, detail .659/3.626 ->.083/.130, pills .663/.787 ->.085/.133 and
+recipe .673/4.036 ->.105/.182ms. Complete per-phase/path p50/p95/p99 and
+totals are in comparison `inventory_sql_ms`. The query still visits the
+user's indexed inventory range and filters types; no claim of eliminating
+all213 scanned entries is made. Returned rows fall213 ->4 for pills/herbs,
+213 ->8 for equipment and213 ->5 for recipe, with six rather than the full
+legacy column set. This is reduced fetch/materialization work, **not fewer SQLs**.
+Foreground DB operations stay **7505 ->7505**. Background message writer
+operations are1712 ->1708; this incidental batch variation is not a claimed
+product optimization. Shared display-cache hit/miss/invalidation/recompute
+counters are all zero, and no exact-rank operation occurs in this sample.
+
+| Phase / cap / offered arrivals per second | E2E p50/p95/p99 before -> after | All SQL ms | Successful/s | Peak admitted | Peak active handlers |
+| --- | --- | --- | --- | --- | --- |
+|pure/10/20|9.851/25.648/39.232 ->8.892/21.243/28.859|675.462 ->542.422|15.094 ->15.095|2 ->2|1 ->1|
+|mixed/20/20|19.195/37.900/57.473 ->18.569/45.425/55.320|783.113 ->713.119|15.037 ->15.033|2 ->2|1 ->1|
+|contention/20/35|19.541/64.293/91.597 ->20.073/81.992/116.034|813.360 ->715.807|26.219 ->26.201|4 ->5|3 ->3|
+
+The mixed p95 and all contention tails **regress** despite lower inventory
+SQL time. The sample proves reduced shared inventory work and a pure-stage
+improvement; it does not prove better mixed throughput or universally lower
+latency. Contention producer-delay p95/p99 grows .182/2.566 ->1.267/8.104ms,
+loop-dispatch p95/p99 9.702/22.730 ->21.882/37.285ms and event-loop lag
+p95/p99 19.552/29.102 ->22.453/38.073ms. Admission queue p95 remains
+.010 ->.011ms. The worst after herb-detail response122.420ms has only.727ms
+DB, a37.771ms handler interval and substantial dispatch/pre-handler delay;
+its overlapping GC events are sub-millisecond. This locates significant
+non-inventory/loop cost but does **not** isolate application, scheduler or
+observer ownership. Do not blame GC, declare the changed SQL the tail cause,
+disable guards or rerun to select a better number. The unchanged training
+control also regresses in contention and its mixed SQL cost rises as shown.
+
+### Resources and Remaining Limits
+
+Each stage uses the same shared validation lock and enforced2/4 CPUs,
+AS1GiB,CPU600s,wall1200s,`MALLOC_ARENA_MAX=2`,RSS900MiB stop,
+RAM>=768MiB,disk>=2GiB and per/total WAL<=256MiB. Six processes run serially;
+no second stress group or outer taskset is used. Minimum measured phase RAM
+is1557MiB and disk11,809,345,536bytes. Maximum single WAL18,321,672bytes;
+sampled total WAL<=22,507,624bytes. No limit/stop threshold is reached.
+
+Phase peak RSS grows212.316/220.168/221.172 ->218.762/221.348/223.926MiB.
+Full-process maximum peaks at233.043MiB and includes setup/check/restore.
+Main-thread phase CPU1592.235/2308.431/2255.930 ->
+1438.709/2248.166/2297.346ms also retains the contention regression.
+Phase user+system CPU2.080/2.828/2.656 ->1.904/2.772/2.740s;
+observed profiler sections359.199/411.334/301.589 ->
+337.735/407.744/333.016ms are incomplete overlapping diagnostics, not
+subtractable application cost. Phase setup6.281/5.284/5.301 ->
+5.232/5.276/5.274s, startup5.487-6.275s and final restore13.691-15.001s
+are outside response latency. Per-process raw I/O/write totals are in the
+comparison and include snapshot IO, not just application writes.
+
+These3.66-6.39s traffic windows reach only handler interval peaks1/1/3.
+Offered20/20/35 requests/s, configured concurrency caps10/20/20, actual
+overlap and successful throughput are distinct. This does not prove20 active
+handlers or sustained50 successful requests/s. One213-item bag cardinality,
+few herbs, a missing furnace and64training writes do not characterize large
+recipe search, successful concurrent refinement, cold precise ranks/global
+invalidation or the full674-matcher/41-background-entry inventory. The overall
+performance goal remains ACTIVE; old tail/global-invalidation limits remain.

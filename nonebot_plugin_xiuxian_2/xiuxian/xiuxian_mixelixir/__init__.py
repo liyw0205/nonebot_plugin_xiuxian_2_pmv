@@ -455,7 +455,7 @@ async def mix_elixir_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mix_elixir.finish()
     user_id = user_info['user_id']
-    user_back = _sql_message().get_back_msg(user_id)
+    user_back = _sql_message().get_back_msg(user_id, compact=True)
     if not user_back:
         msg = "道友的背包空空如也，无法炼丹"
         await handle_send(bot, event, msg)
@@ -655,7 +655,7 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
             await handle_send(bot, event, msg, md_type="炼丹", k1="丹药", v1="丹药背包", k2="药材", v2="药材背包", k3="帮助", v3="炼丹帮助")
             await mix_make.finish()
 
-        user_back = _sql_message().get_back_msg(user_id) or []
+        user_back = _sql_message().get_back_msg(user_id, goods_types=("药材", "炼丹炉")) or []
         check, zhuyao_goods_id = await check_yaocai_name_in_back(
             user_id, zhuyao_name, zhuyao_num, back_rows=user_back
         )
@@ -833,7 +833,9 @@ async def mix_make_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, mo
 async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num, *, back_rows=None):
     flag = False
     goods_id = 0
-    user_back = back_rows if back_rows is not None else (_sql_message().get_back_msg(user_id) or [])
+    user_back = back_rows if back_rows is not None else (
+        _sql_message().get_back_msg(user_id, goods_types=("药材",)) or []
+    )
     for back in user_back:
         if back['goods_type'] == '药材':
             if Items().get_data_by_item_id(back['goods_id'])['name'] == yaocai_name:
@@ -851,7 +853,9 @@ async def check_yaocai_name_in_back(user_id, yaocai_name, yaocai_num, *, back_ro
 async def check_ldl_name_in_back(user_id, ldl_name, *, back_rows=None):
     flag = False
     goods_info = {}
-    user_back = back_rows if back_rows is not None else (_sql_message().get_back_msg(user_id) or [])
+    user_back = back_rows if back_rows is not None else (
+        _sql_message().get_back_msg(user_id, goods_types=("炼丹炉",)) or []
+    )
     for back in user_back:
         if back['goods_type'] == '炼丹炉':
             if back['goods_name'] == ldl_name:

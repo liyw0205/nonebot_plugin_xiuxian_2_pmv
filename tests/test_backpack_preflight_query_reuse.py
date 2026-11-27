@@ -75,6 +75,9 @@ class MixelixirPreflightQueryReuseTests(unittest.TestCase):
             self.assertEqual(asyncio.run(self.module.check_ldl_name_in_back("u", "炉")), (True, {"buff": 0}))
             self.assertEqual(asyncio.run(self.module.check_ldl_name_in_back("u", "炉")), (False, {}))
         self.assertEqual(manager.get_back_msg.call_count, 4)
+        self.assertEqual([call.kwargs for call in manager.get_back_msg.call_args_list],
+                         [{"goods_types": ("药材",)}, {"goods_types": ("药材",)},
+                          {"goods_types": ("炼丹炉",)}, {"goods_types": ("炼丹炉",)}])
 
     def _reject_recipe(self, rows, recipe="主药草1药引引1辅药辅1丹炉炉"):
         application = SimpleNamespace(
@@ -95,7 +98,7 @@ class MixelixirPreflightQueryReuseTests(unittest.TestCase):
         ):
             with self.assertRaises(FinishedException):
                 asyncio.run(self.module.mix_make_(bot, event, mode=recipe))
-        manager.get_back_msg.assert_called_once_with("u")
+        manager.get_back_msg.assert_called_once_with("u", goods_types=("药材", "炼丹炉"))
         application.refine_cost.assert_not_called()
         send.assert_awaited_once()
         return send.await_args.args[2]

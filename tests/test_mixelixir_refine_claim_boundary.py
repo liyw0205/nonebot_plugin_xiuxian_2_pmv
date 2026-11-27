@@ -145,7 +145,7 @@ class MixelixirRefineClaimBoundaryTests(unittest.TestCase):
                     )
 
             self.assertEqual(refine_cost.call_count, 1)
-            fake_manager.get_back_msg.assert_called_once_with("u")
+            fake_manager.get_back_msg.assert_called_once_with("u", goods_types=("药材", "炼丹炉"))
             fake_buff.get_user_main_buff_data.assert_called_once_with()
             self.assertEqual(refine_cost.call_args.kwargs["furnace_id"], 4)
             self.assertEqual(refine_reward.call_count, 2)
