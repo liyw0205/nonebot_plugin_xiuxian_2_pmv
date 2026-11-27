@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from nonebot_plugin_xiuxian_2.features.sect.application import SectApplication
 from nonebot_plugin_xiuxian_2.features.sect.migrations import apply_sect_secbuff
@@ -43,7 +44,8 @@ class SectCatalogReadStageTests(unittest.TestCase):
         self.items = {str(key): {"name": f"Item{key}", "level": "tier"}
                       for key in (101, 102, 201, 202)}
 
-    def run_handler(self, name):
+    def run_handler(self, name, *, catalog_reader=None, random_source=None,
+                    search_probability=100):
         async def finish():
             raise Finished
 
@@ -62,11 +64,13 @@ class SectCatalogReadStageTests(unittest.TestCase):
             "get_secnameid": lambda name, keys: next(key for key in keys if self.items[key]["name"] == name),
             "UserBuffDate": lambda uid: SimpleNamespace(BuffInfo=self.buff()),
             "get_sectbufftxt": lambda scale, config: (1, ["tier"]),
-            "BuffJsonDate": lambda: SimpleNamespace(get_gfpeizhi=lambda: {
-                "tier": {"gf_list": ["102"], "st_list": ["202"]}}),
-            "runtime_random": SimpleNamespace(randint=lambda low, high: 0, choice=lambda values: values[0]),
+            "BuffJsonDate": lambda: SimpleNamespace(get_gfpeizhi=catalog_reader or (lambda: {
+                "tier": {"gf_list": ["102"], "st_list": ["202"]}})),
+            "runtime_random": random_source or SimpleNamespace(
+                randint=lambda low, high: 0, choice=lambda values: values[0]),
             "config": {key: {"获取消耗的灵石": 100, "获取消耗的资材": 200,
-                             "获取到功法的概率": 100, "获取到神通的概率": 100,
+                             "获取到功法的概率": search_probability,
+                             "获取到神通的概率": search_probability,
                              "学习资材消耗": 150}
                        for key in ("宗门主功法参数", "宗门神通参数")},
             "jsondata": SimpleNamespace(sect_config_data=lambda: {"0": {"title": "宗主"}}),
@@ -134,6 +138,55 @@ class SectCatalogReadStageTests(unittest.TestCase):
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             self.assertEqual(2, uow.query_one("SELECT COUNT(*) AS n FROM sect_buff_search_operations")["n"])
             self.assertEqual(1, uow.query_one("SELECT COUNT(*) AS n FROM sect_secbuff_learn_operations")["n"])
+
+    def test_search_catalog_is_read_once_for_hundred_hits_and_fresh_next_request(self):
+        catalog_file = self.database.parent / "search-catalog.json"
+        def read_catalog():
+            with catalog_file.open(encoding="utf-8") as stream:
+                return json.load(stream)
+        for name, column, original, added in (
+            ("sect_mainbuff_get_", "mainbuff", "101", "102"),
+            ("sect_secbuff_get_", "secbuff", "201", "202"),
+        ):
+            with self.subTest(name=name):
+                self.reset()
+                catalog_file.write_text(json.dumps({"tier": {
+                    "gf_list": ["102"], "st_list": ["202"]}}), encoding="utf-8")
+                reader = Mock(side_effect=read_catalog)
+                random_calls = []
+                random_source = SimpleNamespace(
+                    randint=Mock(side_effect=lambda low, high: random_calls.append("roll") or 0),
+                    choice=Mock(side_effect=lambda values: random_calls.append(tuple(values)) or values[0]),
+                )
+                self.run_handler(name, catalog_reader=reader, random_source=random_source)
+                self.assertEqual(1, reader.call_count)
+                self.assertEqual(100, random_source.randint.call_count)
+                self.assertEqual(200, random_source.choice.call_count)
+                self.assertEqual(["roll", ("tier",), (added,)] * 100, random_calls)
+                self.assertEqual(f"[{original},{added}]", self.app.get_sect_info(1)[column])
+                self.reset()
+                catalog_file.write_text(json.dumps({"tier": {
+                    "gf_list": ["101"], "st_list": ["201"]}}), encoding="utf-8")
+                self.run_handler(name, catalog_reader=reader)
+                self.assertEqual(2, reader.call_count)
+                self.assertEqual(f"[{original}]", self.app.get_sect_info(1)[column])
+
+    def test_search_with_no_hits_never_reads_catalog_and_keeps_settlement(self):
+        for name, column, catalog in (("sect_mainbuff_get_", "mainbuff", "[101]"),
+                                      ("sect_secbuff_get_", "secbuff", "[201]")):
+            with self.subTest(name=name):
+                self.reset()
+                reader = Mock(side_effect=AssertionError("unused catalog read"))
+                random_source = SimpleNamespace(randint=Mock(return_value=100), choice=Mock())
+                self.assertIn("失败100次", self.run_handler(
+                    name, catalog_reader=reader, random_source=random_source,
+                    search_probability=0))
+                reader.assert_not_called()
+                self.assertEqual(100, random_source.randint.call_count)
+                random_source.choice.assert_not_called()
+                row = self.app.get_sect_info(1)
+                self.assertEqual((9900, 19800, catalog),
+                                 (row["sect_used_stone"], row["sect_materials"], row[column]))
 
     def test_search_both_catalogs_and_assets_are_rechecked_after_read_stage(self):
         original = self.app.apply_buff_search

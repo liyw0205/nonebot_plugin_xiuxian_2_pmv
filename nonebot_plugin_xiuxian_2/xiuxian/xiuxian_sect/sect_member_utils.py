@@ -9,6 +9,7 @@ from ...features.base.keyword_page import matches_keyword
 items = Items()
 sect_application = None
 config = get_config()
+_TASK_NOT_PROVIDED = object()
 
 
 def bind_sect_member_dependencies(
@@ -91,8 +92,14 @@ def create_user_sect_task(user_id, sect_id=None, operation_id=None, replace_exis
 
 
 
-def refresh_user_sect_task(user_id, sect_id, operation_id, *, return_failure=False):
-    current = sect_application.get_active_task(user_id)
+def refresh_user_sect_task(
+    user_id, sect_id, operation_id, *, return_failure=False,
+    current_task=_TASK_NOT_PROVIDED,
+):
+    current = (
+        sect_application.get_active_task(user_id)
+        if current_task is _TASK_NOT_PROVIDED else current_task
+    )
     if not current:
         return {"status": "task_missing"} if return_failure else None
     tasklist = config["宗门任务"]

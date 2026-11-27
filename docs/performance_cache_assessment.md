@@ -5495,3 +5495,193 @@ background entries or resolve known static-analysis limits. Fifteen-board
 personal-season fanout, cold precise ranks/global invalidation, broader shapes
 and sustained capacity remain open. The overall performance goal stays
 **ACTIVE** after this bounded delivery.
+
+## V30: Shared Inventory Projections and Read-Stage IO
+
+This batch follows shared query patterns instead of creating another command
+taxonomy. Static beneficiaries are **seven distinct matchers**: two sect
+searches, task refresh, shop view, shop purchase, daily elixir claim and item
+use. Ordinary and accessory packages share that last matcher. The call chain
+spans sect, backpack, package-reward and accessory-package functionality;
+nine runtime files change, including one fixed-table inventory reader; eight
+contain the performance delta and two carry a shared correctness overlay
+(the accessory application belongs to both sets).
+These counts are static scope, not seven timed capacity measurements.
+
+|Shared entry and callers|Repeated work removed|Live boundary retained|
+|---|---|---|
+|Sect shop view/purchase, two callers|One duplicate full profile read and its UOW per request|Purchase rechecks membership, contribution, stock and weekly limit in its transaction|
+|Task refresh handler/helper|Second unchanged active-task read, including table/schema queries|Task period, user, sect, task CAS and receipt checks remain authoritative|
+|Main/secondary sect searches, two callers|Up to100 identical configuration JSON parses become at most one per request; zero hits still read zero times|All100 random attempts/order, catalog CAS and asset settlement remain; next request reads configuration afresh|
+|Daily elixir settlement|Distinct-item inventory reads before/after writes become two bounded batches|Per-item exact counts, capacity, ordered writes, user/sect/receipt postconditions and full rollback remain|
+|Ordinary package application/repository|Reuse the same-transaction wallet projection; batch distinct reward capacity reads|Capacity remains after package/wallet writes and triggers; savepoint rollback and fresh final wallet projection remain|
+|Accessory package application/repository|Remove overwritten snapshot; batch package/reward projections in each required snapshot|Prepare/finalize/compensate stay separate, with fresh reads and the original durable protocol|
+
+The inventory reader accepts only fixed `back` projections, bound values and
+400-ID chunks (at most801 bindings). Results follow requested ordinals rather
+than a Python ID map, retaining missing versus NULL rows, duplicate legacy
+rows and SQLite comparison affinity. Single-item requests retain a point
+read. Multi-item statements still perform internal per-ID lookups; reducing
+SQLite API executions does not remove unindexed legacy scan complexity. No
+cross-request personal cache, arbitrary table/column API, reward-rule merge
+or exact-rank snapshot substitution is introduced.
+
+The new live-boundary regression also exposed an existing shop refusal bug:
+eager formatting accessed `purchased`/`contribution` even when those fields
+were absent from another rejection. Formatting now reads the fields only for
+their corresponding status, preserving the actual reason instead of raising
+`AttributeError`. It does not change purchase eligibility or successful writes.
+
+The sole new workload is frozen at288 requests/version:96 shop reads, then
+two96-request mixed stages with24 shop reads,24 daily claims,24 ordinary
+18050 opens and24 accessory18126 opens each. Caps/arrival rates are1/10,
+10/20 and20/35; competition repeats each package route across six actors
+four times while24 claimants share four sects. It reuses the sole1M fixture
+and existing populated sect membership, with actual package inventory and
+nonempty accessory bags. This covers populated reward settlement absent from
+V29. Catalog contents and gameplay stay unchanged. Accessory18126 contains
+accessories only: its timed evidence can cover redundant snapshot removal,
+while mixed ordinary-item/accessory snapshot batching needs focused regression
+coverage. Search configuration IO and task refresh are not additional timed
+paths. Acceptance and measured results follow below; test success alone is
+not runtime performance evidence.
+
+Static route review caught a second existing correctness blocker before
+dispatching the load: pure accessory18126 supplies no ordinary rewards, but
+the accessory request builder called the ordinary-package nonempty validator.
+Accessory requests now allow empty ordinary rewards only while retaining
+required, validated accessories; recovery uses that same builder. Ordinary
+package requests still reject empty rewards. Success/replay, recovery and
+capacity compensation have direct regressions. Both performance sources use
+this identical correctness overlay (`accessory_package/schemas.py` and only
+the builder/recovery changes in its application). Thus **before is4553f3b1
+plus that overlay**, not an unmodified HEAD or refused requests counted as
+throughput. Only the eight IO implementation files differ between versions.
+The preexisting second-plus-random accessory UID collision risk remains
+visible to the independent uniqueness oracle, not masked by fixed IDs or a
+weaker consistency rule.
+
+Affected acceptance: the first consolidated run passed229 tests and44
+subtests; one new NULL post-receipt assertion expected the wrong existing
+reason. The product rejected/rolled back correctly; the regression now checks
+`sect_elixir_item_write_rejected`, item subject and full rollback. Only that
+case and the accessory-affected set were rerun after the real builder fix:
+22 tests and4 subtests passed. Compilation, architecture, inventory and
+whitespace gates passed once after the completed batch. No local full
+unittest, old workload or CI configuration change was run.
+
+The non-timing1M preflight passed all288 planned routes and independent seed
+invariants, then restored the original fixture. It recorded128sects,
+8192members/task rows,955back rows and128player-accessory rows (32 existing
+instances/actor). Only the following frozen pair is timing evidence; these
+feature-table sizes must not be described as millions of inventory rows.
+
+### V30 Frozen Pair Results
+
+The sole six-stage pair passed:288/288 successes/version, zero business
+rejections, cooldown refusals, exceptions, timeouts, boundary violations or
+SQLite busy/locked errors. Each mixed stage performs72 fresh writes; both
+versions therefore perform144 successful settlements, including48 ordinary
+and48 accessory packages plus48 claims. Independent full inventory/binding,
+selected/background player rows, accessory instances, receipts, ledger,
+audit, outbox, eligibility resources and generation checks passed. All tasks
+drained before each restore; the original1M rank digest was restored after
+every process. Driver hashes, full seed manifests, plans, fixture identity,
+limits and eight-file performance delta match the comparison checker.
+
+All nine timed stage/path rows are retained below. E2E includes scheduled
+arrival, producer/loop delay and admission queue. Latencies are milliseconds;
+queries count foreground SQLite API calls, not internal per-item seeks.
+Each cell gives before -> after; p99 from24 samples is effectively a maximum,
+not a stable population tail estimate.
+
+|Stage/path|n/version|E2E p50|E2E p95|E2E p99|DB calls|DB total ms|
+|---|---:|---|---|---|---|---|
+|pure/shop|96|23.335 ->18.611|31.367 ->24.814|77.980 ->67.047|2614 ->2134|1111.806 ->768.943|
+|mixed/accessory|24|44.352 ->40.292|58.585 ->47.830|74.054 ->51.483|1590 ->1494|581.337 ->528.301|
+|mixed/elixir|24|56.565 ->51.725|72.659 ->70.205|87.572 ->79.748|1830 ->1618|833.663 ->799.730|
+|mixed/ordinary|24|30.119 ->26.748|45.366 ->50.711|72.874 ->62.251|1128 ->1032|274.429 ->272.301|
+|mixed/shop|24|22.841 ->17.414|49.204 ->25.405|76.869 ->72.771|670 ->550|280.542 ->198.775|
+|contention/accessory|24|738.023 ->762.906|1131.964 ->1030.425|1177.971 ->1042.097|1590 ->1494|575.138 ->555.299|
+|contention/elixir|24|600.886 ->579.524|1099.399 ->910.560|1120.823 ->983.948|1824 ->1616|810.879 ->808.612|
+|contention/ordinary|24|687.286 ->708.853|1160.462 ->1017.432|1184.569 ->1070.748|1128 ->1032|297.025 ->279.783|
+|contention/shop|24|709.149 ->576.757|1149.507 ->1001.415|1152.159 ->1013.132|670 ->550|295.280 ->211.250|
+
+Foreground calls total13044 ->11520, a reduction of1524 (11.68%). Counting
+message-writer background operations as well gives14175 ->12642; background
+calls1131 ->1122 vary with queue batching and must not be credited as a
+deterministic product-query saving. The complete per-request SQL aggregation,
+including SQL outside the displayed top20, confirms:
+
+- Shop full-profile calls across144 requests:288 ->144. Each removed profile
+  UOW saves five foreground API operations including connection/transaction
+  setup. Pure profile SQL time382.009 ->10.056ms includes the old extra
+  manager read; it is not an isolated cold-disk experiment.
+- Ordinary packages: wallet192 ->96; capacity/package point reads192 ->48
+  plus48 bounded batch statements. In mixed, inventory SQL time2.280 ->5.377ms
+  (point+batch) **increases**, while redundant wallet and API work is removed.
+  Batching these tiny rows alone is not a universal SQL-time improvement.
+- Accessory packages: wallet144 ->96, package reads144 ->96, table enumeration
+  144 ->96, back-column introspection192 ->144. The measured package has no
+  ordinary rewards and uses single-item points; no timed multi-item batch
+  claim is made for it. Table-enumeration time25.598 ->18.837ms in mixed and
+  29.619 ->20.985ms in contention.
+- Elixir inventory points516 ->96 batch statements:260 ->48 in mixed and
+  256 ->48 in contention. The independently seeded draws produce130/128
+  distinct request/item pairs respectively; both versions use identical
+  rewards. Inventory SQL time7.602 ->4.859ms and6.350 ->4.996ms respectively.
+
+|Phase|cap / arrivals per second|Peak handler overlap|Success/s|E2E p50/p95/p99 before -> after|All SQL ms|Phase CPU seconds|
+|---|---|---|---|---|---|---|
+|pure|1 /10|1 ->1|10.079 ->10.085|23.335/31.367/77.980 ->18.611/24.814/67.047|1234.126 ->892.273|2.789 ->2.314|
+|mixed|10 /20|1 ->1|20.006 ->20.039|40.886/72.659/87.572 ->39.271/63.294/79.748|2139.118 ->1957.260|3.429 ->3.169|
+|contention|20 /35|14 ->14|25.586 ->26.734|707.414/1149.507/1184.569 ->708.853/1013.132/1070.748|2189.364 ->2212.619|3.530 ->3.308|
+
+Regression and saturation evidence is retained: mixed ordinary p95 rises
+45.366 ->50.711ms; contention accessory/ordinary p50 rise24.883/21.567ms,
+overall p50 rises1.439ms, and total SQL time rises23.255ms. Mixed loop-lag
+p95 rises37.266 ->39.278ms; contention loop-lag p50/p95 rises36.151/109.573
+->37.043/117.167ms. These short serial samples do not establish causal
+uniform speedup; host available RAM also improves across the pair. All
+direct SQL-count reductions are verified per request independently of timing.
+
+Contention admission queue p95/p99 is434.610/505.022 ->356.031/403.922ms;
+loop dispatch p95/p99 is97.310/227.448 ->77.263/168.501ms. Producer delay
+p95/p99 worsens6.900/135.749 ->22.538/136.037ms. Planned arrivals35/s exceed
+the26.734 successful/s measured over the3.591s drained window. Actual maximum
+handler overlap14 is an interval measurement, not parallel CPU/SQLite work;
+neither the cap20 nor arrivals35 proves20/35 simultaneous processing or
+sustained50 successful/s. Pure/mixed peak overlap1 supplies no concurrent
+processing evidence despite the latter's configured cap10. BEGIN execution
+totals (an upper bound including SQL work, not isolated transaction wait)
+are10.941/12.162/9.734 ->10.246/9.985/8.615ms for pure/mixed/contention.
+
+The process-shared display cache records zero hits, misses, invalidations,
+waits and entries in all six stages. No personal-value cache was added;
+rank generation remains unchanged because these catalog packages grant no
+exp/stone. This pair does not retest global rank invalidation or cold exact
+ranking and cannot establish any improvement there.
+
+Resources: the shared validation lock serialized all six processes; each
+used at most2 of4 CPUs, AS1024MiB, RSS900MiB stop, CPU600s, wall1200s and
+`MALLOC_ARENA_MAX=2`. Prechecks/continuous guards require RAM>=768MiB,
+disk>=2GiB and both individual/total WAL<=256MiB. Observed full-process peak
+RSS223.324MiB, minimum phase available RAM1390MiB, disk10478886912bytes and
+maximum total WAL13513696bytes stayed within limits; no safety stop fired.
+Full-process wall48.0-57.3s and CPU41.9-43.9s include imports, fixture seed,
+snapshot and restoration; phase CPU2.3-3.5s is recorded separately. Per-stage
+post-prepare disk writes are approximately1.88-1.90GB, dominated by controlled
+snapshot/restore IO, not game-settlement writes. Final restore alone takes
+13.8-14.5s. Bounded observer CPU is retained in raw reports, uncalibrated and
+partly overlapping SQL instrumentation; it cannot be subtracted to infer
+unobserved production latency. No long-lived million-row copy was created.
+
+Evidence directory:
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`.
+Raw reports are `reward-batch-{before,after}-v30-20261128-phase{0,1,2}-r01.json`;
+the checked summary is `reward-batch-comparison-v30-20261128-r01.json` and
+non-timing preflight is `reward-batch-preflight-v30-20261128-r01.json`.
+The existing fixture identity/rank digest is retained in every raw report.
+This seven-matcher static/four-route timed batch is a bounded improvement,
+not exhaustive674-matcher/41-background coverage or completion of the active
+repository performance goal. Previously accepted V29 gates/load were reused.

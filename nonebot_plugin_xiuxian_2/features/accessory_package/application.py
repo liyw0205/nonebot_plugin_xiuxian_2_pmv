@@ -12,8 +12,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger, OutboxStore
 from ...infrastructure.observability import trace_context
 from .domain import AccessoryReward
-from .domain import normalize_accessories
-from ..package_reward.domain import PackageReward, normalize_rewards
+from ..package_reward.domain import PackageReward
 from .repository import AccessoryPackageGameRepository, AccessoryPackagePlayerRepository
 from .schemas import AccessoryPackageRequest
 
@@ -127,7 +126,6 @@ class AccessoryPackageApplication:
                 )
                 self.ledger.finish(uow, outcome)
                 return outcome
-            before = self.game.snapshot(uow, request)
             status, before = self.game.prepare(uow, request)
             if status != "applied":
                 outcome = self._rejected(request, status, before)
@@ -160,13 +158,13 @@ class AccessoryPackageApplication:
             row = self.game.get(uow, operation_id)
         if row is None:
             raise ValueError("accessory package operation is missing")
-        request = AccessoryPackageRequest(
+        request = AccessoryPackageRequest.build(
             operation_id=operation_id,
             user_id=str(row["user_id"]),
             package_id=int(row["package_id"]),
             quantity=int(row["quantity"]),
-            rewards=normalize_rewards(PackageReward(**item) for item in json.loads(row["rewards_json"])),
-            accessories=normalize_accessories(json.loads(row["accessories_json"])),
+            rewards=(PackageReward(**item) for item in json.loads(row["rewards_json"])),
+            accessories=json.loads(row["accessories_json"]),
             max_goods_num=int(row.get("max_goods_num") or 1000000000),
             accessory_limit=int(row.get("accessory_limit") or 1000000000),
         )

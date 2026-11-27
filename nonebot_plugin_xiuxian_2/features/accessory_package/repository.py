@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.inventory import read_inventory_rows
 from ..package_reward.domain import PackageReward
 from .domain import AccessoryReward
 from .schemas import AccessoryPackageRequest
@@ -61,30 +62,27 @@ class AccessoryPackageGameRepository:
         if "user_xiuxian" not in game_tables:
             return {"stone": None, "package": None, "rewards": {}}
         columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")} if "back" in game_tables else set()
-        bind_column = "bind_num" if "bind_num" in columns else "0 AS bind_num"
         user = uow.query_one("SELECT stone FROM user_xiuxian WHERE user_id = ?", (request.user_id,))
-        package = (
-            uow.query_one(
-                f"SELECT goods_name, goods_type, goods_num, {bind_column} FROM back WHERE user_id = ? AND goods_id = ?",
-                (request.user_id, request.package_id),
-            )
-            if "back" in game_tables
-            else None
-        )
-        rewards: dict[str, dict[str, Any] | None] = {}
+        reward_ids: dict[str, int] = {}
         for reward in request.rewards:
             if reward.name == "灵石" or reward.item_id is None:
                 continue
             key = str(reward.item_id)
-            if key not in rewards:
-                rewards[key] = (
-                    uow.query_one(
-                        f"SELECT goods_name, goods_type, goods_num, {bind_column} FROM back WHERE user_id = ? AND goods_id = ?",
-                        (request.user_id, reward.item_id),
-                    )
-                    if "back" in game_tables
-                    else None
-                )
+            if key not in reward_ids:
+                reward_ids[key] = reward.item_id
+        rows = (
+            read_inventory_rows(
+                uow,
+                request.user_id,
+                (request.package_id, *reward_ids.values()),
+                projection="details",
+                has_bind_num="bind_num" in columns,
+            )
+            if "back" in game_tables
+            else [None] * (len(reward_ids) + 1)
+        )
+        package = rows[0]
+        rewards = dict(zip(reward_ids, rows[1:]))
         return {
             "stone": None if user is None else user.get("stone"),
             "package": None if package is None else dict(package),

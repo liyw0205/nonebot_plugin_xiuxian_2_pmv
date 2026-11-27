@@ -7,6 +7,7 @@ import json
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.inventory import read_inventory_rows
 from .domain import PackageReward
 
 
@@ -64,8 +65,11 @@ class PackageRewardRepository:
         quantity: int,
         rewards: tuple[PackageReward, ...],
         max_goods_num: int,
+        before: dict[str, int] | None = None,
     ) -> str:
-        if self.snapshot(uow, user_id)["rows"] == 0:
+        # The application supplies its read from this transaction; standalone calls stay live.
+        before = self.snapshot(uow, user_id) if before is None else before
+        if before["rows"] == 0:
             return "user_missing"
         package = uow.query_one(
             "SELECT goods_num FROM back WHERE user_id = ? AND goods_id = ?",
@@ -74,7 +78,7 @@ class PackageRewardRepository:
         if package is None or int(package["goods_num"] or 0) < quantity:
             return "item_insufficient"
         stone_delta = sum(item.quantity for item in rewards if item.name == "灵石")
-        if self.snapshot(uow, user_id)["stone"] + stone_delta < 0:
+        if before["stone"] + stone_delta < 0:
             return "stone_insufficient"
 
         columns = {str(row["name"]) for row in uow.query_all("PRAGMA table_info(back)")}
@@ -107,11 +111,9 @@ class PackageRewardRepository:
         for reward in rewards:
             if reward.name != "灵石":
                 totals[reward.item_id] = totals.get(reward.item_id, 0) + reward.quantity  # type: ignore[index]
-        for item_id, amount in totals.items():
-            current = uow.query_one(
-                "SELECT goods_num FROM back WHERE user_id = ? AND goods_id = ?",
-                (user_id, item_id),
-            )
+        # Consumption and wallet triggers may have changed these reward quantities.
+        current_rows = read_inventory_rows(uow, user_id, tuple(totals), projection="quantity")
+        for amount, current in zip(totals.values(), current_rows):
             if int(current["goods_num"] or 0) + amount > max_goods_num if current else amount > max_goods_num:
                 return "inventory_full"
 

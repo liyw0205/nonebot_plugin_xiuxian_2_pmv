@@ -1364,13 +1364,16 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 repeat_count = 0
                 mainbuffidlist = sect_catalog_ids(sect_info['mainbuff'])
                 results = []
+                search_catalog = None
 
                 for i in range(100):  # 每次搜寻尝试100次
                     if runtime_random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
                         # 随机从可获取品阶中选择一个
                         selected_tier = runtime_random.choice(mainbufftypes)
                         # 从该品阶的功法列表中随机选择
-                        mainbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['gf_list'])
+                        if search_catalog is None:
+                            search_catalog = BuffJsonDate().get_gfpeizhi()
+                        mainbuffid = runtime_random.choice(search_catalog[selected_tier]['gf_list'])
                         
                         if mainbuffid in mainbuffidlist:
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
@@ -1462,13 +1465,16 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 repeat_count = 0
                 secbuffidlist = sect_catalog_ids(sect_info['secbuff'])
                 results = []
+                search_catalog = None
 
                 for i in range(100):  # 每次搜寻尝试100次
                     if runtime_random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
                         # 随机从可获取品阶中选择一个
                         selected_tier = runtime_random.choice(secbufftypes)
                         # 从该品阶的神通列表中随机选择
-                        secbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['st_list'])
+                        if search_catalog is None:
+                            search_catalog = BuffJsonDate().get_gfpeizhi()
+                        secbuffid = runtime_random.choice(search_catalog[selected_tier]['st_list'])
                         
                         if secbuffid in secbuffidlist:
                             secbuff = items.get_data_by_item_id(secbuffid)
@@ -1943,9 +1949,11 @@ async def _refresh_sect_task(bot, event):
     if await _task_claim_replay(bot, event, user_id, 'task_refresh'):
         await sect_task_refresh.finish()
     if sect_id:
-        if _daily_sect_task(user_id):
+        current_task = _daily_sect_task(user_id)
+        if current_task:
             refreshed_task = refresh_user_sect_task(
-                user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), return_failure=True
+                user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id),
+                return_failure=True, current_task=current_task,
             )
             if "任务内容" not in refreshed_task:
                 await handle_send(bot, event, _task_failure("刷新宗门任务", refreshed_task, user_id))
@@ -3673,7 +3681,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await sect_shop.finish()
     
     user_id = user_info['user_id']
-    sect_id = sect_application.get_user_profile(user_id)['sect_id']
+    sect_id = user_info['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
@@ -3771,7 +3779,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
-    sect_info = sect_application.get_sect_info(sect_application.get_user_profile(user_id)['sect_id'])
+    sect_info = sect_application.get_sect_info(user_info['sect_id'])
     if not sect_info:
         msg = "宗门信息不存在！"
         await handle_send(bot, event, msg)
@@ -3819,17 +3827,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not result.succeeded:
         failure_messages = {
             "sect_closed": "宗门已封闭，无法进行兑换。",
-            "limit_reached": (
-                f"该商品每周限购{item_data['weekly_limit']}个\n"
-                f"本周已购买{result.purchased}个\n"
-                f"无法再购买{quantity}个！"
-            ),
-            "contribution_insufficient": (
-                f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(result.contribution)}点"
-            ),
             "materials_insufficient": "宗门资材不足，无法兑换。",
             "inventory_full": "背包已满，无法兑换。",
         }
+        if result.status == "limit_reached":
+            failure_messages["limit_reached"] = (
+                f"该商品每周限购{item_data['weekly_limit']}个\n"
+                f"本周已购买{result.purchased}个\n"
+                f"无法再购买{quantity}个！"
+            )
+        elif result.status == "contribution_insufficient":
+            failure_messages["contribution_insufficient"] = (
+                f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(result.contribution)}点"
+            )
         await handle_send(
             bot,
             event,

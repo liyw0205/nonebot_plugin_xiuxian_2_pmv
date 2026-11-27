@@ -124,6 +124,36 @@ def test_inventory_boundary_includes_duplicate_reward_ids_and_exact_large_values
     assert int(saved['goods_num']) == large+1 and int(saved['bind_num']) == large-1
 
 
+def test_multi_reward_reads_are_batched_and_post_receipt_checks_stay_fresh(database):
+    rewards = [(item, str(item), 'pill', 1) for item in range(3000, 3015)]
+    execute = DatabaseUnitOfWork.execute
+    reads = []
+
+    def traced(uow, sql, params=()):
+        if sql.startswith('SELECT') and 'LEFT JOIN back' in sql:
+            reads.append((sql, params))
+        return execute(uow, sql, params)
+
+    with patch.object(DatabaseUnitOfWork, 'execute', traced):
+        result = SectRenameSqlRepository(database).claim_elixir(**{**REQUEST, 'rewards': rewards})
+    assert result['status'] == 'applied' and len(reads) == 2
+    saved = snapshot(database)
+    assert [(row['goods_num'], row['bind_num']) for row in saved[2][1:]] == [(1, 1)] * 15
+    assert SectRenameSqlRepository(database).claim_elixir(**{**REQUEST, 'rewards': rewards})['status'] == 'duplicate'
+    assert snapshot(database) == saved
+
+
+def test_post_receipt_null_inventory_is_rejected_and_rolled_back(database):
+    with DatabaseUnitOfWork(database) as uow:
+        uow.execute("CREATE TRIGGER null_inventory AFTER INSERT ON sect_elixir_claim_operations "
+                    "BEGIN UPDATE back SET goods_num=NULL WHERE goods_id=2001; END")
+    before = snapshot(database)
+    result = SectRenameSqlRepository(database).claim_elixir(**REQUEST)
+    assert result['reason'] == 'sect_elixir_item_write_rejected'
+    assert result['subject'] == '2001'
+    assert snapshot(database) == before
+
+
 def test_started_request_and_generated_rewards_can_resume_but_explicit_payload_conflicts(database):
     app = SectApplication(database)
     with DatabaseUnitOfWork(database) as uow:

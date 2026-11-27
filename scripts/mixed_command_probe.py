@@ -729,6 +729,28 @@ async def drain_owned(row, *, timeout=1):
                     row["errors"].append(detail)
 
 
+def reward_batch_sql_category(sql):
+    compact = "".join(sql.upper().split()).replace('"', '').rstrip(";")
+    if compact.startswith("SELECTSTONEFROMUSER_XIUXIANWHEREUSER_ID="):
+        return "wallet"
+    if compact == "SELECTNAMEFROMSQLITE_MASTERWHERETYPE='TABLE'":
+        return "snapshot_tables"
+    if compact == "PRAGMATABLE_INFO(BACK)":
+        return "back_columns"
+    if (compact.startswith("SELECTB.ROWIDAS_FOUND,") and "LEFTJOINBACKASB" in compact
+            and "WHEREUSER_ID=?ANDGOODS_ID=WANTED.GOODS_IDLIMIT1" in compact):
+        return "inventory_batch"
+    projection, _, suffix = compact.partition("FROMBACK")
+    projection = projection.removeprefix("SELECT").replace("B.", "")
+    if projection in {"GOODS_NUM", "GOODS_NUM,BIND_NUM", "GOODS_NUM,0ASBIND_NUM",
+                      "COALESCE(GOODS_NUM,0)ASN,COALESCE(BIND_NUM,0)ASB",
+                      "GOODS_NAME,GOODS_TYPE,GOODS_NUM,BIND_NUM",
+                      "GOODS_NAME,GOODS_TYPE,GOODS_NUM,0ASBIND_NUM"} and suffix in {
+            "WHEREUSER_ID=?ANDGOODS_ID=?", "ASBWHEREUSER_ID=?ANDGOODS_ID=?"}:
+        return "inventory_point"
+    return None
+
+
 def recorder_metrics(recorder, *, rank_cpu_ms=None):
     metrics = recorder.snapshot()
     # Count from the complete aggregation, never the display-only top 20 SQLs.
@@ -742,7 +764,13 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                   ("full_profile", "single_goods_total", "batch_goods_totals")}
     stage_reads = {name: {"statements": 0, "total_ms": 0.0} for name in
                    ("sign_own", "boss_own", "boss_better", "inventory_full", "inventory_compact")}
+    reward_reads = {name: {"statements": 0, "total_ms": 0.0} for name in
+                    ("wallet", "inventory_point", "inventory_batch", "snapshot_tables", "back_columns")}
     for (_, sql), values in recorder.by_sql.items():
+        reward_category = reward_batch_sql_category(sql)
+        if reward_category is not None:
+            reward_reads[reward_category]["statements"] += values["count"]
+            reward_reads[reward_category]["total_ms"] += values["execute_ms"] + values["fetch_ms"]
         operation = rank_operation(sql)
         if operation is not None:
             totals = operations[operation]
@@ -788,6 +816,8 @@ def recorder_metrics(recorder, *, rank_cpu_ms=None):
                                for name, counts in live_reads.items()}
     metrics["stage_read_io"] = {name: {field: round(value, 3) for field, value in counts.items()}
                                 for name, counts in stage_reads.items()}
+    metrics["reward_batch_io"] = {name: {field: round(value, 3) for field, value in counts.items()}
+                                  for name, counts in reward_reads.items()}
     metrics["exact_rank_operations"] = {
         operation: {field: round(value, 3) if value is not None else None
                     for field, value in totals.items()}
@@ -1289,6 +1319,7 @@ async def run(args, identity):
         "inventory-projection-v26": "tests.mixed_inventory_projection_fixture",
         "live-read-v28": "tests.mixed_live_read_fixture",
         "overview-stage-v29": "tests.mixed_overview_stage_fixture",
+        "reward-batch-v30": "tests.mixed_reward_batch_fixture",
     }[args.scenario])
     driver_files = [Path(__file__), ROOT / "scripts/command_matrix_probe.py",
                     ROOT / "tests/command_probe.py"]
@@ -1457,7 +1488,7 @@ def parse_args(argv=None):
     parser.add_argument("--fixture", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path, default=ROOT)
-    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26", "live-read-v28", "overview-stage-v29"), default="legacy-v1")
+    parser.add_argument("--scenario", choices=("legacy-v1", "rank-gameplay-v2", "rank-range-v3", "read-strata-v4", "relation-v5", "rank-seek-v6", "dynamic-relation-v7", "multiwriter-v9", "player-projection-v10", "activity-rank-v12", "cold-rank-v14", "activity-write-v16", "arena-training-v18", "shared-query-v19", "sect-shared-v21", "sect-directory-v22", "read-stage-v23", "impart-natal-v24", "sect-seek-v25", "inventory-projection-v26", "live-read-v28", "overview-stage-v29", "reward-batch-v30"), default="legacy-v1")
     parser.add_argument("--concurrency", default="1,5,10,20")
     parser.add_argument("--requests-per-phase", type=int, default=48)
     parser.add_argument("--arrival-rate", type=float, default=10)
