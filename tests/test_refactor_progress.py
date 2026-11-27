@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from scripts.check_full_refactor_progress import _parse_source, _retry_actions_include, _slice_status, _walk
 
@@ -157,6 +159,32 @@ class RefactorProgressTests(unittest.TestCase):
         self.assertTrue(buff["closing_reward_stone_alias_uses_same_application_path"])
         self.assertTrue(buff["closing_reward_scope_backlog_and_virtual_world_excluded"])
         self.assertTrue(buff["closing_reward_phase2_membership_unchanged"])
+
+    def test_closing_replay_gate_rejects_missing_or_early_stage_without_breaking_report(self) -> None:
+        facade = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_buff/__init__.py"
+        read_text = Path.read_text
+        source = read_text(facade, encoding="utf-8")
+        start = source.index("async def out_closing_")
+        end = source.index("@mind_state.handle", start)
+        handler = source[start:end]
+        stage = "    user_mes = dict(user_info)\n"
+        without_stage = handler.replace(stage, "", 1)
+        early_stage = without_stage.replace("    closing_operation_id =", stage + "    closing_operation_id =", 1)
+        for name, candidate in (("missing", without_stage), ("before_replay", early_stage)):
+            with self.subTest(stage=name):
+                replacement = source[:start] + candidate + source[end:]
+
+                def read_candidate(path, *args, **kwargs):
+                    return replacement if path == facade else read_text(path, *args, **kwargs)
+
+                _slice_status.cache_clear()
+                try:
+                    with patch.object(Path, "read_text", read_candidate):
+                        report = _slice_status()
+                    self.assertFalse(report["buff"]["closing_reward_replay_before_snapshot_reads"])
+                    self.assertTrue(report["sect"]["name_refresh_application_owned"])
+                finally:
+                    _slice_status.cache_clear()
 
     def test_progress_report_tracks_avatar_identity_cutover(self) -> None:
         avatar = _slice_status()["avatar_identity"]

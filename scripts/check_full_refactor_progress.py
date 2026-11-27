@@ -5680,8 +5680,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def calculate_closing_reward(" in buff_application_source
             ),
             "closing_reward_replay_before_snapshot_reads": (
-                buff_closing_handler.index("buff_application.closing_replay(")
-                < buff_closing_handler.index("_sql_message().get_user_info_with_id(")
+                all(token in buff_closing_handler for token in (
+                    "buff_application.closing_replay(",
+                    "user_mes = dict(user_info)",
+                    "_sql_message().get_user_cd(",
+                    "_closing_reward_inputs(",
+                ))
+                and buff_closing_handler.index("buff_application.closing_replay(")
+                < buff_closing_handler.index("user_mes = dict(user_info)")
+                < buff_closing_handler.index("_sql_message().get_user_cd(")
+                < buff_closing_handler.index("_closing_reward_inputs(")
             ),
             "closing_reward_operation_identity_event_stable": (
                 'return f"buff-closing-settle:{event_id}:{user_id}"' in buff_facade

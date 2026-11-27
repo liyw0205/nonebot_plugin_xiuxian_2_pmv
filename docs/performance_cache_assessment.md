@@ -5326,3 +5326,25 @@ and static caller evidence, not individual load results. The674 matchers and
 not exhaustive runtime coverage. Cold precise ranks/global invalidation,
 non-SQL tail delays, broader inventory shapes and sustained capacity remain
 open. The overall repository performance goal remains **ACTIVE**.
+
+### V28 CI Contract Follow-Up
+
+The14-file batch was pushed as `afad4ec06c1e98110a16657efba5b77060e8933b`.
+Exact-SHA CI46004706535 passed quality but failed both unittest shards
+(60/16 reported errors). All errors originate from one stale
+`check_full_refactor_progress.py` closing-stage string lookup, including a CLI
+wrapper propagating that failure. It expected the removed duplicate full
+profile SELECT. The exact closing-reward progress test reproduced the same
+ValueError locally in a code-only isolated checkout.
+
+The checker now requires replay -> same-stage profile -> live CD -> reward
+inputs in order. Missing tokens return a false gate rather than raising and
+preventing unrelated report sections from being evaluated. Added negative
+regressions reject absent or premature profile stages and verify an unrelated
+section is still available. The affected progress-contract bundle passed
+**85 tests +82 subtests in19.96s**; changed-file compile and whitespace passed.
+This is a coherent checker/regression repair, with no runtime, classification,
+CI/shard or fixture/load change. Accepted runtime gates and the sole V28
+comparison above remain valid and were not repeated. The repair's exact-SHA
+CI is the remaining delivery gate; passing tests alone is not new performance
+evidence or completion of the overall goal.
