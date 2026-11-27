@@ -147,26 +147,29 @@ class TrainingLeaderboardSqlRepository:
         if not user_id or not self.game_database.is_file() or not self.player_database.is_file():
             return PersonalRank()
         try:
-            with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
-                uow.attach_database(self.player_database, "player_data")
+            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 training_columns = sqlite_table_columns(
-                    uow, self.player_database, "training", schema="player_data"
+                    uow, self.player_database, "training"
                 )
                 if not {"user_id", field}.issubset(training_columns):
                     return PersonalRank()
-                return self._rank_in_uow(uow, field, user_id)
+                return self._rank_in_uow(uow, field, user_id, schema="main")
         except (OSError, ValueError, TypeError, KeyError):
             return PersonalRank()
 
     @staticmethod
-    def _rank_in_uow(uow: DatabaseUnitOfWork, field: str, user_id: str) -> PersonalRank:
+    def _rank_in_uow(
+        uow: DatabaseUnitOfWork, field: str, user_id: str, *, schema: str = "player_data"
+    ) -> PersonalRank:
+        if schema not in {"main", "player_data"}:
+            raise ValueError("unsupported SQLite schema")
         deduped = (
             'SELECT t.user_id AS user_id,'
             f'COALESCE(t."{field}",0) AS value '
-            "FROM player_data.training AS t "
+            f"FROM {schema}.training AS t "
             "WHERE t.user_id IS NOT NULL "
             "AND TRIM(CAST(t.user_id AS TEXT))<>'' "
-            "AND t.rowid=(SELECT MIN(c.rowid) FROM player_data.training AS c "
+            f"AND t.rowid=(SELECT MIN(c.rowid) FROM {schema}.training AS c "
             "WHERE c.user_id=t.user_id)"
         )
         row = uow.query_one(

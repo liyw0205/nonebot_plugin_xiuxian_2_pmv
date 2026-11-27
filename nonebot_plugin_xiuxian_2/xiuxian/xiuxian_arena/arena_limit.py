@@ -59,13 +59,21 @@ class ArenaLimit:
 
     def get_daily_challenge_cap(self, user_id):
         arena_info = self.get_user_arena_info(user_id)
+        return self.daily_challenge_cap_from_state(arena_info)
+
+    def daily_challenge_cap_from_state(self, arena_info):
+        """Calculate display allowance from this request's already normalized state."""
         return self.daily_challenges + int(arena_info.get("daily_extra_challenges", 0))
 
     def calculate_daily_honor(self, user_id):
         arena_info = self.get_user_arena_info(user_id)
+        user_ranking = self.get_user_ranking(user_id)
+        return self.daily_honor_from_state(arena_info, user_ranking)
+
+    def daily_honor_from_state(self, arena_info, user_ranking):
+        """Preview honor using the existing TOP1000 ordinal, without another read."""
         base_honor = self.rank_honor_rewards.get(arena_info["rank"], 100)
         ranking_bonus = 0
-        user_ranking = self.get_user_ranking(user_id)
         if user_ranking == 1:
             ranking_bonus = self.ranking_honor_bonus["1"]
         elif 2 <= user_ranking <= 3:

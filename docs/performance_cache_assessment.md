@@ -3395,3 +3395,168 @@ APIs and observed execution/fetch wall time, not SQLite execution alone.
   world-boss/reward write loads, mentor index-maintenance/first-build costs,
   broader score distributions, sustained capacity and unsampled command
   populations remain unproved. No rerun was made to select favorable numbers.
+
+## V18: Training Rank Boundaries and Arena Display Reads (2026-11-27)
+
+- Continue from delivered `22fab701b25cde6578fb98cf633a588cc3ea8023` and
+  successful exact-SHA CI `45908861000`; old accepted shards and loads were
+  reused. The earlier empty-training sample measured20 ATTACH calls at
+  80.244ms versus2.873ms for the rank aggregate, supporting removal of
+  unnecessary connection setup, not a populated-table scan claim. Arena
+  personal information read normalized state twice; honor read state twice
+  and sorted TOP1000 twice. These four paths form the bounded runtime batch.
+- Hot training personal rank now opens only player DB read-only; cold public
+  snapshot plus live rank still uses one attached game/player transaction.
+  The same query retains first-row duplicate handling, competition rank,
+  valid population and arbitrary-precision comparison. Missing game/player
+  files keep their previous fallback. Deliberate dependency reduction: an
+  existing but corrupt unrelated game DB no longer blocks a hot player-only
+  rank; actual player SQL errors still propagate. No personal rank cache or
+  TOP slice substitution was introduced.
+- Arena display handlers reuse one freshly normalized request state; honor
+  preview/display reuse one live existing TOP1000 ordinal. Standalone cap/
+  honor APIs still read fresh data every call. The ranking UOW is read-only,
+  and a missing database returns empty without creating it. SQL ordering,
+  equal-score ordinal positions and outside-TOP1000=0 remain unchanged;
+  this does not turn the old ordinal into an exact competition rank.
+  Daily/weekly repair, challenge-used reset ownership, live eligibility,
+  balances and reward settlement are unchanged. No new cache, index or pool.
+
+Reports under the sole retained fixture
+`/tmp/xiu-runtime-command-matrix-20261125-r01/baseline-r05/data/`:
+
+- Valid before: `arena-training-before-v18-20261127-r02.json`.
+- Only after: `arena-training-after-v18-20261127-r01.json`.
+- Offline comparison: `arena-training-comparison-v18-20261127-r01.json`.
+  Assertions confirm identical driver/fixture/limits/specifications, every
+  request/user/argument, business manifests and original rank digest; both
+  original1M restores pass. Only diagnostic compatibility JSON and its derived
+  seed differ. Package Python hash `1073ac21a550d57dd4d5a1c7b4cdbeb805fc2affd91c475937478906b22146fd`
+  -> `3ad0cc47b2e9a29fb55a92554ca387b5b4ec40d02529a8cf5fbc8a1e2f77ac77`
+  changes four runtime files and one feature test, explicitly distinguished
+  in the comparison. The harness was frozen before valid before-r02.
+- Retained invalid before-r01 stopped after pure:106 successes,10 reply
+  mismatches and12 precision exceptions. Harness actors had included protected
+  historical REAL scores, and local-date seed disagreed with the business UTC
+  date, provoking legitimate precision rejection/day repair. Only the driver
+  cohort and UTC seed were corrected and covered by small tests; business
+  precision/reset rules were not changed. That failed report is not paired
+  performance evidence. Valid before-r02 and after both ran after UTC midnight.
+- New minimal scenario executes384 real matcher/DI/handler requests/version,
+  three128-request phases. Pure cap10 at20 arrivals/s has56 profiles and18
+  each of `历练排行榜`, `历练积分排行榜`, `我的竞技场`, `我的荣誉`.
+  Mixed/contention cap20 at35/50 arrivals/s each retain56 profiles,32 real
+  stone-training writes changing BOTH exp+100/stone-1000, and10 each target.
+  One instance/shared isolated DB serves each phase; all work drains before
+  restoration. Original1M users/hash
+  `0dd134931a7cb0aa3511cc90d50c3c873b3cea97f576dd74e7e536af577ad8c7`
+  remain;8192 arena and8192 training rows reuse existing synthetic owners.
+  Training includes ties, nonpositive and >int64 BLOB points; arena includes
+  ties and viewers outside TOP1000. Target reads use96 exact-value actors;
+  the32 historical REAL actors remain unchanged, not used to evade rejection.
+  Other populations include2560 backpack,8192 avatar/title and4096 pending
+  mentor rows. Arena/training themselves are not mutated by this traffic;
+  their state-operation/honor-receipt tables are empty and checked unchanged.
+  This is not a populated honor-history or arena-write workload.
+- Both valid versions384/384 successful,0 business/cooldown refusals,
+  exceptions, timeouts, SQL errors, busy/locked or boundary violations (0%).
+  All phase invariants pass: exact replies including every public TOP50 name/
+  value/order and personal rank, full arena/training/state-operation hashes,
+  honor receipts, live exp/stone/power changes, items/nonwriters, attributes,
+  JSON and permanent write receipts. No duplicate debit/reward, lost update,
+  negative balance or deadlock was observed. Message persistence drains within
+  phase wall time; response E2E does not include that asynchronous persistence.
+
+Every row gives E2E p50/p95/p99 milliseconds including producer/dispatch/
+admission queues, before -> after. All rows have0% errors/refusals/timeouts;
+n10/18 tails are small-sample maxima. These17 phase/path rows cover6 commands,
+not all674 matchers or41 background entries; prior28-command coverage remains
+a stratified sample. SQL counts include control APIs; wall time includes
+execute/fetch and observer effects, not SQLite engine time alone.
+
+| Phase / path | n | E2E p50/p95/p99 ms before -> after | SQL calls before -> after | SQL wall ms before -> after |
+| --- | ---: | --- | ---: | ---: |
+| pure / arena honor |18|63.036/227.398/227.398 ->39.517/189.520/189.520|846 ->558|896.102 ->551.935|
+| pure / arena info |18|14.696/212.937/212.937 ->11.848/208.830/208.830|488 ->344|63.135 ->41.424|
+| pure / profile |56|25.173/275.847/339.718 ->15.744/159.884/188.040|2264 ->2256|154.788 ->121.645|
+| pure / training points rank |18|50.360/288.881/288.881 ->45.626/258.097/258.097|345 ->311|748.009 ->781.018|
+| pure / training completed rank |18|60.638/222.792/222.792 ->42.553/139.747/139.747|346 ->313|803.531 ->695.436|
+| mixed / arena honor |10|266.058/577.576/577.576 ->110.469/166.380/166.380|470 ->310|477.590 ->293.401|
+| mixed / arena info |10|272.191/557.058/557.058 ->116.165/194.739/194.739|272 ->192|37.782 ->27.198|
+| mixed / profile |56|272.430/561.061/637.531 ->137.350/219.497/272.533|2266 ->2271|284.368 ->279.612|
+| mixed / stone training |32|279.764/646.926/668.718 ->135.498/194.048/199.014|1219 ->1219|180.688 ->194.270|
+| mixed / training points rank |10|268.557/616.725/616.725 ->152.323/219.898/219.898|193 ->175|439.115 ->374.660|
+| mixed / training completed rank |10|272.913/522.090/522.090 ->148.415/190.666/190.666|194 ->177|421.977 ->418.264|
+| contention / arena honor |10|973.177/1745.609/1745.609 ->827.465/1302.375/1302.375|472 ->310|497.769 ->260.709|
+| contention / arena info |10|992.746/1765.492/1765.492 ->847.714/1301.047/1301.047|270 ->192|37.136 ->22.483|
+| contention / profile |56|780.967/1651.357/1885.039 ->724.809/1328.553/1400.007|2260 ->2262|315.880 ->336.370|
+| contention / stone training |32|905.313/1825.744/1845.685 ->774.067/1358.685/1378.607|1216 ->1216|166.163 ->162.741|
+| contention / training points rank |10|907.218/1783.577/1783.577 ->933.273/1320.599/1320.599|193 ->175|434.119 ->375.179|
+| contention / training completed rank |10|922.442/1804.065/1804.065 ->749.251/1339.241/1339.241|194 ->177|462.633 ->443.304|
+
+- Across38 requests/path, arena info player handles76 ->38, player-DB SQL764 ->462,
+  wall129.265 ->80.845ms; honor handles152 ->76, player-DB SQL1294 ->684,
+  wall1703.417 ->942.616ms. State SELECTs76 ->38 in each; honor TOP1000
+  sorts76 ->38, wall1486.397 ->866.644ms. Each training path game handles/
+  ATTACH38 ->3, retaining one cold combined read/phase;35 hot requests move to
+  player-only handles. Both training paths together ATTACH76 ->6,
+  wall365.334 ->30.146ms; DETACH wall22.080 ->1.634ms. The live training
+  aggregate still scans8192 rows per request and remains a material blocking
+  cost. Diagnostic omission counts are0 for these targets. Total SQL and
+  E2E reductions are not identical: pure points SQL wall regresses, as do
+  mixed training SQL and contention profile SQL; contention points median
+  also regresses. This is one frozen pair, not proof every call is faster.
+- Short-window successful throughput19.968/30.972/29.866 ->
+  20.015/33.765/33.498 per second; contention window4.286 ->3.821s, well
+  below sustained50 successes/s. Peak in-flight7/20/20 ->6/8/20; observed
+  handler wall overlap4/13/16 ->3/6/15. Offered rates, queued requests and
+  overlap do not establish20 simultaneously executing CPU/SQLite requests.
+  Admission contention p95/p991187.118/1264.072 ->695.951/798.322ms;
+  dispatch118.466/133.801 ->79.800/177.638ms (p99 regresses). Producer
+  contention p95/p992.675/3.973 ->20.145/120.064ms regresses. Loop p95/p99
+  59.481/114.307 ->56.326/80.469,78.757/85.943 ->57.080/71.330,
+  144.885/212.326 ->97.640/226.856ms; contention p50/p99 regress. Keep
+  these queue/loop regressions instead of treating offered50/s as capacity.
+- Exp/stone generation deltas remain0/32/32; rank worker calls328/348/342
+  ->323/353/344, wall59.485/162.339/168.166 ->42.766/163.833/181.810ms.
+  Mixed/contention worker wall regresses; contention COUNT2 ->4 calls,
+  .733 ->6.278ms and CPU69.006 ->72.500ms regress. Rank algorithm/global
+  generation invalidation were not changed. Cache hits/misses316/104,190/118,
+  194/114 ->225/105,139/119,143/115; fewer schema accesses accompany the
+  removed reads, so hit totals alone are not a hit-rate improvement. Evictions
+  72/86/82 ->73/87/83, partial hits91/38/48 ->91/38/36; waits/expiry/explicit
+  invalidations/oversized/bypass0. End32 entries, maximum76950 ->76949
+  estimated bytes under1MiB. Counters are phase aggregates, not per-command.
+  BEGIN counts882/938/938 ->828/908/908; p95/p99 .022/.084 ->.019/.264,
+  .031/.277 ->.037/.280,.037/.235 ->.036/.217ms. BEGIN includes execution
+  and only bounds transaction wait; pure p99/mixed both regress. Whole-phase
+  foreground+background SQL4926/5186/5182 ->4424/4946/4914,
+  wall2902.975/2162.097/2282.873 ->2431.713/1917.123/1933.185ms.
+- Unchanged shared lock,2/4 CPUs,1GiB AS,600CPU/1200wall seconds,
+  `MALLOC_ARENA_MAX=2`, RAM768MiB/disk2GiB preflight floors, RSS900MiB and
+  single/total WAL256MiB stops; no guard fired. Minimum traffic-phase sampled
+  RAM1564 ->1580MiB/disk13958144000 ->13817622528 bytes; pretraffic available
+  RAM1887 ->1543MiB. Full-process peak RSS
+  239.223 ->232.145MiB; sampled/final virtual peak626.652 ->596.992MiB.
+  Single WAL18321672/total27006728 bytes unchanged; final WAL0. Process CPU
+  71.147 ->67.432s, wall82.190 ->80.014s, restore13.670 ->13.456s include
+  setup/snapshot IO, not application throughput. Traffic-window IO reads
+  925696 ->1933312 and writes54112256 ->56868864 bytes regress; final
+  cumulative reads911450112 ->990662656/writes4265664512 ->4267151360
+  include restoration. Main-thread CPU4343.423/3610.167/3735.985 ->
+  3672.503/3229.855/3307.690ms includes observer work; phase process CPU
+  5.105/4.439/4.524 ->4.527/3.979/4.022s. Observer overhead remains
+  uncalibrated and is not subtracted from request latency.
+- One consolidated affected suite144 passed/43 subtests in12.70s; seven
+  already-passed driver cases reused. New cases cover pure helper boundaries,
+  live wrappers, day/ISO-week repair without resetting daily-used, state/rank
+  query reuse, readonly/missing-file boundaries, duplicate/tied/huge ranks and
+  actual authorizer failure/recovery. Handler unit tests execute real function
+  bodies with mocked delivery; the paired load supplies real matcher/DI
+  coverage. Two bounded independent read reviews found no blocker. Compile,
+  architecture (`ok=true/errors=[]`), inventory and scoped whitespace pass in
+  a code-only acceptance tree; original status/deletion remain untouched.
+  No old full suite or load was repeated; exact delivered-SHA CI is the clean
+  complete gate. This batch leaves repository-wide performance goal active:
+  training full aggregates, remaining honor sorts, arena-write/history loads,
+  unsampled commands and sustained capacity still require separate evidence.

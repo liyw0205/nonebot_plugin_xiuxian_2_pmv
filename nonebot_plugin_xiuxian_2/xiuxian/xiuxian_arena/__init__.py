@@ -497,7 +497,7 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     user_id = user_info['user_id']
     arena_data = arena_limit.get_user_arena_info(user_id)
-    challenge_cap = arena_limit.get_daily_challenge_cap(user_id)
+    challenge_cap = arena_limit.daily_challenge_cap_from_state(arena_data)
     challenge_used = int(arena_data.get("daily_challenges_used", 0))
     challenge_remaining = max(0, challenge_cap - challenge_used)
     daily_buys = int(arena_data.get("daily_challenge_buys", 0))
@@ -688,8 +688,10 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     arena_data = arena_limit.get_user_arena_info(user_id)
     
     # 计算明日预计奖励
-    tomorrow_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
     user_ranking = arena_limit.get_user_ranking(user_id)
+    tomorrow_honor, base_honor, ranking_bonus = arena_limit.daily_honor_from_state(
+        arena_data, user_ranking
+    )
     
     msg = f"""
 **我的荣誉**

@@ -200,7 +200,9 @@ class ArenaStateRepository:
             return state
 
     def ranking(self, limit: int) -> tuple[tuple[str, int], ...]:
-        with DatabaseUnitOfWork(self.player_database) as uow:
+        if not Path(self.player_database).is_file():
+            return ()
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                 return ()
             rows = uow.query_all(

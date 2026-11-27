@@ -69,7 +69,7 @@ class TrainingLeaderboardRepositoryTests(unittest.TestCase):
             cached_snapshot, live_rank = self.repository.top_snapshot_with_rank(
                 "completed", "viewer", limit=50
             )
-        self.assertEqual(1, attach.call_count)
+        self.assertEqual(0, attach.call_count)
         self.assertEqual(snapshot["rows"], cached_snapshot["rows"])
         self.assertEqual(snapshot["as_of"], cached_snapshot["as_of"])
         self.assertEqual(PersonalRank(1, 3, 12), live_rank)
