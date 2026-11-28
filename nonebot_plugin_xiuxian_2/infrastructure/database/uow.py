@@ -13,10 +13,16 @@ from ...core.numeric import adapt_sqlite_params, register_numeric_functions
 
 
 class _ConnectionScope:
+    # A request alternates game/player and read/write UOW shapes; one idle slot
+    # per distinct connection key avoids reopening (and re-reading schema/WAL
+    # state) on every alternation. Bounded so a scope never hoards handles.
+    MAX_IDLE = 4
+
     def __init__(self, *, write_owner=None, write_database=None, reuse_live_readers=False) -> None:
         self.thread_id = get_ident()
         self.active = True
-        self.idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
+        # Insertion-ordered: oldest first, evicted when MAX_IDLE is exceeded.
+        self.idle: dict[tuple[Any, ...], tuple[sqlite3.Connection, Any]] = {}
         self.write_owner = write_owner
         self.write_database = Path(write_database).resolve() if write_database is not None else None
         self.reuse_live_readers = bool(reuse_live_readers)
@@ -32,10 +38,13 @@ class _ConnectionScope:
         return None
 
     def take(self, key: tuple[Any, ...]) -> tuple[sqlite3.Connection, Any] | None:
-        if not self.available() or self.idle is None or self.idle[0] != key:
+        if not self.available():
             return None
-        _, connection, numeric_functions = self.idle
-        self.idle = None
+        self._evict_stale(key)
+        entry = self.idle.pop(key, None)
+        if entry is None:
+            return None
+        connection, numeric_functions = entry
         try:
             if not connection.in_transaction:
                 return connection, numeric_functions
@@ -44,22 +53,36 @@ class _ConnectionScope:
         connection.close()
         return None
 
+    def _evict_stale(self, key: tuple[Any, ...]) -> None:
+        # Same path with a different file identity: the old handle must never
+        # be reused, so close it as soon as the replacement is observed.
+        for other in [k for k in self.idle if k[0] == key[0] and k[1] != key[1]]:
+            self.idle.pop(other)[0].close()
+
     def put(self, key: tuple[Any, ...], connection: sqlite3.Connection, numeric_functions: Any) -> None:
         if not self.available():
             connection.close()
             return
-        if self.idle is not None:
-            _, previous, _ = self.idle
-            self.idle = None
-            previous.close()
-        self.idle = key, connection, numeric_functions
+        self._evict_stale(key)
+        previous = self.idle.pop(key, None)
+        if previous is not None:
+            previous[0].close()
+        self.idle[key] = connection, numeric_functions
+        while len(self.idle) > self.MAX_IDLE:
+            oldest = next(iter(self.idle))
+            self.idle.pop(oldest)[0].close()
 
     def close(self) -> None:
         self.active = False
-        if self.idle is not None:
-            _, connection, _ = self.idle
-            self.idle = None
-            connection.close()
+        idle, self.idle = self.idle, {}
+        failure = None
+        for connection, _ in idle.values():
+            try:
+                connection.close()
+            except Exception as exc:  # close every handle, then surface the first failure
+                failure = failure or exc
+        if failure is not None:
+            raise failure
 
 
 _CONNECTION_SCOPE: ContextVar[_ConnectionScope | None] = ContextVar("database_uow_connection_scope", default=None)

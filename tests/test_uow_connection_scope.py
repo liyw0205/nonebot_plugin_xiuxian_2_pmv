@@ -149,7 +149,45 @@ class UowConnectionScopeTests(unittest.TestCase):
             with DatabaseUnitOfWork(self.database, read_only=True) as readonly:
                 with self.assertRaises(sqlite3.OperationalError):
                     readonly.execute("UPDATE sample SET value=1")
-            self.assertEqual(1, sum(not row.closed for row in self.connections))
+            # One idle handle per distinct option key, never shared across keys.
+            self.assertEqual(3, sum(not row.closed for row in self.connections))
+            with DatabaseUnitOfWork(self.database, foreign_keys=False) as again:
+                self.assertIs(original, again.connection)
+                self.assertEqual(0, again.query_one("PRAGMA foreign_keys")["foreign_keys"])
+        self.assertTrue(all(row.closed for row in self.connections))
+
+    def test_alternating_keys_reuse_each_connection_once_initialized(self):
+        other = self.database.with_name("player.db")
+        with REAL_CONNECT(other) as connection:
+            connection.execute("CREATE TABLE sample(id INTEGER PRIMARY KEY,value INTEGER)")
+            connection.execute("INSERT INTO sample VALUES(1,0)")
+        connection.close()
+        with DatabaseUnitOfWork.connection_scope():
+            for _ in range(3):
+                with DatabaseUnitOfWork(self.database, immediate=True) as game:
+                    game.execute("UPDATE sample SET value=value+1 WHERE id=1")
+                with DatabaseUnitOfWork(other, read_only=True) as player:
+                    self.assertEqual(0, player.query_one("SELECT value FROM sample")["value"])
+                with DatabaseUnitOfWork(self.database, read_only=True) as reader:
+                    self.assertGreater(reader.query_one("SELECT value FROM sample")["value"], 0)
+            self.assertEqual(3, len(self.connections))
+            writer = next(row for row in self.connections if "BEGIN IMMEDIATE" in row.statements)
+            self.assertEqual(1, writer.statements.count("PRAGMA journal_mode"))
+            self.assertEqual(3, writer.commits)
+        self.assertTrue(all(row.closed for row in self.connections))
+
+    def test_idle_connections_are_bounded_oldest_first(self):
+        limit = uow_module._ConnectionScope.MAX_IDLE
+        with DatabaseUnitOfWork.connection_scope():
+            for index in range(limit + 2):
+                with DatabaseUnitOfWork(self.database, timeout=1 + index):
+                    pass
+            self.assertEqual(limit, sum(not row.closed for row in self.connections))
+            self.assertTrue(self.connections[0].closed)
+            self.assertTrue(self.connections[1].closed)
+            with DatabaseUnitOfWork(self.database, timeout=1 + limit + 1) as newest:
+                self.assertIs(self.connections[-1], newest.connection)
+        self.assertTrue(all(row.closed for row in self.connections))
 
     def test_new_transaction_sees_external_commit(self):
         with DatabaseUnitOfWork.connection_scope():

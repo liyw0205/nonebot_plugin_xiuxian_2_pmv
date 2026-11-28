@@ -6160,3 +6160,103 @@ Interpretation (conservative):
   overall goal stays **ACTIVE**. Next batches should first separate run-order
   and same-code variance (e.g. alternating order) before trusting small e2e
   deltas.
+
+### V35 Run-Order Control For The V34 Pair (measurement only, no code change)
+
+Same frozen V34 trees (`/tmp/xiu-v34-baseline-r01`, `/tmp/xiu-v34-accept-r01`),
+driver, scenario `feature-rank-index-v32`, sole 1M fixture and limits, run in
+REVERSED order (after first, then before) as
+`feature-rank-index-{after,before}-v34-20261128-phase{0,1,2}-r02rev`. All six
+phases `pass`, 96/96 success, invariants pass, original rank digest restored.
+The r01 reports are kept unchanged; this is a variance control, not a retry.
+
+| phase / metric | before r01 (1st) | before r02rev (2nd) | after r01 (2nd) | after r02rev (1st) |
+|---|---|---|---|---|
+| pure e2e p50/p95/p99 ms | 13.417/20.728/102.419 | 13.728/55.091/154.853 | 10.743/47.677/149.251 | 10.522/78.556/174.909 |
+| pure main CPU ms | 1285.7 | 1435.2 | 1202.6 | 1218.7 |
+| mixed e2e p50/p95/p99 ms | 327.282/648.184/781.262 | 132.768/296.175/390.827 | 97.784/178.878/221.459 | 79.300/185.094/230.627 |
+| mixed main CPU ms / SQL ms | 2603.9 / 1674.6 | 2447.3 / 1439.0 | 2309.1 / 1458.4 | 2236.7 / 1463.8 |
+| contention e2e p50/p95/p99 ms | 797.408/1106.190/1187.938 | 780.008/1118.383/1169.417 | 728.113/978.344/1034.448 | 713.577/949.220/986.422 |
+| contention main CPU ms | 2493.2 | 2504.1 | 2221.9 | 2373.7 |
+
+Conclusions (two orderings, still a small sample):
+
+- The run-order hypothesis for the pure tail is **not supported**. In r02rev the
+  first-run (after) pure p95 is 78.556ms and the second-run (before) 55.091ms;
+  the low 20.728ms of before r01 is the outlier. Pure p95/p99 on 32-sample
+  paths swings 20-79ms run to run. The after pure p95/p99 is higher than
+  before in BOTH orderings (47.7/78.6 vs 20.7/55.1ms); this stays a retained,
+  unexplained regression and is not attributed to ordering.
+- Consistent across both orderings, after vs before: pure p50 lower
+  (10.5-10.7 vs 13.4-13.7ms), main-thread CPU lower in every phase, mixed p95
+  lower (179-185 vs 296-648ms), contention p95 lower (949-978 vs
+  1106-1118ms). Mixed SQL time is NOT consistently lower (before r02rev
+  1439.0ms vs after 1458-1464ms), so latency gains are CPU/scheduling, not SQL.
+- Same-code variance is large: before mixed p95 648.184 vs 296.175ms across
+  the two runs. Only directions reproduced in both orderings are reported.
+- Resources: peak RSS <= 219.238MiB, all phases within existing guards.
+
+## V36: Multi-Slot Request Connection Scope In uow
+
+V33 reuses one idle connection per request scope, but a request alternates
+game/player and read/write UOW shapes, so a single idle slot was closed and
+reopened on every alternation. V36 keeps at most four idle connections per
+request scope, keyed by the existing connection key (path + file identity +
+mode). A key whose path matches but whose file identity changed is closed
+immediately and never reused; connections still in a transaction are closed
+instead of reused; overflow evicts the oldest; scope close closes every handle
+and then surfaces the first close failure. No SQL text, parameter binding,
+transaction boundary, CAS, receipt, reply or reason/subject contract changed.
+
+Runtime file changed: `infrastructure/database/uow.py`; regressions in
+`tests/test_uow_connection_scope.py`, `tests/test_activity_boss_live_reader.py`
+and `tests/test_rank_display_readers.py` (per-key slots, stale-identity
+eviction, bound, close-all with first failure, explicit-scope lifetime).
+
+Affected acceptance (shared lock): connection-scope group `138 passed, 41
+subtests passed`; product-caller group 96 passed plus two frozen-owner checks
+that fail identically on a HEAD-only export (missing export-ignored docs and a
+pre-existing sect frozen-owner pytest function not collected by CI unittest),
+so not attributed to V36. Compile, architecture, inventory and whitespace pass;
+non-timing preflight pass. No full local unittest.
+
+### V36 Same-Data Pair Results
+
+Before = unmodified `6c5e1e40` (V34 delivered), after = `6c5e1e40` + the
+whitelist files; frozen V32 driver/scenario `feature-rank-index-v32`, sole 1M
+fixture, unchanged limits. Sole pair
+`feature-rank-index-{before,after}-v36-20261128-phase{0,1,2}-r01` and
+`feature-rank-index-comparison-v36-20261128-r01.json`
+(sha256 `115d3d4d...dd58445`): status `comparison_valid`; same driver/fixture/
+limits/phase specs/requests, full seed manifests byte-identical, only `uow.py`
+differs at runtime, every phase 96/96 success, invariants, write counts, DB
+boundary coverage and restoration pass, no safety/execution errors.
+
+| phase | e2e p50/p95/p99 ms | SQL queries (fg) / ms | success/s | main CPU ms | queue p95 ms | peak in-flight |
+|---|---|---|---|---|---|---|
+| pure 10/20 | 10.794/14.519/106.000 -> 11.036/50.709/168.715 | 1746 (1261) / 365.166 -> 1744 (1261) / 393.120 | 20.163 -> 20.160 | 1087.644 -> 1262.934 | 0.013 -> 0.012 | 2 -> 4 |
+| mixed 20/35 | 98.173/225.262/296.298 -> 63.136/163.235/197.217 | 4999 (4541) / 1403.847 -> 4957 (4493) / 1420.134 | 34.371 -> 32.973 | 2331.802 -> 2384.870 | 0.010 -> 0.011 | 11 -> 7 |
+| contention 20/50 | 641.197/1021.177/1067.070 -> 701.989/929.065/977.666 | 4967 (4541) / 1496.661 -> 4933 (4493) / 1421.805 | 33.476 -> 34.543 | 2410.547 -> 2328.452 | 465.050 -> 455.463 | 20 -> 20 |
+
+Interpretation (conservative):
+
+- Work reduction is real but small: foreground queries drop 48 per write phase,
+  entirely on `宗门捐献` (2016 -> 1968, two fewer per donation); its DB time
+  590.794 -> 568.708ms (mixed) and 626.081 -> 576.284ms (contention). BOSS
+  purchase query count is unchanged (1872) and its DB time is not lower
+  (494.663 -> 511.058, 498.381 -> 505.640ms).
+- Mixed whole SQL time is NOT lower (1403.847 -> 1420.134ms); main-thread CPU
+  is NOT consistently lower (pure +16.1%, mixed +2.3%, contention -3.4%).
+- Mixed e2e p50/p95 is lower, but V35 showed same-code mixed p95 varying
+  296-648ms, so this pair's mixed/contention latency deltas are recorded and
+  NOT claimed. Contention p50 regresses (641.197 -> 701.989ms) while p95/p99
+  improve; contention stays queue-bound.
+- Retained regression: pure whole p95 14.519 -> 50.709ms, p99
+  106.000 -> 168.715ms (BOSS rank p95 15.077 -> 50.709, `我的赛季` p95
+  13.425 -> 78.146, `赛季榜` p95 11.150 -> 18.055ms), plus pure SQL time
+  365.166 -> 393.120ms and pure CPU up. Pure query counts are identical; the
+  same after-tail pattern appeared in V33/V34/V35 and remains unexplained.
+- Resources: peak RSS <= 218.887MiB, minimum available RAM 1452MiB, disk free
+  >= 8637976576 bytes, max WAL 7090552 bytes, all within guards.
+- One finite serial pair; no sustained-capacity claim, not exhaustive 674/41
+  coverage. Overall goal stays **ACTIVE**.

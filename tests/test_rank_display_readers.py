@@ -156,8 +156,11 @@ class RankDisplayReaderTests(unittest.TestCase):
             worker.join(3)
             self.assertFalse(worker.is_alive())
             self.assertTrue(all(connection.closed for connection in self.connections[4:]))
-            self.assertTrue(scoped[0].closed)
-            self.assertFalse(scoped[1].closed)
+            # Both scoped handles stay idle (distinct keys) until scope exit.
+            self.assertTrue(all(not c.closed and not c.in_transaction for c in scoped[:2]))
+            self.assertTrue(all(c not in retained for c in scoped))
+        self.assertTrue(all(c.closed for c in scoped))
+        self.assertTrue(all(not c.closed for c in retained))
         self.assertEqual([], errors)
         self.assertEqual((2, 2, 100), results[0])
         self.assertTrue(all(connection.closed for connection in scoped))

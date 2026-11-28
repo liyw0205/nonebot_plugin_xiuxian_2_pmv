@@ -27,6 +27,11 @@ DatabaseUnitOfWork = uow_module.DatabaseUnitOfWork
 FIGHT_DATE = "2026-10-06"
 
 
+
+def DatabaseUnitOfWork_MAX_IDLE():
+    from nonebot_plugin_xiuxian_2.infrastructure.database import uow as _uow
+    return _uow._ConnectionScope.MAX_IDLE
+
 class FixedDatetime(datetime):
     @classmethod
     def now(cls, tz=None):
@@ -222,11 +227,13 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
                 ok, text = self.repository._fight_boss(user_id="u", operation_id="scoped-action")
             self.assertTrue(ok, text)
             self.assertEqual(1, len(scoped_readers))
-            self.assertTrue(scoped_readers[0].closed)
-            scoped_writer = self.connections[-1]
-            self.assertFalse(scoped_writer.closed)
-            self.assertFalse(scoped_writer.in_transaction)
-        self.assertTrue(scoped_writer.closed)
+            # The scoped reader stays idle under its own key until scope exit.
+            self.assertFalse(scoped_readers[0].in_transaction)
+            scoped_handles = [c for c in self.connections if c is not retained]
+            self.assertTrue(scoped_handles)
+            self.assertTrue(all(c.closed or not c.in_transaction for c in scoped_handles))
+        self.assertTrue(all(c.closed for c in scoped_handles))
+        self.assertTrue(scoped_readers[0].closed)
         self.assertFalse(retained.closed)
         self.assertEqual(1, retained.statements.count("BEGIN"))
         self.assertTrue(self.repository._fight_boss(user_id="u", operation_id="after-scope")[0])
@@ -376,9 +383,12 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
             self.assertIsNone(self.writer.when_unscoped())
             self.assertIsNone(self.owner.when_unscoped())
             scoped = self.connections[2:]
-            self.assertEqual(3, len(scoped))
-            self.assertTrue(all(c.closed for c in scoped[:-1]))
-            self.assertFalse(scoped[-1].closed)
+            # Multi-slot scope: one idle handle per distinct key, reused within
+            # the scope, never the retained unscoped handles, closed at exit.
+            self.assertTrue(1 <= len(scoped) <= 3)
+            self.assertLessEqual(sum(not c.closed for c in scoped), DatabaseUnitOfWork_MAX_IDLE())
+            self.assertTrue(all(not c.closed and not c.in_transaction or c.closed for c in scoped))
+            self.assertTrue(all(c is not retained_writer and c is not retained_reader for c in scoped))
             self.assertTrue(all("PRAGMA query_only=ON" not in c.statements for c in scoped))
         self.assertTrue(all(c.closed for c in scoped))
         self.assertFalse(retained_writer.closed)
@@ -386,7 +396,8 @@ class ActivityBossLiveReaderTests(unittest.TestCase):
         self.assertEqual(3, retained_writer.commits)
         self.assertEqual(1, retained_reader.commits)
         self.assertTrue(self.execute("app-after-scope").ok)
-        self.assertEqual(5, len(self.connections))
+        # After the scope, only the retained handles serve; nothing new opens.
+        self.assertEqual(2 + len(scoped), len(self.connections))
         self.assertEqual(6, retained_writer.commits)
         self.assertEqual(2, retained_reader.commits)
 
