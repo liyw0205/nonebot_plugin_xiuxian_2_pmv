@@ -5,6 +5,7 @@ from typing import Any
 from ...core.numeric import as_int_like
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import PLAYER_PROJECTION_READ_OWNER
 from ..base.first_user_rows import first_user_rows
 from ..base.indexed_ranking import (
     TRAINING_RANK_INDEXES,
@@ -161,7 +162,8 @@ class TrainingLeaderboardSqlRepository:
         if not user_id or not self.game_database.is_file() or not self.player_database.is_file():
             return PersonalRank()
         try:
-            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+            with DatabaseUnitOfWork(self.player_database, read_only=True,
+                                    read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped()) as uow:
                 training_columns = sqlite_table_columns(
                     uow, self.player_database, "training"
                 )

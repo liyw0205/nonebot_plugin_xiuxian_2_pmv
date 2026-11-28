@@ -6,6 +6,7 @@ from ...core.numeric import as_int_like, bind_sqlite_param, require_exact_intege
 from ...core.errors import DomainError
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import PLAYER_PROJECTION_READ_OWNER
 from ..base.first_user_rows import first_user_rows
 from ..base.indexed_ranking import (
     BOSS_INTEGRAL_ORDER_INDEX, BOSS_INTEGRAL_RANK_INDEX,
@@ -64,7 +65,8 @@ class BossIntegralSqlRepository:
         if limit == 0 or not self.database.is_file():
             return []
 
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True,
+                                read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped()) as uow:
             if not self._ready(uow):
                 return []
             return self._top_integrals_in_uow(uow, limit)
@@ -124,7 +126,8 @@ class BossIntegralSqlRepository:
         def load_top_and_rank():
             if not self.database.is_file():
                 return [], PersonalRank()
-            with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            with DatabaseUnitOfWork(self.database, read_only=True,
+                                    read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped()) as uow:
                 if not self._ready(uow):
                     return [], PersonalRank()
                 rows = self._top_integrals_in_uow(uow, normalized_limit)
@@ -146,7 +149,8 @@ class BossIntegralSqlRepository:
         user_id = str(user_id).strip()
         if not user_id or not self.database.is_file():
             return PersonalRank()
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True,
+                                read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped()) as uow:
             if not self._ready(uow):
                 return PersonalRank()
             return self._integral_rank_in_uow(uow, user_id)
@@ -189,7 +193,8 @@ class BossIntegralSqlRepository:
         if not self.database.is_file():
             return BossIntegralSnapshot("schema_missing", user_id)
 
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(self.database, read_only=True,
+                                read_owner=PLAYER_PROJECTION_READ_OWNER.when_unscoped()) as uow:
             if not self._ready(uow):
                 return BossIntegralSnapshot("schema_missing", user_id)
             row = uow.query_one(

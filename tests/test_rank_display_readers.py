@@ -17,9 +17,14 @@ except ValueError:
     nonebot.init(command_start={"", "/"}, log_level="ERROR")
 
 from nonebot_plugin_xiuxian_2.core.errors import DomainError
+from nonebot_plugin_xiuxian_2.core.numeric import register_numeric_functions
 from nonebot_plugin_xiuxian_2.features.activity import read_model_repository as activity
+from nonebot_plugin_xiuxian_2.features.base.indexed_ranking import BOSS_INTEGRAL_RANK_INDEX, TRAINING_RANK_INDEXES
+from nonebot_plugin_xiuxian_2.features.base.ranking_position import PersonalRank
+from nonebot_plugin_xiuxian_2.features.boss import integral_repository as boss
 from nonebot_plugin_xiuxian_2.features.info import profile_repository
 from nonebot_plugin_xiuxian_2.features.title import application as title
+from nonebot_plugin_xiuxian_2.features.training import leaderboard_repository as training
 from nonebot_plugin_xiuxian_2.infrastructure.database import uow as database
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_natal_treasure import natal_data
 from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
@@ -45,6 +50,12 @@ class RankDisplayReaderTests(unittest.TestCase):
             "INSERT INTO title VALUES('a','[\"1\"]','1')",
             "CREATE TABLE natal_treasure(user_id TEXT PRIMARY KEY,form,name,level)",
             "INSERT INTO natal_treasure VALUES('a',1,'Original',3)",
+            "CREATE TABLE boss_limit(user_id TEXT PRIMARY KEY,integral)",
+            "INSERT INTO boss_limit VALUES('a',100),('b',200)",
+            BOSS_INTEGRAL_RANK_INDEX.create_sql,
+            "CREATE TABLE training(user_id TEXT PRIMARY KEY,points,completed)",
+            "INSERT INTO training VALUES('a',10,1),('b',20,2)",
+            TRAINING_RANK_INDEXES['points'].create_sql,
         ])
         self.game_owner, self.player_owner = database.ReadOnlyConnectionOwner(), database.ReadOnlyConnectionOwner()
         self.stack = ExitStack()
@@ -55,6 +66,8 @@ class RankDisplayReaderTests(unittest.TestCase):
         self.stack.enter_context(patch.object(profile_repository, "LIVE_PROJECTION_READ_OWNER", self.game_owner))
         self.stack.enter_context(patch.object(natal_data, "PLAYER_PROJECTION_READ_OWNER", self.player_owner))
         self.stack.enter_context(patch.object(title, "PLAYER_PROJECTION_READ_OWNER", self.player_owner))
+        self.stack.enter_context(patch.object(boss, "PLAYER_PROJECTION_READ_OWNER", self.player_owner))
+        self.stack.enter_context(patch.object(training, "PLAYER_PROJECTION_READ_OWNER", self.player_owner))
         self.stack.enter_context(patch.object(natal_data, "get_paths", return_value=SimpleNamespace(player_db=self.player)))
         self.connections = []
 
@@ -72,6 +85,7 @@ class RankDisplayReaderTests(unittest.TestCase):
     def write(path, statements):
         connection = REAL_CONNECT(path)
         try:
+            register_numeric_functions(connection)
             for sql in statements:
                 connection.execute(sql)
             connection.commit()
@@ -182,6 +196,90 @@ class RankDisplayReaderTests(unittest.TestCase):
         self.game.unlink()
         self.assertEqual((0, 0, 0), self.repository.board_standing("sign", "boss", "a"))
         self.assertFalse(self.game.exists())
+
+    def test_boss_and_training_share_player_handle_with_independent_live_transactions(self):
+        integral = boss.BossIntegralSqlRepository(self.player)
+        leaderboard = training.TrainingLeaderboardSqlRepository(self.game, self.player)
+        self.assertEqual(100, integral.get_integral("a").integral)
+        self.assertEqual(PersonalRank(2, 2, 100), integral.integral_rank("a"))
+        self.assertEqual(PersonalRank(2, 2, 10), leaderboard.rank_of("points", "a"))
+        huge = 10 ** 40 + 1
+        self.write(self.player, [f"UPDATE boss_limit SET integral='{huge}' WHERE user_id='a'",
+                                 f"UPDATE training SET points='{huge}' WHERE user_id='a'"])
+        self.assertEqual(PersonalRank(1, 2, huge), integral.integral_rank("a"))
+        self.assertEqual(PersonalRank(1, 2, huge), leaderboard.rank_of("points", "a"))
+        self.assertEqual([("a", huge), ("b", 200)], integral.top_integrals())
+        self.assertEqual(1, len(self.connections))
+        reader = self.connections[0]
+        self.assertEqual(6, reader.statements.count("BEGIN"))
+        self.assertEqual(6, reader.commits)
+        self.assertFalse(reader.in_transaction)
+        self.assertIn("PRAGMA query_only=ON", reader.statements)
+        # The index content proof remains live on each rank call.
+        self.assertEqual(5, sum("SELECT type,name,sql" in sql for sql in reader.statements))
+
+    def test_feature_rank_read_denial_discards_reader_and_recovers(self):
+        integral = boss.BossIntegralSqlRepository(self.player)
+        leaderboard = training.TrainingLeaderboardSqlRepository(self.game, self.player)
+        self.assertEqual(2, integral.integral_rank("a").rank)
+        reader = self.connections[-1]
+        reader.set_authorizer(lambda action, table, *_: sqlite3.SQLITE_DENY
+                              if action == sqlite3.SQLITE_READ and table == "boss_limit" else sqlite3.SQLITE_OK)
+        with self.assertRaises(sqlite3.DatabaseError):
+            integral.integral_rank("a")
+        self.assertTrue(reader.closed)
+        self.assertEqual(2, leaderboard.rank_of("points", "a").rank)
+        self.assertEqual(2, integral.integral_rank("a").rank)
+        self.assertEqual(2, len(self.connections))
+
+    def test_feature_rank_scope_and_worker_preserve_owner_lifetime(self):
+        integral = boss.BossIntegralSqlRepository(self.player)
+        leaderboard = training.TrainingLeaderboardSqlRepository(self.game, self.player)
+        integral.integral_rank("a")
+        retained = self.connections[0]
+        results, errors = [], []
+
+        def read():
+            try:
+                results.append(integral.integral_rank("a"))
+                results.append(leaderboard.rank_of("points", "a"))
+            except BaseException as exc:
+                errors.append(exc)
+
+        with database.DatabaseUnitOfWork.connection_scope():
+            read()
+            scoped = self.connections[1]
+            worker = threading.Thread(target=copy_context().run, args=(read,))
+            worker.start()
+            worker.join(3)
+            self.assertFalse(worker.is_alive())
+            self.assertFalse(scoped.closed)
+            self.assertTrue(all(connection.closed for connection in self.connections[2:]))
+        self.assertTrue(scoped.closed)
+        self.assertFalse(retained.closed)
+        self.assertEqual([], errors)
+        self.assertEqual([PersonalRank(2, 2, 100), PersonalRank(2, 2, 10)] * 2, results)
+        self.assertEqual(4, len(self.connections))
+
+    def test_feature_rank_reader_tracks_replaced_index_file_and_missing_schema(self):
+        integral = boss.BossIntegralSqlRepository(self.player)
+        self.assertEqual(2, integral.integral_rank("a").rank)
+        retained = self.connections[-1]
+        self.write(self.player, ["DROP INDEX boss_integral_exact_rank_v1",
+                                 "CREATE INDEX boss_integral_exact_rank_v1 ON boss_limit(integral DESC)",
+                                 "UPDATE boss_limit SET integral=300 WHERE user_id='a'"])
+        self.assertEqual(PersonalRank(1, 2, 300), integral.integral_rank("a"))
+        self.write(self.player, ["ALTER TABLE boss_limit RENAME COLUMN integral TO old_integral"])
+        self.assertEqual("schema_missing", integral.get_integral("a").status)
+        replacement = self.player.with_name("feature-replacement.db")
+        self.write(replacement, ["CREATE TABLE boss_limit(user_id TEXT PRIMARY KEY,integral)",
+                                 "INSERT INTO boss_limit VALUES('a',700)"])
+        replacement.replace(self.player)
+        self.assertEqual(PersonalRank(1, 1, 700), integral.integral_rank("a"))
+        self.assertTrue(retained.closed)
+        self.player.unlink()
+        self.assertEqual("schema_missing", integral.get_integral("a").status)
+        self.assertFalse(self.player.exists())
 
 
 if __name__ == "__main__":

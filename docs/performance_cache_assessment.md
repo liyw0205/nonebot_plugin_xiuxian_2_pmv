@@ -6296,11 +6296,15 @@ Comparison SHA256: `d0af23d513eef9b5365dc48d891100a164935f9e1781986acf0710014f3d
 | contention 20/50 | 611.315/969.264/1010.499 -> 709.578/960.598/1026.573 | 4924 (4493) / 1663.540 -> 4836 (4405) / 1404.749 | 34.371 -> 34.822 | 2344.414 -> 2299.948 | 453.428 -> 442.950 |
 
 - Each write stage has 24 purchases: SQL 1872 -> 1784 (88 fewer, including
-  cold fills), DB time 496.663 -> 463.391ms mixed and 479.024 -> 463.103ms
+  cold fills: first request 82, subsequent 23 requests 74 each, baseline 78
+  each), DB time 496.663 -> 463.391ms mixed and 479.024 -> 463.103ms
   contention. Purchase e2e p50/p95/p99: mixed 124.597/251.526/260.802 ->
   61.902/137.396/194.609ms; contention 570.732/969.264/971.761 ->
   689.497/940.503/1006.205ms. Counts and reduced metadata work are established;
   a stable production latency gain is not established by this single pair.
+  Connection diagnostics omit later statements (first request: 8/1/26 on the
+  scoped game reader/player reader/writer); SQL counts/totals above use the
+  complete request counters, not sums of those bounded diagnostics.
 - Shared cache hits/misses: pure 218/8 unchanged; mixed and contention
   202/8 -> 410/16. Entries 8 -> 16, no eviction; write invalidations stay 96.
   Pure has no BOSS purchases and unchanged foreground SQL; its p95/queue
@@ -6317,3 +6321,142 @@ Comparison SHA256: `d0af23d513eef9b5365dc48d891100a164935f9e1781986acf0710014f3d
   Not a million concurrent users, exhaustive 674/41 coverage or sustained
   50 successes/s. No full local unittest rerun; unaffected green coverage is
   reused per the current goal. Overall follow-up remains active.
+
+## Pure Tail Attribution From V33-V36 Saved Evidence
+
+Bounded offline correlation uses eight existing pure reports: both sides of
+V33, V34 and V36 r01, and both V34 r02rev reports (V35 order control). It does
+not dispatch another workload. Derived evidence in the retained fixture data:
+`pure-tail-attribution-v37-20261128-r01.json`, SHA256
+`8873b4a62fdfd1f8a0f6f9132fb267e899a459bfece49320b667fda89333789d`.
+
+| saved run | main-thread generation-2 GC | directly affected request | response / SQL ms | next request arrival delay ms |
+|---|---|---|---|---|
+| V33 before r01 | none | first cold request | 81.621 / 19.907 | .215 |
+| V33 after r01 | 141.136ms | season board #932000038 | 195.905 / .544 | 93.756 |
+| V34 before r01 | none | first cold request | 102.419 / 22.831 | 4.298 |
+| V34 after r01 | 136.531ms | season board #932000092 | 149.251 / .265 | 93.395 |
+| V36 before r01 | none | first cold request | 106.000 / 22.003 | .411 |
+| V36 after r01 | 147.965ms | BOSS rank #932000091 | 168.715 / 2.788 | 109.194 |
+| V35 after r02rev | 151.848ms | personal season #932000093 | 174.909 / 2.712 | 103.574 |
+| V35 before r02rev | 145.762ms | season board #932000092 | 154.131 / .435 | 104.413 |
+
+All five generation-2 pauses overlap the recorded request service intervals;
+the delayed following arrivals overlap those same pauses. This explains a
+specific recurring component of the saved pure tails and why the order
+control also has a slow before run. It does not establish that product code
+caused more GC, or that every p95 difference is GC. Do not adjust/subtract
+these durations from the reported latency. Cold-start tails remain separate.
+
+Evidence limits: no allocation owners or GC stacks, no per-pause GC CPU or
+host run-queue measurements. GC wall duration can include host descheduling;
+the instrumented driver also allocates records. Remaining hypotheses are
+startup/observer allocation changing the collection threshold, product
+allocation differences, and host scheduling within those intervals. The
+existing reports cannot separate them. No product GC policy, cache TTL or
+correctness check is changed to hide this uncertainty; no unchanged-code
+traffic rerun is justified by this correlation alone.
+
+## Next Shared Cost: First Schema Read On Player Connections
+
+V36 after pure top-query diagnostics contain 66 shared `rank_index_available`
+metadata calls with 53.171ms (51.9996ms execute, 1.1734ms fetch). Its proof must stay
+live: schema-version-only shortcuts can accept a rolled-back DDL definition,
+and pathname-only shortcuts can inspect the wrong file after replacement.
+
+A bounded native read-only probe compares 40 fresh connections per database,
+alternating the existing metadata SQL with a simpler equivalent predicate,
+then repeating queries on each still-open connection. Same retained fixture,
+no business writes, two CPUs, AS1024MiB/CPU30s/wall45s and the validation lock.
+`rank-proof-startup-v37-20261128-r01.json`, SHA256
+`b852892bc1a00bd549be7a51eae6e677c92f20b9e46383f1b758a201fdd7da97`:
+
+- Player original query median wall/CPU: first 1.195/1.198ms, repeated
+  .041/.043ms. Simplified first query 1.157/1.161ms: the predicate is not the
+  main cost. Game original first 3.320/3.322ms, repeated .116/.117ms, with
+  similarly small first-query change for the simpler predicate.
+- The first attempt selected `message.db` for the season table and stopped
+  at the nonempty/equality assertion; the corrected target is `xiuxian.db`.
+  No failed-probe timing is used as acceptance evidence.
+- Native SQL timings exclude the handler and instrumentation, so they are
+  mechanism evidence, not command throughput or a replacement for a frozen
+  before/after comparison. The actionable player-side opportunity is to use
+  the existing idle reader owner, retaining independent live transactions,
+  rather than weakening the index proof or caching personal ranks.
+
+## V38: Share The Existing Idle Player Reader For Feature Standings
+
+BOSS integral reads (snapshot values, personal position and display cold
+loads) and training personal positions now opt into the existing
+`PLAYER_PROJECTION_READ_OWNER.when_unscoped()`. This retains an idle query-only
+main-thread handle across independent read transactions. Explicit request
+scopes keep their existing scoped lifetime; worker/reentrant calls do not
+borrow the main-thread handle. Attached training display reads and all writers
+keep their previous lifetime. The existing plugin shutdown closes this owner.
+
+Index content proofs, exact numeric comparisons, live integral/eligibility
+and personal rank, display TTL, CAS and write transactions are unchanged.
+The narrower SQL-predicate alternative was rejected by the startup probe;
+no schema-version-only index shortcut is introduced.
+
+Focused acceptance: 87 tests/10 subtests plus 19 training/fixture tests with
+14 subtests pass. New regressions prove cross-repository handle sharing with
+six independent live transactions, external exact-integer updates above
+int64, live index replacement/fallback, missing schema/file handling, denied
+reads discarded/recovered, copied worker contexts and explicit scope closure.
+Existing index-proof rollback/path-hint tests and purchase ingress are green.
+
+### V38 Same-Data Results And Limits
+
+Sole pair: unmodified `214cd642` in `/tmp/xiu-v38-baseline-r01` versus that
+product plus the integral/training repository changes in
+`/tmp/xiu-v38-accept-r01`. Same V36 driver, V32 scenario, retained 1M fixture,
+requests and limits. Reports `feature-rank-index-{before,after}-v38-20261128-
+phase{0,1,2}-r01.json` and comparison
+`feature-rank-index-comparison-v38-20261128-r01.json` under the fixture data;
+comparison SHA256 `1fac012ec64a6c2051c4fb2862e459a0a3ab278213021bf9565275a8cd709d59`.
+Preflight and all comparison gates pass: all 576 total requests succeed,
+identical full seed manifests, expected writes/invariants, complete database
+snapshot coverage, no SQL/busy errors and original-data restoration.
+
+| phase | e2e p50/p95/p99 ms | SQL queries (foreground) / ms | success/s | main CPU ms | queue p95 ms |
+|---|---|---|---|---|---|
+| pure 10/20 | 10.618/15.160/79.411 -> 10.562/16.375/78.067 | 1746 (1261) / 371.410 -> 1683 (1197) / 321.487 | 20.177 -> 20.173 | 1083.975 -> 1033.172 | .012 -> .021 |
+| mixed 20/35 | 60.906/179.267/207.051 -> 66.719/270.489/355.658 | 4869 (4405) / 1401.835 -> 4831 (4373) / 1351.358 | 34.643 -> 33.524 | 2233.111 -> 2353.470 | .009 -> .012 |
+| contention 20/50 | 765.909/1027.503/1125.834 -> 595.737/924.355/958.411 | 4823 (4405) / 1452.437 -> 4803 (4373) / 1391.677 | 33.787 -> 34.844 | 2389.764 -> 2324.451 | 480.496 -> 429.709 |
+
+- BOSS rank samples: 32 pure, 16 mixed, 16 contention. Complete SQL counts
+  619 -> 555, 315 -> 283, 315 -> 283; DB time 92.459 -> 47.553,
+  51.461 -> 21.893, 54.792 -> 24.696ms. Pure response p50/p95/p99
+  13.040/24.111/49.442 -> 10.913/17.614/47.728ms. Mixed BOSS p95 regresses
+  193.189 -> 320.177ms; contention p95 916.100 -> 852.887ms.
+- Pure metadata proof calls stay 66; observed top-query wall drops
+  47.474 -> 11.696ms, consistent with avoiding repeated schema startup.
+  New connection opens recorded on BOSS rank requests fall 32 -> 0 pure and
+  16 -> 0 mixed. The after reader is already warmed by fixture setup;
+  setup time is excluded and the native probe records the initial cost.
+  This establishes amortized live-read savings, not zero cold-start cost.
+- The explicit purchase scope remains independent: purchase SQL stays 1784
+  in both write stages. Cache hits/misses stay 218/8 pure and 410/16 in both
+  write stages, entries 8/16, no eviction, invalidations 0/96/96.
+- Retain pure p95/queue regressions, all mixed latency quantile regressions,
+  mixed CPU increase and lower success throughput. Mixed after has a
+  141.131ms main-thread generation-2 GC; before mixed has none. As with the
+  saved pure evidence, this is a measured stall, not allocation ownership
+  or a basis for subtracting CPU/observer costs. It overlaps the slowest
+  personal-season request (#932100072, response 355.658ms, SQL 1.395ms).
+  Contention donation SQL time
+  also rises 577.018 -> 602.947ms. No universal latency improvement claim.
+- Peak RSS <= 218.648MiB, available RAM >= 1550MiB, disk free >= 8355299328
+  bytes, max WAL 7090552 bytes. All unchanged CPU/RAM/disk/WAL/CPU-time/wall
+  guards pass; heavy work is serial under the driver's internal lock.
+- The frozen matrix has no training-rank traffic. Training is behavior-tested
+  here; no training throughput gain is claimed. Coverage/scale limits remain
+  five matcher paths, 1M main users and the smaller feature tables, not a
+  674-command audit, million concurrency or sustained 50 successes/s.
+
+Compile, architecture (`ok=true`, no errors), inventory `--check` and whitespace
+pass. No full local unittest rerun; directly affected regressions and the
+unchanged green coverage are used under this goal. V37 `214cd642` CI
+`46118809107` is completed/success for quality and both unittest shards;
+build/release is skipped. V38's own SHA/CI must pass before delivery is complete.
