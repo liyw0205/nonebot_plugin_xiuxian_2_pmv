@@ -232,5 +232,48 @@ class DatabaseHelperTests(unittest.TestCase):
         )
 
 
+
+class SqlRewriteCacheTests(unittest.TestCase):
+    STATEMENTS = (
+        "SELECT '%s ILIKE', \"%s\", value ILIKE %s -- %s\n/* %s */",
+        "SELECT btrim(name) FROM users ORDER BY score NULLS LAST FOR UPDATE SKIP LOCKED",
+        "SET LOCAL statement_timeout = 5",
+        "UPDATE xiuxian_impart SET note='WHERE user_id=?',stone_num=? WHERE user_id=? AND stone_num=?;",
+        "UPDATE impart_data.xiuxian_impart SET stone_num=stone_num-%s WHERE user_id=%s",
+        "",
+    )
+
+    def setUp(self) -> None:
+        db_backend._convert_sql_cached.cache_clear()
+        db_backend._scope_effective_impart_update_cached.cache_clear()
+
+    def test_cached_rewrites_match_uncached_on_repeat(self) -> None:
+        for statement in self.STATEMENTS:
+            with self.subTest(statement=statement):
+                expected_convert = db_backend._convert_sql_uncached(statement)
+                expected_scope = db_backend._scope_effective_impart_update_uncached(statement)
+                for _ in range(3):
+                    self.assertEqual(db_backend._convert_sql(statement), expected_convert)
+                    self.assertEqual(db_backend._scope_effective_impart_update(statement), expected_scope)
+        self.assertEqual(db_backend._convert_sql(None), "")
+        info = db_backend._convert_sql_cached.cache_info()
+        self.assertGreaterEqual(info.hits, 2 * len(self.STATEMENTS))
+
+    def test_cache_is_bounded_and_long_statements_bypass_it(self) -> None:
+        limit = db_backend._SQL_REWRITE_CACHE_SIZE
+        for index in range(limit + 50):
+            db_backend._convert_sql(f"SELECT {index} WHERE a=%s")
+            db_backend._scope_effective_impart_update(f"SELECT {index} WHERE a=%s")
+        self.assertEqual(db_backend._convert_sql_cached.cache_info().currsize, limit)
+        self.assertEqual(db_backend._scope_effective_impart_update_cached.cache_info().currsize, limit)
+
+        db_backend._convert_sql_cached.cache_clear()
+        db_backend._scope_effective_impart_update_cached.cache_clear()
+        long_sql = "SELECT %s" + " " * db_backend._SQL_REWRITE_MAX_CACHED_LENGTH
+        self.assertEqual(db_backend._convert_sql(long_sql), "SELECT ?" + long_sql[len("SELECT %s"):])
+        self.assertEqual(db_backend._scope_effective_impart_update(long_sql), long_sql)
+        self.assertEqual(db_backend._convert_sql_cached.cache_info().currsize, 0)
+        self.assertEqual(db_backend._scope_effective_impart_update_cached.cache_info().currsize, 0)
+
 if __name__ == "__main__":
     unittest.main()

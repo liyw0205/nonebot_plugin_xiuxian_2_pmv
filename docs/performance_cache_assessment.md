@@ -6094,3 +6094,69 @@ Retained regressions and limits (not re-run for a better sample):
 - One finite serial pair; observer overhead uncalibrated; setup/restore
   excluded; two write handlers plus three read controls. No sustained-capacity
   claim, not exhaustive 674/41 coverage. The overall goal stays **ACTIVE**.
+
+## V34: Bounded Cache For Pure SQL Text Rewrites In db_backend
+
+Every statement executed through `db_backend` passes `_convert_sql` (placeholder
+/ `SET LOCAL` rewrite) and `_scope_effective_impart_update` (legacy duplicate
+`user_id` scoping). Both are pure functions of the SQL text (parameters are
+bound separately), yet each call rescanned the full text with regexes. The V33
+pair's write and read paths repeat a small set of statement texts thousands of
+times. V34 memoises both rewrites with `functools.lru_cache(maxsize=512)` and
+bypasses the cache for statements longer than 32768 characters, so
+dynamically generated text cannot grow memory without bound. No SQL output,
+parameter binding, transaction, CAS, receipt, reply or reason/subject contract
+changed.
+
+Runtime file changed: `xiuxian/xiuxian_utils/db_backend.py`; regressions added
+to `tests/test_db_backend.py` (`test_cached_rewrites_match_uncached_on_repeat`,
+`test_cache_is_bounded_and_long_statements_bypass_it`).
+
+Affected acceptance (one run, shared lock): `331 passed, 9 subtests passed`;
+compile, architecture, inventory and whitespace pass; non-timing preflight
+pass. No full local unittest.
+
+### V34 Same-Data Pair Results
+
+Before = unmodified `1580a588` (V33 delivered), after = `1580a588` + the
+whitelist files; frozen V32 driver/scenario `feature-rank-index-v32`, sole 1M
+fixture, unchanged limits (AS 1024MiB, CPU 600s, wall 1200s, 2 of 4 CPUs,
+`MALLOC_ARENA_MAX=2`). Sole pair
+`feature-rank-index-{before,after}-v34-20261128-phase{0,1,2}-r01` and
+`feature-rank-index-comparison-v34-20261128-r01.json`
+(sha256 `b55a6915...802f96d`): status `comparison_valid`; same driver/fixture/
+limits/phase specs/requests, full seed manifests byte-identical, only
+`db_backend.py` differs at runtime, every phase 96/96 success, invariants,
+write counts, DB boundary coverage and restoration pass, no safety/execution
+errors.
+
+| phase | e2e p50/p95/p99 ms | SQL queries / ms | success/s | main CPU ms | queue p95 ms | peak in-flight |
+|---|---|---|---|---|---|---|
+| pure 10/20 | 13.417/20.728/102.419 -> 10.743/47.677/149.251 | 1747/381.989 -> 1745/371.557 | 20.171 -> 20.051 | 1285.697 -> 1202.555 | 0.011 -> 0.012 | 2 -> 3 |
+| mixed 20/35 | 327.282/648.184/781.262 -> 97.784/178.878/221.459 | 4975/1674.610 -> 4995/1458.375 | 29.757 -> 34.544 | 2603.913 -> 2309.082 | 0.011 -> 0.009 | 20 -> 8 |
+| contention 20/50 | 797.408/1106.190/1187.938 -> 728.113/978.344/1034.448 | 4973/1625.906 -> 4965/1585.507 | 32.322 -> 34.281 | 2493.163 -> 2221.904 | 602.217 -> 429.189 | 20 -> 20 |
+
+Interpretation (conservative):
+
+- Foreground query counts are identical (1261/4541/4541 both versions); the
+  change removes repeated text scans, not SQL. The most defensible signal is
+  main-thread CPU, down 6.5% / 11.3% / 10.9% per phase, plus lower write DB
+  time (mixed purchase 578.385 -> 510.598ms, donation 716.268 -> 630.695ms).
+- **The mixed latency drop is NOT attributable to V34.** The V34 *before* tree
+  is the same code as the V33 *after* tree, yet its mixed p95 was 648.184ms
+  versus 170.180ms in the V33 pair. Same-code run-to-run variance in mixed is
+  therefore larger than the V34 effect; mixed/contention e2e differences in
+  this pair are recorded but not claimed.
+- Retained regression: pure whole p95 20.728 -> 47.677ms, p99
+  102.419 -> 149.251ms (`赛季榜` p95 9.597 -> 37.848, `我的赛季` p95
+  20.728 -> 77.308, BOSS rank p95 21.976 -> 47.677ms). The pure tail regressed
+  on the *after* run in both V33 and V34 while read code is unchanged in both;
+  a run-order effect (after always runs second) is suspected but unproven.
+- Contention remains queue-bound (queue p95 429.189ms, service ~0.47-0.70s).
+- Resources: peak RSS <= 218.727MiB, minimum available RAM 1237MiB, disk free
+  >= 8771256320 bytes, max WAL 7090552 bytes, all within guards.
+- One finite serial pair, observer overhead uncalibrated, setup/restore
+  excluded. No sustained-capacity claim, not exhaustive 674/41 coverage. The
+  overall goal stays **ACTIVE**. Next batches should first separate run-order
+  and same-code variance (e.g. alternating order) before trusting small e2e
+  deltas.
