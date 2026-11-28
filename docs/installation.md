@@ -4,7 +4,7 @@
 
 安装器默认下载最新正式版，资产名为 `project.tar.gz`；如需固定版本，可设置
 `XIUXIAN_RELEASE_TAG=vX.Y.Z`。下载时会尝试测速通过的加速源，并校验归档；加速源不可用时
-回退至 GitHub 直连，全部下载失败则停止，不覆盖数据目录。最新正式版为 `v1.3.21`。
+回退至 GitHub 直连，全部下载失败则停止，不覆盖数据目录。最新正式版为 `v1.3.22`。
 
 安装器下载地址：
 `https://github.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/releases/latest/download/project.tar.gz`。
