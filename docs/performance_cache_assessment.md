@@ -6507,6 +6507,20 @@ delivery, not real QQ. Reports: `/tmp/xiu-v39-bag-replay-r01.json` and
 inventory `--check` and whitespace pass. Unaffected green coverage is reused;
 no full local unittest rerun under this goal.
 
+Initial V39 CI `46147409324` exposed two stale pytest fault-injection mocks
+in `test_guishi_clear.py`: they still supplied the full-profile API instead
+of the batch-name API. Both failures reproduce locally. Clear/scheduler
+fixtures now supply the projection contract; distinct display names and an
+exact single fault assertion prevent ID fallback from hiding fixture errors.
+The complete affected trade/scheduler/auction group passes locally (423 tests,
+2 subtests). The initial CI also has one failed source assertion in 3700
+unittest cases: the lazy-reader test required the removed full-profile call.
+It reproduces locally and now checks lazy construction and instance reuse
+directly. The affected lazy-reader/inventory/profile group passes (26 tests);
+the other CI unittest shard succeeds. Compilation and whitespace pass.
+Product files are unchanged, so the same-data pair below remains applicable
+without another matrix run. These corrections are delivered as one batch.
+
 ### V39 Same-Data Results And Limits
 
 One serial pair: `/tmp/xiu-v39-before-r01` at `d5d103bf` versus
