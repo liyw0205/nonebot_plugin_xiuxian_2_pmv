@@ -10,6 +10,7 @@ from datetime import date, datetime
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from ...infrastructure.clock import SystemClock
+from ..base.schema_catalog import sqlite_table_columns
 from .battle_repository import (
     WorldBossBattleSettlementSqlRepository,
     WorldBossDailyLimitSnapshot,
@@ -107,22 +108,14 @@ class BossPurchaseSqlRepository:
             return None
         today = today or self.clock.now().date()
         with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
-            boss_columns = {
-                str(row[1]).casefold()
-                for row in uow.execute('PRAGMA table_info("boss")').fetchall()
-            }
+            boss_columns = sqlite_table_columns(uow, self.player_database, "boss")
             if "weekly_purchases" in boss_columns:
                 row = uow.query_one(
                     "SELECT weekly_purchases AS weekly FROM boss WHERE user_id=?",
                     (user_id,),
                 )
             else:
-                weekly_columns = {
-                    str(row[1]).casefold()
-                    for row in uow.execute(
-                        'PRAGMA table_info("boss_weekly_purchases")'
-                    ).fetchall()
-                }
+                weekly_columns = sqlite_table_columns(uow, self.player_database, "boss_weekly_purchases")
                 if not {"user_id", "weekly_purchases"} <= weekly_columns:
                     return None
                 row = uow.query_one(
@@ -203,7 +196,7 @@ class BossPurchaseSqlRepository:
                 if values["quantity"] != quantity or values["cost"] != quantity * unit_cost:raise corrupt()
                 return {"status":"duplicate","reason":"","subject":user_id,**values}
             if uow.query_one("SELECT 1 AS ok FROM user_xiuxian WHERE user_id=?",(user_id,)) is None:return self._record(uow,operation_id,payload,result("user_missing"))
-            integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id,));boss_columns={str(row[1]) for row in uow.execute("PRAGMA player_data.table_info(boss)").fetchall()}
+            integral=uow.query_one("SELECT COALESCE(integral,0) AS integral FROM player_data.boss_limit WHERE user_id=?",(user_id,));boss_columns=sqlite_table_columns(uow, self.player_database, "boss", schema="player_data")
             if "weekly_purchases" in boss_columns:
                 weekly_table = "boss"
                 boss = uow.query_one("SELECT COALESCE(weekly_purchases,'{}') AS weekly FROM player_data.boss WHERE user_id=?", (user_id,))

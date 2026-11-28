@@ -19,7 +19,10 @@ from nonebot_plugin_xiuxian_2.core.errors import ConflictError
 from nonebot_plugin_xiuxian_2.features.boss.application import BossApplication
 from nonebot_plugin_xiuxian_2.features.boss.purchase_command_application import BossPurchaseCommandApplication
 from nonebot_plugin_xiuxian_2.features.boss.purchase_command_replies import render_boss_purchase_reply
-from nonebot_plugin_xiuxian_2.features.boss.purchase_command_repository import BossPurchaseCommandRepository
+from nonebot_plugin_xiuxian_2.features.boss.purchase_command_repository import (
+    BossPurchaseCommandRepository,
+    BossPurchaseCommandSchemaError,
+)
 from nonebot_plugin_xiuxian_2.features.boss.repository import BossPurchaseSqlRepository
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork, OperationLedger
 
@@ -509,3 +512,58 @@ def test_real_handler_reuses_one_idle_connection_per_database_and_closes_on_exit
     replay = handler.run("1 1", event_id="scoped-event")
     assert REPLAY in replay
     assert _query(context.player, "SELECT integral FROM boss_limit") == [(90,)]
+
+
+def test_receipt_reads_legacy_row_once_and_reuses_warm_structure_metadata(tmp_path, monkeypatch):
+    from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
+
+    context = _context(tmp_path, weekly=0)
+    process_read_cache.clear()
+    statements = []
+    execute = DatabaseUnitOfWork.execute
+
+    def record(uow, sql, params=()):
+        statements.append(sql)
+        return execute(uow, sql, params)
+
+    monkeypatch.setattr(DatabaseUnitOfWork, "execute", record)
+    for _ in range(2):
+        statements.clear()
+        assert context.reader.receipt("missing", "u", item_id=ITEM_ID, quantity=1) is None
+        assert statements.count('SELECT * FROM "boss_purchase_operations" WHERE operation_id=?') == 1
+    assert not any("table_info" in sql or "sqlite_master" in sql for sql in statements)
+
+
+@pytest.mark.parametrize("table,column,profile", [
+    ("operation_ledger", "request_hash", False),
+    ("boss_purchase_operations", "payload", False),
+    ("operation_audit", "audit_id", False),
+    ("user_xiuxian", "user_id", True),
+])
+def test_warm_command_metadata_rejects_changed_schema_and_recovers(tmp_path, table, column, profile):
+    context = _context(tmp_path, weekly=0)
+
+    def read():
+        return context.reader.profile("u") if profile else context.reader.receipt("missing", "u")
+
+    original = read()
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute(f'ALTER TABLE "{table}" RENAME COLUMN "{column}" TO missing_column')
+    with pytest.raises(BossPurchaseCommandSchemaError):
+        read()
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute(f'ALTER TABLE "{table}" RENAME COLUMN missing_column TO "{column}"')
+    assert read() == original
+
+
+def test_warm_profile_rejects_view_and_keeps_player_values_live(tmp_path):
+    context = _context(tmp_path, weekly=0)
+    assert context.reader.profile("u")["stone"] == 0
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("UPDATE user_xiuxian SET stone=17 WHERE user_id='u'")
+    assert context.reader.profile("u")["stone"] == 17
+    with DatabaseUnitOfWork(context.game) as uow:
+        uow.execute("ALTER TABLE user_xiuxian RENAME TO saved_player")
+        uow.execute("CREATE VIEW user_xiuxian AS SELECT * FROM saved_player")
+    with pytest.raises(BossPurchaseCommandSchemaError):
+        context.reader.profile("u")

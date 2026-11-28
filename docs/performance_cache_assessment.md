@@ -6260,3 +6260,60 @@ Interpretation (conservative):
   >= 8637976576 bytes, max WAL 7090552 bytes, all within guards.
 - One finite serial pair; no sustained-capacity claim, not exhaustive 674/41
   coverage. Overall goal stays **ACTIVE**.
+
+## V37: BOSS Purchase Structure Metadata And Receipt Reads
+
+`BossPurchaseCommandRepository` reads the table catalog once and each required
+column set once in its transaction, using the existing file-identity/schema-
+version cache. It reads the legacy receipt row once. Weekly-purchase reads and
+the attached writer use the same existing column-metadata helper. Player
+profiles, integral, weekly quantities, eligibility, ledger/receipt payloads,
+CAS, write verification and transaction boundaries remain live and unchanged.
+No connection owner or journal/commit policy changes in this batch.
+
+Affected tests: 65 passed, 36 subtests passed, including schema mutation and
+recovery, table-versus-view checks, warm live profile/weekly values, attached
+weekly fallback and a concurrent weekly change rejected by the original CAS.
+The additional BOSS application/exact-currency group passes 4 tests. Compile,
+architecture (`ok=true`, no errors), inventory `--check` and whitespace pass.
+
+Sole frozen pair: unmodified `7107c8d8` in `/tmp/xiu-v37-baseline-r01`, versus
+that source plus the two BOSS repository files in `/tmp/xiu-v37-accept-r01`.
+Reports under the retained `baseline-r05/data` fixture directory:
+`feature-rank-index-{before,after}-v37-20261128-phase{0,1,2}-r01.json` and
+`feature-rank-index-comparison-v37-20261128-r01.json`. The unchanged V36 driver,
+V32 scenario, requests, seed manifests, limits, database boundaries and restore
+digests match. All six phases pass with 96/96 successes, exact asset/ledger/
+receipt invariants and original-data restoration; no busy/locked or SQL errors.
+Preflight passes. An initial export lacked Git identity and stopped before
+fixture access; adding local object references fixed source identification.
+Comparison SHA256: `d0af23d513eef9b5365dc48d891100a164935f9e1781986acf0710014f3d8038`.
+
+| phase | e2e p50/p95/p99 ms | SQL queries (foreground) / ms | success/s | main CPU ms | queue p95 ms |
+|---|---|---|---|---|---|
+| pure 10/20 | 10.707/17.944/80.850 -> 10.538/18.285/78.114 | 1746 (1261) / 390.484 -> 1747 (1261) / 369.722 | 20.174 -> 20.173 | 1090.669 -> 1090.857 | .011 -> .023 |
+| mixed 20/35 | 119.235/260.802/329.680 -> 54.777/172.298/223.091 | 4941 (4493) / 1432.355 -> 4877 (4405) / 1351.477 | 34.521 -> 33.002 | 2327.990 -> 2365.543 | .010 -> .010 |
+| contention 20/50 | 611.315/969.264/1010.499 -> 709.578/960.598/1026.573 | 4924 (4493) / 1663.540 -> 4836 (4405) / 1404.749 | 34.371 -> 34.822 | 2344.414 -> 2299.948 | 453.428 -> 442.950 |
+
+- Each write stage has 24 purchases: SQL 1872 -> 1784 (88 fewer, including
+  cold fills), DB time 496.663 -> 463.391ms mixed and 479.024 -> 463.103ms
+  contention. Purchase e2e p50/p95/p99: mixed 124.597/251.526/260.802 ->
+  61.902/137.396/194.609ms; contention 570.732/969.264/971.761 ->
+  689.497/940.503/1006.205ms. Counts and reduced metadata work are established;
+  a stable production latency gain is not established by this single pair.
+- Shared cache hits/misses: pure 218/8 unchanged; mixed and contention
+  202/8 -> 410/16. Entries 8 -> 16, no eviction; write invalidations stay 96.
+  Pure has no BOSS purchases and unchanged foreground SQL; its p95/queue
+  regression and small CPU difference are retained as control observations.
+- Retain contention p50/p99 regression, mixed CPU increase and lower mixed
+  successful throughput. Contention loop p99 208.414 -> 249.766ms also rises.
+  V35 same-code variance and uncalibrated observer overhead still apply.
+- Peak RSS <= 218.945MiB, available RAM >= 1395MiB, free disk >= 8245469184
+  bytes, maximum WAL 7090552 bytes. Same <=2 CPU, AS1024MiB, RSS900MiB,
+  RAM768MiB, disk2GiB/full-snapshot precheck, WAL256MiB, CPU600s/wall1200s
+  guards; no outer lock around the driver's own validation lock.
+- Coverage remains five matcher paths across three 96-request phases, 1M
+  main users/128 actors/8192 sect members/3840 season rows/2048 BOSS rows.
+  Not a million concurrent users, exhaustive 674/41 coverage or sustained
+  50 successes/s. No full local unittest rerun; unaffected green coverage is
+  reused per the current goal. Overall follow-up remains active.
