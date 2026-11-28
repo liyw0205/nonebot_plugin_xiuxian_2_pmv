@@ -2038,9 +2038,10 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 await sect_users.finish()
 
             # 关键词筛选：道号/职位名/境界/UID；无命中与「宗门没有成员」分开提示
+            position_config = jsondata.sect_config_data()
             position_titles = {
                 str(pos_id): pos_data.get("title", "")
-                for pos_id, pos_data in jsondata.sect_config_data().items()
+                for pos_id, pos_data in position_config.items()
                 if isinstance(pos_data, dict)
             }
             filtered_users = filter_sect_member_rows(userlist, keyword, position_titles)
@@ -2052,7 +2053,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             sorted_users = sorted(filtered_users, key=lambda x: x['sect_position'])
 
             # 获取长老职位编号
-            position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
+            position_zhanglao = [k for k, v in position_config.items() if v.get("title", "") == "长老"]
             elder_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
 
             # 当前操作者职位
@@ -2086,7 +2087,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 if keyword:
                     title.append(f"筛选「{keyword}」命中 {total_members} 人")
                 for pos_id in sorted(position_count.keys()):
-                    pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                    pos_data = position_config.get(str(pos_id), {})
                     pos_title = pos_data.get("title", f"未知职位{pos_id}")
                     max_count = pos_data.get("max_count", 0)
                     count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
@@ -2118,7 +2119,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     position_count = count_sect_positions(sorted_users)
 
                     for pos_id in sorted(position_count.keys()):
-                        pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                        pos_data = position_config.get(str(pos_id), {})
                         pos_title = pos_data.get("title", f"未知职位{pos_id}")
                         max_count = pos_data.get("max_count", 0)
                         count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
@@ -3269,7 +3270,8 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     sect_position = user_info['sect_position']
     user_name = user_info['user_name']
     sect_info = sect_application.get_sect_info(sect_id)
-    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    position_config = jsondata.sect_config_data()
+    owner_idx = [k for k, v in position_config.items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_id:
@@ -3313,7 +3315,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗主
 > {sect_application.get_user_profile(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
 道友职位
-> {jsondata.sect_config_data()[f"{sect_position}"]["title"]}
+> {position_config[f"{sect_position}"]["title"]}
 宗门状态
 > {join_status}{closed_status}
 宗门人数

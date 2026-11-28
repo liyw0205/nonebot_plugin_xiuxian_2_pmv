@@ -26,7 +26,8 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             "user_id": "u-1",
             "user_name": "测试道友",
             "id": 7,
-            "root_type": "天灵根",
+            "root_type": "命运道果",
+            "root_level": 40,
             "level": "江湖好手",
             "sect_id": None,
             "sect_position": None,
@@ -81,6 +82,7 @@ class InfoProfileReuseTests(unittest.IsolatedAsyncioTestCase):
             )
 
         get_profile.assert_not_called()
+        manager.get_root_rate.assert_called_once_with("命运道果", "u-1", root_level=40)
         title_display.assert_called_once_with("u-1", title_id="title-1")
         level_rate_reader.assert_called_once_with()
         buff.get_user_main_buff_data.assert_called_once_with()

@@ -388,6 +388,82 @@ class InventoryProjectionCallerTests(unittest.TestCase):
         self.assertEqual([item.args[3] for item in handler.await_args_list], [2, 5])
         self.assertIn("背包中没有足够", send.await_args.args[2])
 
+    def test_local_special_dispatch_reuses_only_this_checked_profile(self):
+        bot, event = SimpleNamespace(), SimpleNamespace()
+        entries = [(20010, "use_lottery_talisman"), (20019, "use_unbind_charm"),
+                   (20020, "use_spirit_stone_bag"), (20021, "use_tianji_stone_trigger"),
+                   (20022, "use_three_cultivation_pill")]
+        entries.extend((item_id, "use_pet_egg_item") for item_id in self.back.PET_EGG_IDS)
+        for item_id, handler_name in entries:
+            with self.subTest(item_id=item_id):
+                profiles = [{"user_id": "u", "stone": 10**80 + delta} for delta in (1, 2)]
+                handler = AsyncMock()
+                with (
+                    patch.object(self.back, "assign_bot", AsyncMock(return_value=(bot, None))),
+                    patch.object(self.back, "check_user", side_effect=[
+                        (True, profile, "") for profile in profiles]) as check,
+                    patch.object(self.back.items, "get_data_by_item_name", return_value=(
+                        item_id, {"type": "特殊道具", "name": "item"})),
+                    patch.object(self.back, "_sql_message", return_value=SimpleNamespace(
+                        goods_num=Mock(return_value=5))),
+                    patch.object(self.back, handler_name, handler),
+                ):
+                    for _ in profiles:
+                        with self.assertRaises(FinishedException):
+                            asyncio.run(self.back.use_item_(bot, event, "item 2 target" if item_id == 20019 else "item 2"))
+                self.assertEqual(2, check.call_count)
+                self.assertEqual(2, handler.await_count)
+                for call_args, profile in zip(handler.await_args_list, profiles):
+                    self.assertEqual((bot, event, item_id, 2), call_args.args)
+                    self.assertIs(profile, call_args.kwargs["user_info"])
+                    if item_id == 20019:
+                        self.assertEqual("target", call_args.kwargs["target_item_name"])
+
+    def test_local_special_helpers_still_validate_independent_calls(self):
+        for handler_name in ("use_pet_egg_item", "use_lottery_talisman", "use_unbind_charm",
+                             "use_spirit_stone_bag", "use_tianji_stone_trigger", "use_three_cultivation_pill"):
+            with (
+                self.subTest(handler=handler_name),
+                patch.object(self.back, "assign_bot", AsyncMock(return_value=("bot", None))),
+                patch.object(self.back, "check_user", return_value=(False, None, "refused")) as check,
+                patch.object(self.back, "handle_send", AsyncMock()) as send,
+                patch.object(self.back, "back_application") as application,
+            ):
+                asyncio.run(getattr(self.back, handler_name)("bot", "event", 20022, 1))
+                check.assert_called_once_with("event")
+                send.assert_awaited_once_with("bot", "event", "refused", md_type="我要修仙")
+                self.assertEqual([], application.mock_calls)
+
+    def test_three_pill_uses_checked_fate_level_and_preserves_exact_arguments(self):
+        profile = {"user_id": "u", "level": "realm", "root_type": "命运道果",
+                   "root_level": 40, "exp": 10**80 + 1}
+        manager = SimpleNamespace(get_root_rate=Mock(return_value=49.5),
+                                  get_user_info_with_id=Mock(side_effect=AssertionError("duplicate profile")))
+        result = SimpleNamespace(succeeded=False)
+        with (
+            patch.object(self.back, "assign_bot", AsyncMock(side_effect=AssertionError("duplicate assignment"))),
+            patch.object(self.back, "check_user", side_effect=AssertionError("duplicate identity")),
+            patch.object(self.back, "_sql_message", return_value=manager),
+            patch.object(self.back.jsondata, "level_data", return_value={"realm": {"spend": 2}}),
+            patch.object(self.back, "UserBuffDate", return_value=SimpleNamespace(
+                BuffInfo={}, get_user_main_buff_data=lambda: {})),
+            patch.object(self.back, "XiuConfig", return_value=SimpleNamespace(
+                closing_exp=100, closing_exp_upper_limit=2)),
+            patch.object(self.back, "OtherSet", return_value=SimpleNamespace(
+                set_closing_type=lambda level: 10**80 + 1)),
+            patch.object(self.back.random, "uniform", return_value=1),
+            patch.object(self.back, "_cultivation_item_operation_id", return_value="operation"),
+            patch.object(self.back.back_application, "three_cultivation_pill", return_value=result) as apply,
+            patch.object(self.back, "_back_op_fail_msg", return_value="live refusal"),
+            patch.object(self.back, "handle_send", AsyncMock()) as send,
+        ):
+            asyncio.run(self.back.use_three_cultivation_pill("bot", "event", 20022, 2, user_info=profile))
+        manager.get_root_rate.assert_called_once_with("命运道果", "u", root_level=40)
+        apply.assert_called_once_with(operation_id="operation", user_id="u", item_id=20022,
+                                      quantity=2, requested_exp=9900 * 2 * 333,
+                                      max_exp=(10**80 + 1) * 2, power_multiplier=99.0)
+        send.assert_awaited_once_with("bot", "event", "live refusal")
+
 
 if __name__ == "__main__":
     unittest.main()

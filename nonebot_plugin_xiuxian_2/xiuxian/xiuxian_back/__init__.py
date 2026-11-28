@@ -1412,7 +1412,10 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
             else:
                 exp = goods_info['buff'] * num
-                root_rate = _sql_message().get_root_rate(user_info_full['root_type'], user_id)
+                root_rate = _sql_message().get_root_rate(
+                    user_info_full['root_type'], user_id,
+                    root_level=user_info_full.get('root_level', 0),
+                )
                 level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
                 result = back_application.cultivation_item(
                     operation_id=_cultivation_item_operation_id(event, user_id, goods_id),
@@ -1598,23 +1601,25 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
-        # 调用对应的处理函数
+        handler_kwargs = {}
+        if goods_id in {20010, 20019, 20020, 20021, 20022, *PET_EGG_IDS}:
+            handler_kwargs['user_info'] = user_info
         if int(goods_id) == 20019:
-            await handler_func(bot, event, goods_id, quantity, target_item_name=parts[2] if len(parts) == 3 else "")
-        else:
-            await handler_func(bot, event, goods_id, quantity)
+            handler_kwargs['target_item_name'] = parts[2] if len(parts) == 3 else ""
+        await handler_func(bot, event, goods_id, quantity, **handler_kwargs)
     else:
         msg = f"{item_name} 是特殊道具，但目前没有对应的使用方法！"
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         
     await use_item.finish()
 
-async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用宠物蛋，按道具配置孵化指定稀有度宠物。"""
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = str(user_info["user_id"])
     item_info = items.get_data_by_item_id(item_id)
@@ -1696,13 +1701,14 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包")
     return
 
-async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用灵签宝箓"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
     user_id = user_info["user_id"]
     rewards = []
     for _ in range(num):
@@ -1746,13 +1752,14 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await handle_send(bot, event, result_msg)
     return
 
-async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, target_item_name=""):
+async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, target_item_name="", user_info=None):
     """使用解绑符解除物品绑定状态"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
     user_id = user_info["user_id"]
 
     if not target_item_name:
@@ -1790,13 +1797,14 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     await handle_send(bot, event, msg)
 
-async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用灵石福袋"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info["user_id"]
 
@@ -1842,13 +1850,14 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     await handle_send(bot, event, "\n".join(lines))
 
-async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用天机灵石引"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info["user_id"]
 
@@ -1889,23 +1898,18 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
 
     await handle_send(bot, event, "\n".join(lines))
 
-async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int = 1):
+async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int = 1, *, user_info=None):
     """使用三转玄丹"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)
-
-    if not user_mes:
-        await handle_send(bot, event, "获取用户信息失败！")
-        return
-
+    user_mes = user_info
     level = user_mes['level']
-    current_exp = user_mes['exp']
 
     # 获取单次修炼的修为
     level_rate = _sql_message().get_root_rate(

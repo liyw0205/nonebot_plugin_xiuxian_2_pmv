@@ -6460,3 +6460,83 @@ pass. No full local unittest rerun; directly affected regressions and the
 unchanged green coverage are used under this goal. V37 `214cd642` CI
 `46118809107` is completed/success for quality and both unittest shards;
 build/release is skipped. V38's own SHA/CI must pass before delivery is complete.
+
+## V39: Reuse Request Data And Batch Trade Display Names
+
+Baseline `d5d103bf` has completed/success CI `46119858816`, including quality
+and both unittest shards. This batch follows current callers rather than the
+obsolete 7107-hotspot handoff. Three independent P1 candidates are implemented:
+
+- `xiuxian_back.use_item_` already checks identity before six local item
+  handlers check it again. Pet eggs, talismans, unbinding, stone bags, tianji
+  stones and three-cultivation pills now receive that request's profile;
+  standalone calls still validate. The pill also drops a third profile read.
+  Divine-item use and the image profile pass the existing `root_level` to
+  avoid the fate-root fallback lookup. Inventory and settlement checks remain
+  live, with no cross-request profile cache.
+- Root reroll generation/comparison repeatedly parses the same root JSON:
+  the ten generated options plus automatic comparison use one read instead
+  of twenty (the separate existing rate calculation is unchanged). The
+  interactive reply independently reloads once instead of ten comparisons.
+  Sect member display reuses one position config instead of `2+P` reads in
+  text or `2+2P` in first-page Markdown, where P is distinct position count;
+  my-sect uses one instead of two. The next request sees new configuration.
+- Trade match lines, scheduled matches, clear/refund summaries, expired
+  returns, auction detail and final results replace per-person full profiles
+  with the existing `user_id,user_name` projection, deduplicated and batched
+  by 400 IDs. Scheduled matching batches per candidate group while retaining
+  each settlement/event order. Missing/failed display names fall back to IDs;
+  flow exceptions propagate. Five visible auction records bound the lookup.
+
+P2 sect personal-rank sorting is deferred: the sect table is small and exact
+large-number/tie/duplicate-ID compatibility outweighs the evidenced benefit.
+`Items.get_items_data()` has no production callers, so it is not optimized.
+These exhaust this round's confirmed high-priority candidates; this is not
+evidence that all future hotspots are resolved. TTL, GC policy, precise live
+ranks, assets/eligibility, transactions, CAS, ledger and replay are unchanged.
+
+Focused acceptance passes: initial affected group 187 tests/98 subtests,
+contract group 381/23, additional trade group 252/2, final name group 5/2 and
+standalone config unittest 3. Groups overlap and are not a unique test total.
+Tests cover fresh next-request data, identical RNG state, exact large values,
+duplicate rows, both auction renderers, display failures and event ordering.
+Four real matcher cases pass (bag use/replay, unbind, auction deadline/restart,
+six-step settlement rejection/recovery), with isolated SQLite and mocked
+delivery, not real QQ. Reports: `/tmp/xiu-v39-bag-replay-r01.json` and
+`/tmp/xiu-v39-command-regressions-r01.json`. Compile, architecture (no errors),
+inventory `--check` and whitespace pass. Unaffected green coverage is reused;
+no full local unittest rerun under this goal.
+
+### V39 Same-Data Results And Limits
+
+One serial pair: `/tmp/xiu-v39-before-r01` at `d5d103bf` versus
+`/tmp/xiu-v39-after-r01` with only the six product files replaced. Unchanged
+V36 driver, `sect-shared-v21`, sole retained 1M fixture `baseline-r05`, seed,
+requests and limits. Reports `sect-shared-{before,after}-v39-20261128-
+phase{0,1,2}-r01.json` and `sect-shared-comparison-v39-20261128-r01.json`
+are in that fixture's data directory; comparison SHA256
+`2026e3c0bebab6201ca432b66148c05affb9b4d6b2146c72ed686abd7a76d9a4`.
+Comparison is valid: 128 successes per phase per version (768 total, 0 errors),
+all invariants, DB boundary coverage and original-data restoration pass.
+
+| phase (concurrency/arrival per s) | e2e p50/p95/p99 ms | foreground SQL | success/s | main CPU ms |
+|---|---|---|---|---|
+| pure 10/20 | 27.103/34.627/95.107 -> 26.984/36.421/65.823 | 3798 -> 3798 | 20.082 -> 20.086 | 3368.799 -> 3305.251 |
+| mixed 20/35 | 26.955/172.607/256.883 -> 22.936/82.831/87.566 | 3805 -> 3805 | 35.067 -> 35.055 | 2990.994 -> 2811.630 |
+| contention 20/50 | 728.342/917.886/978.888 -> 391.738/544.019/576.275 | 3805 -> 3805 | 38.409 -> 42.883 | 3079.581 -> 2764.207 |
+
+My-sect samples are 64/32/32; other traffic is unchanged controls. Its p95 is
+36.128 -> 38.612, 176.470 -> 83.639, 888.267 -> 527.578ms. Cache hits/misses
+and entries remain zero. Total SQL is 4443 -> 4444, 4433 -> 4449 and
+4376 -> 4386 due to background polling counts, not product query savings.
+Keep the pure p95 regression and small mixed throughput regression. This
+single ordered pair cannot assign all tail changes to config reuse or prove
+sustained capacity. Item dispatch, reroll, member display and trade have no
+matrix traffic: their regressions prove reduced repeated work and behavior,
+not measured command throughput gains. No unchanged-code rerun is warranted.
+
+Peak RSS <= 210.219MiB, sampled available RAM >= 1377MiB, disk free >=
+7970934784 bytes, max WAL 7090552 bytes. Existing two-CPU, AS1024MiB,
+CPU600s/wall1200s, RSS900MiB, RAM768MiB, disk2GiB, WAL256MiB and
+`MALLOC_ARENA_MAX=2` limits pass under the driver's internal validation lock;
+no additional 1M fixture copy. V39's exact commit CI remains a delivery gate.

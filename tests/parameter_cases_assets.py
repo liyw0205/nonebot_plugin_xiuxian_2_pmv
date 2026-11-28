@@ -51,7 +51,10 @@ def register(case):
     async def special_success(probe):
         name = probe.grant_item(20020)
         before = balances(probe)
-        text = await probe.command("道具使用", f"道具使用 {name} 2", number=920001)
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_back as module
+        with patch.object(module, "check_user", wraps=module.check_user) as check:
+            text = await probe.command("道具使用", f"道具使用 {name} 2", number=920001)
+        assert check.call_count == 1, check.call_count
         assert probe.managers[0].goods_num("900001", 20020) == 3, text
         after = balances(probe)
         assert after[0][1] > before[0][1], (text, before, after)

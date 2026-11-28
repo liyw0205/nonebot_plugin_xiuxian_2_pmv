@@ -62,7 +62,7 @@ class SectReadFixture(unittest.TestCase):
                                 "sect_application": self.app, "config": {"等级建设度": 5000000}})
         self.message = 1
 
-    def run_handler(self, name, count="1"):
+    def run_handler(self, name, count="1", *, position_reader=None):
         async def finish():
             raise Finished
 
@@ -86,8 +86,8 @@ class SectReadFixture(unittest.TestCase):
             "_parse_practice_count": lambda args, cap: int(args or 1),
             "_sect_operation_id": lambda event, action, sect: f"sect:{event}:{action}:{sect}",
             "result_failure": lambda action, result: result.reason or result.status,
-            "jsondata": SimpleNamespace(sect_config_data=lambda: {
-                "0": {"title": "宗主"}, "1": {"title": "Member"}}),
+            "jsondata": SimpleNamespace(sect_config_data=position_reader or (lambda: {
+                "0": {"title": "宗主"}, "1": {"title": "Member"}})),
         }
         for matcher in ("upatkpractice", "uphppractice", "upmppractice", "my_sect",
                         "sect_buildings", "sect_position_update"):
@@ -103,6 +103,14 @@ class SectReadFixture(unittest.TestCase):
 
 
 class SectReadStageTests(SectReadFixture):
+    def test_my_sect_reads_positions_once_per_request_and_sees_updated_titles(self):
+        reader = Mock(side_effect=[{"0": {"title": "宗主"}, "1": {"title": title}}
+                                   for title in ("Member", "Updated")])
+        self.assertIn("Member", self.run_handler("my_sect_", position_reader=reader))
+        self.assertEqual(1, reader.call_count)
+        self.assertIn("Updated", self.run_handler("my_sect_", position_reader=reader))
+        self.assertEqual(2, reader.call_count)
+
     def test_all_three_upgrade_callers_read_one_sect_row_then_use_live_transaction(self):
         for name, field in (("upatkpractice_", "atkpractice"), ("uphppractice_", "hppractice"),
                             ("upmppractice_", "mppractice")):

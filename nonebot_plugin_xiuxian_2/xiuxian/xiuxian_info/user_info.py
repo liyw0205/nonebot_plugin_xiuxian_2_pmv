@@ -124,7 +124,9 @@ async def get_user_xiuxian_info(
     final_attr = get_player_attributes(user_id, **attribute_providers)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
-    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     level_rate_data = jsondata.level_rate_data()
     sect_id = user_info['sect_id']

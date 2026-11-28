@@ -1234,9 +1234,11 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         await restart.finish()
 
     # 生成10个随机灵根选项
+    root_data = jsondata.root_data()
+    root_generator = XiuxianJsonDate()
     linggen_options = []
     for _ in range(10):
-        name, root_type = XiuxianJsonDate().linggen_get()
+        name, root_type = root_generator.linggen_get(root_data=root_data)
         linggen_options.append((name, root_type))
     
     # 显示所有随机生成的灵根选项
@@ -1247,7 +1249,7 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
     if JsonConfig().is_auto_root_selection_enabled():
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
-                                             key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
+                                             key=lambda x: root_data[x[1]]["type_speeds"])
         result = base_application.reroll_root(
             operation_id=operation_id,
             user_id=user_id,
@@ -1298,7 +1300,8 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, _root_reroll_success_message(previous, duplicate=True))
         return
 
-    selected_name, selected_root_type = max(linggen_options, key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
+    root_data = jsondata.root_data()
+    selected_name, selected_root_type = max(linggen_options, key=lambda x: root_data[x[1]]["type_speeds"])
 
     if user_choice.isdigit(): # 判断数字
         user_choice = int(user_choice)
