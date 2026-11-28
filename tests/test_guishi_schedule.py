@@ -579,7 +579,7 @@ def test_actual_scheduler_resumes_partial_pending_before_sweep_and_preserves_fai
                     scheduler.remove_listener(listener)
 
             scheduler.start()
-            manager = SimpleNamespace(get_user_info_with_id=lambda _: None)
+            manager = SimpleNamespace(get_user_names_by_ids=lambda _: {})
             sweep = AsyncMock(wraps=trade.process_guishi_transactions)
             with patch.object(trade, "trade_application", database.app), patch.object(trade, "_sql_message", return_value=manager), \
                     patch.object(trade, "record_trade_event"), patch.object(trade, "process_guishi_transactions", sweep):
@@ -627,7 +627,7 @@ def test_immediate_partial_failure_reason_survives_message_adapters(onebot, mark
     failure = GuishiMatchFailure(reason, "buy2", "sell", matches=[fill])
     with patch.object(trade.trade_application, "guishi_resume_immediate_match",
                       return_value=GuishiImmediateMatchResult("pending", (fill,), failure)), \
-            patch.object(trade, "_sql_message", return_value=SimpleNamespace(get_user_info_with_id=lambda _: None)), \
+            patch.object(trade, "_sql_message", return_value=SimpleNamespace(get_user_names_by_ids=lambda _: {})), \
             patch.object(trade, "record_trade_event"):
         reply = "成功摆摊！摊位ID：sell\n" + trade._resume_guishi_match_reply("sell")
     assert all(value in reply for value in ("成功摆摊", "x1", "未完成", reason, "buy2", "sell"))

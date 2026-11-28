@@ -1177,11 +1177,11 @@ class ActivityReadModelApplication:
         if selected is not None:
             key = str(selected["key"])
             rows = self.repository.boss_snapshot(str(user_id), [key], today)
-            position, _ = self.repository.board_position("boss", key, str(user_id))
+            row = rows.get(key, {})
             return self._status_block(
                 selected,
-                rows.get(key, {}),
-                rank_position=max(0, int(position)),
+                row,
+                rank_position=max(0, int(row.get("rank_position") or 0)),
                 multiple_active=multiple,
             )
         active = self._active_bosses(activities)
@@ -1193,12 +1193,12 @@ class ActivityReadModelApplication:
         blocks = []
         for activity in active:
             key = str(activity["key"])
-            position, _ = self.repository.board_position("boss", key, str(user_id))
+            row = rows.get(key, {})
             blocks.append(
                 self._status_block(
                     activity,
-                    rows.get(key, {}),
-                    rank_position=max(0, int(position)),
+                    row,
+                    rank_position=max(0, int(row.get("rank_position") or 0)),
                     multiple_active=multiple,
                 )
             )
@@ -1212,10 +1212,15 @@ class ActivityReadModelApplication:
             selected = active[0] if len(active) == 1 else None
         if selected is None:
             return "请指定活动首领名称后查询排行"
-        rows = self.repository.boss_rank(str(selected["key"]), limit)
+        snapshot = self.repository.boss_rank_snapshot(str(selected["key"]), limit)
+        rows = snapshot["rows"]
         lines = [f"【{selected.get('boss_name', '活动首领')}伤害排行】"]
         if not rows:
             lines.append("暂无数据")
+            if snapshot.get("as_of"):
+                from ..base.public_display_snapshot import display_snapshot_freshness
+
+                lines.append(display_snapshot_freshness(snapshot))
             return "\n".join(lines)
         for index, row in enumerate(rows, 1):
             user_id = str(row.get("user_id") or "")
@@ -1225,6 +1230,10 @@ class ActivityReadModelApplication:
             from ...xiuxian.xiuxian_utils.utils import number_to
 
             lines.append(f"{index}. {name} 伤害 {number_to(max(0, int(row.get('total_damage') or 0)))}")
+        if snapshot.get("as_of"):
+            from ..base.public_display_snapshot import display_snapshot_freshness
+
+            lines.append(display_snapshot_freshness(snapshot))
         return "\n".join(lines)
 
     def task_progress_text(self, user_id: str) -> str:
@@ -1355,15 +1364,15 @@ class ActivityReadModelApplication:
             lines.append(reason)
         activity_key = _activity_config_key(config)
         uid = str(user_id or "")
+        standings = self.repository.board_standings(
+            tuple(str(board.get("source") or "") for board in boards),
+            activity_key,
+            uid,
+        )
         for board in boards:
             source = str(board.get("source") or "")
             label = str(board.get("label") or board.get("key") or source)
-            total = self.repository.board_total(source, activity_key)
-            position, value = (
-                (0, 0)
-                if not uid
-                else self.repository.board_position(source, activity_key, uid)
-            )
+            position, total, value = standings.get(source, (0, 0, 0))
             lines.append(
                 f"{label}：{position_text(position, total)}（{value_text(source, value)}）"
             )
@@ -1402,7 +1411,10 @@ class ActivityReadModelApplication:
         label = str(board.get("label") or board.get("key") or source)
         limit = max(1, min(int(board.get("limit") or 10), 100))
         activity_key = _activity_config_key(config)
-        rows = self.repository.board_rank(source, activity_key, limit)
+        board_snapshot = self.repository.board_rank_snapshot(
+            source, activity_key, limit
+        )
+        rows = board_snapshot["rows"]
         lines = [f"【{config.get('name', '节日签到活动')} · {label}】"]
         ok, reason = activity_state(config)
         if not ok:
@@ -1416,12 +1428,13 @@ class ActivityReadModelApplication:
                     f"{display_name(str(row.get('user_id') or ''), str(row.get('user_name') or ''))} "
                     f"{value_text(source, int(row.get('value') or 0))}"
                 )
+        if board_snapshot.get("as_of"):
+            from ..base.public_display_snapshot import display_snapshot_freshness
+
+            lines.append(display_snapshot_freshness(board_snapshot))
         uid = str(user_id or "")
-        total = self.repository.board_total(source, activity_key)
-        position, value = (
-            (0, 0)
-            if not uid
-            else self.repository.board_position(source, activity_key, uid)
+        position, total, value = self.repository.board_standing(
+            source, activity_key, uid
         )
         lines.append(
             f"我的名次：{position_text(position, total)}（{value_text(source, value)}）"

@@ -127,6 +127,10 @@ def get_user_profile(user_id: int | str, *, raise_errors: bool = False):
     return _player_profile().get_user_profile(user_id)
 
 
+def get_user_display_profiles_by_ids(user_ids):
+    return _player_profile().get_user_display_profiles_by_ids(user_ids)
+
+
 def get_user_profile_by_name(user_name: str):
     return _player_profile().get_user_profile_by_name(user_name)
 
@@ -2426,6 +2430,21 @@ def get_statistics_data(user_id: str, key: str = None, *, raise_errors=False):
                 {"reason": "statistics_read_failed", "subject": "statistics"},
             ) from e
         return {}
+
+def update_statistics_values(user_id: str, increments: dict) -> None:
+    """Record one trade event's counters without repeated row reads/commits."""
+    if not any(increments.values()):
+        return
+    try:
+        original_user_id = str(user_id)
+        impersonated_id = get_impersonating_target(original_user_id)
+        user_id_for_stats = original_user_id if impersonated_id is None else impersonated_id
+        if impersonated_id is not None:
+            logger.warning(f"用户 {original_user_id} 正在伪装 {user_id_for_stats}")
+        _player_data_manager().increment_statistics(str(user_id_for_stats), increments)
+    except Exception as e:
+        logger.error(f"更新统计数据失败: {e}")
+
 
 def update_statistics_value(user_id: str, key: str, value: int = None, increment: int = 1) -> dict:
     """

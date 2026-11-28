@@ -466,7 +466,7 @@ def test_sect_maintenance_rethrows_outer_failure() -> None:
 
     with patch.object(
         sect.sect_application,
-        "list_sects_with_member_count",
+        "list_maintenance_sects",
         side_effect=RuntimeError("sect db unavailable"),
     ):
         with pytest.raises(RuntimeError, match="宗门状态检测失败"):

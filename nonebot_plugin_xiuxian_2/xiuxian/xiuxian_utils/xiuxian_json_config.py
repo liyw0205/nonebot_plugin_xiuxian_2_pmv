@@ -31,9 +31,9 @@ class XiuxianJsonDate:
             data = json.loads(a)
             return data[0][level]
 
-    def linggen_get(self):
+    def linggen_get(self, *, root_data=None):
         """获取灵根信息"""
-        data = jsondata.root_data()
+        data = jsondata.root_data() if root_data is None else root_data
         rate_dict = {}
         for i, v in data.items():
             rate_dict[i] = v["type_rate"]

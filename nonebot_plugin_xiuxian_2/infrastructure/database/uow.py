@@ -4,10 +4,177 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+from threading import RLock, current_thread, get_ident, main_thread
 from typing import Any, Mapping
 
 from ...core.numeric import adapt_sqlite_params, register_numeric_functions
+
+
+class _ConnectionScope:
+    # A request alternates game/player and read/write UOW shapes; one idle slot
+    # per distinct connection key avoids reopening (and re-reading schema/WAL
+    # state) on every alternation. Bounded so a scope never hoards handles.
+    MAX_IDLE = 4
+
+    def __init__(self, *, write_owner=None, write_database=None, reuse_live_readers=False) -> None:
+        self.thread_id = get_ident()
+        self.active = True
+        # Insertion-ordered: oldest first, evicted when MAX_IDLE is exceeded.
+        self.idle: dict[tuple[Any, ...], tuple[sqlite3.Connection, Any]] = {}
+        self.write_owner = write_owner
+        self.write_database = Path(write_database).resolve() if write_database is not None else None
+        self.reuse_live_readers = bool(reuse_live_readers)
+
+    def available(self) -> bool:
+        return self.active and self.thread_id == get_ident()
+
+    def writer_for(self, database: Path):
+        if (self.available() and current_thread() is main_thread()
+                and self.write_owner is not None
+                and database.resolve() == self.write_database and database.is_file()):
+            return self.write_owner
+        return None
+
+    def take(self, key: tuple[Any, ...]) -> tuple[sqlite3.Connection, Any] | None:
+        if not self.available():
+            return None
+        self._evict_stale(key)
+        entry = self.idle.pop(key, None)
+        if entry is None:
+            return None
+        connection, numeric_functions = entry
+        try:
+            if not connection.in_transaction:
+                return connection, numeric_functions
+        except sqlite3.ProgrammingError:
+            pass
+        connection.close()
+        return None
+
+    def _evict_stale(self, key: tuple[Any, ...]) -> None:
+        # Same path with a different file identity: the old handle must never
+        # be reused, so close it as soon as the replacement is observed.
+        for other in [k for k in self.idle if k[0] == key[0] and k[1] != key[1]]:
+            self.idle.pop(other)[0].close()
+
+    def put(self, key: tuple[Any, ...], connection: sqlite3.Connection, numeric_functions: Any) -> None:
+        if not self.available():
+            connection.close()
+            return
+        self._evict_stale(key)
+        previous = self.idle.pop(key, None)
+        if previous is not None:
+            previous[0].close()
+        self.idle[key] = connection, numeric_functions
+        while len(self.idle) > self.MAX_IDLE:
+            oldest = next(iter(self.idle))
+            self.idle.pop(oldest)[0].close()
+
+    def close(self) -> None:
+        self.active = False
+        idle, self.idle = self.idle, {}
+        failure = None
+        for connection, _ in idle.values():
+            try:
+                connection.close()
+            except Exception as exc:  # close every handle, then surface the first failure
+                failure = failure or exc
+        if failure is not None:
+            raise failure
+
+
+_CONNECTION_SCOPE: ContextVar[_ConnectionScope | None] = ContextVar("database_uow_connection_scope", default=None)
+
+
+class _IdleConnectionOwner:
+    """Retain one idle main-thread connection, never a transaction or result.
+
+    Callers must finish each unit of work synchronously. Other threads and
+    reentrant calls use independent connections that close at their exit.
+    Use query_one/query_all for fetched results, or propagate raw cursor errors.
+    """
+
+    def __init__(self) -> None:
+        self._lock = RLock()
+        self._active = False
+        self._retain = True
+        self._idle: tuple[tuple[Any, ...], sqlite3.Connection, Any] | None = None
+
+    def when_unscoped(self) -> _IdleConnectionOwner | None:
+        """Select at UOW construction, preserving an explicit request's key/lifetime."""
+        scope = _CONNECTION_SCOPE.get()
+        return None if scope is not None and scope.available() else self
+
+    def _acquire(self, key: tuple[Any, ...]) -> tuple[bool, tuple[sqlite3.Connection, Any] | None]:
+        if current_thread() is not main_thread():
+            return False, None
+        self._lock.acquire()
+        if self._active:
+            self._lock.release()
+            return False, None
+        self._active, self._retain = True, True
+        try:
+            idle, self._idle = self._idle, None
+            if idle is not None:
+                previous_key, connection, numeric_functions = idle
+                try:
+                    clean = not connection.in_transaction
+                except sqlite3.ProgrammingError:
+                    clean = False
+                if previous_key == key and clean:
+                    return True, (connection, numeric_functions)
+                connection.close()
+            return True, None
+        except BaseException:
+            self._active = False
+            self._lock.release()
+            raise
+
+    def _release(self, key, connection, numeric_functions, *, reusable: bool) -> None:
+        try:
+            if reusable and self._retain:
+                self._idle = key, connection, numeric_functions
+            elif connection is not None:
+                connection.close()
+        finally:
+            self._active = False
+            self._lock.release()
+
+    def close(self) -> None:
+        """Close on the main lifecycle thread; the next call may reopen lazily."""
+        if current_thread() is not main_thread():
+            raise RuntimeError("connection owner must close on the main thread")
+        with self._lock:
+            self._retain = False
+            idle, self._idle = self._idle, None
+            if idle is not None:
+                idle[1].close()
+
+
+class ReadOnlyConnectionOwner(_IdleConnectionOwner):
+    """Retain a query-only reader across independent live read transactions."""
+
+    def when_unscoped(self) -> ReadOnlyConnectionOwner | None:
+        scope = _CONNECTION_SCOPE.get()
+        if scope is not None and scope.available() and scope.reuse_live_readers:
+            return self
+        return super().when_unscoped()
+
+
+class WriteConnectionOwner(_IdleConnectionOwner):
+    """Retain an opt-in writer across independent synchronous transactions."""
+
+
+# Opt-in live projections share one idle handle, including across repository types.
+LIVE_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+# A separate player handle avoids evicting the live game projection reader.
+PLAYER_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+PLAYER_ACTIVITY_WRITE_OWNER = WriteConnectionOwner()
+IMPART_PROJECTION_READ_OWNER = ReadOnlyConnectionOwner()
+# Training and boss settlement use plain writers, unlike the timestamp writer.
+STONE_TRAINING_WRITE_OWNER = WriteConnectionOwner()
 
 
 class DatabaseUnitOfWork:
@@ -23,6 +190,8 @@ class DatabaseUnitOfWork:
         foreign_keys: bool = True,
         require_exists: bool = False,
         query_only: bool = False,
+        read_owner: ReadOnlyConnectionOwner | None = None,
+        write_owner: WriteConnectionOwner | None = None,
     ) -> None:
         self.database = Path(database)
         self.timeout = timeout
@@ -30,11 +199,139 @@ class DatabaseUnitOfWork:
         self.read_only = bool(read_only)
         self.foreign_keys = bool(foreign_keys)
         self.require_exists = bool(require_exists)
-        self.query_only = bool(query_only)
+        self.query_only = bool(query_only) or read_owner is not None
+        if read_owner is not None and not self.read_only:
+            raise ValueError("a retained reader requires read_only=True")
+        if write_owner is not None and (self.read_only or self.query_only or read_owner is not None):
+            raise ValueError("a retained writer requires a writable unit of work")
+        self._read_owner = read_owner or write_owner
+        self._write_owned = write_owner is not None
+        self._scope_write_owner = False
+        self._read_owner_active = False
+        self._read_owner_key: tuple[Any, ...] | None = None
+        self._read_cursors: list[sqlite3.Cursor] = []
+        self._read_failed = False
         self.connection: sqlite3.Connection | None = None
         self._attached_schemas: set[str] = set()
+        self._connection_scope: _ConnectionScope | None = None
+        self._scope_key: tuple[Any, ...] | None = None
+
+    @staticmethod
+    @contextmanager
+    def connection_scope(
+        *, write_owner: WriteConnectionOwner | None = None,
+        write_database: str | Path | None = None,
+        reuse_live_readers: bool = False,
+    ) -> Iterator[None]:
+        """Reuse at most one idle connection within an explicit sync request.
+
+        Each unit of work still commits or rolls back its own transaction.
+        Nested scopes are independent; copied contexts on another thread do
+        not borrow the originating thread's connection.
+
+        An opt-in writer retains only idle plain UOW handles for one database
+        across scopes; read and attached transactions keep the scoped lifetime.
+        Internal writer scopes may preserve existing opt-in live read owners;
+        this never makes nested writers ignore an explicit caller scope.
+        """
+        if (write_owner is None) != (write_database is None):
+            raise ValueError("write_owner and write_database must be specified together")
+        if reuse_live_readers and write_owner is None:
+            raise ValueError("live reader reuse requires an opt-in writer scope")
+        scope = _ConnectionScope(
+            write_owner=write_owner, write_database=write_database,
+            reuse_live_readers=reuse_live_readers,
+        )
+        token = _CONNECTION_SCOPE.set(scope)
+        try:
+            yield
+        finally:
+            _CONNECTION_SCOPE.reset(token)
+            scope.close()
+
+    def _connection_key(self) -> tuple[Any, ...]:
+        path = self.database.resolve()
+        try:
+            stat = path.stat()
+            identity = stat.st_dev, stat.st_ino
+        except FileNotFoundError:
+            identity = None
+        return (path, identity, self.timeout, self.immediate, self.read_only,
+                self.foreign_keys, self.require_exists, self.query_only)
 
     def __enter__(self) -> "DatabaseUnitOfWork":
+        self._read_failed = False
+        if self._scope_write_owner:
+            self._read_owner = None
+            self._read_owner_key = None
+            self._write_owned = self._scope_write_owner = False
+        scope = _CONNECTION_SCOPE.get()
+        if (type(self) is DatabaseUnitOfWork and self._read_owner is None
+                and not self.read_only and not self.query_only and scope is not None):
+            owner = scope.writer_for(self.database)
+            if owner is not None:
+                self._read_owner = owner
+                self._write_owned = self._scope_write_owner = True
+        if self._read_owner is not None:
+            self._read_owner_key = self._connection_key()
+            self._read_owner_active, borrowed = self._read_owner._acquire(self._read_owner_key)
+            try:
+                return self._enter_connection(borrowed)
+            except BaseException:
+                connection, self.connection = self.connection, None
+                if self._read_owner_active:
+                    self._read_owner_active = False
+                    self._read_owner._release(self._read_owner_key, connection, None, reusable=False)
+                elif connection is not None:
+                    connection.close()
+                raise
+        return self._enter_connection()
+
+    @property
+    def database_identity(self) -> tuple[str, int, int]:
+        """Identity bound to this transaction's retained or scoped connection."""
+        bound_key = self._read_owner_key or self._scope_key
+        path, identity, *_ = bound_key or self._connection_key()
+        if identity is None:
+            raise FileNotFoundError(f"database is unavailable: {path}")
+        return str(path), *identity
+
+    @property
+    def has_bound_database_identity(self) -> bool:
+        return self._read_owner_key is not None or self._scope_key is not None
+
+    def _check_read_identity(self) -> None:
+        if self._read_owner is not None and self._read_owner_key != self._connection_key():
+            kind = "write" if self._write_owned else "read-only"
+            raise sqlite3.OperationalError(f"{kind} database identity changed")
+
+    def _check_scoped_database_identity(self) -> None:
+        if self._connection_scope is None or self._scope_key is None:
+            return
+        current_key = self._connection_key()
+        if self._scope_key[1] is not None and self._scope_key != current_key:
+            raise sqlite3.OperationalError("scoped database identity changed")
+        self._scope_key = current_key
+
+    def _enter_connection(self, borrowed=None) -> "DatabaseUnitOfWork":
+        scope = _CONNECTION_SCOPE.get()
+        self._connection_scope = scope if self._read_owner is None and scope is not None and scope.available() else None
+        self._scope_key = self._connection_key() if self._connection_scope is not None else None
+        if self.require_exists and not self.read_only and not self.database.is_file():
+            raise FileNotFoundError(f"database is unavailable: {self.database}")
+        if self._connection_scope is not None:
+            borrowed = self._connection_scope.take(self._scope_key)
+        if borrowed is not None:
+            self.connection, self._numeric_functions = borrowed
+            try:
+                self.connection.execute("BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN")
+                self._check_scoped_database_identity()
+                self._check_read_identity()
+            except Exception:
+                self.connection.close()
+                self.connection = None
+                raise
+            return self
         if self.read_only:
             self.connection = sqlite3.connect(
                 f"{self.database.resolve().as_uri()}?mode=ro",
@@ -44,8 +341,6 @@ class DatabaseUnitOfWork:
         elif self.require_exists:
             # mode=rw keeps an explicit existence check free of the create-on-open
             # race, so a missing business database never becomes an empty file.
-            if not self.database.is_file():
-                raise FileNotFoundError(f"database is unavailable: {self.database}")
             self.connection = sqlite3.connect(
                 f"{self.database.resolve().as_uri()}?mode=rw",
                 timeout=self.timeout,
@@ -55,6 +350,7 @@ class DatabaseUnitOfWork:
             self.database.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(self.database, timeout=self.timeout)
         try:
+            self._check_scoped_database_identity()
             self._numeric_functions = register_numeric_functions(self.connection)
             self.connection.row_factory = sqlite3.Row
             # busy_timeout must be in effect before any statement that could
@@ -68,6 +364,8 @@ class DatabaseUnitOfWork:
             self.connection.execute(
                 "BEGIN IMMEDIATE" if self.immediate and not self.read_only else "BEGIN"
             )
+            self._check_scoped_database_identity()
+            self._check_read_identity()
         except Exception:
             # Exceptions raised while entering a context do not trigger
             # __exit__, so close the partially initialized connection here.
@@ -103,17 +401,43 @@ class DatabaseUnitOfWork:
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool | None:
         if self.connection is None:
             return None
+        connection = self.connection
+        reusable = False
         try:
+            for cursor in self._read_cursors:
+                cursor.close()
+            self._read_cursors.clear()
             if exc_type is None:
-                self.connection.commit()
+                if self._write_owned:
+                    self._check_read_identity()
+                connection.commit()
             else:
-                self.connection.rollback()
-        finally:
+                connection.rollback()
             for schema in tuple(self._attached_schemas):
-                self.connection.execute(f'DETACH DATABASE "{schema}"')
+                connection.execute(f'DETACH DATABASE "{schema}"')
+            self._check_read_identity()
+            reusable = not connection.in_transaction
+        finally:
+            self._read_cursors.clear()
             self._attached_schemas.clear()
-            self.connection.close()
             self.connection = None
+            scope, key = self._connection_scope, self._scope_key
+            self._connection_scope = None
+            self._scope_key = None
+            if self._read_owner_active:
+                self._read_owner_active = False
+                self._read_owner._release(
+                    self._read_owner_key, connection, self._numeric_functions,
+                    reusable=reusable and exc_type is None and not self._read_failed,
+                )
+            elif reusable and scope is not None and key is not None:
+                try:
+                    scope.put(key, connection, self._numeric_functions)
+                except Exception:
+                    connection.close()
+                    raise
+            else:
+                connection.close()
         return None
 
     def _conn(self) -> sqlite3.Connection:
@@ -123,26 +447,62 @@ class DatabaseUnitOfWork:
 
     def commit(self) -> None:
         """Commit before invoking an external post-transaction effect."""
-        self._conn().commit()
+        try:
+            if self._write_owned:
+                self._check_read_identity()
+            self._conn().commit()
+        except BaseException:
+            self._read_failed = True
+            raise
 
     def execute(self, sql: str, params: Any = ()) -> sqlite3.Cursor:
         # Central overflow guard: the raw driver aborts the whole transaction on
         # any int outside int64, so every statement binds normalized params.
-        return self._numeric_functions.run(self._conn().execute, sql, adapt_sqlite_params(params))
+        try:
+            cursor = self._numeric_functions.run(self._conn().execute, sql, adapt_sqlite_params(params))
+        except BaseException:
+            self._read_failed = True
+            raise
+        if self._read_owner is not None:
+            self._read_cursors.append(cursor)
+        return cursor
 
     def executemany(self, sql: str, params: Any) -> sqlite3.Cursor:
-        return self._numeric_functions.run(self._conn().executemany,
-            sql, (adapt_sqlite_params(row) for row in params)
-        )
+        try:
+            cursor = self._numeric_functions.run(self._conn().executemany,
+                sql, (adapt_sqlite_params(row) for row in params)
+            )
+        except BaseException:
+            self._read_failed = True
+            raise
+        if self._read_owner is not None:
+            self._read_cursors.append(cursor)
+        return cursor
 
     def query_one(self, sql: str, params: Any = ()) -> Mapping[str, Any] | None:
         cursor = self.execute(sql, params)
-        row = self._numeric_functions.run(cursor.fetchone)
-        return dict(row) if row is not None else None
+        try:
+            row = self._numeric_functions.run(cursor.fetchone)
+            return dict(row) if row is not None else None
+        except BaseException:
+            self._read_failed = True
+            raise
+        finally:
+            if self._read_owner is not None:
+                cursor.close()
+                self._read_cursors.remove(cursor)
 
     def query_all(self, sql: str, params: Any = ()) -> list[Mapping[str, Any]]:
         cursor = self.execute(sql, params)
-        return [dict(row) for row in self._numeric_functions.run(cursor.fetchall)]
+        try:
+            return [dict(row) for row in self._numeric_functions.run(cursor.fetchall)]
+        except BaseException:
+            self._read_failed = True
+            raise
+        finally:
+            if self._read_owner is not None:
+                cursor.close()
+                self._read_cursors.remove(cursor)
 
     def attach_database(self, database: str | Path, schema: str, *, read_only: bool = False) -> None:
         """Attach a catalogued secondary database to this transaction."""
@@ -179,4 +539,4 @@ def is_database_busy(exc: BaseException) -> bool:
     )
 
 
-__all__ = ["DatabaseUnitOfWork", "is_database_busy"]
+__all__ = ["DatabaseUnitOfWork", "ReadOnlyConnectionOwner", "WriteConnectionOwner", "LIVE_PROJECTION_READ_OWNER", "PLAYER_ACTIVITY_WRITE_OWNER", "is_database_busy"]

@@ -580,7 +580,7 @@ async def check_item_effect_(bot: Bot, event: GroupMessageEvent | PrivateMessage
         msg = f"物品 {input_str} 不存在，请检查名称是否正确！"
         await handle_send(bot, event, msg, md_type="背包", k1="效果", v1="查看效果", k2="物品", v2="查看修仙界物品", k3="帮助", v3="修仙帮助")
         return
-    item_msg = get_item_msg(goods_id, user_info['user_id'])
+    item_msg = get_item_msg(goods_id, user_info['user_id'], user_info=user_info)
     if goods_id == 15053 or input_str == "补偿": # 某些特定物品可能不需要显示效果
         await check_item_effect.finish()
     # 构造返回消息：> 放在 ID 下，后续整段缩小（多行每行带 >）
@@ -771,7 +771,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     # === 特殊处理回血丹 ===
     if len(args) > 0 and args[0] == "回血丹":
-        back_msg = _sql_message().get_back_msg(user_id)
+        back_msg = _sql_message().get_back_msg(user_id, compact=True)
         if not back_msg:
             msg = "💼 道友的背包空空如也！"
             await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -854,7 +854,7 @@ async def fast_alchemy_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await fast_alchemy.finish()
     
     # === 获取背包物品 ===
-    back_msg = _sql_message().get_back_msg(user_id)
+    back_msg = _sql_message().get_back_msg(user_id, compact=True)
     if not back_msg:
         msg = "💼 道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="炼金", v1="快速炼金", k2="灵石", v2="灵石", k3="背包", v3="我的背包")
@@ -960,7 +960,7 @@ async def no_use_zb_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
     user_id = user_info['user_id']
     arg = args.extract_plain_text().strip()
 
-    back_msg = _sql_message().get_back_msg(user_id)  # 背包sql信息,list(back)
+    back_msg = _sql_message().get_back_msg(user_id, compact=True)
     if not back_msg:
         msg = "道友的背包空空如也！"
         await handle_send(bot, event, msg, md_type="背包", k1="卸装", v1="卸装", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1352,6 +1352,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             goods_id,
             num,
             _cultivation_item_operation_id(event, user_id, goods_id),
+            user_info=user_info,
         )
 
     elif goods_type == "特殊道具":
@@ -1367,7 +1368,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
             msg = f"道友背包中的{item_name}数量不足，当前仅有{goods_num}个！"
             await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
             await use.finish()
-        user_info_full = _sql_message().get_user_info_with_id(user_id)
+        user_info_full = user_info
         if (goods_info['rank'] + added_ranks) < convert_rank(user_info_full['level'])[0]:
             msg = f"神物：{goods_info['name']}的使用境界为{goods_info['境界']}以上，道友不满足条件！"
         else:
@@ -1411,7 +1412,10 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
             else:
                 exp = goods_info['buff'] * num
-                root_rate = _sql_message().get_root_rate(user_info_full['root_type'], user_id)
+                root_rate = _sql_message().get_root_rate(
+                    user_info_full['root_type'], user_id,
+                    root_level=user_info_full.get('root_level', 0),
+                )
                 level_spend = jsondata.level_data()[user_info_full['level']]["spend"]
                 result = back_application.cultivation_item(
                     operation_id=_cultivation_item_operation_id(event, user_id, goods_id),
@@ -1431,7 +1435,7 @@ async def use_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: M
                 )
 
     elif goods_type == "聚灵旗":
-        msg = get_use_jlq_msg(user_id, goods_id)
+        msg = get_use_jlq_msg(user_id, goods_id, user_info=user_info)
 
     else:
         msg = "该类型物品暂不支持使用。"
@@ -1563,8 +1567,8 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     # 祈愿石由结算服务按原始请求数量校验库存，确保同一消息可以幂等重放。
     if goods_id != 20005:
         replay_safe_item_ids = {20001, 20007, 20012, 20013, 20018}
-        goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
         if goods_id not in replay_safe_item_ids:
+            goods_num = _sql_message().goods_num(user_info['user_id'], goods_id)
             if goods_num <= 0:
                 msg = f"背包中没有足够的 {item_name} ！"
                 await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
@@ -1597,23 +1601,25 @@ async def use_item_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, ar
     
     handler_func = ITEM_HANDLERS.get(goods_id, None)
     if handler_func:
-        # 调用对应的处理函数
+        handler_kwargs = {}
+        if goods_id in {20010, 20019, 20020, 20021, 20022, *PET_EGG_IDS}:
+            handler_kwargs['user_info'] = user_info
         if int(goods_id) == 20019:
-            await handler_func(bot, event, goods_id, quantity, target_item_name=parts[2] if len(parts) == 3 else "")
-        else:
-            await handler_func(bot, event, goods_id, quantity)
+            handler_kwargs['target_item_name'] = parts[2] if len(parts) == 3 else ""
+        await handler_func(bot, event, goods_id, quantity, **handler_kwargs)
     else:
         msg = f"{item_name} 是特殊道具，但目前没有对应的使用方法！"
         await handle_send(bot, event, msg, md_type="背包", k1="使用", v1="道具使用", k2="存档", v2="我的修仙信息", k3="背包", v3="我的背包")
         
     await use_item.finish()
 
-async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用宠物蛋，按道具配置孵化指定稀有度宠物。"""
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = str(user_info["user_id"])
     item_info = items.get_data_by_item_id(item_id)
@@ -1695,13 +1701,14 @@ async def use_pet_egg_item(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     await handle_send(bot, event, msg, md_type="背包", k1="宠物", v1="我的宠物", k2="宠物背包", v2="宠物背包")
     return
 
-async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用灵签宝箓"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
     user_id = user_info["user_id"]
     rewards = []
     for _ in range(num):
@@ -1745,13 +1752,14 @@ async def use_lottery_talisman(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await handle_send(bot, event, result_msg)
     return
 
-async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, target_item_name=""):
+async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, target_item_name="", user_info=None):
     """使用解绑符解除物品绑定状态"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
     user_id = user_info["user_id"]
 
     if not target_item_name:
@@ -1789,13 +1797,14 @@ async def use_unbind_charm(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     
     await handle_send(bot, event, msg)
 
-async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用灵石福袋"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info["user_id"]
 
@@ -1841,13 +1850,14 @@ async def use_spirit_stone_bag(bot: Bot, event: GroupMessageEvent | PrivateMessa
 
     await handle_send(bot, event, "\n".join(lines))
 
-async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int):
+async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int, *, user_info=None):
     """使用天机灵石引"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info["user_id"]
 
@@ -1888,26 +1898,23 @@ async def use_tianji_stone_trigger(bot: Bot, event: GroupMessageEvent | PrivateM
 
     await handle_send(bot, event, "\n".join(lines))
 
-async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int = 1):
+async def use_three_cultivation_pill(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, item_id: int, num: int = 1, *, user_info=None):
     """使用三转玄丹"""
-    bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
-    if not isUser:
-        await handle_send(bot, event, msg, md_type="我要修仙")
-        return
+    if user_info is None:
+        bot, send_group_id = await assign_bot(bot=bot, event=event)
+        isUser, user_info, msg = check_user(event)
+        if not isUser:
+            await handle_send(bot, event, msg, md_type="我要修仙")
+            return
 
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)
-
-    if not user_mes:
-        await handle_send(bot, event, "获取用户信息失败！")
-        return
-
+    user_mes = user_info
     level = user_mes['level']
-    current_exp = user_mes['exp']
 
     # 获取单次修炼的修为
-    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)           # 灵根倍率
+    level_rate = _sql_message().get_root_rate(
+        user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]                               # 境界倍率
 
     user_buff_data = UserBuffDate(user_id)
@@ -2012,12 +2019,15 @@ async def chakan_wupin_(
             await handle_send(bot, event, empty_notice(keyword, item_type))
             await chakan_wupin.finish()
     
+    goods_totals = {}
+    if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具"] and item_data:
+        goods_totals = _sql_message().goods_max_nums(item_data)
     msg_list = []
     
     for item_id, item_info in item_data.items():
         name = item_info['name']
         if item_type in ["功法", "辅修功法", "神通", "身法", "瞳术", "法器", "防具", "饰品"]:
-            desc = get_item_msg(item_id)  # 获取详细描述
+            desc = get_item_msg(item_id, goods_total=goods_totals.get(item_id, 0))
             # 列表走 send_msg_handler 代码框：> 不会当 MD 缩小，勿整段加 >
             msg = f"ID：{item_id}\n{desc}"
         elif item_type == "特殊物品":
@@ -2073,7 +2083,7 @@ async def chakan_wupin_(
     await chakan_wupin.finish()
 
 def _build_main_backpack_sections_for_md(user_id: str):
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, compact=True)
     if not back_data:
         return []
 
@@ -2116,8 +2126,10 @@ def _build_main_backpack_sections_for_md(user_id: str):
                 "name": gname,
                 "goods_type": b.get("goods_type", ""),
                 "count": 0,
-                "bind": 0
+                "bind": 0,
             }
+            if "state" in b:
+                merged[key]["state"] = b["state"]
         merged[key]["count"] += int(b.get("goods_num", 0))
         merged[key]["bind"] += int(b.get("bind_num", 0))
 
@@ -2136,7 +2148,11 @@ def _build_main_backpack_sections_for_md(user_id: str):
             lv = item_info.get("level", "")
             if it in ["法器", "防具"]:
                 row["_sort_idx"] = _rank_idx(lv, EQUIPMENT_RANK_ORDER)
-                row["_is_equipped"] = check_equipment_use_msg(user_id, row["goods_id"])
+                row["_is_equipped"] = check_equipment_use_msg(
+                    user_id,
+                    row["goods_id"],
+                    back_item=row if "state" in row else None,
+                )
                 row["is_equipped"] = row["_is_equipped"]
                 if row["_is_equipped"]:
                     equip_map[it]["已装备"].append(row)
@@ -2184,7 +2200,7 @@ def _build_danyao_sections_for_md(user_id: str):
     - 按 buff_type 分类
     - 同分类按名字排序
     """
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, goods_types=("丹药",))
     if not back_data:
         return []
 
@@ -2233,7 +2249,7 @@ def _build_yaocai_sections_for_md(user_id: str):
     - 按 一~九品药材 分类
     - 同分类按名字排序
     """
-    back_data = _sql_message().get_back_msg(user_id)
+    back_data = _sql_message().get_back_msg(user_id, goods_types=("药材",))
     if not back_data:
         return []
 

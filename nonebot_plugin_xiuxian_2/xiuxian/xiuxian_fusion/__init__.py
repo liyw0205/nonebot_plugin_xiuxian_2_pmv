@@ -193,6 +193,9 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
 
     user_info = _sql_message().get_user_info_with_id(user_id)
     back_msg = _sql_message().get_back_msg(user_id) or []
+    goods_rows = {}
+    for back in back_msg:
+        goods_rows.setdefault(back['goods_id'], []).append(back)
     
     fusion_info = equipment.get('fusion', None)
     if not fusion_info:
@@ -202,10 +205,9 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     limit = fusion_info.get('limit', None)
     if limit is not None:
         current_amount = 0
-        for back in back_msg:
-            if back['goods_id'] == int(equipment_id):
-                current_amount = back['goods_num']
-                break
+        target_rows = goods_rows.get(int(equipment_id), ())
+        if target_rows:
+            current_amount = target_rows[0]['goods_num']
         if current_amount >= limit or current_amount + quantity > limit:
             return False, f"道友的背包中已有足够数量的 {equipment['name']}，无法再次合成！"
     
@@ -229,14 +231,13 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     for item_id, amount_per_attempt in needed_items.items():
         amount_needed = int(amount_per_attempt) * quantity
         total_amount = 0
-        for back in back_msg:
-            if back['goods_id'] == int(item_id):
-                if back['goods_type'] == "装备":
-                    is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
-                    available_num = back['goods_num'] - (1 if is_equipped else 0)
-                else:
-                    available_num = back['goods_num']
-                total_amount += max(0, available_num)
+        for back in goods_rows.get(int(item_id), ()):
+            if back['goods_type'] == "装备":
+                is_equipped = check_equipment_use_msg(user_id, back['goods_id'], back_item=back)
+                available_num = back['goods_num'] - (1 if is_equipped else 0)
+            else:
+                available_num = back['goods_num']
+            total_amount += max(0, available_num)
         
         if total_amount < amount_needed:
             missing_items.append((item_id, amount_needed - total_amount))
@@ -247,15 +248,15 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
             material_info = _items().get_data_by_item_id(int(item_id))
             if material_info:
                 actual_missing = amount_needed
-                for back in back_msg:
-                    if back['goods_id'] == int(item_id):
-                        if back['goods_type'] == "装备":
-                            is_equipped = check_equipment_use_msg(user_id, back['goods_id'])
-                            available_num = back['goods_num'] - (1 if is_equipped else 0)
-                        else:
-                            available_num = back['goods_num']
-                        actual_missing = max(0, amount_needed - available_num)
-                        break
+                material_rows = goods_rows.get(int(item_id), ())
+                if material_rows:
+                    back = material_rows[0]
+                    if back['goods_type'] == "装备":
+                        is_equipped = check_equipment_use_msg(user_id, back['goods_id'], back_item=back)
+                        available_num = back['goods_num'] - (1 if is_equipped else 0)
+                    else:
+                        available_num = back['goods_num']
+                    actual_missing = max(0, amount_needed - available_num)
                 
                 if actual_missing > 0:
                     missing_names.append(f"{actual_missing} 个 {material_info['name']}")
@@ -267,8 +268,11 @@ async def general_fusion(user_id, equipment_id, equipment, operation_id, quantit
     outcomes = tuple(guaranteed or runtime_random.randint(1, 100) <= 30 for _ in range(quantity))
     reserved_items = {}
     for item_id in needed_items:
-        item_info = next((back for back in back_msg if back['goods_id'] == int(item_id)), None)
-        if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(user_id, int(item_id)):
+        material_rows = goods_rows.get(int(item_id), ())
+        item_info = material_rows[0] if material_rows else None
+        if item_info and item_info['goods_type'] == "装备" and check_equipment_use_msg(
+            user_id, int(item_id), back_item=item_info
+        ):
             reserved_items[int(item_id)] = 1
     if quantity == 1:
         outcome = fusion_application.apply(

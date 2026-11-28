@@ -6,6 +6,7 @@ from pathlib import Path
 from ...core.numeric import require_exact_integer
 from ...core.errors import DomainError
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.schema_catalog import read_sqlite_table_names
 
 
 class BankCommandReceiptRepository:
@@ -22,8 +23,8 @@ class BankCommandReceiptRepository:
         self.database = Path(database)
 
     @staticmethod
-    def _row(uow, table, operation_id, required):
-        if uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)) is None:
+    def _row(uow, tables, table, operation_id, required):
+        if table not in tables:
             return None
         columns = {str(row["name"]) for row in uow.query_all(f'PRAGMA table_info("{table}")')}
         if not set(required).union({"operation_id", "payload"}).issubset(columns):
@@ -114,7 +115,8 @@ class BankCommandReceiptRepository:
             return {"action": action, "status": "schema_missing"}
         try:
             with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-                row = self._row(uow, "bank_account_operations", operation_id, {
+                tables = read_sqlite_table_names(uow)
+                row = self._row(uow, tables, "bank_account_operations", operation_id, {
                     "user_id", "deposited", "interest", "wallet_after", "saved_after", "created_at",
                 })
                 if row is not None:
@@ -122,7 +124,7 @@ class BankCommandReceiptRepository:
                 else:
                     receipts = []
                     for kind, (table, columns) in self._LEGACY.items():
-                        previous = self._row(uow, table, operation_id, columns)
+                        previous = self._row(uow, tables, table, operation_id, columns)
                         if previous is not None:
                             receipts.append(self._legacy(kind, previous))
                     if not receipts:

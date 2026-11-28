@@ -85,9 +85,14 @@ class PlayerProfileReadContractTest(unittest.TestCase):
     def test_info_projection_uses_profile_reader_for_identity_fields(self) -> None:
         root = Path(__file__).resolve().parents[1]
         source = (root / "nonebot_plugin_xiuxian_2" / "xiuxian" / "xiuxian_info" / "user_info.py").read_text(encoding="utf-8")
-        self.assertGreaterEqual(source.count("get_user_profile("), 4)
         self.assertNotIn("_sql_message().get_user_real_info", source)
         tree = ast.parse(source)
+        profile_calls = [node for node in ast.walk(tree)
+                         if isinstance(node, ast.Call) and ast.unparse(node.func) == "get_user_profile"]
+        self.assertEqual([[ast.unparse(arg) for arg in call.args] for call in profile_calls],
+                         [["user_id"]])
+        self.assertIn("_sql_message().get_user_names_by_ids(relation_ids + apprentice_ids)", source)
+        self.assertIn("get_display_apprentice_ids(user_id, mentor_data)", source)
         calls = [node for node in ast.walk(tree)
                  if isinstance(node, ast.Call) and ast.unparse(node.func) == "get_player_attributes"]
         self.assertEqual(len(calls), 1)

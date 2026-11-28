@@ -460,21 +460,24 @@ async def arena_ranking_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     """竞技场排行榜"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     
-    ranking = arena_limit.get_arena_ranking(limit=10)
     viewer_id = str(event.get_user_id())
+    ranking, viewer_rank = arena_limit.get_arena_ranking_with_rank(
+        limit=10, user_id=viewer_id
+    )
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
     
     msg = "🏆 【竞技场排行榜】🏆\n"
     msg += "═" * 12 + "\n"
     
     for i, (user_id, score) in enumerate(ranking, 1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        if user_info:
+        user_id_key = str(user_id)
+        if user_id_key in user_names:
             rank_icon = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
             icon = rank_icon[i-1] if i <= 10 else f"{i}."
-            msg += f"{icon} {user_info['user_name']} - {score}分 ({arena_limit.calculate_rank(score)})\n"
+            msg += f"{icon} {user_names[user_id_key]} - {score}分 ({arena_limit.calculate_rank(score)})\n"
     
     msg += personal_rank_line(
-        arena_limit.rank_of(viewer_id),
+        viewer_rank,
         label="竞技场积分",
         unit="分",
         number=number_to,
@@ -494,7 +497,7 @@ async def arena_myinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
     
     user_id = user_info['user_id']
     arena_data = arena_limit.get_user_arena_info(user_id)
-    challenge_cap = arena_limit.get_daily_challenge_cap(user_id)
+    challenge_cap = arena_limit.daily_challenge_cap_from_state(arena_data)
     challenge_used = int(arena_data.get("daily_challenges_used", 0))
     challenge_remaining = max(0, challenge_cap - challenge_used)
     daily_buys = int(arena_data.get("daily_challenge_buys", 0))
@@ -685,8 +688,10 @@ async def arena_honor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     arena_data = arena_limit.get_user_arena_info(user_id)
     
     # 计算明日预计奖励
-    tomorrow_honor, base_honor, ranking_bonus = arena_limit.calculate_daily_honor(user_id)
     user_ranking = arena_limit.get_user_ranking(user_id)
+    tomorrow_honor, base_honor, ranking_bonus = arena_limit.daily_honor_from_state(
+        arena_data, user_ranking
+    )
     
     msg = f"""
 **我的荣誉**

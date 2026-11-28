@@ -205,6 +205,23 @@ def load_mentor(user_id):
     }
 
 
+def get_display_apprentice_ids(mentor_id, mentor_data):
+    """Batch live backlinks for display; action eligibility keeps its own reads."""
+    apprentice_ids = _normalize_id_list(mentor_data.get("apprentice_ids"))
+    if not apprentice_ids:
+        return []
+    rows = _player_data_manager().get_fields_by_ids(
+        "mentor", apprentice_ids, ("mentor_id",), ensure_fields=False
+    )
+    result = []
+    for apprentice_id in apprentice_ids:
+        backlink = rows.get(apprentice_id, {}).get("mentor_id")
+        backlink = None if _is_none_like(backlink) else str(backlink)
+        if backlink == str(mentor_id):
+            result.append(apprentice_id)
+    return result
+
+
 def save_mentor(user_id, data):
     """保存用户师徒数据。"""
     mentor_id = data.get("mentor_id")

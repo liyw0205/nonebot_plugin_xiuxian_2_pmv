@@ -179,7 +179,19 @@ def apply_collect_synthesis(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_activity_rank_indexes(uow: DatabaseUnitOfWork) -> None:
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_activity_user_sign_rank ON activity_user"
+        "(sign_days DESC,total_sign_days DESC,last_sign_date ASC,user_id ASC)"
+    )
+    uow.execute(
+        "CREATE INDEX IF NOT EXISTS idx_activity_boss_damage_rank ON activity_boss_damage"
+        "(activity_key,total_damage DESC,user_id ASC) WHERE total_damage>0"
+    )
+
+
 __all__ = [
+    "apply_activity_rank_indexes",
     "apply_collect_synthesis",
     "apply_activity",
     "apply_activity_state_schema",

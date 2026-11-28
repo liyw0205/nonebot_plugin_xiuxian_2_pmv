@@ -37,6 +37,7 @@ from ...features.base.keyword_page import (
     parse_page_arg,
 )
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.public_display_snapshot import display_snapshot_freshness
 from ...features.base.shop_limit import shop_limit_line
 from ...features.player_state.application import PlayerStateApplication
 from ...infrastructure.ids import UUIDGenerator
@@ -530,15 +531,20 @@ async def tower_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     # 生成排行榜
     rank_msg = "【通天塔排行榜】\n"
     viewer_id = str(user_info["user_id"])
-    for i, (user_id, integral) in enumerate(tower_limit.ranking("current_floor"), start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    snapshot, viewer_rank = tower_limit.ranking_snapshot_with_rank(
+        viewer_id, "current_floor"
+    )
+    ranking = snapshot["rows"]
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
+    for i, (user_id, integral) in enumerate(ranking, start=1):
+        rank_msg += f"第{i}位 | {user_names[str(user_id)]} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        tower_limit.rank_of(viewer_id, "current_floor"),
+        viewer_rank,
         label="通天塔层数",
         unit="层",
         number=number_to,
     )
+    rank_msg += "\n" + display_snapshot_freshness(snapshot)
     
     await handle_send(bot, event, rank_msg)
     await tower_rank.finish()
@@ -555,15 +561,18 @@ async def tower_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     # 生成排行榜
     rank_msg = "【通天塔积分排行榜】\n"
     viewer_id = str(user_info["user_id"])
-    for i, (user_id, integral) in enumerate(tower_limit.ranking("score"), start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        rank_msg += f"第{i}位 | {user_info['user_name']} | {number_to(integral)}\n"
+    snapshot, viewer_rank = tower_limit.ranking_snapshot_with_rank(viewer_id, "score")
+    ranking = snapshot["rows"]
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranking])
+    for i, (user_id, integral) in enumerate(ranking, start=1):
+        rank_msg += f"第{i}位 | {user_names[str(user_id)]} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        tower_limit.rank_of(viewer_id, "score"),
+        viewer_rank,
         label="通天塔积分",
         unit="点",
         number=number_to,
     )
+    rank_msg += "\n" + display_snapshot_freshness(snapshot)
     
     await handle_send(bot, event, rank_msg)
     await tower_integral_rank.finish()

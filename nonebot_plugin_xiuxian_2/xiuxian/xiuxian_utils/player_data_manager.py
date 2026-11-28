@@ -12,8 +12,9 @@ from nonebot.log import logger
 from ...paths import get_paths
 
 from . import db_backend
+from .shared_read_cache import process_read_cache
 from ...core.errors import DomainError
-from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param
+from ...core.numeric import as_int_like, sqlite_int_compare, require_exact_integer, bind_sqlite_param, exact_crystal_integer
 
 
 DATABASE = get_paths().data
@@ -57,6 +58,10 @@ _MONEY_FIELDS = {
 
 
 def _decode_field(table, field, value):
+    if table == "statistics" and isinstance(value, (bytes, bytearray, memoryview)):
+        integer = exact_crystal_integer(value)
+        if integer is not None:
+            return integer
     money = _MONEY_FIELDS.get(table, {}).get(field)
     if money and value is not None:
         return require_exact_integer(value, field=money, subject="actor")
@@ -236,6 +241,60 @@ class PlayerDataManager:
                 )
             self._commit_write()
             self._invalidate_field_list_cache(table_name, field)
+
+    def increment_statistics(self, user_id, increments):
+        """Apply one event's counters with one current read and one atomic write."""
+        changes = {str(key): int(value) for key, value in increments.items() if value}
+        if not changes:
+            return
+        if "user_id" in changes:
+            raise ValueError("user_id is not a statistics counter")
+        with self._conn_lock:
+            if self.conn.in_transaction:
+                raise RuntimeError("statistics batch requires an idle manager connection")
+            self._ensure_table_exists("statistics")
+            for field in changes:
+                self._ensure_field_exists("statistics", field, "INTEGER")
+            fields = list(changes)
+            columns = ", ".join(self._quote_ident(field) for field in fields)
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = self.conn.execute(
+                    f"SELECT {columns} FROM statistics WHERE user_id=%s", (str(user_id),)
+                ).fetchone()
+                values = []
+                for index, field in enumerate(fields):
+                    current = _decode_field("statistics", field, row[index]) if row is not None else 0
+                    try:
+                        current = int(current) if current is not None else 0
+                    except (TypeError, ValueError):
+                        current = 0
+                    values.append(current + changes[field])
+                placeholders = ", ".join("%s" for _ in values)
+                assignments = ", ".join(
+                    f"{self._quote_ident(field)}=excluded.{self._quote_ident(field)}"
+                    for field in fields
+                )
+                written = self.conn.execute(
+                    f"INSERT INTO statistics(user_id, {columns}) VALUES(%s, {placeholders}) "
+                    f"ON CONFLICT(user_id) DO UPDATE SET {assignments}",
+                    (str(user_id), *(bind_sqlite_param(value, exact=True) for value in values)),
+                )
+                saved = self.conn.execute(
+                    f"SELECT {columns} FROM statistics WHERE user_id=%s", (str(user_id),)
+                ).fetchone()
+                # Do not silently report success when a trigger ignored or
+                # rewrote an event. Large new totals use exact BLOB encoding.
+                if written.rowcount != 1 or saved is None or any(
+                    exact_crystal_integer(saved[index]) != value for index, value in enumerate(values)
+                ):
+                    raise DocumentWriteRejected("statistics", str(user_id), projection_mismatch=True)
+                self._commit_write()
+            except Exception:
+                self.conn.rollback()
+                raise
+            for field in fields:
+                self._invalidate_field_list_cache("statistics", field)
 
     def get_fields(self, user_id, table_name, *, raise_errors=False):
         """通过user_id查看一个表这个主键的全部字段"""
@@ -433,6 +492,80 @@ class PlayerDataManager:
                     record[col] = _decode_field(table_name, col, val)
                 results.append(record)
             return results
+
+    def get_all_fields(self, table_name, fields) -> list[dict]:
+        """Read only the requested columns for every row in a table."""
+        self._ensure_table_exists(table_name)
+        requested = list(dict.fromkeys(str(field) for field in fields if str(field)))
+        with self._conn_lock:
+            available = {
+                str(name).casefold(): str(name)
+                for name in self.conn.column_names(table_name)
+            }
+            columns = [
+                available[field.casefold()]
+                for field in requested
+                if field.casefold() in available
+            ]
+            if "user_id" in available and all(
+                column.casefold() != "user_id" for column in columns
+            ):
+                columns.insert(0, available["user_id"])
+            if not columns:
+                return []
+            cursor = self._get_cursor()
+            cursor.execute(
+                f"SELECT {', '.join(self._quote_ident(column) for column in columns)} "
+                f"FROM {self._quote_ident(table_name)}"
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    column: _decode_field(table_name, column, value)
+                    for column, value in zip(columns, row)
+                }
+                for row in rows
+            ]
+
+    def get_fields_by_ids(self, table_name, user_ids, fields, *, ensure_fields=True) -> dict[str, dict]:
+        """Read selected fields for a bounded set of users in batched queries."""
+        selected_fields = list(dict.fromkeys(str(field) for field in fields if str(field)))
+        if ensure_fields:
+            self._ensure_table_exists(table_name)
+            for field in selected_fields:
+                self._ensure_field_exists(table_name, field)
+        ids = list(dict.fromkeys(str(user_id) for user_id in user_ids if user_id is not None))
+        if not ids:
+            return {}
+        if not ensure_fields:
+            with self._conn_lock:
+                available = {str(name).casefold() for name in self.conn.column_names(table_name)}
+            if not {"user_id", *(field.casefold() for field in selected_fields)} <= available:
+                return {}
+
+        result: dict[str, dict] = {}
+        field_sql = [self._quote_ident("user_id"), *(self._quote_ident(field) for field in selected_fields)]
+        for offset in range(0, len(ids), 400):
+            batch = ids[offset : offset + 400]
+            placeholders = ",".join(["%s"] * len(batch))
+            with self._conn_lock:
+                cursor = self._get_cursor()
+                cursor.execute(
+                    f"SELECT {', '.join(field_sql)} FROM {self._quote_ident(table_name)} "
+                    f"WHERE user_id IN ({placeholders})",
+                    tuple(batch),
+                )
+                rows = cursor.fetchall()
+                columns = [column[0] for column in cursor.description]
+            for row in rows:
+                record = {
+                    column: _decode_field(table_name, column, value)
+                    for column, value in zip(columns, row)
+                }
+                user_id = str(record.get("user_id") or "")
+                if user_id:
+                    result.setdefault(user_id, record)
+        return result
 
     def delete_record(self, user_id, table_name):
         """
@@ -669,4 +802,5 @@ class PlayerDataManager:
             self.conn = db_backend.connect(self.database_path, check_same_thread=False)
             self._ensured_tables.clear()
             self._ensured_fields.clear()
+            process_read_cache.invalidate_snapshot_database(self.database_path)
             logger.opt(colors=True).info(f"<green>player数据库已重连！</green>")

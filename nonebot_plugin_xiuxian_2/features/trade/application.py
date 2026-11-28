@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 import sqlite3
 from datetime import tzinfo
@@ -155,6 +156,9 @@ class TradeApplication(LegacyApplication):
             listing_id=listing_id,
             name=name,
         )
+
+    def xianshi_minimum_prices(self, names: Iterable[str]) -> dict[str, int]:
+        return self.xianshi_query_repository.minimum_prices(names)
 
     def xianshi_my_trades(
         self, user_id: str, *, limit: int = 5

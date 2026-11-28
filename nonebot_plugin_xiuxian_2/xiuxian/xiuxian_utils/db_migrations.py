@@ -100,6 +100,189 @@ def _create_numeric_rank_index(
         )
 
 
+def _create_numeric_rank_key_index(
+    conn,
+    index_name: str,
+    table_name: str,
+    column_name: str,
+):
+    """Index arbitrary-integer keys for fast range counts in personal ranks."""
+    if not conn.table_exists(table_name):
+        return
+
+    available = {name.lower() for name in conn.column_names(table_name)}
+    if column_name.lower() not in available:
+        return
+
+    expression = f"xiuxian_int_sort_key_compact({db_backend.quote_ident(column_name)})"
+    try:
+        conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS {db_backend.quote_ident(index_name)}
+            ON {db_backend.quote_ident(table_name)} ({expression})
+            """
+        )
+    except Exception as exc:
+        logger.warning(
+            f"[xiuxian-db] 跳过数值排行键索引 {index_name}："
+            f"table={table_name}, column={column_name}, error={exc}"
+        )
+
+
+def realm_level_order_expression() -> str:
+    """Keep leaderboard SQL and its composite index on the same realm ordering."""
+    from ..xiuxian_config import convert_rank
+
+    rank_mapping = {rank: idx for idx, rank in enumerate(convert_rank("江湖好手")[1])}
+    branches = []
+    for level, value in sorted(rank_mapping.items(), key=lambda item: item[1], reverse=True):
+        escaped_level = level.replace("'", "''")
+        branches.append(f"WHEN '{escaped_level}' THEN '{value:02}'")
+    return "(CASE level " + " ".join(branches) + " ELSE level END)"
+
+
+def _create_realm_rank_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"exp", "level", "user_name"}.issubset(available):
+        return
+
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_realm_rank_v1 "
+            'ON user_xiuxian (xiuxian_int_sort_key_compact("exp") DESC, '
+            f"{realm_level_order_expression()} ASC) WHERE user_name IS NOT NULL"
+        )
+    except Exception as exc:
+        logger.warning(
+            "[xiuxian-db] 跳过境界排行索引 idx_user_xiuxian_realm_rank_v1："
+            f"table=user_xiuxian, error={exc}"
+        )
+
+
+def _create_root_rank_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"root_level", "user_name"}.issubset(available):
+        return
+
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_root_rank_v1 "
+            "ON user_xiuxian (root_level DESC) WHERE user_name IS NOT NULL"
+        )
+    except Exception as exc:
+        logger.warning(
+            "[xiuxian-db] 跳过轮回排行索引 idx_user_xiuxian_root_rank_v1："
+            f"table=user_xiuxian, error={exc}"
+        )
+
+
+def _create_public_rank_indexes(conn) -> None:
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_power_rank_key_v1",
+        "user_xiuxian",
+        "power",
+    )
+    _create_root_rank_index(conn)
+
+
+def _create_sect_owner_numeric_index(conn) -> None:
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if "user_id" not in available:
+        return
+
+    # Owner IDs have INTEGER affinity; retain the original equality after this seek.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_user_xiuxian_user_id_numeric_v1 "
+        "ON user_xiuxian(CAST(user_id AS NUMERIC))"
+    )
+
+
+def _create_numeric_rank_generation(conn) -> None:
+    """Track score-set changes so cached exact personal ranks stay current."""
+    if not conn.table_exists("user_xiuxian"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"user_id", "exp", "stone"}.issubset(available):
+        return
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS xiuxian_numeric_rank_generation ("
+        "singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
+        "generation INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO xiuxian_numeric_rank_generation(singleton,generation) "
+        "VALUES(1,0)"
+    )
+    for operation, condition in (
+        ("insert", ""),
+        ("delete", ""),
+        (
+            "update",
+            " WHEN NEW.user_id IS NOT OLD.user_id "
+            "OR NEW.exp IS NOT OLD.exp OR NEW.stone IS NOT OLD.stone",
+        ),
+    ):
+        conn.execute(
+            f"CREATE TRIGGER IF NOT EXISTS xiuxian_numeric_rank_generation_{operation} "
+            f"AFTER {operation.upper()} ON user_xiuxian{condition} "
+            "BEGIN UPDATE xiuxian_numeric_rank_generation "
+            "SET generation=generation+1 WHERE singleton=1; END"
+        )
+
+
+def _migration_20261126_0002_independent_numeric_rank_generation(conn) -> None:
+    """Retain legacy invalidation while tracking each score column separately."""
+    _create_numeric_rank_generation(conn)
+    if not conn.table_exists("xiuxian_numeric_rank_generation"):
+        return
+    available = {name.lower() for name in conn.column_names("user_xiuxian")}
+    if not {"user_id", "exp", "stone"}.issubset(available):
+        return
+
+    generation_columns = {
+        name.lower() for name in conn.column_names("xiuxian_numeric_rank_generation")
+    }
+    for column in ("exp_generation", "stone_generation"):
+        if column not in generation_columns:
+            conn.execute(
+                f"ALTER TABLE xiuxian_numeric_rank_generation "
+                f"ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+            )
+
+    for operation in ("insert", "delete", "update"):
+        name = f"xiuxian_numeric_rank_generation_{operation}"
+        conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+        if operation == "update":
+            condition = (
+                " WHEN NEW.user_id IS NOT OLD.user_id "
+                "OR NEW.exp IS NOT OLD.exp OR NEW.stone IS NOT OLD.stone"
+            )
+            increments = (
+                "exp_generation=exp_generation+(NEW.exp IS NOT OLD.exp), "
+                "stone_generation=stone_generation+(NEW.stone IS NOT OLD.stone)"
+            )
+        else:
+            condition = ""
+            increments = (
+                "exp_generation=exp_generation+1, "
+                "stone_generation=stone_generation+1"
+            )
+        conn.execute(
+            f"CREATE TRIGGER {name} AFTER {operation.upper()} "
+            f"ON user_xiuxian{condition} "
+            "BEGIN UPDATE xiuxian_numeric_rank_generation "
+            f"SET generation=generation+1, {increments} WHERE singleton=1; END"
+        )
+
+
 def _ensure_core_indexes(conn):
     """热点表索引：幂等执行，不依赖迁移版本。"""
     for index_name, table_name, columns in (
@@ -114,6 +297,7 @@ def _ensure_core_indexes(conn):
     ):
         _create_index(conn, index_name, table_name, columns)
 
+    _create_sect_owner_numeric_index(conn)
     _create_numeric_rank_index(
         conn,
         "idx_user_xiuxian_exp_numeric_rank",
@@ -126,6 +310,20 @@ def _ensure_core_indexes(conn):
         "user_xiuxian",
         "stone",
     )
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_exp_rank_key_v2",
+        "user_xiuxian",
+        "exp",
+    )
+    _create_numeric_rank_key_index(
+        conn,
+        "idx_user_xiuxian_stone_rank_key_v2",
+        "user_xiuxian",
+        "stone",
+    )
+    _create_public_rank_indexes(conn)
+    _create_realm_rank_index(conn)
 
 
 def _ensure_user_xiuxian_unique_index(conn):
@@ -195,6 +393,22 @@ def _migration_20260717_0001_dedupe_user_xiuxian(conn):
             )
 
 
+def _migration_20261125_0001_compact_numeric_rank_keys(conn):
+    """Rebuild rank indexes after switching their arbitrary-integer key encoding."""
+    if not conn.table_exists("user_xiuxian"):
+        return
+
+    for column in ("exp", "stone"):
+        old_index = f"idx_user_xiuxian_{column}_rank_key"
+        conn.execute(f"DROP INDEX IF EXISTS {db_backend.quote_ident(old_index)}")
+        _create_numeric_rank_key_index(
+            conn,
+            f"idx_user_xiuxian_{column}_rank_key_v2",
+            "user_xiuxian",
+            column,
+        )
+
+
 def _migration_20260707_0001_runtime_marker(conn):
     """建立迁移基线；实际热点索引由 _ensure_core_indexes 幂等维护。"""
     _ensure_core_indexes(conn)
@@ -203,6 +417,14 @@ def _migration_20260707_0001_runtime_marker(conn):
 CORE_MIGRATIONS: list[tuple[str, Migration]] = [
     ("20260707_0001_runtime_marker", _migration_20260707_0001_runtime_marker),
     ("20260717_0001_dedupe_user_xiuxian", _migration_20260717_0001_dedupe_user_xiuxian),
+    ("20261125_0001_compact_numeric_rank_keys", _migration_20261125_0001_compact_numeric_rank_keys),
+    ("20261125_0002_realm_rank_index", _create_realm_rank_index),
+    ("20261125_0003_public_rank_indexes", _create_public_rank_indexes),
+    ("20261126_0001_exact_numeric_rank_generation", _create_numeric_rank_generation),
+    (
+        "20261126_0002_independent_numeric_rank_generation",
+        _migration_20261126_0002_independent_numeric_rank_generation,
+    ),
 ]
 
 

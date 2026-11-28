@@ -5,6 +5,7 @@ from typing import Any
 
 from ...core.numeric import normalize_sect_row
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import LIVE_PROJECTION_READ_OWNER
 
 
 class SectInfoSqlRepository:
@@ -21,7 +22,10 @@ class SectInfoSqlRepository:
 
     def get_name_by_id(self, sect_id: int | str) -> str | None:
         """Read display identity without loading unrelated treasury balances."""
-        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        with DatabaseUnitOfWork(
+            self.database, read_only=True,
+            read_owner=LIVE_PROJECTION_READ_OWNER.when_unscoped(),
+        ) as uow:
             row = uow.query_one(
                 "SELECT sect_name FROM sects WHERE sect_id=?",
                 (sect_id,),

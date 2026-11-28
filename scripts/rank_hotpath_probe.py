@@ -62,6 +62,87 @@ def _range_rank_sql(column: str) -> str:
     """
 
 
+def _key_rank_sql(column: str) -> str:
+    value = f'xiuxian_int_sort_key_compact("{column}")'
+    return f"""
+        WITH target AS (
+            SELECT {value} AS value
+            FROM user_xiuxian
+            WHERE user_id=%s
+        )
+        SELECT CASE
+            WHEN target.value IS NULL THEN 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} IS NOT NULL
+            )
+            ELSE 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} > target.value
+            )
+        END AS rank_value
+        FROM target
+    """
+
+
+def _legacy_key_rank_sql(column: str) -> str:
+    value = f'xiuxian_int_sort_key_legacy("{column}")'
+    return f"""
+        WITH target AS (
+            SELECT {value} AS value
+            FROM user_xiuxian
+            WHERE user_id=%s
+        )
+        SELECT CASE
+            WHEN target.value IS NULL THEN 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} IS NOT NULL
+            )
+            ELSE 1 + (
+                SELECT COUNT(DISTINCT {value})
+                FROM user_xiuxian
+                WHERE {value} > target.value
+            )
+        END AS rank_value
+        FROM target
+    """
+
+
+def _legacy_decimal_sort_key(value):
+    from nonebot_plugin_xiuxian_2.core.numeric import as_int_like
+
+    if value is None:
+        return None
+    number = as_int_like(value)
+    magnitude = str(abs(number)).encode("ascii")
+    length = len(magnitude).to_bytes(4, "big")
+    if number < 0:
+        return b"\x00" + bytes(255 - byte for byte in length) + bytes(
+            255 - byte for byte in magnitude
+        )
+    return b"\x01" + length + magnitude
+
+
+def _rank_index_bytes(connection) -> dict[str, int] | None:
+    names = (
+        "idx_user_xiuxian_exp_rank_key_v2",
+        "idx_user_xiuxian_stone_rank_key_v2",
+        "idx_probe_legacy_exp_rank_key",
+        "idx_probe_legacy_stone_rank_key",
+    )
+    try:
+        rows = connection.execute(
+            "SELECT name, SUM(pgsize) AS bytes FROM dbstat "
+            "WHERE name IN (?,?,?,?) GROUP BY name",
+            names,
+        ).fetchall()
+    except Exception:
+        return None
+    return {str(row[0]): int(row[1] or 0) for row in rows}
+
+
 def _percentile(values: list[float], percentile: float) -> float:
     ordered = sorted(values)
     return ordered[max(0, math.ceil(len(ordered) * percentile) - 1)]
@@ -167,24 +248,36 @@ def _fixture_context(fixture: Path, report: Path):
             shutil.rmtree(temp_dir)
 
 
-async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
+async def _run_variant(
+    probe, entry, game, snapshot, *, legacy: bool, range_legacy: bool = False
+) -> dict:
     snapshot.restore()
+    if legacy and range_legacy:
+        raise ValueError("legacy rank variants cannot be combined")
     manager_type = type(game)
-    original_exp = manager_type.get_exp_rank
-    original_stone = manager_type.get_stone_rank
+    original_combined = manager_type.get_exp_and_stone_ranks
     original_read = manager_type._read_query
     rank_sql = []
     rank_total_ms = 0.0
 
     if legacy:
-        def legacy_exp(self, user_id):
-            return self._read_query(_legacy_rank_sql("exp"), (user_id,), one=True)
+        def legacy_pair(self, user_id):
+            exp = self._read_query(_legacy_rank_sql("exp"), (user_id,), one=True)
+            stone = self._read_query(_legacy_rank_sql("stone"), (user_id,), one=True)
+            if exp is None or stone is None:
+                return None
+            return exp[0], stone[0]
 
-        def legacy_stone(self, user_id):
-            return self._read_query(_legacy_rank_sql("stone"), (user_id,), one=True)
+        manager_type.get_exp_and_stone_ranks = legacy_pair
+    elif range_legacy:
+        def range_pair(self, user_id):
+            exp = self._read_query(_range_rank_sql("exp"), (user_id,), one=True)
+            stone = self._read_query(_range_rank_sql("stone"), (user_id,), one=True)
+            if exp is None or stone is None:
+                return None
+            return exp[0], stone[0]
 
-        manager_type.get_exp_rank = legacy_exp
-        manager_type.get_stone_rank = legacy_stone
+        manager_type.get_exp_and_stone_ranks = range_pair
 
     def traced_read(self, sql, params=None, **kwargs):
         nonlocal rank_total_ms
@@ -192,7 +285,7 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
         result = original_read(self, sql, params, **kwargs)
         elapsed_ms = (time.perf_counter() - started) * 1000
         sql_text = str(sql)
-        if "xiuxian_int_text" in sql_text and (
+        if ("xiuxian_int_text" in sql_text or "xiuxian_int_sort_key" in sql_text) and (
             "dense_rank() OVER" in sql_text or "COUNT(DISTINCT" in sql_text
         ):
             rank_total_ms += elapsed_ms
@@ -201,6 +294,8 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
 
     manager_type._read_query = traced_read
     samples = []
+    cpu_before = resource.getrusage(resource.RUSAGE_SELF)
+    wall_before = time.perf_counter()
     try:
         for number in range(1, REQUESTS + 1):
             started = time.perf_counter()
@@ -226,12 +321,18 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
             )
     finally:
         manager_type._read_query = original_read
-        manager_type.get_exp_rank = original_exp
-        manager_type.get_stone_rank = original_stone
+        manager_type.get_exp_and_stone_ranks = original_combined
+    cpu_after = resource.getrusage(resource.RUSAGE_SELF)
 
     values = [item["latency_ms"] for item in samples]
     return {
-        "variant": "before_legacy_two_rank_reads" if legacy else "after_range_rank_read",
+        "variant": (
+            "before_legacy_two_rank_reads"
+            if legacy
+            else "before_numeric_collation_range"
+            if range_legacy
+            else "current_rank_implementation"
+        ),
         "requests": len(samples),
         "samples": samples,
         "p50_ms": _percentile(values, 0.50),
@@ -246,6 +347,96 @@ async def _run_variant(probe, entry, game, snapshot, *, legacy: bool) -> dict:
         "rank_sql_count": len(rank_sql),
         "rank_sql_total_ms": round(rank_total_ms, 3),
         "rank_sql": rank_sql,
+        "wall_s": round(time.perf_counter() - wall_before, 3),
+        "cpu_user_s": round(cpu_after.ru_utime - cpu_before.ru_utime, 3),
+        "cpu_system_s": round(cpu_after.ru_stime - cpu_before.ru_stime, 3),
+    }
+
+
+async def _run_compact_key_variant(probe, entry, game, snapshot, *, legacy_key: bool) -> dict:
+    snapshot.restore()
+    manager_type = type(game)
+    original_combined = manager_type.get_exp_and_stone_ranks
+    original_read = manager_type._read_query
+    rank_sql = []
+    rank_total_ms = 0.0
+
+    if legacy_key:
+        def legacy_rank_pair(self, user_id):
+            exp = self._read_query(_legacy_key_rank_sql("exp"), (user_id,), one=True)
+            stone = self._read_query(_legacy_key_rank_sql("stone"), (user_id,), one=True)
+            if exp is None or stone is None:
+                return None
+            return exp[0], stone[0]
+
+        manager_type.get_exp_and_stone_ranks = legacy_rank_pair
+
+    def traced_read(self, sql, params=None, **kwargs):
+        nonlocal rank_total_ms
+        started = time.perf_counter()
+        result = original_read(self, sql, params, **kwargs)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        sql_text = str(sql)
+        if "COUNT(DISTINCT" in sql_text and (
+            "xiuxian_int_sort_key" in sql_text
+            or "xiuxian_int_sort_key_legacy" in sql_text
+        ):
+            rank_total_ms += elapsed_ms
+            rank_sql.append({"sql": " ".join(sql_text.split()), "elapsed_ms": round(elapsed_ms, 3)})
+        return result
+
+    manager_type._read_query = traced_read
+    samples = []
+    cpu_before = resource.getrusage(resource.RUSAGE_SELF)
+    wall_before = time.perf_counter()
+    try:
+        for number in range(1, REQUESTS + 1):
+            started = time.perf_counter()
+            result = await probe.run_case(
+                entry,
+                "missing",
+                number,
+                actor="900001",
+                input_text=COMMAND,
+                timeout=8,
+            )
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            reply = "".join(result.get("replies") or [])
+            samples.append(
+                {
+                    "latency_ms": round(elapsed_ms, 3),
+                    "status": result.get("status"),
+                    "reply_bytes": len(reply.encode("utf-8")),
+                    "reply_sha256": hashlib.sha256(reply.encode("utf-8")).hexdigest(),
+                    "errors": result.get("errors", []),
+                    "blocked": result.get("blocked", []),
+                }
+            )
+    finally:
+        manager_type._read_query = original_read
+        manager_type.get_exp_and_stone_ranks = original_combined
+    cpu_after = resource.getrusage(resource.RUSAGE_SELF)
+
+    values = [item["latency_ms"] for item in samples]
+    return {
+        "variant": "before_decimal_binary_keys_two_reads" if legacy_key else "after_compact_binary_keys_one_read",
+        "requests": len(samples),
+        "samples": samples,
+        "p50_ms": _percentile(values, 0.50),
+        "p95_ms": _percentile(values, 0.95),
+        "p99_ms": _percentile(values, 0.99),
+        "error_rate": sum(
+            bool(item["status"] != "pass" or item["errors"] or item["blocked"])
+            for item in samples
+        ) / len(samples),
+        "reply_bytes": sorted({item["reply_bytes"] for item in samples}),
+        "reply_sha256": sorted({item["reply_sha256"] for item in samples}),
+        "rank_sql_count": len(rank_sql),
+        "rank_sql_total_ms": round(rank_total_ms, 3),
+        "rank_sql": rank_sql,
+        "wall_s": round(time.perf_counter() - wall_before, 3),
+        "cpu_user_s": round(cpu_after.ru_utime - cpu_before.ru_utime, 3),
+        "cpu_system_s": round(cpu_after.ru_stime - cpu_before.ru_stime, 3),
     }
 
 
@@ -1175,8 +1366,17 @@ async def _title_probe(args: argparse.Namespace) -> dict:
 async def _probe(args: argparse.Namespace) -> dict:
     fixture = args.fixture.resolve()
     report = args.report.resolve()
+    data_dir = fixture / "data" / "xiuxian"
+    database_files_before_startup = {
+        name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
+        for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+    }
     with _fixture_context(fixture, report) as probe:
+        startup_started = time.perf_counter()
+        startup_cpu = resource.getrusage(resource.RUSAGE_SELF)
         _, managers = await probe.prepare(seed=False)
+        startup_elapsed = time.perf_counter() - startup_started
+        startup_cpu_after = resource.getrusage(resource.RUSAGE_SELF)
         game = managers[0]
         if game.conn.execute("SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)).fetchone() is None:
             raise SystemExit("fixture is missing required actor user_id=900001")
@@ -1195,6 +1395,10 @@ async def _probe(args: argparse.Namespace) -> dict:
             "entry": "live matcher/handler via tests.command_probe.run_case",
             "fixture": str(fixture),
             "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+            "database_files_before_startup": database_files_before_startup,
+            "startup_s": round(startup_elapsed, 3),
+            "startup_cpu_user_s": round(startup_cpu_after.ru_utime - startup_cpu.ru_utime, 3),
+            "startup_cpu_system_s": round(startup_cpu_after.ru_stime - startup_cpu.ru_stime, 3),
             "database_files_bytes": {
                 name: (data_dir / name).stat().st_size if (data_dir / name).exists() else 0
                 for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
@@ -1204,10 +1408,21 @@ async def _probe(args: argparse.Namespace) -> dict:
                 "stone_rank": _rank_explain(game.conn, stone_sql),
                 "range_exp_rank": _rank_explain(game.conn, _range_rank_sql("exp")),
                 "range_stone_rank": _rank_explain(game.conn, _range_rank_sql("stone")),
+                "key_exp_rank": _rank_explain(game.conn, _key_rank_sql("exp")),
+                "key_stone_rank": _rank_explain(game.conn, _key_rank_sql("stone")),
             },
         }
-        result["before"] = await _run_variant(probe, entry, game, snapshot, legacy=True)
-        result["after"] = await _run_variant(probe, entry, game, snapshot, legacy=False)
+        if args.rank_key_compare:
+            result["before"] = await _run_variant(
+                probe, entry, game, snapshot, legacy=False, range_legacy=True
+            )
+            result["after"] = await _run_variant(
+                probe, entry, game, snapshot, legacy=False
+            )
+            result["comparison"] = "numeric-collation range vs binary sort-key range"
+        else:
+            result["before"] = await _run_variant(probe, entry, game, snapshot, legacy=True)
+            result["after"] = await _run_variant(probe, entry, game, snapshot, legacy=False)
         snapshot.restore()
         result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
         _validate_comparison(result)
@@ -1215,6 +1430,87 @@ async def _probe(args: argparse.Namespace) -> dict:
         if result["status"] != "pass":
             raise RuntimeError(f"rank comparison failed: {result['failure_reasons']}")
         return result
+
+
+async def _compact_rank_probe(args: argparse.Namespace) -> dict:
+    fixture = args.fixture.resolve()
+    report = args.report.resolve()
+    with _fixture_context(fixture, report) as probe:
+        db_backend = importlib.import_module(
+            "nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.db_backend"
+        )
+        original_connect = db_backend.connect
+
+        def connect_with_legacy_key(*connect_args, **connect_kwargs):
+            connection = original_connect(*connect_args, **connect_kwargs)
+            connection._raw.create_function(
+                "xiuxian_int_sort_key_legacy",
+                1,
+                _legacy_decimal_sort_key,
+                deterministic=True,
+            )
+            return connection
+
+        db_backend.connect = connect_with_legacy_key
+        try:
+            startup_started = time.perf_counter()
+            startup_cpu = resource.getrusage(resource.RUSAGE_SELF)
+            _, managers = await probe.prepare(seed=False)
+            startup_elapsed = time.perf_counter() - startup_started
+            startup_cpu_after = resource.getrusage(resource.RUSAGE_SELF)
+            game = managers[0]
+            if game.conn.execute(
+                "SELECT 1 FROM user_xiuxian WHERE user_id=%s LIMIT 1", ("900001",)
+            ).fetchone() is None:
+                raise SystemExit("fixture is missing required actor user_id=900001")
+
+            with db_backend.transaction(game.database_path) as connection:
+                for column in ("exp", "stone"):
+                    connection.execute(
+                        f"CREATE INDEX IF NOT EXISTS idx_probe_legacy_{column}_rank_key "
+                        f"ON user_xiuxian (xiuxian_int_sort_key_legacy(\"{column}\"))"
+                    )
+
+            entry = next(item for item in probe.inventory() if item["command"] == COMMAND)
+            snapshot = probe.FixtureSnapshot(probe.tests._data_dir, managers)
+            result = {
+                "command": COMMAND,
+                "entry": "live matcher/handler via tests.command_probe.run_case",
+                "fixture": str(args.fixture.resolve()),
+                "users": game.conn.execute("SELECT COUNT(*) FROM user_xiuxian").fetchone()[0],
+                "startup_s": round(startup_elapsed, 3),
+                "startup_cpu_user_s": round(startup_cpu_after.ru_utime - startup_cpu.ru_utime, 3),
+                "startup_cpu_system_s": round(startup_cpu_after.ru_stime - startup_cpu.ru_stime, 3),
+                "explain": {
+                    "decimal_exp_rank": _rank_explain(game.conn, _legacy_key_rank_sql("exp")),
+                    "decimal_stone_rank": _rank_explain(game.conn, _legacy_key_rank_sql("stone")),
+                    "compact_exp_rank": _rank_explain(game.conn, _key_rank_sql("exp")),
+                    "compact_stone_rank": _rank_explain(game.conn, _key_rank_sql("stone")),
+                },
+                "index_bytes": _rank_index_bytes(game.conn),
+            }
+            result["before"] = await _run_compact_key_variant(
+                probe, entry, game, snapshot, legacy_key=True
+            )
+            result["after"] = await _run_compact_key_variant(
+                probe, entry, game, snapshot, legacy_key=False
+            )
+            snapshot.restore()
+            result["database_files_bytes"] = {
+                name: (args.fixture.resolve() / "data" / "xiuxian" / name).stat().st_size
+                if (args.fixture.resolve() / "data" / "xiuxian" / name).exists()
+                else 0
+                for name in ("xiuxian.db", "xiuxian.db-wal", "xiuxian.db-shm")
+            }
+            result["rss_mb"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 3)
+            result["comparison"] = "decimal magnitude keys/two rank reads vs compact byte keys/one rank read"
+            _validate_comparison(result)
+            report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            if result["status"] != "pass":
+                raise RuntimeError(f"compact rank comparison failed: {result['failure_reasons']}")
+            return result
+        finally:
+            db_backend.connect = original_connect
 
 
 async def _smoke(args: argparse.Namespace) -> dict:
@@ -1328,6 +1624,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fixture", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument(
+        "--rank-key-compare",
+        action="store_true",
+        help="compare numeric-collation range ranking with the current binary-key implementation",
+    )
+    parser.add_argument(
+        "--compact-rank-compare",
+        action="store_true",
+        help="compare the prior decimal key/two-read path with compact binary keys and one read",
+    )
     parser.add_argument("--smoke", action="store_true", help="run one live command without performance sampling")
     parser.add_argument("--profile-reuse", action="store_true", help="compare duplicate versus reused profile reads")
     parser.add_argument("--config-reuse", action="store_true", help="compare duplicate versus request-local config reads")
@@ -1336,7 +1642,7 @@ def main() -> int:
     parser.add_argument("--title-reuse", action="store_true", help="compare duplicate versus reused title state reads")
     parser.add_argument("--state-reuse", action="store_true", help="compare duplicate versus reused 我的状态 reads")
     args = parser.parse_args()
-    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.config_reuse, args.base_reuse, args.buff_reuse, args.title_reuse, args.state_reuse)) > 1:
+    if sum(bool(value) for value in (args.smoke, args.profile_reuse, args.config_reuse, args.base_reuse, args.buff_reuse, args.title_reuse, args.state_reuse, args.rank_key_compare, args.compact_rank_compare)) > 1:
         parser.error("probe modes cannot be combined")
     result = asyncio.run(
         _smoke(args)
@@ -1353,6 +1659,8 @@ def main() -> int:
         if args.title_reuse
         else _state_probe(args)
         if args.state_reuse
+        else _compact_rank_probe(args)
+        if args.compact_rank_compare
         else _probe(args)
     )
     if args.smoke:
@@ -1369,6 +1677,10 @@ def main() -> int:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     elif args.state_reuse:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.rank_key_compare:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
+    elif args.compact_rank_compare:
+        print(json.dumps({key: result[key] for key in ("fixture", "users", "index_bytes", "before", "after", "comparison", "rss_mb")}, ensure_ascii=False))
     else:
         print(json.dumps({key: result[key] for key in ("fixture", "users", "before", "after", "rss_mb")}, ensure_ascii=False))
     return 0

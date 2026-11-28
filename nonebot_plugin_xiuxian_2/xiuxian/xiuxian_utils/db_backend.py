@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -148,8 +149,15 @@ def _convert_sql_code(sql: str) -> str:
     return sql.replace("%s", "?")
 
 
-def _convert_sql(sql: str) -> str:
-    sql = str(sql or "")
+# SQL text is a pure input to both rewrites below (parameters are bound
+# separately), so repeated statements reuse the scan result.  The cache is
+# bounded by entry count and only admits statements up to a fixed length, so
+# dynamically generated text cannot grow memory without limit.
+_SQL_REWRITE_CACHE_SIZE = 512
+_SQL_REWRITE_MAX_CACHED_LENGTH = 32768
+
+
+def _convert_sql_uncached(sql: str) -> str:
     if _SET_LOCAL_RE.fullmatch(sql):
         return "SELECT 1"
     return "".join(
@@ -158,7 +166,24 @@ def _convert_sql(sql: str) -> str:
     )
 
 
+_convert_sql_cached = lru_cache(maxsize=_SQL_REWRITE_CACHE_SIZE)(_convert_sql_uncached)
+
+
+def _convert_sql(sql: str) -> str:
+    sql = str(sql or "")
+    if len(sql) > _SQL_REWRITE_MAX_CACHED_LENGTH:
+        return _convert_sql_uncached(sql)
+    return _convert_sql_cached(sql)
+
+
 def _scope_effective_impart_update(sql: str) -> str:
+    sql = str(sql or "")
+    if len(sql) > _SQL_REWRITE_MAX_CACHED_LENGTH:
+        return _scope_effective_impart_update_uncached(sql)
+    return _scope_effective_impart_update_cached(sql)
+
+
+def _scope_effective_impart_update_uncached(sql: str) -> str:
     """Keep legacy ``user_id`` writes on the established row only.
 
     Historical SQLite databases can contain duplicate ``user_id`` rows.  The
@@ -183,6 +208,11 @@ def _scope_effective_impart_update(sql: str) -> str:
         + " ORDER BY rowid LIMIT 1)"
         + sql[match.end("predicate"):]
     )
+
+
+_scope_effective_impart_update_cached = lru_cache(maxsize=_SQL_REWRITE_CACHE_SIZE)(
+    _scope_effective_impart_update_uncached
+)
 
 
 def _adapt_param(value: Any) -> Any:

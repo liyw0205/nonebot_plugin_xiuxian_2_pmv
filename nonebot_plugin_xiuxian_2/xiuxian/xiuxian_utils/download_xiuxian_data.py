@@ -1130,6 +1130,9 @@ class UpdateManager:
             src_conn = sqlite3.connect(src_path, timeout=30)
             src_conn.row_factory = sqlite3.Row
             dst_conn = sqlite3.connect(temp_db, timeout=30)
+            # Rebuilt expression indexes reference the project's numeric UDFs.
+            from ...core.numeric import register_numeric_functions
+            register_numeric_functions(dst_conn)
             dst_conn.execute("PRAGMA journal_mode=DELETE")
             dst_conn.execute("PRAGMA synchronous=OFF")
             dst_conn.execute("PRAGMA foreign_keys=OFF")

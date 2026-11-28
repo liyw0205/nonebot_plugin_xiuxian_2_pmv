@@ -10,7 +10,7 @@ class TrainingStorageLazyReaderTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("PlayerDataManager", source)
         self.assertIn("training_application.get_state(user_id)", source)
-        self.assertIn("training_application.leaderboard(field, limit=50)", source)
+        self.assertIn("training_application.leaderboard_snapshot(field, limit=50)", source)
         application = (
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/features/training/application.py"

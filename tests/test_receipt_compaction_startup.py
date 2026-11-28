@@ -381,6 +381,24 @@ class SpaceReclaimTests(CompactionFixture):
         # Nothing left to reclaim afterwards.
         self.assertEqual(reclaim_space(self.game, free_bytes=10 ** 12)["status"], "no_free_pages")
 
+    def test_reclaim_rebuilds_numeric_expression_indexes(self) -> None:
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("CREATE TABLE ranked(user_id TEXT, score TEXT)")
+            conn.execute(
+                "CREATE INDEX ranked_exact_v1 ON ranked(xiuxian_int_sort_key_compact(score) DESC)"
+            )
+            conn.executemany("INSERT INTO ranked VALUES(%s,%s)", [(f"u{i}", str(i) * 40) for i in range(400)])
+        with db_backend.transaction(self.game) as conn:
+            conn.execute("DELETE FROM ranked WHERE user_id<>'u1'")
+        self.assertGreater(database_space(self.game)["freelist_pages"], 0)
+        result = reclaim_space(self.game, free_bytes=10 ** 12)
+        self.assertEqual(result["status"], "reclaimed", result)
+        with db_backend.transaction(self.game) as conn:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name='ranked_exact_v1'"
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+
     def test_compaction_without_conversion_never_reclaims(self) -> None:
         report = self.run_compaction(allow_reclaim=True)
         self.assertEqual(report.converted, 0)

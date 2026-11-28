@@ -10,6 +10,7 @@ from ...core.result import OperationOutcome, ReplyPlan
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.database.ledger import request_hash
 from ...infrastructure.observability import trace_context
+from ..base.schema_catalog import read_sqlite_table_names
 from .domain import HarvestRequest, SettlementRequest, normalize_rewards
 from .repository import MixelixirRepository
 from .harvest_repository import MixelixirHarvestSqlRepository
@@ -190,13 +191,15 @@ class MixelixirApplication:
 
     def refine_cost_replay(self, *, operation_id: str, recipe_key: str):
         """Return a terminal cost result before the handler checks consumed materials."""
-        payload = {"recipe_set_id": "custom", "recipe_key": str(recipe_key)}
         with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
-            if uow.query_one(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_ledger'"
-            ) is None:
-                return None
-            record = self.ledger.get(uow, str(operation_id), "mixelixir.refine_cost")
+            tables = read_sqlite_table_names(uow)
+            return self._refine_cost_replay_in(uow, tables, operation_id, recipe_key)
+
+    def _refine_cost_replay_in(self, uow, tables, operation_id, recipe_key):
+        if "operation_ledger" not in tables:
+            return None
+        payload = {"recipe_set_id": "custom", "recipe_key": str(recipe_key)}
+        record = self.ledger.get(uow, str(operation_id), "mixelixir.refine_cost")
         if record is None:
             return None
         if record.request_hash != request_hash(payload):
@@ -207,6 +210,21 @@ class MixelixirApplication:
         if outcome is None:
             raise ConflictError("炼丹请求正在处理中")
         return outcome
+
+    def refine_recovery_state(
+        self, *, operation_id: str | None, user_id: str, recipe_key: str
+    ) -> tuple[OperationOutcome | None, str | None]:
+        """Read only the initial recovery stage; settlement must read live again."""
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            tables = read_sqlite_table_names(uow)
+            replay = (self._refine_cost_replay_in(uow, tables, operation_id, recipe_key)
+                      if operation_id is not None else None)
+            if replay is not None:
+                return replay, None
+            task = MixelixirRefineRewardSqlRepository(
+                self.game_database, self.player_database
+            ).latest_ready_task_in(uow, user_id, recipe_key, tables=tables)
+            return None, task
 
     def refine_reward(self, *, operation_id: str, user_id: str, task_id: str, max_goods_num: int):
         return self._execute(

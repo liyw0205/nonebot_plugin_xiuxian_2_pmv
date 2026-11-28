@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from threading import RLock
+from threading import RLock, current_thread, main_thread
 from typing import Any, ClassVar
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.uow import ReadOnlyConnectionOwner
 
 
 @dataclass(frozen=True)
@@ -35,12 +37,43 @@ class AdminBlackhouseSqlRepository:
         },
         "admin_blackhouse_imports": {"import_key", "imported_at"},
     }
-    _schema_cache: ClassVar[dict[tuple[str, int], bool]] = {}
+    _schema_cache: ClassVar[OrderedDict[tuple[str, int, int, int], bool]] = OrderedDict()
     _schema_cache_lock: ClassVar[RLock] = RLock()
+    _read_owner: ClassVar[ReadOnlyConnectionOwner] = ReadOnlyConnectionOwner()
 
     def __init__(self, database: str | Path, *, lock: RLock | None = None) -> None:
         self.database = Path(database)
         self.lock = lock or RLock()
+
+    @classmethod
+    def close_read_connection(cls) -> None:
+        if current_thread() is not main_thread():
+            return
+        cls._read_owner.close()
+        with cls._schema_cache_lock:
+            cls._schema_cache.clear()
+
+    def _require_read_database(self) -> None:
+        if not self.database.is_file():
+            if current_thread() is main_thread():
+                self.close_read_connection()
+            raise RuntimeError("schema_missing")
+
+    @classmethod
+    def _schema_cached(cls, key: tuple[str, int, int, int]) -> bool:
+        with cls._schema_cache_lock:
+            if key not in cls._schema_cache:
+                return False
+            cls._schema_cache.move_to_end(key)
+            return True
+
+    @classmethod
+    def _remember_schema(cls, key: tuple[str, int, int, int]) -> None:
+        with cls._schema_cache_lock:
+            cls._schema_cache[key] = True
+            cls._schema_cache.move_to_end(key)
+            while len(cls._schema_cache) > 64:
+                cls._schema_cache.popitem(last=False)
 
     @staticmethod
     def _identifier(value: Any, label: str) -> str:
@@ -89,9 +122,7 @@ class AdminBlackhouseSqlRepository:
     def _cached_schema_ready(cls, uow: DatabaseUnitOfWork, database: Path) -> bool:
         """Reuse validated DDL while rechecking the mutable import marker."""
         key = cls._schema_cache_key(uow, database)
-        with cls._schema_cache_lock:
-            cached = cls._schema_cache.get(key)
-        if cached:
+        if cls._schema_cached(key):
             try:
                 marker = uow.query_one(
                     "SELECT 1 AS present FROM admin_blackhouse_imports WHERE import_key=?",
@@ -106,18 +137,17 @@ class AdminBlackhouseSqlRepository:
             return False
         if not cls._schema_ready(uow):
             return False
-        with cls._schema_cache_lock:
-            cls._schema_cache[key] = True
+        cls._remember_schema(key)
         return True
 
     @classmethod
-    def _schema_cache_key(cls, uow: DatabaseUnitOfWork, database: Path) -> tuple[str, int]:
+    def _schema_cache_key(cls, uow: DatabaseUnitOfWork, database: Path) -> tuple[str, int, int, int]:
         row = uow.query_one("PRAGMA schema_version")
         try:
             schema_version = int(row["schema_version"]) if row is not None else -1
         except (KeyError, TypeError, ValueError):
             schema_version = -1
-        return str(database.resolve()), schema_version
+        return (*uow.database_identity, schema_version)
 
     @classmethod
     def _cached_snapshot(
@@ -128,13 +158,10 @@ class AdminBlackhouseSqlRepository:
     ) -> bool:
         """Read the marker and membership atomically after schema validation."""
         key = cls._schema_cache_key(uow, database)
-        with cls._schema_cache_lock:
-            cached = cls._schema_cache.get(key)
-        if not cached:
+        if not cls._schema_cached(key):
             if not cls._schema_ready(uow):
                 raise RuntimeError("schema_missing")
-            with cls._schema_cache_lock:
-                cls._schema_cache[key] = True
+            cls._remember_schema(key)
             return bool(
                 uow.query_one(
                     "SELECT 1 AS present FROM admin_blackhouse_users WHERE user_id=?",
@@ -155,9 +182,8 @@ class AdminBlackhouseSqlRepository:
 
     def snapshot(self, user_id: Any) -> bool:
         user_id = self._identifier(user_id, "user id")
-        if not self.database.is_file():
-            raise RuntimeError("schema_missing")
-        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        self._require_read_database()
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True, read_owner=self._read_owner) as uow:
             return self._cached_snapshot(uow, self.database, user_id)
 
     def is_banned(self, user_id: Any) -> bool:
@@ -174,9 +200,8 @@ class AdminBlackhouseSqlRepository:
                 seen.add(user_id)
         if not normalized:
             return {}
-        if not self.database.is_file():
-            raise RuntimeError("schema_missing")
-        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        self._require_read_database()
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True, read_owner=self._read_owner) as uow:
             if not self._cached_schema_ready(uow, self.database):
                 raise RuntimeError("schema_missing")
             placeholders = ",".join("?" for _ in normalized)
@@ -189,9 +214,8 @@ class AdminBlackhouseSqlRepository:
         return {user_id: user_id in present for user_id in normalized}
 
     def list_banned(self) -> list[dict[str, str]]:
-        if not self.database.is_file():
-            raise RuntimeError("schema_missing")
-        with self.lock, DatabaseUnitOfWork(self.database, read_only=True) as uow:
+        self._require_read_database()
+        with self.lock, DatabaseUnitOfWork(self.database, read_only=True, read_owner=self._read_owner) as uow:
             if not self._cached_schema_ready(uow, self.database):
                 raise RuntimeError("schema_missing")
             return [

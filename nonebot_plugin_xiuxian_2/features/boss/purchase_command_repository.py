@@ -7,6 +7,7 @@ from typing import Any, Mapping
 
 from ...infrastructure.database import DatabaseUnitOfWork, OperationLedger
 from ...infrastructure.database.ledger import request_hash
+from ..base.schema_catalog import sqlite_table_columns, sqlite_table_names
 
 
 class BossPurchaseCommandSchemaError(RuntimeError):
@@ -69,22 +70,8 @@ class BossPurchaseCommandRepository:
         self.ledger = OperationLedger()
 
     @staticmethod
-    def _columns(uow: DatabaseUnitOfWork, table: str) -> set[str]:
-        return {
-            str(row["name"]).casefold()
-            for row in uow.query_all(f'PRAGMA table_info("{table}")')
-        }
-
-    @staticmethod
-    def _table_exists(uow: DatabaseUnitOfWork, table: str) -> bool:
-        return (
-            uow.query_one(
-                "SELECT 1 AS present FROM sqlite_master "
-                "WHERE type='table' AND name=?",
-                (table,),
-            )
-            is not None
-        )
+    def _columns(uow: DatabaseUnitOfWork, table: str) -> frozenset[str]:
+        return sqlite_table_columns(uow, uow.database, table)
 
     @staticmethod
     def _number(value: Any, *, positive: bool = False) -> int:
@@ -498,11 +485,13 @@ class BossPurchaseCommandRepository:
         if not self.database.is_file():
             raise BossPurchaseCommandSchemaError("boss purchase database missing")
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            has_ledger = self._table_exists(uow, "operation_ledger")
-            has_legacy = self._table_exists(uow, self._LEGACY_TABLE)
+            tables = sqlite_table_names(uow, self.database)
+            has_ledger = "operation_ledger" in tables
+            has_legacy = self._LEGACY_TABLE in tables
+            legacy_columns = self._columns(uow, self._LEGACY_TABLE) if has_legacy else frozenset()
             if has_ledger and not self._LEDGER_COLUMNS <= self._columns(uow, "operation_ledger"):
                 raise BossPurchaseCommandSchemaError("boss purchase ledger schema missing")
-            if has_legacy and not self._LEGACY_COLUMNS <= self._columns(uow, self._LEGACY_TABLE):
+            if has_legacy and not self._LEGACY_COLUMNS <= legacy_columns:
                 raise BossPurchaseCommandSchemaError("boss purchase receipt schema missing")
             if not has_ledger and not has_legacy:
                 raise BossPurchaseCommandSchemaError("boss purchase receipt schema missing")
@@ -549,7 +538,7 @@ class BossPurchaseCommandRepository:
                         quantity=quantity,
                         legacy_payload=legacy_payload,
                     )
-                    if record.status in {"started", "failed"} and legacy_row is not None and "status" not in self._columns(uow, self._LEGACY_TABLE):
+                    if record.status in {"started", "failed"} and legacy_row is not None and "status" not in legacy_columns:
                         committed = self._committed_business_result(
                             legacy_row,
                             operation_id=operation_id,
@@ -571,17 +560,12 @@ class BossPurchaseCommandRepository:
                     if not has_legacy:
                         return None
                 elif not legacy_row:
-                    if not self._table_exists(uow, "operation_audit"):
+                    if "operation_audit" not in tables:
                         raise BossPurchaseCommandSchemaError("boss purchase audit schema missing")
                     if not self._AUDIT_COLUMNS <= self._columns(uow, "operation_audit"):
                         raise BossPurchaseCommandSchemaError("boss purchase audit schema missing")
 
             if has_legacy:
-                legacy_columns = self._columns(uow, self._LEGACY_TABLE)
-                legacy_row = uow.query_one(
-                    f'SELECT * FROM "{self._LEGACY_TABLE}" WHERE operation_id=?',
-                    (operation_id,),
-                )
                 if legacy_row is not None:
                     if legacy_payload_invalid:
                         return self._reject(display_action, "receipt_invalid")
@@ -608,7 +592,7 @@ class BossPurchaseCommandRepository:
             raise BossPurchaseCommandSchemaError("boss purchase database missing")
         required = {"user_id"}
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
-            if not self._table_exists(uow, "user_xiuxian"):
+            if "user_xiuxian" not in sqlite_table_names(uow, self.database):
                 raise BossPurchaseCommandSchemaError("boss purchase player schema missing")
             columns = self._columns(uow, "user_xiuxian")
             if not required <= columns:

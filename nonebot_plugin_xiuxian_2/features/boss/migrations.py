@@ -73,6 +73,20 @@ def apply_boss_player_schema(uow: DatabaseUnitOfWork) -> None:
     )
 
 
+def apply_boss_exact_rank_indexes(uow: DatabaseUnitOfWork) -> None:
+    """Store exact sort/range keys; legacy identity semantics remain read-guarded."""
+    from ..base.indexed_ranking import BOSS_INTEGRAL_ORDER_INDEX, BOSS_INTEGRAL_RANK_INDEX
+
+    columns = {row["name"] for row in uow.query_all('PRAGMA table_info("boss_limit")')}
+    if not columns:
+        apply_boss_player_schema(uow)
+        columns = {row["name"] for row in uow.query_all('PRAGMA table_info("boss_limit")')}
+    if not {"user_id", "integral"}.issubset(columns):
+        return
+    for spec in (BOSS_INTEGRAL_RANK_INDEX, BOSS_INTEGRAL_ORDER_INDEX):
+        uow.execute(spec.create_sql)
+
+
 def apply_boss_full_refresh_player_schema(uow: DatabaseUnitOfWork) -> None:
     """Install the operation receipt table used by full session refreshes."""
     uow.execute(
@@ -104,6 +118,7 @@ def apply_boss_punishment_operations(uow: DatabaseUnitOfWork) -> None:
 __all__ = [
     "apply_boss",
     "apply_boss_battle_player_schema",
+    "apply_boss_exact_rank_indexes",
     "apply_boss_full_refresh_player_schema",
     "apply_boss_player_schema",
     "apply_boss_punishment_operations",

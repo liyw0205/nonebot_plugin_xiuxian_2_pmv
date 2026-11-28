@@ -27,6 +27,11 @@ class PlayerProfileApplication:
     def get_user_profile_by_name(self, user_name: str) -> dict[str, Any] | None:
         return self.repository.get_user_profile_by_name(user_name)
 
+    def get_user_display_profiles_by_ids(
+        self, user_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        return self.repository.get_user_display_profiles_by_ids(user_ids)
+
     def search_users(self, query: str) -> list[dict[str, Any]]:
         return self.repository.search_users(query)
 

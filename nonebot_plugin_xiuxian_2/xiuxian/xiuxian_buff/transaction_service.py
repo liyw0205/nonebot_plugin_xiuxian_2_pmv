@@ -89,8 +89,34 @@ class PartnerProtectionService:
         return cls.normalize(row[0] if row is not None else "off")
 
     def get_status(self, user_id) -> str:
-        with self._lock, db_backend.transaction(self._player_database) as conn:
-            return self.read_status(conn, user_id)
+        with self._lock:
+            try:
+                connection = db_backend.connect_readonly(self._player_database)
+            except db_backend.OperationalError:
+                try:
+                    self._player_database.stat()
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise
+            else:
+                with closing(connection) as conn:
+                    try:
+                        row = conn.execute(
+                            "SELECT status.two_exp_protect FROM status WHERE user_id=%s",
+                            (str(user_id),),
+                        ).fetchone()
+                    except db_backend.OperationalError as exc:
+                        # Only legacy schema gaps retain the initializing read.
+                        if str(exc) not in {
+                            "no such table: status",
+                            "no such column: status.two_exp_protect",
+                        }:
+                            raise
+                    else:
+                        return self.normalize(row[0] if row is not None else "off")
+            with db_backend.transaction(self._player_database) as conn:
+                return self.read_status(conn, user_id)
 
     def set_status(
         self, operation_id, user_id, expected_status, new_status
@@ -1436,6 +1462,14 @@ class MentorApplicationService:
             "CREATE UNIQUE INDEX IF NOT EXISTS mentor_application_pending_apprentice "
             "ON mentor_applications(apprentice_id) WHERE status='pending'"
         )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS mentor_application_pending_expiry "
+            "ON mentor_applications(expires_at) WHERE status='pending'"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS mentor_application_pending_mentor "
+            "ON mentor_applications(mentor_id,created_at) WHERE status='pending'"
+        )
 
     @staticmethod
     def _ensure_mentor_schema(conn) -> None:
@@ -1759,6 +1793,17 @@ class MentorApplicationService:
             except Exception:
                 conn.rollback()
                 raise
+
+    def count_pending(self, mentor_id, *, now=None) -> int:
+        current = float(time.time() if now is None else now)
+        with self._lock, db_backend.transaction(self._player_database) as conn:
+            self._ensure_schema(conn)
+            self._expire_stale(conn, current)
+            row = conn.execute(
+                "SELECT COUNT(*) FROM mentor_applications WHERE mentor_id=%s AND status='pending'",
+                (str(mentor_id),),
+            ).fetchone()
+        return int(row[0])
 
     def list_pending(self, mentor_id, *, now=None) -> list[MentorApplication]:
         current = float(time.time() if now is None else now)

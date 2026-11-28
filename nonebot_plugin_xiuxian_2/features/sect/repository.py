@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...infrastructure.database.inventory import read_inventory_rows
 from ...infrastructure.clock import SystemClock
 from .schema import SCHEMA_MISSING, table_ready
 
@@ -184,12 +185,16 @@ class SectRenameSqlRepository:
                 return reject("materials_insufficient", str(sect_id))
             if number(user["claimed"], "sect_elixir_get") == 1:
                 return reject("already_claimed")
+            item_ids = tuple(dict.fromkeys(item_id for item_id, _, _, _ in normalized))
+            initial = dict(zip(item_ids, read_inventory_rows(uow, user_id, item_ids)))
             expected = {}
             for item_id, _, _, qty in normalized:
                 if item_id not in expected:
-                    row = uow.query_one("SELECT COALESCE(goods_num,0) AS n,COALESCE(bind_num,0) AS b "
-                                        "FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
-                    expected[item_id] = (number(row["n"], "sect_elixir_inventory"), number(row["b"], "sect_elixir_bound")) if row else (0, 0)
+                    row = initial[item_id]
+                    expected[item_id] = (
+                        number(0 if row["goods_num"] is None else row["goods_num"], "sect_elixir_inventory"),
+                        number(0 if row["bind_num"] is None else row["bind_num"], "sect_elixir_bound"),
+                    ) if row is not None else (0, 0)
                 count, bound = expected[item_id]
                 if count < 0 or bound < 0 or bound > count:
                     return reject("sect_elixir_inventory_invalid", str(item_id))
@@ -214,8 +219,8 @@ class SectRenameSqlRepository:
             changed = uow.execute("INSERT INTO sect_elixir_claim_operations(operation_id,payload,rewards) VALUES(?,?,?)", (operation_id, payload, encoded))
             if changed.rowcount != 1:
                 self._elixir_reject("receipt", operation_id)
-            for item_id, counts in expected.items():
-                row = uow.query_one("SELECT goods_num,bind_num FROM back WHERE user_id=? AND goods_id=?", (user_id, item_id))
+            saved_items = read_inventory_rows(uow, user_id, item_ids)
+            for (item_id, counts), row in zip(expected.items(), saved_items):
                 if row is None or (number(row["goods_num"], "sect_elixir_inventory"), number(row["bind_num"], "sect_elixir_bound")) != counts:
                     self._elixir_reject("item", item_id)
             saved_user = uow.query_one("SELECT sect_id,sect_position,COALESCE(sect_contribution,0) AS contribution,"

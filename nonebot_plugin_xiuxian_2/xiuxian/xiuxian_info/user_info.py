@@ -16,6 +16,7 @@ from ..xiuxian_utils.numeric_bind import as_int_like
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..command_guard import guard_command
 from ..xiuxian_utils.xiuxian2_handle import XiuxianDateManage, OtherSet, UserBuffDate
+from ..xiuxian_utils.exact_rank_reader import run_exact_rank_read
 from ...core.errors import DomainError
 from ...features.impart.application import ImpartApplication
 from ...features.sect.sect_info_repository import SectInfoSqlRepository
@@ -24,6 +25,7 @@ from ..xiuxian_utils.data_source import jsondata
 from .draw_user_info import draw_user_info_img, draw_user_info_img_with_default_bg
 from ..xiuxian_config import XiuConfig
 from ..xiuxian_buff import load_mentor, load_partner
+from ..xiuxian_buff.partner_storage import get_display_apprentice_ids
 from nonebot.log import logger
 from urllib.parse import quote
 
@@ -103,10 +105,9 @@ async def get_user_xiuxian_info(
     user_name = user_info['user_name']
 
     user_num = user_info['id']
-    rank = _sql_message().get_exp_rank(user_id)
+    rank = await run_exact_rank_read(_sql_message(), user_id)
     user_rank = int(rank[0])
-    stone = _sql_message().get_stone_rank(user_id)
-    user_stone = int(stone[0])
+    user_stone = int(rank[1])
 
     if not user_name:
         user_name = f"无名氏(发送修仙改名+道号更新)"
@@ -123,7 +124,9 @@ async def get_user_xiuxian_info(
     final_attr = get_player_attributes(user_id, **attribute_providers)
     final_atk = final_attr["final_atk"] if final_attr else user_info['atk']
 
-    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     level_rate_data = jsondata.level_rate_data()
     sect_id = user_info['sect_id']
@@ -153,12 +156,17 @@ async def get_user_xiuxian_info(
             exp_meg = f"可突破！"
 
     partner_data = load_partner(user_id)
+    mentor_data = load_mentor(user_id)
+    mentor_id = mentor_data.get("mentor_id")
+    apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+    partner_user_id = partner_data.get("partner_id")
+    relation_ids = [user for user in (partner_user_id, mentor_id) if user is not None]
+    names = _sql_message().get_user_names_by_ids(relation_ids + apprentice_ids) if relation_ids or apprentice_ids else {}
     if not partner_data or partner_data.get('partner_id') is None:
         partner_info = "无"
     else:
         partner_user_id = partner_data["partner_id"]
         affection = partner_data["affection"]
-        partner_info_data = get_user_profile(partner_user_id)
         if affection >= 10000:
             affection_level = "💖 深情厚谊"
         elif affection >= 5000:
@@ -167,24 +175,17 @@ async def get_user_xiuxian_info(
             affection_level = "💗 初识情愫"
         else:
             affection_level = "💓 缘分伊始"
-        partner_info = f"{partner_info_data['user_name']} ({affection_level})" if partner_info_data else "无"
+        partner_info = f"{names[partner_user_id]} ({affection_level})" if partner_user_id in names else "无"
 
-    mentor_data = load_mentor(user_id)
-    mentor_id = mentor_data.get("mentor_id")
     if mentor_id:
-        mentor_info_data = get_user_profile(mentor_id)
-        mentor_info = mentor_info_data["user_name"] if mentor_info_data else "数据异常"
+        mentor_info = names[mentor_id] if mentor_id in names else "数据异常"
     else:
         mentor_info = "无"
 
     apprentice_names = []
-    for apprentice_id in mentor_data.get("apprentice_ids", []):
-        apprentice_data = load_mentor(apprentice_id)
-        if str(apprentice_data.get("mentor_id")) != str(user_id):
-            continue
-        apprentice_info_data = get_user_profile(apprentice_id)
-        if apprentice_info_data:
-            apprentice_names.append(apprentice_info_data["user_name"])
+    for apprentice_id in apprentice_ids:
+        if apprentice_id in names:
+            apprentice_names.append(names[apprentice_id])
     apprentice_info = "、".join(apprentice_names[:3]) if apprentice_names else "无"
     if len(apprentice_names) > 3:
         apprentice_info += f"等{len(apprentice_names)}人"
@@ -328,7 +329,7 @@ async def xiuxian_message_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
     )
 
     if XiuConfig().user_info_image:
-        await xiuxian_message_img_(bot, event)
+        await _send_user_info_image(bot, event, user_info["user_id"], detail_map)
         await xiuxian_message.finish()
 
     config = XiuConfig()
@@ -492,14 +493,20 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
     detail_map, _ = await get_user_xiuxian_info(
         user_info['user_id'], user_info=user_info, equipped_title_id=title_id
     )
+    await _send_user_info_image(bot, event, user_info["user_id"], detail_map)
+    await xiuxian_message_img.finish()
+
+
+async def _send_user_info_image(bot, event, user_id, detail_map):
+    """Render the live projection already obtained by the calling handler."""
     equipped_title_name = detail_map.get("称号", "")
     if equipped_title_name == "无":
         equipped_title_name = ""
     
     if XiuConfig().xiuxian_info_img:
-        img_res = await draw_user_info_img(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img(user_id, detail_map)
     else:
-        img_res = await draw_user_info_img_with_default_bg(user_info['user_id'], detail_map)
+        img_res = await draw_user_info_img_with_default_bg(user_id, detail_map)
     
     if equipped_title_name:
         sent_info_pic = False
@@ -509,7 +516,6 @@ async def xiuxian_message_img_(bot: Bot, event: GroupMessageEvent | PrivateMessa
         except Exception as e:
             logger.warning(f"修仙信息图片版图文发送失败，降级纯图片: {e}")
         if sent_info_pic:
-            await xiuxian_message_img.finish()
+            return
 
     await handle_pic_send(bot, event, img_res)
-    await xiuxian_message_img.finish()

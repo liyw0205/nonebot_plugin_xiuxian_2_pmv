@@ -543,10 +543,7 @@ AUCTION_ACTIVITY_BUTTONS = {
 # 获取仙肆物品的最低价格
 def get_xianshi_min_price(item_name: str) -> int | None:
     """获取仙肆中指定物品的最低价格"""
-    items_in_xianshi = trade_application.xianshi_get_items(name=item_name)
-    if not items_in_xianshi:
-        return None
-    return min(item['price'] for item in items_in_xianshi)
+    return trade_application.xianshi_minimum_prices((item_name,)).get(item_name)
 
 
 # 计算仙肆手续费
@@ -684,13 +681,28 @@ def _record_guishi_match_event(result, buyer_name, seller_name):
     )
 
 
+def _trade_display_names(user_ids):
+    ids = list(dict.fromkeys(str(user_id) for user_id in user_ids))
+    if not ids:
+        return {}
+    try:
+        return _sql_message().get_user_names_by_ids(ids)
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        logger.opt(exception=exc).warning("交易展示姓名读取失败，使用用户编号")
+        return {}
+
+
 def _guishi_match_lines(matches):
+    matches = tuple(matches)
+    names = _trade_display_names(
+        user_id for fill in matches for user_id in (fill.buyer_id, fill.seller_id)
+    )
     lines = []
     for fill in matches:
-        buyer = _sql_message().get_user_info_with_id(fill.buyer_id)
-        seller = _sql_message().get_user_info_with_id(fill.seller_id)
-        buyer_name = buyer['user_name'] if buyer else fill.buyer_id
-        seller_name = seller['user_name'] if seller else fill.seller_id
+        buyer_name = names.get(str(fill.buyer_id), fill.buyer_id)
+        seller_name = names.get(str(fill.seller_id), fill.seller_id)
         lines.append(f"{buyer_name} 从 {seller_name} 购得 {fill.item_name} x{fill.quantity}，"
                      f"共 {number_to(fill.amount)} 灵石。")
         _record_guishi_match_event(fill, buyer_name, seller_name)
@@ -1032,7 +1044,7 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
         if type_match and rank_match:
             # 对于装备类型，检查是否已被使用
             if item['goods_type'] == "装备":
-                is_equipped = check_equipment_use_msg(user_id, item['goods_id'])
+                is_equipped = check_equipment_use_msg(user_id, item['goods_id'], back_item=item)
                 if is_equipped:
                     # 如果装备已被使用，可上架数量 = 总数量 - 绑定数量 - 1（已装备的）
                     available_num = item['goods_num'] - item['bind_num'] - 1
@@ -1062,12 +1074,15 @@ async def xianshi_auto_add_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     # === 批量处理逻辑 ===
     processed_items_summary = []
     total_fees_to_deduct = 0
+
+    items_to_add = [item for item in items_to_add
+                    if not get_trade_forbid_reason(item['id'], item['info'])]
+    minimum_prices = trade_application.xianshi_minimum_prices(
+        item['name'] for item in items_to_add
+    )
     
     for item in items_to_add:
-        if get_trade_forbid_reason(item['id'], item['info']): # 跳过禁止交易的物品
-            continue
-
-        min_price_in_xianshi = get_xianshi_min_price(item['name'])
+        min_price_in_xianshi = minimum_prices.get(item['name'])
         
         if min_price_in_xianshi is None: # 如果仙肆中没有该物品，则根据炼金价+100万设定价格
             price_for_item = int(get_recover(item['id'], 1) + 1000000)
@@ -2786,26 +2801,24 @@ async def clear_all_guishi_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
     else:
         summary = f"成功清空鬼市！本次处理 {cleared_count} 条订单。"
     msg_parts = [summary]
-    labels = {}
-    for user_id in set(refund_stone_summary) | {key[0] for key in refund_item_summary}:
-        try:
-            user_info = _sql_message().get_user_info_with_id(user_id)
-            labels[user_id] = user_info['user_name'] if user_info else user_id
-        except (MatcherException, ProcessException):
-            raise
-        except Exception as exc:
-            labels[user_id] = user_id
-            msg_parts.append(report_exception("清空鬼市读取退款对象名称", exc, event=event))
+    refund_users = set(refund_stone_summary) | {key[0] for key in refund_item_summary}
+    try:
+        labels = _sql_message().get_user_names_by_ids(list(refund_users)) if refund_users else {}
+    except (MatcherException, ProcessException):
+        raise
+    except Exception as exc:
+        labels = {}
+        msg_parts.append(report_exception("清空鬼市读取退款对象名称", exc, event=event))
     if failures:
         msg_parts.append("未完成订单：\n" + "\n".join(failures))
     if refund_stone_summary:
         msg_parts.append("\n☆------灵石退还------☆")
         for user_id, amount in refund_stone_summary.items():
-            msg_parts.append(f"{labels[user_id]}: {number_to(amount)}灵石")
+            msg_parts.append(f"{labels.get(str(user_id), user_id)}: {number_to(amount)}灵石")
     if refund_item_summary:
         msg_parts.append("\n☆------物品退还------☆")
         for (user_id, item_name), quantity in refund_item_summary.items():
-            msg_parts.append(f"{labels[user_id]}: {item_name} x{quantity}")
+            msg_parts.append(f"{labels.get(str(user_id), user_id)}: {item_name} x{quantity}")
 
     await handle_send(bot, event, "\n".join(msg_parts))
     await clear_all_guishi.finish()
@@ -2859,7 +2872,10 @@ async def process_guishi_transactions(user_id: str = None) -> str:
         if not available_baitan_orders:
             if user_id: transaction_log += f"【{qiugou_item_name}】没有符合价格或非自己的摆摊订单。\n"
             continue
-        
+
+        names = _trade_display_names(
+            [qiugou_user_id, *(order['user_id'] for order in available_baitan_orders)]
+        )
         for baitan_order in available_baitan_orders:
             baitan_order_id = baitan_order['id']
             result = trade_application.guishi_match(
@@ -2879,14 +2895,8 @@ async def process_guishi_transactions(user_id: str = None) -> str:
                     f"baitan_order_id={baitan_order_id} status={result.status}"
                 )
 
-            qiugou_user_info = _sql_message().get_user_info_with_id(result.buyer_id)
-            baitan_user_info = _sql_message().get_user_info_with_id(result.seller_id)
-            qiugou_user_name = (
-                qiugou_user_info['user_name'] if qiugou_user_info else result.buyer_id
-            )
-            baitan_user_name = (
-                baitan_user_info['user_name'] if baitan_user_info else result.seller_id
-            )
+            qiugou_user_name = names.get(str(result.buyer_id), result.buyer_id)
+            baitan_user_name = names.get(str(result.seller_id), result.seller_id)
             _record_guishi_match_event(result, qiugou_user_name, baitan_user_name)
             transaction_log += (f"{qiugou_user_name} 从 {baitan_user_name} 处\n"
                                 f"购买了 {result.quantity} 个 【{result.item_name}】，花费 {number_to(result.amount)} 灵石。\n")
@@ -2994,18 +3004,18 @@ async def clear_expired_baitan_orders_job():
                 f"reason={getattr(result, 'reason', '') or result.status} subject={getattr(result, 'subject', '') or order['id']}"
             )
         if result.refunded_quantity > 0:
-            user_info = _sql_message().get_user_info_with_id(result.user_id)
-            user_name = user_info['user_name'] if user_info else f"用户{result.user_id}"
-            user_key = f"{user_name} ({result.user_id})"
-            refund_item_summary.setdefault(user_key, []).append(
+            refund_item_summary.setdefault(result.user_id, []).append(
                 f"{result.item_name} x{result.refunded_quantity}"
             )
         cleared_count += 1
     
     logger.info(f"共清理 {cleared_count} 条超时鬼市摆摊订单。")
     if refund_item_summary:
+        names = _trade_display_names(refund_item_summary)
         summary_msg = "以下物品已从鬼市摆摊中退还给玩家：\n"
-        for user_key, item_list in refund_item_summary.items():
+        for user_id, item_list in refund_item_summary.items():
+            user_name = names.get(str(user_id), f"用户{user_id}")
+            user_key = f"{user_name} ({user_id})"
             summary_msg += f"{user_key}:\n  " + "\n  ".join(item_list) + "\n"
         logger.info(summary_msg)
 
@@ -3041,6 +3051,14 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
             price_str = number_to(item["current_price"])
             start_str = number_to(item["start_price"])
             show_id = str(item.get("id") or auction_id)
+            bid_records = [
+                {"bidder_id": bidder_id, "price": bid_price,
+                 "time": item.get("bid_times", {}).get(bidder_id, 0)}
+                for bidder_id, bid_price in (item.get("bids") or {}).items()
+            ]
+            bid_records.sort(key=lambda bid: bid["time"], reverse=True)
+            bid_records = bid_records[:5]
+            bidder_names = _trade_display_names(bid["bidder_id"] for bid in bid_records)
             if XiuConfig().markdown_status:
                 name_cmd = quote(f"查看效果 {name}")
                 name_md = f"[{name}](mqqapi://aio/inlinecmd?command={name_cmd}&enter=false&reply=false)"
@@ -3055,16 +3073,10 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     f"> 物品：{name_md}",
                 ]
                 if item.get("bids"):
-                    bid_records = []
-                    for bidder_id_str, bid_price in item["bids"].items():
-                        bid_time = item.get("bid_times", {}).get(bidder_id_str, 0)
-                        bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
-                    bid_records.sort(key=lambda x: x["time"], reverse=True)
                     lines.append("")
                     lines.append("**竞拍记录**")
-                    for i, bid in enumerate(bid_records[:5]):
-                        bidder_info = _sql_message().get_user_info_with_id(bid["bidder_id"])
-                        bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
+                    for i, bid in enumerate(bid_records):
+                        bidder_name = bidder_names.get(str(bid["bidder_id"]), str(bid["bidder_id"]))
                         time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                         lines.append(f"> {i+1}. {bidder_name}：{number_to(bid['price'])}灵石（{time_str}）")
                 lines.append("")
@@ -3085,15 +3097,9 @@ async def auction_view_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
                     f"当前价：{price_str}灵石",
                 ]
                 if item.get("bids"):
-                    bid_records = []
-                    for bidder_id_str, bid_price in item["bids"].items():
-                        bid_time = item.get("bid_times", {}).get(bidder_id_str, 0)
-                        bid_records.append({"bidder_id": bidder_id_str, "price": bid_price, "time": bid_time})
-                    bid_records.sort(key=lambda x: x["time"], reverse=True)
                     msg_list.append("竞拍记录：")
-                    for i, bid in enumerate(bid_records[:5]):
-                        bidder_info = _sql_message().get_user_info_with_id(bid["bidder_id"])
-                        bidder_name = bidder_info["user_name"] if bidder_info else str(bid["bidder_id"])
+                    for i, bid in enumerate(bid_records):
+                        bidder_name = bidder_names.get(str(bid["bidder_id"]), str(bid["bidder_id"]))
                         time_str = datetime.fromtimestamp(bid["time"]).strftime("%H:%M:%S") if bid["time"] else ""
                         msg_list.append(f"{i+1}. {bidder_name} {number_to(bid['price'])}灵石 {time_str}")
                 await handle_send(
@@ -3757,10 +3763,12 @@ async def auction_end_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
     
     # 构造结果消息
     msg_list = ["拍卖已结束！成交结果："]
+    winner_names = _trade_display_names(
+        result["winner_id"] for result in results[:5] if result.get("final_price") is not None
+    )
     for result in results[:5]:  # 最多显示5条结果
         if result.get("final_price") is not None:
-            winner_info = _sql_message().get_user_info_with_id(result["winner_id"])
-            winner_name = winner_info["user_name"] if winner_info else str(result["winner_id"])
+            winner_name = winner_names.get(str(result["winner_id"]), str(result["winner_id"]))
             msg_list.append(
                 f"{result['item_name']} 成交价: {number_to(result['final_price'])}灵石 "
                 f"手续费: {number_to(result['fee'])}灵石 "

@@ -15,6 +15,7 @@ from ...infrastructure.database import (
     OutboxStore,
 )
 from ...infrastructure.database.ledger import request_hash
+from ...infrastructure.database.uow import STONE_TRAINING_WRITE_OWNER
 from .._legacy_application import LegacyApplication
 from .repository import BuffRepository, LegacyBuffRepository
 from .rename_repository import BlessedSpotRenameSqlRepository
@@ -61,11 +62,26 @@ class BuffApplication(LegacyApplication):
         return self._execute(operation_id=operation_id, user_id=user_id, action=f"buff.{action}", payload={"user_id": user_id, **kwargs}, call=lambda: self.repository.invoke(action, operation_id, user_id, **kwargs))
 
     def _asset_request(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
+        if table == "stone_training_operations":
+            owner = STONE_TRAINING_WRITE_OWNER.when_unscoped()
+            with DatabaseUnitOfWork.connection_scope(
+                write_owner=owner, write_database=self.game_database if owner else None,
+            ):
+                return self._asset_request_scoped(
+                    operation_id=operation_id, user_id=user_id, action=action, kwargs=kwargs,
+                    identity=identity, table=table, extra=extra, transient=transient, call=call,
+                )
+        return self._asset_request_scoped(
+            operation_id=operation_id, user_id=user_id, action=action, kwargs=kwargs,
+            identity=identity, table=table, extra=extra, transient=transient, call=call,
+        )
+
+    def _asset_request_scoped(self, *, operation_id, user_id, action, kwargs, identity, table, extra, transient, call):
         payload = {"user_id": user_id, **kwargs}
         stable_payload = {key: value for key, value in payload.items() if key not in transient}
         with DatabaseUnitOfWork(self.game_database, immediate=True) as uow:
-            tables = {row["name"] for row in uow.query_all("SELECT name FROM sqlite_master WHERE type='table'")}
-            existing = self.ledger.get(uow, operation_id, action) if "operation_ledger" in tables else None
+            ledger_ready = uow.query_one("SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_ledger'")
+            existing = self.ledger.get(uow, operation_id, action) if ledger_ready is not None else None
             receipt_ready = operations_ready(uow) if table == "blessed_spot_operations" else stone_training_ready(uow)
             if receipt_ready:
                 suffix = " AND action='open'" if table == "blessed_spot_operations" else ""
@@ -87,7 +103,11 @@ class BuffApplication(LegacyApplication):
             # Unchanged historical refusals still replay their original outcome.
             if existing is not None and existing.request_hash == request_hash(payload):
                 stable_payload = payload
-        return self._execute(operation_id=operation_id, user_id=user_id, action=action, payload=stable_payload, call=call)
+        return self._execute(
+            operation_id=operation_id, user_id=user_id, action=action, payload=stable_payload, call=call,
+            zero_write_rejections=("stone_training_write_rejected", "currency_precision_unavailable")
+            if table == "stone_training_operations" else (),
+        )
 
     def open(self, *, operation_id: str, user_id: str, **kwargs: Any):
         if self._explicit_repository is not None:

@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.indexed_ranking import (
+    ARENA_SCORE_ORDER_INDEX,
+    ARENA_SCORE_RANK_INDEX,
+    indexed_personal_rank,
+    rank_index_available,
+)
 from ..base.ranking_position import PersonalRank
 from .schema import ArenaSchemaMissing, table_ready
 
@@ -200,15 +206,44 @@ class ArenaStateRepository:
             return state
 
     def ranking(self, limit: int) -> tuple[tuple[str, int], ...]:
-        with DatabaseUnitOfWork(self.player_database) as uow:
+        if not Path(self.player_database).is_file():
+            return ()
+        with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
             if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                 return ()
-            rows = uow.query_all(
+            rows = self._ranking_in_uow(uow, limit)
+        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows)
+
+    def _ranking_in_uow(self, uow: DatabaseUnitOfWork, limit: int) -> list[dict[str, Any]]:
+        if rank_index_available(uow, self.player_database, ARENA_SCORE_ORDER_INDEX):
+            return uow.query_all(
                 "SELECT user_id,COALESCE(score,0) AS score "
-                "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) COLLATE xiuxian_integer DESC LIMIT ?",
+                f'FROM arena INDEXED BY "{ARENA_SCORE_ORDER_INDEX.name}" '
+                f"ORDER BY {ARENA_SCORE_ORDER_INDEX.key} DESC,rowid ASC LIMIT ?",
                 (max(0, int(limit)),),
             )
-        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows)
+        return uow.query_all(
+            "SELECT user_id,COALESCE(score,0) AS score "
+            "FROM arena ORDER BY xiuxian_int_text(COALESCE(score,0)) COLLATE xiuxian_integer DESC LIMIT ?",
+            (max(0, int(limit)),),
+        )
+
+    def ranking_with_rank(
+        self, limit: int, user_id: str
+    ) -> tuple[tuple[tuple[str, int], ...], PersonalRank]:
+        """Read the public top slice and exact viewer rank from one DB snapshot."""
+        user_id = str(user_id).strip()
+        if not user_id or not Path(self.player_database).is_file():
+            return (), PersonalRank()
+        try:
+            with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
+                if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
+                    return (), PersonalRank()
+                rows = self._ranking_in_uow(uow, limit)
+                rank = self._rank_in_uow(uow, user_id)
+        except (OSError, ValueError, TypeError, KeyError):
+            return (), PersonalRank()
+        return tuple((str(row["user_id"]), as_int_like(row["score"])) for row in rows), rank
 
     def rank_of(self, user_id: str) -> PersonalRank:
         """本人竞技场名次：并列名次 + 有分人数 + 本人积分（只读、缺库/缺表降级）。"""
@@ -219,34 +254,31 @@ class ArenaStateRepository:
             with DatabaseUnitOfWork(self.player_database, read_only=True) as uow:
                 if not table_ready(uow, "arena", frozenset({"user_id", "score"})):
                     return PersonalRank()
-                value = as_int_like(
-                    (uow.query_one(
-                        "SELECT COALESCE(score,0) AS value "
-                        "FROM arena WHERE user_id=? ORDER BY rowid ASC LIMIT 1",
-                        (user_id,),
-                    ) or {"value": 0})["value"]
-                    or 0
-                )
-                total = int(
-                    (uow.query_one(
-                        "SELECT COUNT(*) AS n FROM arena "
-                        "WHERE xiuxian_int_cmp(COALESCE(score,0),0)>0"
-                    ) or {"n": 0})["n"]
-                    or 0
-                )
-                if value <= 0:
-                    return PersonalRank(0, total, 0)
-                better = int(
-                    (uow.query_one(
-                        "SELECT COUNT(*) AS n FROM arena "
-                        "WHERE xiuxian_int_cmp(COALESCE(score,0),?)>0",
-                        (value,),
-                    ) or {"n": 0})["n"]
-                    or 0
-                )
+                return self._rank_in_uow(uow, user_id)
         except (OSError, ValueError, TypeError, KeyError):
             return PersonalRank()
-        return PersonalRank(better + 1, total, value)
+
+    @staticmethod
+    def _rank_in_uow(uow: DatabaseUnitOfWork, user_id: str) -> PersonalRank:
+        if rank_index_available(uow, uow.database, ARENA_SCORE_RANK_INDEX):
+            return indexed_personal_rank(uow, ARENA_SCORE_RANK_INDEX, user_id)
+        row = uow.query_one(
+            "WITH target AS ("
+            "SELECT EXISTS(SELECT 1 FROM arena WHERE user_id=?) AS present,"
+            "COALESCE((SELECT score FROM arena WHERE user_id=? ORDER BY rowid ASC LIMIT 1),0) "
+            "AS value"
+            ") SELECT target.value AS value,"
+            "COUNT(CASE WHEN xiuxian_int_cmp(COALESCE(arena.score,0),0)>0 "
+            "THEN 1 END) AS total,"
+            "COUNT(CASE WHEN target.present=1 AND "
+            "xiuxian_int_cmp(COALESCE(arena.score,0),target.value)>0 THEN 1 END) AS better "
+            "FROM target LEFT JOIN arena ON 1=1 GROUP BY target.present,target.value",
+            (user_id, user_id),
+        ) or {}
+        value = max(0, as_int_like(row.get("value")))
+        total = max(0, int(row.get("total") or 0))
+        better = max(0, int(row.get("better") or 0))
+        return PersonalRank(better + 1 if value > 0 else 0, total, value)
 
 
 __all__ = ["ARENA_FIELDS", "ArenaStateRepository"]

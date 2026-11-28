@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -18,6 +19,8 @@ class XianshiQueryRepository(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     def my_trades(self, user_id: str, *, limit: int = 5) -> list[dict[str, Any]]: ...
+
+    def minimum_prices(self, names: Iterable[str]) -> dict[str, int]: ...
 
 
 class XianshiQuerySqlRepository:
@@ -69,6 +72,38 @@ class XianshiQuerySqlRepository:
             if filters:
                 sql += " WHERE " + " AND ".join(filters)
             return [{**row, "price": require_exact_integer(row["price"], field="listing_price", subject=str(row["id"]))} for row in uow.query_all(sql, params)]
+
+    def minimum_prices(self, names: Iterable[str]) -> dict[str, int]:
+        """Project exact minima in one read stage without materializing listings."""
+        if not self.database.is_file():
+            return {}
+        names = list(dict.fromkeys(str(name) for name in names))
+        if not names:
+            return {}
+        minimums: dict[str, int] = {}
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            if not self._table_exists(uow):
+                return {}
+            for offset in range(0, len(names), 256):
+                chunk = names[offset:offset + 256]
+                placeholders = ",".join("?" for _ in chunk)
+                cursor = uow.execute(
+                    "SELECT id,name,price FROM xianshi_item "
+                    f"WHERE name IN ({placeholders})", chunk,
+                )
+                try:
+                    while rows := cursor.fetchmany(128):
+                        for row in rows:
+                            # Even a nonminimum bad price must retain its rejection.
+                            price = require_exact_integer(
+                                row["price"], field="listing_price", subject=str(row["id"]),
+                            )
+                            name = row["name"]
+                            if name not in minimums or price < minimums[name]:
+                                minimums[name] = price
+                finally:
+                    cursor.close()
+        return minimums
 
     def my_trades(self, user_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         """Read the player's recent Xianshi purchases and sales (read-only)."""

@@ -46,9 +46,6 @@ jobs:
       - name: Compile sources
         run: python -m compileall -q nonebot_plugin_xiuxian_2 tests scripts
 
-      - name: Run full unittest suite
-        run: python -m unittest discover -s . -p 'test_*.py' -q
-
       - name: Run focused pytest regressions
         run: >-
           flock -w 600 /tmp/nonebot-project-validation.lock timeout 300
@@ -86,8 +83,38 @@ jobs:
       - name: Check patch whitespace
         run: git diff --check
 
+  unittest:
+    name: unittest (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The release-gate tests require the repository's historical tags.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Install locked dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.lock
+
+      - name: Run isolated unittest module shard
+        run: python scripts/run_unittest_shard.py --shard "${{ matrix.shard }}/2"
+
   build-and-release:
-    needs: quality
+    needs: [quality, unittest]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write

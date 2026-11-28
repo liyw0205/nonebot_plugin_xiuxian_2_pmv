@@ -32,6 +32,12 @@ class ArenaStateApplication:
         with self.lock:
             return self.repository.ranking(limit)
 
+    def ranking_with_rank(
+        self, limit: int, user_id: str
+    ) -> tuple[tuple[tuple[str, int], ...], PersonalRank]:
+        with self.lock:
+            return self.repository.ranking_with_rank(limit, user_id)
+
     def rank_of(self, user_id: str) -> PersonalRank:
         with self.lock:
             return self.repository.rank_of(user_id)

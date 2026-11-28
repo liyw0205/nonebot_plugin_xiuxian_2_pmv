@@ -3220,7 +3220,6 @@
     "invitation_reward_operations",
     "isolated_effect",
     "json_each",
-    "keepers",
     "latest",
     "lottery_legacy_migrations",
     "lottery_participants",
@@ -3287,7 +3286,6 @@
     "natal_treasure_feature_migrations",
     "normal_pvp_operations",
     "normal_training_operations",
-    "normalized",
     "novice_gift_claim_operations",
     "operation_audit",
     "operation_ledger",
@@ -3309,7 +3307,6 @@
     "past_life_reset_operations",
     "past_life_reset_targets",
     "past_life_start_operations",
-    "pending",
     "permanent_atk_item_operations",
     "pet_active_switch_operations",
     "pet_feature_migrations",
@@ -3501,6 +3498,7 @@
     "xianshi_watch_operations",
     "xianshi_watchlist",
     "xiuxian_impart",
+    "xiuxian_numeric_rank_generation",
     "xiuxian_tasks"
   ],
   "features": [

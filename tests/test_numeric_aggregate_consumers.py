@@ -45,6 +45,8 @@ class NumericAggregateConsumerTests(unittest.TestCase):
         self.assertEqual([('a', 2**63), ('b', 9)], [(r['user_id'], r['value']) for r in repository.board_rank('collect', 'event')])
         self.assertEqual((1, 2**63), repository.board_position('collect', 'event', 'a'))
         self.assertEqual((2, 9), repository.board_position('collect', 'event', 'b'))
+        self.assertEqual((1, 2, 2**63), repository.board_standing('collect', 'event', 'a'))
+        self.assertEqual({'collect': (2, 2, 9)}, repository.board_standings(('collect',), 'event', 'b'))
 
     def test_contribution_flow_preserves_exact_scientific_amounts(self):
         with DatabaseUnitOfWork(self.database) as uow:
@@ -70,7 +72,8 @@ class NumericAggregateConsumerTests(unittest.TestCase):
             uow.executemany("INSERT INTO activity_pass_balance VALUES('event',?,10,?)", [('a', 1e29), ('b', 2e29), ('c', 900)])
         repo = ActivityReadModelSqlRepository(self.database)
         for query in (lambda: repo.board_rank('points', 'event'),
-                      lambda: repo.board_position('points', 'event', 'a')):
+                      lambda: repo.board_position('points', 'event', 'a'),
+                      lambda: repo.board_standing('points', 'event', 'a')):
             with self.assertRaises(DomainError) as caught:
                 query()
             self.assertEqual('activity_points_precision_lost_real', caught.exception.details['reason'])
@@ -80,6 +83,7 @@ class NumericAggregateConsumerTests(unittest.TestCase):
                 self.assertEqual(['b', 'a', 'c'], [r['user_id'] for r in rows])
                 for rank, row in enumerate(rows, 1):
                     self.assertEqual((rank, row['value']), repo.board_position(source, 'event', row['user_id']))
+                    self.assertEqual((rank, 3, row['value']), repo.board_standing(source, 'event', row['user_id']))
 
     def test_activity_money_boards_order_adjacent_blob_integers(self):
         value = 10**45 + 123
@@ -93,6 +97,7 @@ class NumericAggregateConsumerTests(unittest.TestCase):
         self.assertEqual(['b', 'a', 'c'], [row['user_id'] for row in rows])
         for rank, row in enumerate(rows, 1):
             self.assertEqual((rank, row['value']), repo.board_position('points', 'event', row['user_id']))
+            self.assertEqual((rank, 3, row['value']), repo.board_standing('points', 'event', row['user_id']))
 
     def test_activity_shop_stock_and_compatibility_helpers_agree_above_int64(self):
         from tests.test_db_backend import db_backend

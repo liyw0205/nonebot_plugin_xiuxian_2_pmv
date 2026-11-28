@@ -14,6 +14,7 @@ from ...features.base.application import BaseApplication
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
 from ...infrastructure.ids import UUIDGenerator
+from ...infrastructure.database import DatabaseUnitOfWork
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from nonebot import get_bot
 from ..on_compat import on_command
@@ -558,21 +559,10 @@ def _get_sect_weekly_rank_fallback(limit: int = 5):
         return None
 
     week_key = get_current_season("weekly").key
-    return _sql_message()._read_query(
-        """
-        SELECT
-            g.sect_id,
-            COALESCE(s.sect_name, g.sect_id) AS sect_name,
-            SUM(g.progress) AS total_progress
-        FROM sect_weekly_goal AS g
-        LEFT JOIN sects AS s ON s.sect_id = g.sect_id
-        WHERE g.week_key = %s
-        GROUP BY g.sect_id, s.sect_name
-        ORDER BY total_progress DESC
-        LIMIT %s
-        """,
-        (week_key, max(1, min(int(limit or 5), 50))),
-        dict_row=True,
+    from ..xiuxian_sect.sect_weekly import sect_weekly_goal_manager
+
+    return sect_weekly_goal_manager.weekly_rank(
+        max(1, min(int(limit or 5), 50)), week_key
     )
 
 
@@ -1244,9 +1234,11 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
         await restart.finish()
 
     # 生成10个随机灵根选项
+    root_data = jsondata.root_data()
+    root_generator = XiuxianJsonDate()
     linggen_options = []
     for _ in range(10):
-        name, root_type = XiuxianJsonDate().linggen_get()
+        name, root_type = root_generator.linggen_get(root_data=root_data)
         linggen_options.append((name, root_type))
     
     # 显示所有随机生成的灵根选项
@@ -1257,7 +1249,7 @@ async def restart_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, sta
     if JsonConfig().is_auto_root_selection_enabled():
         # 按灵根倍率排序选择最佳灵根
         selected_name, selected_root_type = max(linggen_options, 
-                                             key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
+                                             key=lambda x: root_data[x[1]]["type_speeds"])
         result = base_application.reroll_root(
             operation_id=operation_id,
             user_id=user_id,
@@ -1308,7 +1300,8 @@ async def handle_user_choice(bot: Bot, event: GroupMessageEvent | PrivateMessage
         await handle_send(bot, event, _root_reroll_success_message(previous, duplicate=True))
         return
 
-    selected_name, selected_root_type = max(linggen_options, key=lambda x: jsondata.root_data()[x[1]]["type_speeds"])
+    root_data = jsondata.root_data()
+    selected_name, selected_root_type = max(linggen_options, key=lambda x: root_data[x[1]]["type_speeds"])
 
     if user_choice.isdigit(): # 判断数字
         user_choice = int(user_choice)
@@ -1549,13 +1542,16 @@ async def power_breakdown_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
 async def assets_overview_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """我的资产总览：一次展示本人灵石、灵庄、宗门、背包与竞技场规模（只读）。"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    isUser, user_info, msg = check_user(event)
+    with DatabaseUnitOfWork.connection_scope():
+        isUser, user_info, msg = check_user(event)
+        if isUser:
+            payload = assets_overview_application.overview(
+                str(user_info["user_id"]), profile=user_info
+            )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await assets_overview.finish()
 
-    # 只使用登录会话里的 user_id；不接受任何参数指定他人资产。
-    payload = assets_overview_application.overview(str(user_info["user_id"]))
     text = format_assets_overview(payload, format_number=number_to)
     await handle_send(
         bot,

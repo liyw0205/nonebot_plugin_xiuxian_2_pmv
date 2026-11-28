@@ -282,13 +282,12 @@ async def impart_top_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         30:"虚神本源"
     }
     
-    v_impart_top = xiuxian_impart.get_impart_rank()
+    v_impart_top = xiuxian_impart.get_impart_rank_display()
     msg = f"\n✨虚神界等级排行榜TOP50✨\n"
     num = 0
     for i in v_impart_top:
         num += 1
-        user_info = _sql_message().get_user_info_with_id(i['user_id'])
-        user_name = user_info['user_name'] if user_info else "未知修士"
+        user_name = i.get("user_name", "未知修士")
         impart_name = impart_level.get(i['impart_lv'], "未知秘境")
         msg += f"第{num}位  {user_name}\n现位于：{impart_name}（LV {i['impart_lv']}）\n"
         if num == 50:
@@ -319,10 +318,12 @@ async def impart_pk_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     list_msg = []
     win_num = "win_num"
     pk_num = "pk_num"
+    user_names = _sql_message().get_user_names_by_ids(xu_list)
+    user_data_by_id = {str(user_id): impart_pk.find_user_data(user_id) for user_id in xu_list}
     for x in range(len(xu_list)):
-        user_data = impart_pk.find_user_data(xu_list[x])
+        user_data = user_data_by_id.get(str(xu_list[x]))
         if user_data:
-            name = _sql_message().get_user_info_with_id(xu_list[x])['user_name']
+            name = user_names[str(xu_list[x])]
             msg = ""
             msg += f"编号：{user_data['number']}\n"
             msg += f"道友：{name}\n"
@@ -670,10 +671,9 @@ async def impart_pk_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0  # 功法修炼倍率
     mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
-    impart_data_draw = await impart_pk_check(user_id)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_exp_up_raw = impart_data['impart_exp_up'] if impart_data is not None else 0
+    # No successful-path suspension or impart write since the repaired state read.
+    impart_exp_up_raw = impart_data_draw['impart_exp_up']
     impart_exp_up = effective_xu_impart_exp_up(impart_exp_up_raw)
     impart_exp_up2 = xu_impart_lv_bonus(impart_lv)
     
@@ -1066,6 +1066,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
         if not is_type:
             await handle_send(bot, event, msg, md_type="4", k2="修仙帮助", v2="修仙帮助", k3="虚神界帮助", v3="虚神界帮助")
             await impart_pk_out_closing.finish()
+        user_cd_message = _sql_message().get_user_cd(user_id)
     
     # 获取用户信息和传承数据
     user_mes = _sql_message().get_user_info_with_id(user_id)
@@ -1084,8 +1085,6 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     user_get_exp_max = max(0, as_int_like(max_exp) - use_exp)  # 确保不为负数
 
     now_time = runtime_clock.now()
-    user_cd_message = _sql_message().get_user_cd(user_id)
-    
     # 计算闭关时长：坏 create_time → 0 分钟，仍可出关清 type=4
     from ..xiuxian_utils.cd_time import elapsed_minutes_from_cd_time, normalize_cd_time_token
     create_time_token = normalize_cd_time_token(user_cd_message.get("create_time"))
@@ -1095,7 +1094,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)
-    user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5 / 1.5
+    user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 / 1.5
     
     mainbuffdata = user_buff_data.get_user_main_buff_data()
     mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata is not None else 0
@@ -1103,8 +1102,7 @@ async def impart_pk_out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMes
     mainbuffclors = mainbuffdata['clo_rs'] if mainbuffdata is not None else 0
 
     # 计算传承增益（虚神界修为用成长曲线后的有效值）
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
-    impart_exp_up_raw = impart_data['impart_exp_up'] if impart_data is not None else 0
+    impart_exp_up_raw = impart_data_draw['impart_exp_up']
     impart_exp_up = effective_xu_impart_exp_up(impart_exp_up_raw)
     impart_lv = impart_data_draw['impart_lv'] if impart_data_draw is not None else 0
     impart_exp_up2 = xu_impart_lv_bonus(impart_lv)

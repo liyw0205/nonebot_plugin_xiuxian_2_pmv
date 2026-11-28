@@ -158,6 +158,7 @@ from .features.map.manifest import FEATURE as MAP_FEATURE
 from .infrastructure.database.message_store import (
     apply_message_store_schema,
     apply_season_rank_schema,
+    apply_season_rank_exact_indexes,
 )
 from .features.map.migrations import (
     apply_map,
@@ -187,6 +188,7 @@ from .features.accessory_package.manifest import FEATURE as ACCESSORY_PACKAGE_FE
 from .features.accessory_package.migrations import apply_accessory_package
 from .features.arena.manifest import FEATURE as ARENA_FEATURE
 from .features.arena.migrations import apply_arena, apply_arena_challenge_purchase, apply_arena_challenge_ticket, apply_arena_daily_reward_player, apply_arena_purchase, apply_arena_purchase_receipt, apply_arena_season_reward, apply_arena_settlement, apply_arena_state, apply_arena_weekly_rank_reduction
+from .features.arena.migrations import apply_arena_exact_rank_indexes
 from .features.auction.manifest import FEATURE as AUCTION_FEATURE
 from .features.auction.jobs import settle as auction_settle_job
 from .features.bank.manifest import FEATURE as BANK_FEATURE
@@ -211,6 +213,7 @@ from .features.activity_reward.migrations import (
     apply_activity_boss_rank_legacy_receipts,
 )
 from .features.activity.migrations import (
+    apply_activity_rank_indexes,
     apply_activity_state_schema,
     apply_activity_state_legacy,
     apply_activity_event_receipts,
@@ -225,6 +228,7 @@ from .features.tianti_settlement.migrations import apply_tianti_settlement, appl
 from .features.tianti_training.manifest import FEATURE as TIANTI_TRAINING_FEATURE
 from .features.tianti_training.migrations import apply_tianti_breakthrough_operations, apply_tianti_item_reward_operations, apply_tianti_medicine_bath_operations, apply_tianti_player_info, apply_tianti_qiaoxue_operations, apply_tianti_training, apply_tianti_training_operations, apply_training_state
 from .features.training.migrations import apply_training_event_operations, apply_training_event_player, apply_training_event_resolutions, apply_training_leaderboard_indexes, apply_training_purchase_operations, apply_training_reset_operations
+from .features.training.migrations import apply_training_exact_rank_indexes
 from .features.tower.manifest import FEATURE as TOWER_FEATURE
 from .features.tower.migrations import apply_tower, apply_tower_purchase, apply_tower_settlement, apply_tower_state
 from .features.sect_fairyland.manifest import FEATURE as SECT_FAIRYLAND_FEATURE
@@ -265,6 +269,7 @@ from .features.boss.migrations import (
     apply_boss_battle_player_schema,
     apply_boss_full_refresh_player_schema,
     apply_boss_player_schema,
+    apply_boss_exact_rank_indexes,
     apply_boss_punishment_operations,
     apply_boss_purchase,
     apply_boss_settlement,
@@ -357,6 +362,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("activity_state.002", "activity_state_legacy_backfill", apply_activity_state_legacy),
         Migration("activity_state.003", "activity_event_receipts", apply_activity_event_receipts),
         Migration("activity_state.004", "activity_collect_synthesis_operations", apply_collect_synthesis),
+        Migration("activity_state.005", "activity_rank_indexes", apply_activity_rank_indexes),
         Migration("admin_asset.001", "admin_asset_feature_migrations", apply_admin_asset),
         Migration("admin_asset.002", "admin_stone_adjustment_operations", apply_admin_stone_adjustment),
         Migration("admin_asset.003", "admin_stone_batch_adjustment_operations", apply_admin_stone_batch),
@@ -380,6 +386,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("arena.008", "arena_daily_reward_player_schema", apply_arena_daily_reward_player),
         Migration("arena.009", "arena_state_operations", apply_arena_state),
         Migration("arena.010", "arena_purchase_receipt", apply_arena_purchase_receipt),
+        Migration("arena.011", "arena_exact_rank_indexes", apply_arena_exact_rank_indexes),
         Migration("auction.001", "auction_feature_migrations", apply_auction),
         Migration("auction.002", "auction_session_settlement_schema", apply_auction_settlement),
         Migration("auction.003", "auction_queue_operations", apply_auction_queue_operations),
@@ -430,6 +437,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("boss.005", "world_boss_full_refresh_player_schema", apply_boss_full_refresh_player_schema),
         Migration("boss.006", "world_boss_battle_player_schema", apply_boss_battle_player_schema),
         Migration("boss.007", "world_boss_punishment_operations", apply_boss_punishment_operations),
+        Migration("boss.008", "world_boss_exact_rank_indexes", apply_boss_exact_rank_indexes),
         Migration("buff.001", "buff_feature_migrations", apply_buff),
         Migration("buff.002", "partner_token_operations", apply_partner_token_operations),
         Migration("buff.003", "partner_two_exp_usage", apply_partner_token_usage),
@@ -548,6 +556,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("rift.008", "rift_settlement_operations", apply_rift_settlement_operations),
         Migration("rift.009", "rift_entry_schema", apply_rift_entry_schema),
         Migration("season_rank.001", "season_rank_player_leaderboard", apply_season_rank_schema),
+        Migration("season_rank.002", "season_rank_exact_indexes", apply_season_rank_exact_indexes),
         Migration("sect.001", "sect_feature_migrations", apply_sect),
         Migration("sect.002", "sect_rename_operations", apply_sect_rename),
         Migration("sect.003", "sect_member_join_operations", apply_sect_join),
@@ -619,6 +628,7 @@ def build_migrations() -> tuple[Migration, ...]:
         Migration("training.004", "training_reset_operations", apply_training_reset_operations),
         Migration("training.005", "training_event_resolutions", apply_training_event_resolutions),
         Migration("training.006", "training_leaderboard_indexes", apply_training_leaderboard_indexes),
+        Migration("training.007", "training_exact_rank_indexes", apply_training_exact_rank_indexes),
         Migration("work.001", "work_feature_migrations", apply_work),
         Migration("work.002", "work_daily_refresh_reset_operations", apply_work_daily_refresh_reset),
         Migration("work.003", "work_item_use_operations", apply_work_item_use),
@@ -642,6 +652,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "arena.011",
         "past_life.002",
         "pet.005",
         "tower.004",
@@ -704,6 +715,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "tasks.004",
         "training.002",
         "training.006",
+        "training.007",
         "world_events.002",
         "world_events.004",
         "world_events.005",
@@ -717,6 +729,7 @@ _GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS = frozenset(
         "base.007",
         "boss.004",
         "boss.006",
+        "boss.008",
         "buff.009",
         "buff.011",
         "buff.013",
@@ -732,6 +745,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "arena.006",
         "arena.008",
         "arena.009",
+        "arena.011",
         "auction.006",
         "auction.008",
         "info.avatar.001",
@@ -789,6 +803,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "tasks.004",
         "training.002",
         "training.006",
+        "training.007",
         "world_events.002",
         "world_events.004",
         "world_events.005",
@@ -802,6 +817,7 @@ _PLAYER_DATABASE_MIGRATION_VERSIONS = frozenset(
         "base.011",
         "boss.004",
         "boss.006",
+        "boss.008",
     }
 )
 _TRADE_DATABASE_MIGRATION_VERSIONS = frozenset({"legacy.admin.003", "legacy.admin.005", "platform.001", "trade.003", "trade.005", "trade.006", "trade.007", "trade.008", "trade.015", "auction.004"})
@@ -1545,8 +1561,27 @@ def build_lifecycle(context: RuntimeContext | None = None) -> tuple[Lifecycle, R
         context.web_app = None
         phase_state["web"] = False
 
+    def shutdown_database() -> None:
+        from threading import current_thread, main_thread
+
+        from .features.admin.blackhouse_repository import AdminBlackhouseSqlRepository
+        from .infrastructure.database.uow import (
+            LIVE_PROJECTION_READ_OWNER, PLAYER_PROJECTION_READ_OWNER,
+            PLAYER_ACTIVITY_WRITE_OWNER, IMPART_PROJECTION_READ_OWNER,
+            STONE_TRAINING_WRITE_OWNER,
+        )
+
+        if current_thread() is main_thread():
+            AdminBlackhouseSqlRepository.close_read_connection()
+            LIVE_PROJECTION_READ_OWNER.close()
+            PLAYER_PROJECTION_READ_OWNER.close()
+            PLAYER_ACTIVITY_WRITE_OWNER.close()
+            IMPART_PROJECTION_READ_OWNER.close()
+            STONE_TRAINING_WRITE_OWNER.close()
+        phase_state["database"] = False
+
     lifecycle.register(LifecyclePhase.FILESYSTEM, ensure_filesystem)
-    lifecycle.register(LifecyclePhase.DATABASE, ensure_database)
+    lifecycle.register(LifecyclePhase.DATABASE, ensure_database, shutdown=shutdown_database)
     lifecycle.register(LifecyclePhase.MIGRATIONS, ensure_migrations)
     lifecycle.register(LifecyclePhase.REPOSITORIES, ensure_repositories)
     lifecycle.register(LifecyclePhase.JOBS, ensure_jobs, shutdown=shutdown_jobs)

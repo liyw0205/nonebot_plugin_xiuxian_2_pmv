@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,10 +22,66 @@ class MindStateHotpathTests(unittest.TestCase):
         self.assertIn("base_provider=lambda _user_id: base_attr", handler)
         self.assertIn("buff_data_provider=user_buff_data", handler)
         self.assertEqual(handler.count("user_buff_data = UserBuffDate(user_id)"), 1)
+        self.assertNotIn("get_user_impart_info_with_id", handler)
         self.assertNotIn("_sql_message().get_user_info_with_id(user_id)", handler)
         self.assertNotIn("_sql_message().get_player_data(user_id)", handler)
         self.assertIn('"气血": final_attr["current_hp"]', handler)
         self.assertIn('"真元": final_attr["current_mp"]', handler)
+
+    def test_my_exp_reuses_live_profile_and_buff_snapshot(self) -> None:
+        import nonebot
+
+        try:
+            nonebot.get_driver()
+        except ValueError:
+            nonebot.init(command_start={"", "/"}, log_level="ERROR")
+
+        from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_buff as module
+
+        profile = {
+            "user_id": "u-1",
+            "level": "筑基",
+            "level_up_rate": 4,
+            "root_type": "天灵根",
+            "root_level": 4,
+            "exp": 100,
+        }
+
+        class BuffSnapshot:
+            buff_info_reads = 0
+
+            @property
+            def BuffInfo(self):
+                self.buff_info_reads += 1
+                return {"blessed_spot": 2}
+
+            def get_user_main_buff_data(self):
+                return None
+
+        manager = Mock()
+        manager.get_root_rate.return_value = 1
+        buff = BuffSnapshot()
+        bot = SimpleNamespace(self_id="bot")
+
+        with (
+            patch.object(module, "assign_bot", AsyncMock(return_value=(bot, None))),
+            patch.object(module, "check_user", return_value=(True, profile, "")),
+            patch.object(module, "_sql_message", return_value=manager),
+            patch.object(module, "UserBuffDate", return_value=buff) as buff_factory,
+            patch.object(module, "OtherSet", return_value=SimpleNamespace(level=["筑基"])),
+            patch.object(module, "XiuConfig", return_value=SimpleNamespace(closing_exp=10)),
+            patch.object(module.jsondata, "level_data", return_value={"筑基": {"spend": 1}}),
+            patch.object(module.jsondata, "level_rate_data", return_value={"筑基": 5}),
+            patch.object(module, "handle_send", AsyncMock()) as handle_send,
+            patch.object(module.my_exp, "finish", AsyncMock()),
+        ):
+            asyncio.run(module.my_exp.handlers[0].call(bot, SimpleNamespace()))
+
+        manager.get_user_info_with_id.assert_not_called()
+        manager.get_root_rate.assert_called_once_with("天灵根", "u-1", root_level=4)
+        buff_factory.assert_called_once_with("u-1")
+        self.assertEqual(buff.buff_info_reads, 1)
+        self.assertIn("筑基", handle_send.await_args.args[2])
 
     def test_base_attributes_accepts_matching_profile_without_sql_read(self) -> None:
         from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils import xiuxian2_handle

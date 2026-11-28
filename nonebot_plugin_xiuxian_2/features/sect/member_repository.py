@@ -19,6 +19,14 @@ class SectMemberSqlRepository:
             )
             return [normalize_user_row(row) for row in rows]
 
+    def count_by_sect_id(self, sect_id: int | str) -> int:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            row = uow.query_one(
+                "SELECT COUNT(*) AS count FROM user_xiuxian WHERE sect_id=?",
+                (sect_id,),
+            )
+            return int(row["count"])
+
     def get_user_profile(self, user_id: int | str) -> dict[str, Any] | None:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             row = uow.query_one(

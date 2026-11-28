@@ -59,6 +59,7 @@ from .boss_limit import (
 from ...compatibility.boss import WorldBossBattleSettlementService
 from ...features.boss.application import BossApplication
 from ...features.base.ranking_position import personal_rank_line
+from ...features.base.public_display_snapshot import display_snapshot_freshness
 from ...features.base.shop_limit import shop_limit_line
 from ...features.boss.exp_reward import boss_exp_reward
 from ...features.boss.purchase_command_application import BossPurchaseCommandApplication
@@ -70,6 +71,7 @@ from ...features.boss.repository import BossPurchaseSqlRepository
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.database import DatabaseUnitOfWork
 from ...features.boss.punishment_repository import WorldBossPunishmentSqlRepository
 from ...features.boss.world_boss_repository import (
     WorldBossDailyLimitResetSqlRepository,
@@ -1633,9 +1635,12 @@ async def boss_integral_use_(bot: Bot, event: GroupMessageEvent | PrivateMessage
     event_id = str(getattr(event, "message_id", "") or getattr(event, "id", "") or "").strip()
     operation_id = f"boss-purchase:{event_id}:{user_id}" if event_id else f"boss-purchase:{boss_ids.new_id()}:{user_id}"
     try:
-        result = boss_purchase_command_application.execute(
-            operation_id=operation_id, user_id=user_id, item_id=item_id, quantity=quantity,
-        )
+        # Synchronous section only: receipt/ledger/purchase/finish keep their
+        # own transactions but reuse one idle connection (no await inside).
+        with DatabaseUnitOfWork.connection_scope():
+            result = boss_purchase_command_application.execute(
+                operation_id=operation_id, user_id=user_id, item_id=item_id, quantity=quantity,
+            )
         message = render_boss_purchase_reply(result)
     except ConflictError:
         await handle_send(bot, event, "兑换请求冲突，本次未结算。", md_type="世界BOSS")
@@ -1656,21 +1661,25 @@ async def boss_integral_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessag
         await handle_send(bot, event, msg, md_type="我要修仙")
         await boss_integral_rank.finish()
 
-    ranked_integral = boss_integral_application.top_integrals(50)
     viewer_id = str(user_info["user_id"])
+    snapshot, viewer_rank = boss_integral_application.top_integrals_snapshot_with_rank(
+        50, viewer_id
+    )
+    ranked_integral = snapshot["rows"]
+    user_names = _sql_message().get_user_names_by_ids([user_id for user_id, _ in ranked_integral])
     
     # 生成排行榜
     rank_msg = "【世界BOSS积分排行榜】\n"
     for i, (user_id, integral) in enumerate(ranked_integral, start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        user_name = user_info.get("user_name") if user_info else None
+        user_name = user_names.get(str(user_id))
         rank_msg += f"第{i}位 | {user_name or user_id} | {number_to(integral)}\n"
     rank_msg += personal_rank_line(
-        boss_integral_application.integral_rank(viewer_id),
+        viewer_rank,
         label="世界积分",
         unit="点",
         number=number_to,
     )
+    rank_msg += "\n" + display_snapshot_freshness(snapshot)
     
     await handle_send(bot, event, rank_msg)
     await boss_integral_rank.finish()

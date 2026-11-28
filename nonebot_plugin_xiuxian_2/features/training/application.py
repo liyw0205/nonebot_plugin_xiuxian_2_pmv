@@ -53,6 +53,16 @@ class TrainingApplication(MigratedFeatureApplication):
     def leaderboard(self, field: str, *, limit: int = 50) -> list[dict[str, Any]]:
         return self.repository.leaderboard(field, limit=limit)
 
+    def leaderboard_snapshot(self, field: str, *, limit: int = 50) -> dict[str, Any]:
+        return self.repository.leaderboard_snapshot(field, limit=limit)
+
+    def leaderboard_snapshot_with_rank(
+        self, field: str, user_id: str, *, limit: int = 50
+    ):
+        return self.repository.leaderboard_snapshot_with_rank(
+            field, user_id, limit=limit
+        )
+
     def rank_of(self, field: str, user_id: str):
         return self.repository.rank_of(field, user_id)
 

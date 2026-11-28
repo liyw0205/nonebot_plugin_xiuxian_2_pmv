@@ -31,12 +31,13 @@ class AccessoryPackageRequest:
         max_goods_num: int,
         accessory_limit: int,
     ) -> "AccessoryPackageRequest":
+        ordinary = tuple(rewards)
         request = cls(
             str(operation_id).strip(),
             str(user_id).strip(),
             int(package_id),
             int(quantity),
-            normalize_rewards(rewards),
+            normalize_rewards(ordinary) if ordinary else (),
             normalize_accessories(accessories),
             int(max_goods_num),
             int(accessory_limit),

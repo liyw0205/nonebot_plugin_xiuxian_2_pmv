@@ -73,7 +73,10 @@ def test_xianshi_queries_are_feature_owned_and_read_only():
     assert "DatabaseUnitOfWork(self.database, read_only=True)" in repository
     assert "CREATE TABLE" not in repository
     assert facade.count("xianshi_repository.get_xianshi_items(") == 0
-    assert facade.count("trade_application.xianshi_get_items(") >= 5
+    for argument in ("goods_type=item_type", "user_id=user_id", "listing_id=xianshi_id"):
+        assert f"trade_application.xianshi_get_items({argument})" in facade
+    assert "self.xianshi_query_repository.minimum_prices(names)" in application
+    assert "trade_application.xianshi_minimum_prices(" in facade
 
 
 def test_trade_facade_keeps_legacy_schema_import_explicit_and_out_of_runtime_graph():

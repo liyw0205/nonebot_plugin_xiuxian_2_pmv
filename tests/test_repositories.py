@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import importlib.util
 import tempfile
 import unittest
@@ -50,6 +51,15 @@ class RepositoryTests(unittest.TestCase):
                 "INSERT INTO user_xiuxian VALUES (%s, %s, %s, %s)",
                 ("1002", "另一位道友", 20, 10),
             )
+            conn.execute("ALTER TABLE user_xiuxian ADD COLUMN level TEXT")
+            conn.execute(
+                "UPDATE user_xiuxian SET level=%s WHERE user_id=%s",
+                ("筑基", "1001"),
+            )
+            conn.execute(
+                "UPDATE user_xiuxian SET level=%s WHERE user_id=%s",
+                ("练气", "1002"),
+            )
         with DatabaseUnitOfWork(str(self.database), immediate=True) as uow:
             apply_economy_operations(uow)
         self.logs: list[dict] = []
@@ -94,6 +104,71 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(repository.get_by_id("1001")["user_name"], "测试道友")
         self.assertEqual(repository.get_by_name("测试道友")["user_id"], "1001")
         self.assertEqual(repository.get_with_attributes("1001")["stone"], 100)
+
+    def test_user_display_profiles_batch_reads_current_rows_once(self) -> None:
+        repository = repositories.UserRepository(
+            self.read_query,
+            self.connection,
+            lambda row, description: dict(
+                zip((column[0] for column in description), row)
+            ),
+        )
+
+        profiles = repository.get_display_profiles_by_ids(
+            ["1001", "1002", "1001", "missing", None]
+        )
+        self.assertEqual(
+            {
+                "1001": {"user_name": "测试道友", "level": "筑基"},
+                "1002": {"user_name": "另一位道友", "level": "练气"},
+            },
+            profiles,
+        )
+        self.assertEqual(
+            {"1001": "测试道友", "1002": "另一位道友"},
+            repository.get_names_by_ids(["1001", "1002", "missing"]),
+        )
+
+    def test_all_user_action_target_list_is_not_short_cached(self) -> None:
+        from types import SimpleNamespace
+
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.xiuxian2_handle import (
+            XiuxianDateManage,
+        )
+
+        current_ids = [("1001",)]
+        calls = []
+
+        def read(sql, params=None, **kwargs):
+            calls.append((sql, kwargs))
+            return list(current_ids)
+
+        handle = SimpleNamespace(_read_query=read)
+        self.assertEqual(["1001"], XiuxianDateManage.get_all_user_id(handle))
+        current_ids.append(("1002",))
+        self.assertEqual(["1001", "1002"], XiuxianDateManage.get_all_user_id(handle))
+        self.assertEqual(2, len(calls))
+        self.assertTrue(all("cache_key" not in kwargs for _, kwargs in calls))
+
+    def test_all_user_accessory_actions_resolve_the_live_target_list(self) -> None:
+        source_path = (
+            Path(__file__).resolve().parents[1]
+            / "nonebot_plugin_xiuxian_2"
+            / "xiuxian"
+            / "xiuxian_admin"
+            / "__init__.py"
+        )
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        handlers = {
+            node.name: ast.unparse(node)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in {"cz_", "hmll_"}
+        }
+        self.assertEqual({"cz_", "hmll_"}, set(handlers))
+        for name, handler in handlers.items():
+            with self.subTest(handler=name):
+                self.assertIn("_sql_message().get_all_user_id()", handler)
 
     def test_economy_repository_updates_stones_and_experience(self) -> None:
         repository = repositories.EconomyRepository(

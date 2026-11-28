@@ -195,16 +195,13 @@ def test_concurrent_duplicate_event_operation_replays_committed_result(tmp_path:
         assert connection.execute("SELECT stone FROM user_xiuxian WHERE user_id='u'").fetchone()[0] == 110
 
 
-def test_leaderboard_returns_bounded_numeric_top_and_caches_for_ttl(tmp_path: Path) -> None:
+def test_leaderboard_returns_bounded_numeric_top_and_is_realtime(tmp_path: Path) -> None:
     game, player = _databases(tmp_path, users=75)
     with DatabaseUnitOfWork(player) as uow:
         uow.execute("UPDATE training SET points=CAST(substr(user_id,2) AS INTEGER)")
         uow.execute("UPDATE training SET points=74 WHERE user_id='u'")
         apply_training_leaderboard_indexes(uow)
-    now = [0.0]
-    repository = TrainingLeaderboardSqlRepository(
-        game, player, clock=lambda: now[0], cache_ttl=45.0
-    )
+    repository = TrainingLeaderboardSqlRepository(game, player)
 
     top = repository.top("points", limit=500)
     assert len(top) == 50
@@ -213,9 +210,6 @@ def test_leaderboard_returns_bounded_numeric_top_and_caches_for_ttl(tmp_path: Pa
 
     with DatabaseUnitOfWork(player) as uow:
         uow.execute("UPDATE training SET points=100 WHERE user_id='u1'")
-    assert repository.top("points")[0]["user_id"] == "u"
-
-    now[0] = 46.0
     assert repository.top("points")[0]["user_id"] == "u1"
 
     with DatabaseUnitOfWork(player, read_only=True) as uow:

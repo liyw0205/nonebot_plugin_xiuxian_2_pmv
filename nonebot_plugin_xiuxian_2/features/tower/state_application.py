@@ -43,6 +43,16 @@ class TowerStateApplication:
         with self.lock:
             return self.repository.ranking(field, limit)
 
+    def ranking_snapshot(self, field: str, limit: int = 50) -> dict[str, Any]:
+        with self.lock:
+            return self.repository.ranking_snapshot(field, limit)
+
+    def ranking_snapshot_with_rank(
+        self, user_id: str, field: str = "current_floor", limit: int = 50
+    ):
+        with self.lock:
+            return self.repository.ranking_snapshot_with_rank(user_id, field, limit)
+
     def rank_of(self, user_id: str, field: str = "current_floor"):
         with self.lock:
             return self.repository.rank_of(user_id, field)

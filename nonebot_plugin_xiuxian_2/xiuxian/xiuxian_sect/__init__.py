@@ -45,7 +45,7 @@ from .sect_weekly_commands import sect_weekly, sect_weekly_claim, sect_weekly_ra
 from .sect_member_utils import (
     _md_cmd_link,
     bind_sect_member_dependencies as _bind_sect_member_dependencies,
-    can_join_sect,
+    sect_join_display_status,
     count_sect_positions,
     create_user_sect_task,
     filter_sect_member_rows,
@@ -56,10 +56,9 @@ from .sect_member_utils import (
     get_secname_list,
     get_secnameid,
     get_sect_contribution_level,
-    get_sect_level,
-    get_sect_mainbuff_id_list,
+    sect_level_from_scale,
+    sect_catalog_ids,
     get_sect_member_limit,
-    get_sect_secbuff_id_list,
     get_sectbufftxt,
     get_user_sect_task,
     isUserTask,
@@ -103,6 +102,7 @@ from ...features.sect.task_history import (
 from ...infrastructure.ids import UUIDGenerator
 from ...infrastructure.clock import SystemClock
 from ...infrastructure.random_source import SystemRandom
+from ...infrastructure.database import DatabaseUnitOfWork
 
 items = Items()
 sect_ids = UUIDGenerator()
@@ -456,7 +456,7 @@ async def auto_handle_inactive_sect_owners():
     failures = []
     
     try:
-        all_sects = sect_application.list_sects_with_member_count()
+        all_sects = sect_application.list_maintenance_sects()
         auto_change_sect_owner_cd = XiuConfig().auto_change_sect_owner_cd
         logger.info(f"获取到宗门总数：{len(all_sects)}个")
         
@@ -467,7 +467,6 @@ async def auto_handle_inactive_sect_owners():
         for sect in all_sects:
             sect_id = sect[0]  # 宗门ID
             sect_name = sect[1]  # 宗门名称
-            member_count = sect[4]  # 成员数量
             
             try:
                 logger.info(f"处理宗门：{sect_name}(ID:{sect_id})")
@@ -521,9 +520,12 @@ async def auto_handle_inactive_sect_owners():
                     logger.info(f"符合条件的候选人数量：{len(candidates)}")
                     
                     # 检查候选人活跃状态：必须最近30天内有活跃
+                    last_active_by_user = sect_application.get_last_check_info_times(
+                        str(candidate['user_id']) for candidate in candidates
+                    )
                     active_candidates = []
                     for candidate in candidates:
-                        last_active = sect_application.get_last_check_info_time(candidate['user_id'])
+                        last_active = last_active_by_user[str(candidate['user_id'])]
                         if last_active and (maintenance_checked_at - last_active).days <= auto_change_sect_owner_cd:
                             active_candidates.append(candidate)
                     
@@ -1178,7 +1180,7 @@ async def sect_buff_info_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         await sect_buff_info.finish()
 
     # 获取功法列表
-    mainbuff_list = get_sect_mainbuff_id_list(sect_id)
+    mainbuff_list = sect_catalog_ids(sect_info['mainbuff'])
     if not mainbuff_list:
         msg = f"本宗功法列表为空！"
         await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门功法搜寻", k2="查看", v2="宗门功法查看", k3="捐献", v3="宗门捐献")
@@ -1225,7 +1227,7 @@ async def sect_buff_info2_(bot: Bot, event: GroupMessageEvent | PrivateMessageEv
         await sect_buff_info2.finish()
 
     # 获取神通列表
-    secbuff_list = get_sect_secbuff_id_list(sect_id)
+    secbuff_list = sect_catalog_ids(sect_info['secbuff'])
     if not secbuff_list:
         msg = f"本宗神通列表为空！"
         await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="查看", v2="宗门神通查看", k3="捐献", v3="宗门捐献")
@@ -1361,15 +1363,18 @@ async def sect_mainbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessage
                 success_count = 0
                 fail_count = 0
                 repeat_count = 0
-                mainbuffidlist = get_sect_mainbuff_id_list(sect_id)
+                mainbuffidlist = sect_catalog_ids(sect_info['mainbuff'])
                 results = []
+                search_catalog = None
 
                 for i in range(100):  # 每次搜寻尝试100次
                     if runtime_random.randint(0, 100) <= mainbuffconfig['获取到功法的概率']:
                         # 随机从可获取品阶中选择一个
                         selected_tier = runtime_random.choice(mainbufftypes)
                         # 从该品阶的功法列表中随机选择
-                        mainbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['gf_list'])
+                        if search_catalog is None:
+                            search_catalog = BuffJsonDate().get_gfpeizhi()
+                        mainbuffid = runtime_random.choice(search_catalog[selected_tier]['gf_list'])
                         
                         if mainbuffid in mainbuffidlist:
                             mainbuff, mainbuffmsg = get_main_info_msg(mainbuffid)
@@ -1459,15 +1464,18 @@ async def sect_secbuff_get_(bot: Bot, event: GroupMessageEvent | PrivateMessageE
                 success_count = 0
                 fail_count = 0
                 repeat_count = 0
-                secbuffidlist = get_sect_secbuff_id_list(sect_id)
+                secbuffidlist = sect_catalog_ids(sect_info['secbuff'])
                 results = []
+                search_catalog = None
 
                 for i in range(100):  # 每次搜寻尝试100次
                     if runtime_random.randint(0, 100) <= secbuffconfig['获取到神通的概率']:
                         # 随机从可获取品阶中选择一个
                         selected_tier = runtime_random.choice(secbufftypes)
                         # 从该品阶的神通列表中随机选择
-                        secbuffid = runtime_random.choice(BuffJsonDate().get_gfpeizhi()[selected_tier]['st_list'])
+                        if search_catalog is None:
+                            search_catalog = BuffJsonDate().get_gfpeizhi()
+                        secbuffid = runtime_random.choice(search_catalog[selected_tier]['st_list'])
                         
                         if secbuffid in secbuffidlist:
                             secbuff = items.get_data_by_item_id(secbuffid)
@@ -1548,7 +1556,7 @@ async def sect_secbuff_learn_(bot: Bot, event: GroupMessageEvent | PrivateMessag
                 await handle_send(bot, event, msg, md_type="宗门", k1="搜寻", v1="宗门神通搜寻", k2="宗门", v2="我的宗门", k3="捐献", v3="宗门捐献")
                 await sect_secbuff_learn.finish()
 
-            sectsecbuffidlist = get_sect_secbuff_id_list(sect_id)
+            sectsecbuffidlist = sect_catalog_ids(sect_info['secbuff'])
 
             if msg not in get_secname_list(sectsecbuffidlist):
                 msg = f"本宗还没有该神通，请发送本宗有的神通进行学习！"
@@ -1625,14 +1633,15 @@ async def upatkpractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await upatkpractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         useratkpractice = int(user_info['atkpractice'])  # 当前等级
         if useratkpractice == 100:
             msg = f"道友的攻击修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upatkpractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -1711,14 +1720,15 @@ async def uphppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await uphppractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         userhppractice = int(user_info['hppractice'])  # 当前等级
         if userhppractice == 100:
             msg = f"道友的元血修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await uphppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -1797,14 +1807,15 @@ async def upmppractice_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, "升级数量必须是正整数且不能超过单次上限。")
         await upmppractice.finish()
     if sect_id:
-        sect_materials = int(sect_application.get_sect_info(sect_id)['sect_materials'])  # 当前资材
+        sect_info = sect_application.get_sect_info(sect_id)
+        sect_materials = int(sect_info['sect_materials'])  # 当前资材
         usermppractice = int(user_info['mppractice'])  # 当前等级
         if usermppractice == 100:
             msg = f"道友的灵海修炼等级已达到最高等级!"
             await handle_send(bot, event, msg, md_type="宗门", k1="状态", v1="我的状态", k2="宗门", v2="我的宗门", k3="帮助", v3="宗门帮助")
             await upmppractice.finish()
 
-        sect_level = get_sect_level(sect_id)[0] if get_sect_level(sect_id)[0] <= 100 else 100  # 获取当前宗门修炼等级上限，500w建设度1级,上限100级
+        sect_level = min(sect_level_from_scale(sect_info['sect_scale'])[0], 100)
 
         sect_position = user_info['sect_position']
         # 确保用户不会尝试升级超过宗门等级的上限
@@ -1939,9 +1950,11 @@ async def _refresh_sect_task(bot, event):
     if await _task_claim_replay(bot, event, user_id, 'task_refresh'):
         await sect_task_refresh.finish()
     if sect_id:
-        if _daily_sect_task(user_id):
+        current_task = _daily_sect_task(user_id)
+        if current_task:
             refreshed_task = refresh_user_sect_task(
-                user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id), return_failure=True
+                user_id, sect_id, _sect_operation_id(event, "task_refresh", user_id),
+                return_failure=True, current_task=current_task,
             )
             if "任务内容" not in refreshed_task:
                 await handle_send(bot, event, _task_failure("刷新宗门任务", refreshed_task, user_id))
@@ -1982,15 +1995,17 @@ async def sect_task_history_(bot: Bot, event: GroupMessageEvent | PrivateMessage
 async def sect_list_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门列表：显示宗门人数信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
-    sect_lists_with_members = sect_application.list_sects_with_member_count()
+    sect_lists_with_members = sect_application.list_sect_join_display()
 
     msg_list = []
     for sect in sect_lists_with_members:
-        sect_id, sect_name, sect_scale, user_name, member_count = sect
+        sect_id, sect_name, sect_scale = sect['sect_id'], sect['sect_name'], sect['sect_scale']
+        user_name = sect['owner_name']
         if user_name is None:
             user_name = "暂无"
         
-        can_join, reason = can_join_sect(sect_id)
+        can_join, reason = sect_join_display_status(
+            sect if sect_id is not None else None, sect['member_count'])
         
         msg_list.append(f"编号{sect_id}：{sect_name}\n宗主：{user_name}\n宗门状态：{reason}\n建设度：{number_to(sect_scale)}\n")
 
@@ -2023,9 +2038,10 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 await sect_users.finish()
 
             # 关键词筛选：道号/职位名/境界/UID；无命中与「宗门没有成员」分开提示
+            position_config = jsondata.sect_config_data()
             position_titles = {
                 str(pos_id): pos_data.get("title", "")
-                for pos_id, pos_data in jsondata.sect_config_data().items()
+                for pos_id, pos_data in position_config.items()
                 if isinstance(pos_data, dict)
             }
             filtered_users = filter_sect_member_rows(userlist, keyword, position_titles)
@@ -2037,7 +2053,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
             sorted_users = sorted(filtered_users, key=lambda x: x['sect_position'])
 
             # 获取长老职位编号
-            position_zhanglao = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "长老"]
+            position_zhanglao = [k for k, v in position_config.items() if v.get("title", "") == "长老"]
             elder_position = int(position_zhanglao[0]) if len(position_zhanglao) == 1 else 2
 
             # 当前操作者职位
@@ -2071,7 +2087,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                 if keyword:
                     title.append(f"筛选「{keyword}」命中 {total_members} 人")
                 for pos_id in sorted(position_count.keys()):
-                    pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                    pos_data = position_config.get(str(pos_id), {})
                     pos_title = pos_data.get("title", f"未知职位{pos_id}")
                     max_count = pos_data.get("max_count", 0)
                     count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
@@ -2103,7 +2119,7 @@ async def sect_users_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, 
                     position_count = count_sect_positions(sorted_users)
 
                     for pos_id in sorted(position_count.keys()):
-                        pos_data = jsondata.sect_config_data().get(str(pos_id), {})
+                        pos_data = position_config.get(str(pos_id), {})
                         pos_title = pos_data.get("title", f"未知职位{pos_id}")
                         max_count = pos_data.get("max_count", 0)
                         count_info = f"{position_count[pos_id]}/{max_count}" if max_count > 0 else f"{position_count[pos_id]}"
@@ -2952,13 +2968,16 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
         materials_rate = config.get("宗门捐献资材倍率", 1)
         add_materials = int(donate_stone * materials_rate)
 
-        donation_outcome = sect_application.donate(
-            operation_id=_sect_operation_id(event, "donate", user_id) or f"sect:donate:{user_id}:{sect_ids.new_id()}",
-            user_id=user_id,
-            sect_id=user_info["sect_id"],
-            stone=donate_stone,
-            materials=add_materials,
-        )
+        # Synchronous section only: ledger begin/donation/ledger finish stay
+        # separate transactions but share one idle connection (no await inside).
+        with DatabaseUnitOfWork.connection_scope():
+            donation_outcome = sect_application.donate(
+                operation_id=_sect_operation_id(event, "donate", user_id) or f"sect:donate:{user_id}:{sect_ids.new_id()}",
+                user_id=user_id,
+                sect_id=user_info["sect_id"],
+                stone=donate_stone,
+                materials=add_materials,
+            )
         donation_data = donation_outcome.data or {}
         donation = type("SectDonationView", (), donation_data)()
         donation.applied = donation_outcome.ok
@@ -2990,18 +3009,21 @@ async def sect_donate_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent,
                 sect_materials_delta=add_materials,
                 detail={"donate_stone": donate_stone, "materials_rate": materials_rate},
             )
-            safe_record_game_event(
-                user_id,
-                "sect_donate",
-                donate_stone,
-                {
-                    "source": "sect",
-                    "action": "donate",
-                    "skip_statistics": True,
-                    "sect_id": user_info["sect_id"],
-                    "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
-                },
-            )
+            # Season weekly/monthly/quarterly writes remain independent
+            # transactions; the scope only reuses their idle connection.
+            with DatabaseUnitOfWork.connection_scope():
+                safe_record_game_event(
+                    user_id,
+                    "sect_donate",
+                    donate_stone,
+                    {
+                        "source": "sect",
+                        "action": "donate",
+                        "skip_statistics": True,
+                        "sect_id": user_info["sect_id"],
+                        "detail": {"donate_stone": donate_stone, "materials_rate": materials_rate},
+                    },
+                )
 
         msg = (
             f"道友捐献灵石{donate_stone}枚，"
@@ -3248,7 +3270,8 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     sect_position = user_info['sect_position']
     user_name = user_info['user_name']
     sect_info = sect_application.get_sect_info(sect_id)
-    owner_idx = [k for k, v in jsondata.sect_config_data().items() if v.get("title", "") == "宗主"]
+    position_config = jsondata.sect_config_data()
+    owner_idx = [k for k, v in position_config.items() if v.get("title", "") == "宗主"]
     owner_position = int(owner_idx[0]) if len(owner_idx) == 1 else 0
     
     if sect_id:
@@ -3268,7 +3291,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         max_members = get_sect_member_limit(sect_info['sect_scale'])
         
         # 获取当前宗门人数
-        current_members = len(sect_application.list_sect_members(sect_id))
+        current_members = sect_application.count_sect_members(sect_id)
         
         fairyland_level = _get_sect_fairyland_level(sect_info)
         fairyland_conf = _get_sect_fairyland_config(fairyland_level)
@@ -3292,7 +3315,7 @@ async def my_sect_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 宗主
 > {sect_application.get_user_profile(sect_info['sect_owner'])['user_name'] if sect_info['sect_owner'] else "暂无"}
 道友职位
-> {jsondata.sect_config_data()[f"{sect_position}"]["title"]}
+> {position_config[f"{sect_position}"]["title"]}
 宗门状态
 > {join_status}{closed_status}
 宗门人数
@@ -3355,12 +3378,12 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
     fairyland_name = "未建设" if fairyland_level <= 0 else f"{fairyland_level}级【{fairyland_conf['name']}】"
     task = sect_application.get_active_task(user_info["user_id"])
     task_msg = "未接取，发送【宗门任务】获取" if not task else f"{task['任务名称']}：{task['任务内容'].get('desc', '')}"
-    members = sect_application.list_sect_members(sect_id)
+    member_count = sect_application.count_sect_members(sect_id)
     max_members = get_sect_member_limit(sect_info["sect_scale"])
 
     msg = (
         f"【宗门建设】\n"
-        f"宗门：{sect_info['sect_name']}（{len(members)}/{max_members}人）\n"
+        f"宗门：{sect_info['sect_name']}（{member_count}/{max_members}人）\n"
         f"建设度：{number_to(sect_info['sect_scale'])}\n"
         f"宗门储备：{number_to(sect_info['sect_used_stone'])}灵石\n"
         f"宗门资材：{number_to(sect_info['sect_materials'])}\n"
@@ -3368,7 +3391,7 @@ async def sect_buildings_(bot: Bot, event: GroupMessageEvent | PrivateMessageEve
         f"\n当前建筑：\n"
         f"丹房：{elixir_room_name}\n"
         f"炼体堂：{fairyland_name}\n"
-        f"修炼上限：{get_sect_level(sect_id)[0]}级\n"
+        f"修炼上限：{sect_level_from_scale(sect_info['sect_scale'])[0]}级\n"
         f"\n当前任务：\n{task_msg}\n"
         f"\n可执行操作：宗门任务、宗门周常、宗门捐献、宗门商店、宗门丹房建设、宗门炼体堂升级"
     )
@@ -3667,7 +3690,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await sect_shop.finish()
     
     user_id = user_info['user_id']
-    sect_id = sect_application.get_user_profile(user_id)['sect_id']
+    sect_id = user_info['sect_id']
     if not sect_id:
         msg = f"道友尚未加入宗门！"
         await handle_send(bot, event, msg, md_type="宗门", k1="加入", v1="宗门加入", k2="列表", v2="宗门列表", k3="帮助", v3="宗门帮助")
@@ -3765,7 +3788,7 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
         await handle_send(bot, event, msg, md_type="宗门", k1="兑换", v1="宗门兑换", k2="宗门", v2="我的宗门", k3="商店", v3="宗门商店")
         await sect_buy.finish()
 
-    sect_info = sect_application.get_sect_info(sect_application.get_user_profile(user_id)['sect_id'])
+    sect_info = sect_application.get_sect_info(user_info['sect_id'])
     if not sect_info:
         msg = "宗门信息不存在！"
         await handle_send(bot, event, msg)
@@ -3813,17 +3836,19 @@ async def _(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Mess
     if not result.succeeded:
         failure_messages = {
             "sect_closed": "宗门已封闭，无法进行兑换。",
-            "limit_reached": (
-                f"该商品每周限购{item_data['weekly_limit']}个\n"
-                f"本周已购买{result.purchased}个\n"
-                f"无法再购买{quantity}个！"
-            ),
-            "contribution_insufficient": (
-                f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(result.contribution)}点"
-            ),
             "materials_insufficient": "宗门资材不足，无法兑换。",
             "inventory_full": "背包已满，无法兑换。",
         }
+        if result.status == "limit_reached":
+            failure_messages["limit_reached"] = (
+                f"该商品每周限购{item_data['weekly_limit']}个\n"
+                f"本周已购买{result.purchased}个\n"
+                f"无法再购买{quantity}个！"
+            )
+        elif result.status == "contribution_insufficient":
+            failure_messages["contribution_insufficient"] = (
+                f"贡献度不足！需要{number_to(total_cost)}点，当前拥有{number_to(result.contribution)}点"
+            )
         await handle_send(
             bot,
             event,

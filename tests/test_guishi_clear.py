@@ -22,17 +22,19 @@ def test_partial_clear_keeps_reason_and_successful_refund_in_adapter_reply(reaso
     results = [GuishiOrderCancelResult('cancelled', '1001', 'qiugou', 'buyer', refunded_stone=30),
                GuishiOrderCancelResult('state_changed', '1002', 'qiugou', 'buyer', reason=reason, subject='1002')]
     captured = AsyncMock()
+    name_lookup = Mock(return_value={'buyer': 'BuyerName'})
     event = SimpleNamespace(get_user_id=lambda: 'admin')
     with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), \
             patch.object(trade, 'SUPERUSER', new=AsyncMock(return_value=True)), \
             patch.object(trade.trade_application, 'guishi_get_orders', side_effect=[ORDERS, ORDERS[1:]]), \
             patch.object(trade.trade_application, 'guishi_cancel_qiugou', side_effect=results), \
-            patch.object(trade, '_sql_message', return_value=SimpleNamespace(get_user_info_with_id=lambda uid: {'user_name': 'buyer'})), \
+            patch.object(trade, '_sql_message', return_value=SimpleNamespace(get_user_names_by_ids=name_lookup)), \
             patch.object(trade, 'handle_send', captured):
         with pytest.raises(FinishedException):
             asyncio.run(trade.clear_all_guishi_(object(), event))
     reply = captured.call_args.args[2]
-    assert '本次处理 1 条' in reply and '当前剩余 1 条' in reply and 'buyer: 30灵石' in reply
+    name_lookup.assert_called_once_with(['buyer'])
+    assert '本次处理 1 条' in reply and '当前剩余 1 条' in reply and 'BuyerName: 30灵石' in reply
     assert reason in reply and '订单1002' in reply and '成功清空鬼市' not in reply
     bot = SimpleNamespace(adapter=SimpleNamespace(get_name=lambda: 'OneBot V11' if onebot else 'QQ'))
     config = SimpleNamespace(markdown_status=markdown, markdown_id='', markdown_id2='', markdown_button_status=False,
@@ -56,24 +58,28 @@ def test_read_errors_are_reported_without_losing_committed_outcome(stage):
     fault = RuntimeError('isolated read fault')
     captured = AsyncMock()
     rows = [fault] if stage == 'initial' else [ORDERS[:1], fault if stage == 'remaining' else []]
-    name_lookup = Mock(side_effect=fault if stage == 'name' else None, return_value=None)
+    name_lookup = Mock(side_effect=fault if stage == 'name' else None, return_value={'buyer': 'BuyerName'})
     with patch.object(trade, 'assign_bot', new=AsyncMock(return_value=(object(), None))), \
             patch.object(trade, 'SUPERUSER', new=AsyncMock(return_value=True)), \
             patch.object(trade.trade_application, 'guishi_get_orders', side_effect=rows), \
             patch.object(trade.trade_application, 'guishi_cancel_qiugou',
                          return_value=GuishiOrderCancelResult('cancelled', '1001', 'qiugou', 'buyer', refunded_stone=30)) as cancel, \
-            patch.object(trade, '_sql_message', return_value=SimpleNamespace(get_user_info_with_id=name_lookup)), \
+            patch.object(trade, '_sql_message', return_value=SimpleNamespace(get_user_names_by_ids=name_lookup)), \
             patch.object(trade, 'report_exception', return_value='定位号：read-test') as reported, \
             patch.object(trade, 'handle_send', captured):
         with pytest.raises(FinishedException):
             asyncio.run(trade.clear_all_guishi_(object(), object()))
     reply = captured.call_args.args[2]
+    assert reported.call_count == 1
     assert reported.call_args.args[1] is fault and '定位号：read-test' in reply
     if stage == 'initial':
+        name_lookup.assert_not_called()
         cancel.assert_not_called()
         assert '成功清空' not in reply
     else:
-        assert '本次处理 1 条' in reply and 'buyer: 30灵石' in reply
+        name_lookup.assert_called_once_with(['buyer'])
+        label = 'buyer' if stage == 'name' else 'BuyerName'
+        assert '本次处理 1 条' in reply and f'{label}: 30灵石' in reply
         if stage == 'remaining':
             assert '未能核实' in reply and '成功清空' not in reply
 

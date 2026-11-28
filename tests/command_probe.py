@@ -29,10 +29,15 @@ _boundary_denials = ContextVar("probe_boundary_denials", default=None)
 _SOURCE_MARKER = ".rank-hotpath-source"
 
 
-def isolate_source() -> Path:
+def isolate_source(source_root: Path | None = None) -> Path:
     if "nonebot_plugin_xiuxian_2" in sys.modules:
         raise AssertionError("command diagnostics require a fresh process")
-    source = Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2"
+    source = (Path(source_root).resolve() if source_root is not None else
+              Path(__file__).resolve().parents[1] / "nonebot_plugin_xiuxian_2")
+    if (source / "nonebot_plugin_xiuxian_2").is_dir():
+        source = source / "nonebot_plugin_xiuxian_2"
+    if not (source / "__init__.py").is_file():
+        raise RuntimeError(f"fixture package source is missing: {source}")
     source_copy = tests._data_dir.parent / "command-source"
     if source_copy.exists():
         marker = source_copy / _SOURCE_MARKER
@@ -132,8 +137,13 @@ def install_boundary(root: Path) -> None:
                     return
         elif event == "sqlite3.connect":
             database = str(args[0])
-            if database != ":memory:" and not Path(database.removeprefix("file:").split("?", 1)[0]).resolve().is_relative_to(root):
-                deny("offline boundary: database outside fixture")
+            if database != ":memory:":
+                database_path = Path(database.removeprefix("file:").split("?", 1)[0]).resolve()
+                if not database_path.is_relative_to(root):
+                    deny(
+                        f"offline boundary: database outside fixture: "
+                        f"{database_path} (allowed root: {root})"
+                    )
         elif event in {"os.remove", "os.rmdir", "os.mkdir", "os.chmod", "os.rename"}:
             target = Path(args[0])
             if event == "os.mkdir" and target.is_dir():
@@ -149,7 +159,8 @@ def install_boundary(root: Path) -> None:
     sys.addaudithook(audit)
 
 
-async def prepare(*, seed: bool = True, minimal_map: bool = False):
+async def prepare(*, seed: bool = True, minimal_map: bool = False,
+                  skip_training_wait: bool = True):
     import nonebot
 
     if minimal_map:
@@ -202,18 +213,20 @@ async def prepare(*, seed: bool = True, minimal_map: bool = False):
             game.conn.commit()
         return context, (game, player, trade, impart)
 
-    from nonebot_plugin_xiuxian_2.plugin import startup
+    from nonebot_plugin_xiuxian_2.plugin import install_driver_hooks, startup
 
+    driver = nonebot.get_driver()
+    install_driver_hooks(driver)
     state, _, context, lifecycle = await startup(context)
     if state.error:
         raise AssertionError(state.error)
     # Migrated matcher closures resolve the same runtime context as driver startup.
-    hook = nonebot.get_driver()._xiuxian_refactored_lifecycle_hooks[0]
+    hook = driver._xiuxian_refactored_lifecycle_hooks[0]
     closure = inspect.getclosurevars(hook).nonlocals
     closure["holder"].update(context=context, lifecycle=lifecycle)
     from nonebot_plugin_xiuxian_2.adapters.nonebot.commands import register_migrated_matchers
 
-    register_migrated_matchers(nonebot.get_driver(), closure["holder"])
+    register_migrated_matchers(driver, closure["holder"])
     if seed:
         for uid, name in (("900001", "诊断道友"), ("900002", "诊断对手"), ("900003", "诊断管理")):
             game.create_user(uid, "金", "天灵根", 1000, "2026-11-11 00:00:00", name)
@@ -224,7 +237,8 @@ async def prepare(*, seed: bool = True, minimal_map: bool = False):
     pet_system._ensure_pet_storage()
     from nonebot_plugin_xiuxian_2.xiuxian import xiuxian_buff
 
-    xiuxian_buff.asyncio = ImmediateTrainingWait()
+    if skip_training_wait:
+        xiuxian_buff.asyncio = ImmediateTrainingWait()
     # Legacy JSON consumers keep their real implementation but write only fixtures.
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_Illusion.IllusionData import IllusionData
     from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_base import xiangyuan

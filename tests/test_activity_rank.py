@@ -11,12 +11,14 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import nonebot
 
 nonebot.init()
 
 from nonebot_plugin_xiuxian_2.features.activity.migrations import (
+    apply_activity_rank_indexes,
     apply_activity_state_schema,
 )
 from nonebot_plugin_xiuxian_2.features.activity.rank import (
@@ -115,6 +117,73 @@ class ActivityRankTests(unittest.TestCase):
                     "(activity_key,user_id,points,total_points,update_time) "
                     "VALUES('spring',?,?,?,'')",
                     (user_id, points, total),
+                )
+
+    def test_empty_identity_never_claims_sign_or_boss_records(self) -> None:
+        database = self._database()
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO activity_user(user_id,sign_days,total_sign_days) VALUES(?,?,?)",
+                (("", 10, 10), ("player", 5, 5)),
+            )
+            uow.executemany(
+                "INSERT INTO activity_boss_damage(activity_key,user_id,total_damage) "
+                "VALUES('spring',?,?)",
+                (("", 100), ("player", 50)),
+            )
+        repository = ActivityReadModelSqlRepository(database)
+        for dirty_value in (10, "legacy-invalid"):
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute("UPDATE activity_user SET sign_days=? WHERE user_id=''", (dirty_value,))
+                uow.execute(
+                    "UPDATE activity_boss_damage SET total_damage=? WHERE user_id=''",
+                    (dirty_value,),
+                )
+            for user_id in ("", "  ", None):
+                with self.subTest(user_id=user_id, dirty_value=dirty_value):
+                    self.assertEqual(
+                        {"sign": (0, 2, 0), "boss": (0, 2, 0)},
+                        repository.board_standings(("sign", "boss"), "spring", user_id),
+                    )
+                    self.assertEqual(
+                        (0, 2, 0), repository.board_standing("sign", "spring", user_id)
+                    )
+                    self.assertEqual(
+                        (0, 2, 0), repository.board_standing("boss", "spring", user_id)
+                    )
+
+    def test_combined_standings_keep_uid_ties_and_nonpositive_users_out_of_rank(self):
+        database = self._database()
+        self._seed_points(database, (("a", 5, 10), ("b", 5, 10), ("zero", 0, 0), ("negative", -1, -1)))
+        with DatabaseUnitOfWork(database) as uow:
+            uow.executemany(
+                "INSERT INTO activity_pass_balance(activity_key,user_id,level,total_exp) "
+                "VALUES('spring',?,?,?)",
+                (("a", 5, 10), ("b", 5, 10), ("zero", 0, 0), ("negative", -1, -1)),
+            )
+            uow.executemany(
+                "INSERT INTO activity_collect_inventory(activity_key,user_id,word_char,count) "
+                "VALUES(?,?,?,?)",
+                (
+                    ("spring", "a", "one", 5), ("spring", "b", "one", 5),
+                    ("spring", "zero", "one", 5), ("spring", "zero", "two", -5),
+                    ("spring", "negative", "one", 5), ("spring", "negative", "two", -6),
+                    ("other", "outsider", "one", 100),
+                ),
+            )
+        repository = ActivityReadModelSqlRepository(database)
+        sources = ("points", "pass", "collect")
+        for user_id, rank in (("a", 1), ("b", 2)):
+            with self.subTest(user_id=user_id):
+                result = repository.board_standings(sources, "spring", user_id)
+                self.assertEqual((rank, 2, 10), result["points"])
+                self.assertEqual((rank, 2, 5), result["pass"])
+                self.assertEqual((rank, 2, 5), result["collect"])
+        for user_id in ("zero", "negative", "missing", ""):
+            with self.subTest(user_id=user_id):
+                self.assertEqual(
+                    {source: (0, 2, 0) for source in sources},
+                    repository.board_standings(sources, "spring", user_id),
                 )
 
     # --- 阶段一：配置与数据 ---------------------------------------------
@@ -227,6 +296,11 @@ class ActivityRankTests(unittest.TestCase):
         self.assertEqual(repository.board_position("points", "spring", "u3"), (2, 60))
         self.assertEqual(repository.board_position("points", "spring", "u9"), (0, 0))
         self.assertEqual(repository.board_total("points", "spring"), 3)
+        self.assertEqual(repository.board_standing("points", "spring", "u3"), (2, 3, 60))
+        self.assertEqual(
+            {"points": (2, 3, 60)},
+            repository.board_standings(("points", "points"), "spring", "u3"),
+        )
 
         # 集字榜按字牌总数排名。
         with DatabaseUnitOfWork(database, immediate=True) as uow:
@@ -247,6 +321,7 @@ class ActivityRankTests(unittest.TestCase):
         )
         self.assertEqual(repository.board_position("collect", "spring", "u2"), (1, 5))
         self.assertEqual(repository.board_total("collect", "spring"), 2)
+        self.assertEqual(repository.board_standing("collect", "spring", "u2"), (1, 2, 5))
 
         # 签到榜同分时早签在前。
         with DatabaseUnitOfWork(database, immediate=True) as uow:
@@ -280,6 +355,234 @@ class ActivityRankTests(unittest.TestCase):
         self.assertEqual(repository.board_total("pass", "spring"), 0)
         self.assertEqual(repository.board_rank("nope", "spring", 10), [])
         self.assertEqual(repository.board_rank("points", "spring", 0), [])
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO activity_pass_balance"
+                "(activity_key,user_id,exp,total_exp,level,update_time) VALUES(?,?,?,?,?,?)",
+                (
+                    ("spring", "u1", 100, 100, 10, ""),
+                    ("spring", "u2", 100, 200, 10, ""),
+                    ("spring", "u3", 80, 300, 9, ""),
+                ),
+            )
+        self.assertEqual(repository.board_standing("pass", "spring", "u1"), (2, 3, 10))
+
+    def test_public_board_rows_are_snapshots_but_viewer_position_stays_live(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        database = self._database(with_names=True)
+        self._seed_points(database, [("u1", 100, 100), ("u2", 80, 80)])
+        repository = ActivityReadModelSqlRepository(database)
+
+        first = repository.board_rank("points", "spring", 2)
+        self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+        self.assertEqual(first, repository.board_rank("points", "spring", 2))
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute(
+                "UPDATE activity_point_balance SET total_points=120 WHERE user_id='u2'"
+            )
+        self.assertEqual(first, repository.board_rank("points", "spring", 2))
+        self.assertEqual((1, 120), repository.board_position("points", "spring", "u2"))
+        app = ActivityReadModelApplication(
+            database,
+            config_loader=lambda: _config(
+                {
+                    "boards": [
+                        {"key": "points", "label": "积分榜", "source": "points", "limit": 2}
+                    ],
+                    "rewards": [
+                        {
+                            "board": "points",
+                            "rank_min": 1,
+                            "rank_max": 1,
+                            "key": "top1",
+                            "name": "榜首",
+                            "reward": "灵石x1000",
+                        }
+                    ],
+                }
+            ),
+            clock=SimpleNamespace(now=lambda: NOW),
+        )
+        live_text = app.rank_board_text("u1", "积分榜")
+        self.assertIn("我的名次：第 2 名 / 共 2 人", live_text)
+        self.assertIn("当前名次没有可领取的排行奖励", live_text)
+        process_read_cache.invalidate_snapshot_database(database)
+        refreshed = repository.board_rank("points", "spring", 2)
+        self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+
+    def test_cached_public_rows_are_labeled_while_sign_standing_is_one_live_read(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        database = self._database(with_names=True)
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO activity_user"
+                "(user_id,sign_days,total_sign_days,last_sign_date) VALUES(?,?,?,?)",
+                (("u1", 3, 8, "2026-10-02"), ("u2", 2, 7, "2026-10-03")),
+            )
+        repository = ActivityReadModelSqlRepository(database)
+        first = repository.board_rank_snapshot("sign", "spring", 10)
+
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute(
+                "UPDATE activity_user SET sign_days=4 WHERE user_id='u2'"
+            )
+
+        self.assertEqual(first, repository.board_rank_snapshot("sign", "spring", 10))
+        self.assertEqual((2, 2, 3), repository.board_standing("sign", "spring", "u1"))
+        config = _config(
+            {"boards": [{"key": "sign", "label": "签到榜", "source": "sign", "limit": 10}]}
+        )
+        text = ActivityReadModelApplication(
+            database,
+            config_loader=lambda: config,
+            clock=SimpleNamespace(now=lambda: NOW),
+        ).rank_board_text("u1", "签到榜")
+        self.assertIn("公共榜单快照截至", text)
+        self.assertIn("我的名次：第 2 名 / 共 2 人", text)
+
+    def test_rank_indexes_serve_exact_standings_and_both_display_orders(self) -> None:
+        from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+            process_read_cache,
+        )
+
+        database = self._database(with_names=True)
+        self.addCleanup(process_read_cache.clear)
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.executemany(
+                "INSERT INTO activity_user"
+                "(user_id,sign_days,total_sign_days,last_sign_date) VALUES(?,?,?,?)",
+                (("b", 5, 8, "2026-10-01"), ("a", 5, 8, "2026-10-01"),
+                 ("zero", 0, 0, "")),
+            )
+            uow.executemany(
+                "INSERT INTO activity_boss_damage"
+                "(activity_key,user_id,total_damage) VALUES('spring',?,?)",
+                (("boss-b", 100), ("boss-a", 100), ("boss-zero", 0)),
+            )
+            apply_activity_rank_indexes(uow)
+
+            sign_plan = [
+                str(row["detail"])
+                for row in uow.query_all(
+                    "EXPLAIN QUERY PLAN SELECT a.user_id,a.sign_days,a.total_sign_days,"
+                    "a.last_sign_date,u.user_name FROM activity_user a "
+                    "LEFT JOIN user_xiuxian u ON u.user_id=a.user_id "
+                    "ORDER BY a.sign_days DESC,a.total_sign_days DESC,"
+                    "a.last_sign_date ASC,a.user_id ASC LIMIT ?",
+                    (10,),
+                )
+            ]
+            boss_plan = [
+                str(row["detail"])
+                for row in uow.query_all(
+                    "EXPLAIN QUERY PLAN SELECT d.user_id,d.total_damage,u.user_name "
+                    "FROM activity_boss_damage d LEFT JOIN user_xiuxian u "
+                    "ON u.user_id=d.user_id WHERE d.activity_key=? AND d.total_damage>0 "
+                    "ORDER BY d.total_damage DESC,d.user_id ASC LIMIT ?",
+                    ("spring", 10),
+                )
+            ]
+
+        self.assertTrue(any("idx_activity_user_sign_rank" in row for row in sign_plan), sign_plan)
+        self.assertFalse(any("TEMP B-TREE FOR ORDER BY" in row for row in sign_plan), sign_plan)
+        self.assertTrue(any("idx_activity_boss_damage_rank" in row for row in boss_plan), boss_plan)
+        self.assertFalse(any("TEMP B-TREE FOR ORDER BY" in row for row in boss_plan), boss_plan)
+
+        captured_standing_plans = []
+
+        class ExplainStandingUnitOfWork(DatabaseUnitOfWork):
+            def query_one(inner_self, sql, params=()):
+                if "own.sign_days" in sql or "own.total_damage" in sql:
+                    captured_standing_plans.extend(
+                        str(row["detail"])
+                        for row in inner_self.query_all("EXPLAIN QUERY PLAN " + sql, params)
+                    )
+                return super().query_one(sql, params)
+
+        with patch(
+            "nonebot_plugin_xiuxian_2.features.activity.read_model_repository.DatabaseUnitOfWork",
+            ExplainStandingUnitOfWork,
+        ):
+            repository = ActivityReadModelSqlRepository(database)
+            self.assertEqual((1, 2, 5), repository.board_standing("sign", "spring", "a"))
+            self.assertEqual((2, 2, 5), repository.board_standing("sign", "spring", "b"))
+            self.assertEqual((1, 2, 100), repository.board_standing("boss", "spring", "boss-a"))
+            self.assertEqual((2, 2, 100), repository.board_standing("boss", "spring", "boss-b"))
+
+        self.assertTrue(any("idx_activity_user_sign_rank" in row for row in captured_standing_plans),
+                        captured_standing_plans)
+        self.assertTrue(any("idx_activity_boss_damage_rank" in row for row in captured_standing_plans),
+                        captured_standing_plans)
+        self.assertFalse(any("SCAN activity_user" in row or "SCAN activity_boss_damage" in row
+                             for row in captured_standing_plans), captured_standing_plans)
+        self.assertTrue(any("sign_days>?" in row for row in captured_standing_plans),
+                        captured_standing_plans)
+        self.assertTrue(any("total_damage>?" in row for row in captured_standing_plans),
+                        captured_standing_plans)
+        display = repository.board_rank("sign", "spring", 10)
+        self.assertEqual(["a", "b"], [row["user_id"] for row in display[:2]])
+        repository.board_rank("boss", "spring", 10)
+        with DatabaseUnitOfWork(database, immediate=True) as uow:
+            uow.execute("UPDATE activity_user SET sign_days=6 WHERE user_id='b'")
+            uow.execute("UPDATE activity_boss_damage SET total_damage=101 "
+                        "WHERE activity_key='spring' AND user_id='boss-b'")
+        self.assertEqual((2, 2, 5), repository.board_standing("sign", "spring", "a"))
+        self.assertEqual((1, 2, 6), repository.board_standing("sign", "spring", "b"))
+        self.assertEqual((2, 2, 100), repository.board_standing("boss", "spring", "boss-a"))
+        self.assertEqual((1, 2, 101), repository.board_standing("boss", "spring", "boss-b"))
+        self.assertEqual((0, 2, 0), repository.board_standing("sign", "spring", "zero"))
+        self.assertEqual((0, 2, 0), repository.board_standing("boss", "spring", "boss-zero"))
+
+    def test_indexed_standings_match_independent_full_sort_across_all_tie_fields(self):
+        database = self._database()
+        signs = {f"user{index:03d}": (index % 9 - 1, index % 7,
+                                    f"2026-10-{index % 3 + 1:02d}")
+                 for index in range(128)}
+        bosses = {user_id: (index % 11 - 1) * 100
+                  for index, user_id in enumerate(signs)}
+        with DatabaseUnitOfWork(database) as uow:
+            apply_activity_rank_indexes(uow)
+            uow.executemany("INSERT INTO activity_user"
+                            "(user_id,sign_days,total_sign_days,last_sign_date) VALUES(?,?,?,?)",
+                            ((user_id, *values) for user_id, values in signs.items()))
+            uow.executemany("INSERT INTO activity_boss_damage"
+                            "(activity_key,user_id,total_damage) VALUES('spring',?,?)",
+                            bosses.items())
+            uow.execute("INSERT INTO activity_boss_damage VALUES('other','outsider',999999,'')")
+        repository = ActivityReadModelSqlRepository(database)
+        for updated in (False, True):
+            if updated:
+                signs["user001"] = (99, 99, "2026-01-01")
+                bosses["user001"] = 9999
+                with DatabaseUnitOfWork(database) as uow:
+                    uow.execute("UPDATE activity_user SET sign_days=?,total_sign_days=?,"
+                                "last_sign_date=? WHERE user_id='user001'", signs["user001"])
+                    uow.execute("UPDATE activity_boss_damage SET total_damage=? "
+                                "WHERE activity_key='spring' AND user_id='user001'", (9999,))
+            sign_order = sorted((uid for uid, values in signs.items() if values[0] > 0),
+                                key=lambda uid: (-signs[uid][0], -signs[uid][1],
+                                                 signs[uid][2], uid))
+            boss_order = sorted((uid for uid, value in bosses.items() if value > 0),
+                                key=lambda uid: (-bosses[uid], uid))
+            for uid in (*signs, "missing", ""):
+                with self.subTest(updated=updated, uid=uid):
+                    actual = repository.board_standings(("sign", "boss"), "spring", uid)
+                    for source, order, value in (
+                        ("sign", sign_order, max(0, signs.get(uid, (0,))[0])),
+                        ("boss", boss_order, max(0, bosses.get(uid, 0))),
+                    ):
+                        self.assertEqual((order.index(uid) + 1 if uid in order else 0,
+                                          len(order), value), actual[source])
 
     # --- 阶段四：结算与领取 ---------------------------------------------
 
@@ -363,7 +666,13 @@ class ActivityRankTests(unittest.TestCase):
             config_loader=lambda: config,
             clock=SimpleNamespace(now=lambda: NOW),
         )
-        overview = app.rank_overview_text("u1")
+        with patch.object(
+            app.repository,
+            "_table_names",
+            wraps=app.repository._table_names,
+        ) as table_catalog:
+            overview = app.rank_overview_text("u1")
+        self.assertEqual(1, table_catalog.call_count)
         self.assertIn("排行榜", overview)
         self.assertIn("积分榜：第 1 名 / 共 2 人（累计积分 100分）", overview)
         self.assertIn("活动排行领取", overview)

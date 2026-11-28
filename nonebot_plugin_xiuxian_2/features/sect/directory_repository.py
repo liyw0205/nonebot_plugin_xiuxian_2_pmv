@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ...core.numeric import normalize_sect_row
 from ...infrastructure.database import DatabaseUnitOfWork
+from ...xiuxian.xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 
 
 class SectDirectorySqlRepository:
@@ -37,6 +39,33 @@ class SectDirectorySqlRepository:
             )
             return [row["sect_name"] for row in rows]
 
+    def list_maintenance_sects(self) -> list[tuple[Any, ...]]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            rows = uow.query_all(
+                "WITH first_sects AS ("
+                "SELECT MIN(rowid) AS first_rowid FROM sects GROUP BY sect_id) "
+                "SELECT s.sect_id,s.sect_name FROM first_sects f "
+                "JOIN sects s ON s.rowid=f.first_rowid ORDER BY s.sect_id"
+            )
+        return [(row["sect_id"], row["sect_name"]) for row in rows]
+
+    def list_join_display(self) -> list[dict[str, Any]]:
+        with DatabaseUnitOfWork(self.database, read_only=True) as uow:
+            # Legacy schemas may lack the sect primary key; choose one stable row per ID.
+            # The original equality rejects collisions in the indexed NUMERIC seek.
+            rows = uow.query_all(
+                "WITH first_sects AS ("
+                "SELECT MIN(rowid) AS first_rowid FROM sects GROUP BY sect_id) "
+                "SELECT s.sect_id,s.sect_name,s.sect_scale,s.closed,s.join_open,"
+                "(SELECT user_name FROM user_xiuxian "
+                "WHERE CAST(user_id AS NUMERIC)=CAST(s.sect_owner AS NUMERIC) "
+                "AND user_id=s.sect_owner "
+                "ORDER BY rowid ASC LIMIT 1) AS owner_name,"
+                "(SELECT COUNT(*) FROM user_xiuxian WHERE sect_id=s.sect_id) AS member_count "
+                "FROM first_sects f JOIN sects s ON s.rowid=f.first_rowid ORDER BY s.sect_id"
+            )
+            return [normalize_sect_row(row) for row in rows]
+
     def list_scale_rank(self) -> list[tuple[Any, ...]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             rows = uow.query_all(
@@ -46,6 +75,16 @@ class SectDirectorySqlRepository:
         return [(row["sect_id"], row["sect_name"], row["sect_scale"]) for row in rows]
 
     def list_combat_power_rank(self) -> list[tuple[Any, ...]]:
+        key = shared_snapshot_key(self.database, "sect-combat-power-rank-v1", 50)
+        return process_read_cache.get_or_load(
+            key,
+            database_path=self.database,
+            ttl=60 * 60,
+            loader=self._load_combat_power_rank,
+            snapshot=True,
+        )
+
+    def _load_combat_power_rank(self) -> list[tuple[Any, ...]]:
         with DatabaseUnitOfWork(self.database, read_only=True) as uow:
             rows = uow.query_all(
                 "SELECT sect_id,sect_name,combat_power FROM sects "

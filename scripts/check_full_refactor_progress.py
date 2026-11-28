@@ -59,6 +59,41 @@ def _walk(tree: ast.AST) -> tuple[ast.AST, ...]:
     return tuple(ast.walk(tree))
 
 
+def _sect_shop_checked_profile_reuse(source: str) -> int:
+    """Count the two shop entrypoints that reuse check_user's current profile."""
+    matched = set()
+    for handler in _parse_source(source).body:
+        if not isinstance(handler, ast.AsyncFunctionDef):
+            continue
+        matchers = {
+            decorator.func.value.id
+            for decorator in handler.decorator_list
+            if isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "handle" and isinstance(decorator.func.value, ast.Name)
+            and decorator.func.value.id in {"sect_shop", "sect_buy"}
+        }
+        if not matchers:
+            continue
+        statements = handler.body
+        for index, statement in enumerate(statements):
+            if not (isinstance(statement, ast.Assign) and isinstance(statement.value, ast.Call)
+                    and isinstance(statement.value.func, ast.Name) and statement.value.func.id == "check_user"
+                    and len(statement.targets) == 1 and isinstance(statement.targets[0], ast.Tuple)
+                    and len(statement.targets[0].elts) == 3
+                    and isinstance(statement.targets[0].elts[1], ast.Name)
+                    and statement.targets[0].elts[1].id == "user_info"):
+                continue
+            following = tuple(node for later in statements[index + 1:] for node in _walk(later))
+            if any(isinstance(node, ast.Name) and node.id == "user_info" and isinstance(node.ctx, ast.Store)
+                   for node in following):
+                continue
+            if any(isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name)
+                   and node.value.id == "user_info" and isinstance(node.slice, ast.Constant)
+                   and node.slice.value == "sect_id" for node in following):
+                matched.update(matchers)
+    return len(matched)
+
+
 _FOLDED_OPERATORS = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -2485,10 +2520,14 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "if not result.succeeded:" in tower_reset_admin
             ),
             "ranking_application_owned": (
-                "tower_limit.ranking(\"current_floor\")" in tower_facade
-                and "tower_limit.ranking(\"score\")" in tower_facade
-                and "def ranking(" in tower_state_application
-                and "def ranking(" in tower_state_repository
+                "tower_limit.ranking_snapshot_with_rank(viewer_id, 'current_floor')"
+                in output_function(tower_facade, "tower_rank_")
+                and "tower_limit.ranking_snapshot_with_rank(viewer_id, 'score')"
+                in output_function(tower_facade, "tower_integral_rank_")
+                and "def ranking_snapshot_with_rank(" in tower_state_application
+                and "def ranking_snapshot_with_rank(" in tower_state_repository
+                and "return state_application.ranking_snapshot_with_rank(user_id, field, limit)"
+                in tower_limit
             ),
             "ranking_query_bounded_and_stable": (
                 'field not in {"current_floor", "score"}' in tower_state_repository
@@ -4340,7 +4379,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "scheduled_grant_success_result_owned": '"granted"' in sect_application[sect_application.index("class SectMutationResult"):sect_application.index("class SectApplication")],
             "scheduled_grant_migration_registered": all(token in plugin for token in ("sect.015", "apply_sect_scheduled_materials")) and "sect_scheduled_material_grants" in sect_migrations,
             "scheduled_grant_migration_game_only": '"sect.015"' not in plugin[plugin.index("_GAME_DATABASE_EXCLUDED_MIGRATION_VERSIONS"):plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS")] and '"sect.015"' not in plugin[plugin.index("_PLAYER_DATABASE_MIGRATION_VERSIONS"):plugin.index("_TRADE_DATABASE_MIGRATION_VERSIONS")],
-            "sect_directory_application_owned": "sect_application.list_sects_with_member_count()" in sect_inactive_owner_handler and "sect_application.list_sects_with_member_count()" in sect_list_handler and "get_all_sects_with_member_count" not in sect_inactive_owner_handler + sect_list_handler,
+            "sect_directory_application_owned": "sect_application.list_maintenance_sects()" in sect_inactive_owner_handler and "sect_application.list_sect_join_display()" in sect_list_handler and "get_all_sects_with_member_count" not in sect_inactive_owner_handler + sect_list_handler,
             "sect_directory_repository_owned": "SectDirectorySqlRepository" in sect_application and "def list_with_member_count(" in sect_directory_repository,
             "sect_directory_query_read_only": "read_only=True" in sect_directory_repository and "CREATE TABLE" not in sect_directory_repository,
             "sect_active_names_repository_owned": "def list_active_sect_names(" in sect_directory_repository and "WHERE sect_owner IS NOT NULL" in sect_directory_repository,
@@ -4357,14 +4396,15 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "inactive_owner_profile_application_owned": "sect_application.get_inactive_owner_user_profile(owner_id)" in sect_inactive_owner_handler and "_sql_message().get_user_info_with_id(owner_id)" not in sect_inactive_owner_handler,
             "inactive_owner_profile_repository_owned": "def get_owner_profile(" in sect_inactive_owner_repository and "ORDER BY rowid ASC LIMIT 1" in sect_inactive_owner_repository,
             "inactive_owner_reads_fully_feature_owned": "_sql_message()" not in sect_inactive_owner_handler,
-            "sect_member_list_application_owned": "_sql_message().get_all_users_by_sect_id(" not in sect_facade and (sect_facade.count("sect_application.list_sect_members(") + sect_member_utils.count("sect_application.list_sect_members(")) >= 6,
+            "sect_member_list_application_owned": "_sql_message().get_all_users_by_sect_id(" not in sect_facade and (sect_facade.count("sect_application.list_sect_members(") + sect_member_utils.count("sect_application.list_sect_members(") + sect_facade.count("sect_application.count_sect_members(") + sect_member_utils.count("sect_application.count_sect_members(")) >= 6,
             "sect_member_list_repository_owned": "SectMemberSqlRepository" in sect_application and "def list_by_sect_id(" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
+            "sect_member_count_repository_owned": "return self.member_repository.count_by_sect_id(sect_id)" in sect_application and "SELECT COUNT(*) AS count FROM user_xiuxian WHERE sect_id=?" in sect_member_repository,
             "sect_member_list_read_only": "read_only=True" in sect_member_repository and "CREATE TABLE" not in sect_member_repository,
             "sect_member_utils_application_injected": "sect_app=sect_application" in sect_facade and "if sect_app is None:" in sect_member_utils and "raise ValueError(\"sect_app is required\")" in sect_member_utils,
             "sect_member_utils_info_reads_feature_owned": sect_member_utils.count("sect_application.get_sect_info(") >= 4,
-            "sect_member_utils_join_count_feature_owned": "sect_application.list_sect_members(sect_id)" in sect_member_utils,
+            "sect_member_utils_join_count_feature_owned": "sect_application.count_sect_members(sect_id)" in sect_member_utils,
             "sect_user_profile_repository_owned": "def get_user_profile(" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
-            "sect_user_profile_facade_owned": sect_facade.count("sect_application.get_user_profile(") >= 6 and "_sql_message().get_user_info_with_id(" not in sect_facade,
+            "sect_user_profile_facade_owned": (sect_facade.count("sect_application.get_user_profile(") + _sect_shop_checked_profile_reuse(sect_facade)) >= 6 and "_sql_message().get_user_info_with_id(" not in sect_facade,
             "sect_user_profile_helper_default_owned": "sect_application.get_user_profile(user_id)" in sect_member_utils and "_sql_message().get_user_info_with_id(user_id)" not in sect_member_utils,
             "sect_user_name_profile_repository_owned": "def get_user_profile_by_name(" in sect_member_repository and "WHERE user_name=?" in sect_member_repository and "ORDER BY rowid ASC LIMIT 1" in sect_member_repository and "normalize_user_row(row)" in sect_member_repository,
             "sect_user_name_profile_facade_owned": sect_facade.count("sect_application.get_user_profile_by_name(") == 2 and "_sql_message().get_user_info_with_name(" not in sect_facade,
@@ -4412,7 +4452,7 @@ def _slice_status() -> dict[str, dict[str, object]]:
             "activity_timestamp_clock_injected": "self.clock.now()" in sect_application and "UPDATE user_cd SET last_check_info_time=? WHERE user_id=?" in sect_activity_repository,
             "activity_timestamp_legacy_format_preserved": "astimezone().replace(tzinfo=None)" in sect_application and "isoformat(sep=\" \")" in sect_application,
             "activity_timestamp_order_preserved": sect_elixir_claim_handler.index("sect_application.update_last_check_info_time(user_id)") < sect_elixir_claim_handler.index("if sect_id:"),
-            "activity_timestamp_read_application_owned": sect_inactive_owner_handler.count("sect_application.get_last_check_info_time(") == 2 and "_sql_message().get_last_check_info_time(" not in sect_inactive_owner_handler,
+            "activity_timestamp_read_application_owned": sect_inactive_owner_handler.count("sect_application.get_last_check_info_time(") == 1 and "sect_application.get_last_check_info_times(" in sect_inactive_owner_handler and "_sql_message().get_last_check_info_time(" not in sect_inactive_owner_handler,
             "activity_timestamp_read_repository_owned": "def get_last_check_info_time(" in sect_activity_repository,
             "activity_timestamp_legacy_timezone_safe": "def _elapsed_days(" in sect_disband_repository and "occurred_at.astimezone()" in sect_disband_repository,
             "buff_search_application_owned": sect_facade.count("sect_application.apply_buff_search(") >= 2,
@@ -5675,8 +5715,16 @@ def _slice_status() -> dict[str, dict[str, object]]:
                 and "def calculate_closing_reward(" in buff_application_source
             ),
             "closing_reward_replay_before_snapshot_reads": (
-                buff_closing_handler.index("buff_application.closing_replay(")
-                < buff_closing_handler.index("_sql_message().get_user_info_with_id(")
+                all(token in buff_closing_handler for token in (
+                    "buff_application.closing_replay(",
+                    "user_mes = dict(user_info)",
+                    "_sql_message().get_user_cd(",
+                    "_closing_reward_inputs(",
+                ))
+                and buff_closing_handler.index("buff_application.closing_replay(")
+                < buff_closing_handler.index("user_mes = dict(user_info)")
+                < buff_closing_handler.index("_sql_message().get_user_cd(")
+                < buff_closing_handler.index("_closing_reward_inputs(")
             ),
             "closing_reward_operation_identity_event_stable": (
                 'return f"buff-closing-settle:{event_id}:{user_id}"' in buff_facade

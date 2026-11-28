@@ -11,10 +11,12 @@ boss activity's own key — the same key the boss damage tables use. Written as
 from __future__ import annotations
 
 from datetime import datetime
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import nonebot
 
@@ -30,6 +32,9 @@ from nonebot_plugin_xiuxian_2.features.activity.read_model_repository import (
     ActivityReadModelSqlRepository,
 )
 from nonebot_plugin_xiuxian_2.infrastructure.database import DatabaseUnitOfWork
+from nonebot_plugin_xiuxian_2.xiuxian.xiuxian_utils.shared_read_cache import (
+    process_read_cache,
+)
 from nonebot_plugin_xiuxian_2.features.activity.migrations import (
     apply_activity_state_schema,
 )
@@ -164,6 +169,140 @@ class BossRankPerActivityTests(unittest.TestCase):
         application = self._application(bosses)
         text = application.activity_center_text("u1")
         self.assertIn("活动首领领奖 排行", text)
+
+    def test_overview_reuses_own_rows_and_deduplicates_each_live_board(self) -> None:
+        self._seed_damage([
+            ("boss_a", "u1", 500), ("boss_a", "u0", 500),
+            ("boss_b", "u1", 100), ("boss_b", "other", 900),
+        ])
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            for uid, days, total, last in (
+                ("u1", 3, 9, "2026-10-14"), ("u0", 3, 9, "2026-10-14"),
+                ("later", 3, 9, "2026-10-15"), ("more", 3, 10, "2026-10-15"),
+            ):
+                uow.execute(
+                    "INSERT INTO activity_user(user_id,sign_days,total_sign_days,last_sign_date) "
+                    "VALUES(?,?,?,?)", (uid, days, total, last),
+                )
+        statements = []
+        query_one = DatabaseUnitOfWork.query_one
+
+        def traced(unit, sql, *args, **kwargs):
+            statements.append(sql)
+            return query_one(unit, sql, *args, **kwargs)
+
+        repository = ActivityReadModelSqlRepository(self.database)
+        with patch.object(DatabaseUnitOfWork, "query_one", new=traced):
+            snapshot = repository.overview_snapshot(
+                "u1", "spring", include_tasks=False, include_pass=False,
+                collect_activity_keys=[], board_sources=["sign", "boss", "boss", "sign"],
+                boss_activity_keys=["boss_a", "boss_b", "boss_a", "absent"],
+            )
+        self.assertEqual(snapshot["board_positions"], {"sign": 3, "boss": 2})
+        self.assertEqual(snapshot["boss_board_positions"], {"boss_a": 2, "boss_b": 2, "absent": 0})
+        self.assertEqual(1, sum("FROM activity_user WHERE user_id=?" in sql for sql in statements))
+        self.assertFalse(any("SELECT total_damage FROM" in sql for sql in statements))
+        self.assertEqual(2, sum("COUNT(*) AS better FROM activity_boss_damage" in sql for sql in statements))
+        self.assertEqual(1, sum("COUNT(*) AS better FROM activity_user" in sql for sql in statements))
+
+    def test_status_uses_one_snapshot_without_point_reads_and_refreshes_after_write(self) -> None:
+        self._seed_damage([("boss_a", "u1", 500), ("boss_b", "u1", 100),
+                           ("boss_b", "other", 900)])
+        application = self._application([_boss("boss_a", 1), _boss("boss_b", 1)])
+        repository = application.repository
+        original = DatabaseUnitOfWork.query_one
+        statements, units = [], set()
+
+        def traced(unit, sql, *args, **kwargs):
+            statements.append(sql)
+            units.add(id(unit))
+            return original(unit, sql, *args, **kwargs)
+
+        with (
+            patch.object(repository, "board_position", side_effect=AssertionError("extra snapshot")),
+            patch.object(DatabaseUnitOfWork, "query_one", new=traced),
+        ):
+            first = application.boss_status_text("u1")
+        self.assertEqual(1, len(units))
+        self.assertFalse(any("SELECT total_damage FROM" in sql for sql in statements))
+        self.assertEqual(2, sum("COUNT(*) AS better FROM activity_boss_damage" in sql for sql in statements))
+        self.assertIn("活动首领领奖 排行", first)
+        with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+            uow.execute("UPDATE activity_boss_damage SET total_damage=600 WHERE activity_key='boss_a' AND user_id='u1'")
+            uow.execute("UPDATE activity_boss_damage SET total_damage=1000 WHERE activity_key='boss_b' AND user_id='u1'")
+        fresh = repository.boss_snapshot("u1", ["boss_a", "boss_b"], "2026-10-15")
+        self.assertEqual((fresh["boss_a"]["rank_position"], fresh["boss_a"]["damage"]), (1, 600))
+        self.assertEqual((fresh["boss_b"]["rank_position"], fresh["boss_b"]["damage"]), (1, 1000))
+        with patch.object(repository, "board_position", side_effect=AssertionError("extra snapshot")):
+            selected = application.boss_status_text("u1", "boss_b")
+        self.assertIn("活动首领领奖 排行", selected)
+
+    def test_rank_read_error_is_not_hidden_by_supplied_own_rows(self) -> None:
+        self._seed_damage([("boss_a", "u1", 500)])
+        original = DatabaseUnitOfWork.query_one
+
+        def denied(unit, sql, *args, **kwargs):
+            if "COUNT(*) AS better FROM activity_boss_damage" in sql:
+                raise sqlite3.OperationalError("rank denied")
+            return original(unit, sql, *args, **kwargs)
+
+        repository = ActivityReadModelSqlRepository(self.database)
+        with patch.object(DatabaseUnitOfWork, "query_one", new=denied):
+            with self.assertRaisesRegex(sqlite3.OperationalError, "rank denied"):
+                self._snapshot([_boss("boss_a")])
+            with self.assertRaisesRegex(sqlite3.OperationalError, "rank denied"):
+                repository.boss_snapshot("u1", ["boss_a"], "2026-10-15")
+        self.assertEqual((1, 500), repository.board_position("boss", "boss_a", "u1"))
+
+    def test_zero_missing_and_nonpositive_damage_never_invent_a_rank(self) -> None:
+        self._seed_damage([("boss_a", "u1", 0), ("boss_b", "u1", -5)])
+        repository = ActivityReadModelSqlRepository(self.database)
+        for reader in (
+            lambda: self._snapshot([_boss("boss_a"), _boss("boss_b"), _boss("absent")])["boss_board_positions"],
+            lambda: {key: row["rank_position"] for key, row in repository.boss_snapshot(
+                "u1", ["boss_a", "boss_b", "absent"], "2026-10-15").items()},
+        ):
+            self.assertTrue(all(rank == 0 for rank in reader().values()))
+
+    def test_normalized_rank_fallback_survives_absent_raw_user_snapshot(self) -> None:
+        self._seed_damage([("boss_a", "u1", 500)])
+        repository = ActivityReadModelSqlRepository(self.database)
+        for user_id, key in ((" u1 ", "boss_a"), ("u1", " boss_a ")):
+            with self.subTest(user_id=user_id, key=key):
+                rows = repository.boss_snapshot(user_id, [key], "2026-10-15")
+                self.assertEqual(1, rows[key]["rank_position"])
+                self.assertNotIn("damage", rows[key])
+        text = self._application([_boss("boss_a", 1)]).boss_status_text(" u1 ")
+        self.assertIn("活动首领领奖 排行", text)
+
+    def test_public_boss_board_is_a_process_snapshot_but_rank_decisions_stay_live(self) -> None:
+        self._seed_damage([("boss_a", "u1", 100), ("boss_a", "u2", 90)])
+        process_read_cache.clear()
+        repository = ActivityReadModelSqlRepository(self.database)
+        try:
+            with patch.object(
+                repository, "_load_boss_rank", wraps=repository._load_boss_rank
+            ) as load_board:
+                first = repository.boss_rank("boss_a", 10)
+                self.assertEqual(["u1", "u2"], [row["user_id"] for row in first])
+                self.assertEqual(first, repository.boss_rank("boss_a", 10))
+            load_board.assert_called_once_with("boss_a", 10)
+
+            with DatabaseUnitOfWork(self.database, immediate=True) as uow:
+                uow.execute(
+                    "UPDATE activity_boss_damage SET total_damage=200 WHERE activity_key=? AND user_id=?",
+                    ("boss_a", "u2"),
+                )
+            self.assertEqual(first, repository.boss_rank("boss_a", 10))
+            self.assertEqual((1, 200), repository.board_position("boss", "boss_a", "u2"))
+            self.assertEqual("u1", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
+
+            process_read_cache.invalidate_snapshot_database(self.database)
+            refreshed = repository.boss_rank("boss_a", 10)
+            self.assertEqual(["u2", "u1"], [row["user_id"] for row in refreshed])
+            self.assertEqual("u2", repository.board_rank("boss", "boss_a", 10)[0]["user_id"])
+        finally:
+            process_read_cache.clear()
 
 
 if __name__ == "__main__":

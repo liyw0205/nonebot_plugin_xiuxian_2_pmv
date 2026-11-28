@@ -25,6 +25,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from ...core.numeric import register_numeric_functions
+
 # A rebuild needs roughly the database size again as temporary space; keep a
 # safety factor so a nearly-full volume is never the place we discover that.
 HEADROOM_FACTOR = 2.2
@@ -138,6 +140,8 @@ def reclaim_space(
         # connection so no other code's unit of work is involved.
         conn = sqlite3.connect(str(Path(path)), timeout=30, isolation_level=None)
         try:
+            # VACUUM rebuilds expression indexes over the numeric UDFs.
+            register_numeric_functions(conn)
             conn.execute("PRAGMA busy_timeout=30000")
             conn.execute("VACUUM")
         finally:

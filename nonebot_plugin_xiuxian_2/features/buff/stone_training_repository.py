@@ -1,13 +1,32 @@
 from __future__ import annotations
 
-from ...core.numeric import as_int_like
+from ...core.numeric import bind_sqlite_param, exact_crystal_integer, require_exact_integer
 from ...core.errors import DomainError
 
 import json
+import math
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
 from .operation_schema import SCHEMA_MISSING, stone_training_ready
+
+
+def _training_power(exp: int, multiplier: float) -> int:
+    rate = float(multiplier)
+    if not math.isfinite(rate) or rate < 0:
+        raise ValueError("invalid stone training power multiplier")
+    if exp <= 2 ** 53:
+        product = exp * rate
+        if math.isfinite(product) and product <= 2 ** 53:
+            # Preserve SQLite ROUND(x,0), including the original binary product.
+            return int(product if product > 2 ** 52 else product + .5)
+    numerator, denominator = rate.as_integer_ratio()
+    return (2 * exp * numerator + denominator) // (2 * denominator)
+
+
+def _write_rejected(reason):
+    return DomainError("stone_training_write_rejected", reason,
+                       {"reason": "stone_training_" + reason, "subject": "actor"})
 
 
 class StoneTrainingResult:
@@ -39,19 +58,39 @@ class StoneTrainingSqlRepository:
             user = uow.query_one("SELECT COALESCE(exp,0) AS exp,COALESCE(stone,0) AS stone FROM user_xiuxian WHERE user_id=?", (user_id,))
             if user is None:
                 return StoneTrainingResult("user_missing")
-            if (as_int_like(user["exp"]), as_int_like(user["stone"])) != (expected_exp, expected_stone):
-                return StoneTrainingResult("state_changed", reason="exp_changed" if as_int_like(user["exp"]) != expected_exp else "stone_changed")
+            current_exp = require_exact_integer(user["exp"], field="exp", subject="actor")
+            current_stone = require_exact_integer(user["stone"], field="stone", subject="actor")
+            if (current_exp, current_stone) != (expected_exp, expected_stone):
+                return StoneTrainingResult("state_changed", reason="exp_changed" if current_exp != expected_exp else "stone_changed")
             if exp_gain <= 0:
                 return StoneTrainingResult("exp_capped")
             if expected_stone < stone_cost:
                 return StoneTrainingResult("stone_insufficient", exp_gain, stone_cost)
-            changed = uow.execute("UPDATE user_xiuxian SET exp=exp+?,stone=xiuxian_int_store(xiuxian_int_sub(stone,?,'stone','actor')),power=ROUND((exp+?)*?,0) WHERE user_id=? AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')>=0", (exp_gain, stone_cost, exp_gain, float(power_multiplier), user_id, expected_exp, stone_cost))
+            new_exp, new_stone = current_exp + exp_gain, current_stone - stone_cost
+            power = _training_power(new_exp, power_multiplier)
+            changed = uow.execute(
+                "UPDATE user_xiuxian SET exp=?,stone=?,power=? WHERE user_id=? "
+                "AND xiuxian_int_cmp(exp,?)=0 AND xiuxian_int_cmp(stone,?,1,'stone','actor')=0",
+                (bind_sqlite_param(new_exp, exact=True), bind_sqlite_param(new_stone, exact=True),
+                 bind_sqlite_param(power, exact=True), user_id,
+                 bind_sqlite_param(current_exp, exact=True), bind_sqlite_param(current_stone, exact=True)),
+            )
             if changed.rowcount != 1:
-                raise DomainError("stone_training_write_rejected", "stone training write count mismatch")
-            power_row = uow.query_one("SELECT power FROM user_xiuxian WHERE user_id=?", (user_id,))
-            power = as_int_like(power_row["power"] or 0)
+                raise _write_rejected("player_write_rejected")
             saved = {"exp_gain": exp_gain, "stone_cost": stone_cost, "power": power}
-            uow.execute("INSERT INTO stone_training_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, json.dumps(saved, separators=(",", ":"))))
+            encoded = json.dumps(saved, separators=(",", ":"))
+            receipt = uow.execute("INSERT INTO stone_training_operations(operation_id,payload,result_json) VALUES(?,?,?)", (operation_id, payload, encoded))
+            if receipt.rowcount != 1:
+                raise _write_rejected("receipt_write_rejected")
+            final = uow.query_one(
+                "SELECT actor.exp,actor.stone,actor.power,receipt.payload,receipt.result_json "
+                "FROM user_xiuxian AS actor LEFT JOIN stone_training_operations AS receipt "
+                "ON receipt.operation_id=? WHERE actor.user_id=?", (operation_id, user_id),
+            )
+            if final is None or tuple(exact_crystal_integer(final[field]) for field in ("exp", "stone", "power")) != (new_exp, new_stone, power):
+                raise _write_rejected("player_projection_mismatch")
+            if (final["payload"], final["result_json"]) != (payload, encoded):
+                raise _write_rejected("receipt_projection_mismatch")
             return StoneTrainingResult("applied", **saved)
 
 

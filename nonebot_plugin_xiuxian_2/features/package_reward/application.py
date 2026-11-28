@@ -82,7 +82,7 @@ class PackageRewardApplication:
                         # asset changes back while retaining the rejection
                         # audit in the outer transaction.
                         with uow.savepoint("package_reward_assets"):
-                            status = self.repository.apply(uow, operation_id=request.operation_id, user_id=request.user_id, package_id=request.package_id, quantity=request.quantity, rewards=request.rewards, max_goods_num=request.max_goods_num)
+                            status = self.repository.apply(uow, operation_id=request.operation_id, user_id=request.user_id, package_id=request.package_id, quantity=request.quantity, rewards=request.rewards, max_goods_num=request.max_goods_num, before=before)
                             if status != "applied":
                                 raise _AssetRejected(status)
                     except _AssetRejected as rejected:

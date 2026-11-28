@@ -1,21 +1,10 @@
 # 开发与交付
 
-## 本地验收
+## 本地开发与合并前验收
 
-每个独立改动在提交前执行：
-
-```sh
-python -m unittest discover -s tests -v
-python -m compileall -q nonebot_plugin_xiuxian_2 tests
-git diff --check
-python scripts/check_architecture.py
-```
-
-涉及 QQ Adapter 时额外执行：
-
-```sh
-python -m unittest tests.test_qq_adapter_contracts -v
-```
+开发期间先运行与改动直接相关的聚焦测试；不要因单个测试文件变化就提交、推送或触发 CI。实现和测试稳定后，
+按 [`docs/development_test_workflow.md`](docs/development_test_workflow.md) 完成一次聚焦回归、CI 同口径全量 unittest、
+编译/架构/清单/whitespace 检查，以及本轮确实相关的性能矩阵。QQ Adapter 变化应包含对应适配器合同测试。
 
 ## 提交边界
 

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from ...infrastructure.database import DatabaseUnitOfWork
+from ..base.schema_catalog import read_sqlite_table_names
 
 
 class MixelixirRefineRewardResult:
@@ -78,26 +79,29 @@ class MixelixirRefineRewardSqlRepository:
         return tuple(cls._state_value(field, value) for field, value in zip(cls._MIX_FIELDS, values))
 
     def latest_ready_task(self, user_id: str, recipe_key: str | None = None) -> str | None:
+        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
+            tables = read_sqlite_table_names(uow)
+            return self.latest_ready_task_in(uow, user_id, recipe_key, tables=tables)
+
+    @staticmethod
+    def latest_ready_task_in(uow, user_id: str, recipe_key: str | None = None, *, tables) -> str | None:
+        if "mixelixir_refine_tasks" not in tables:
+            return None
         user_id = str(user_id)
         recipe_key = str(recipe_key or "").strip()
-        with DatabaseUnitOfWork(self.game_database, read_only=True) as uow:
-            if uow.query_one(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mixelixir_refine_tasks'"
-            ) is None:
-                return None
-            if recipe_key:
-                row = uow.query_one(
-                    "SELECT task_id FROM mixelixir_refine_tasks "
-                    "WHERE user_id=? AND status='ready' AND recipe_key=? "
-                    "ORDER BY created_at DESC,task_id DESC LIMIT 1",
-                    (user_id, recipe_key),
-                )
-            else:
-                row = uow.query_one(
-                    "SELECT task_id FROM mixelixir_refine_tasks "
-                    "WHERE user_id=? AND status='ready' ORDER BY created_at DESC,task_id DESC LIMIT 1",
-                    (user_id,),
-                )
+        if recipe_key:
+            row = uow.query_one(
+                "SELECT task_id FROM mixelixir_refine_tasks "
+                "WHERE user_id=? AND status='ready' AND recipe_key=? "
+                "ORDER BY created_at DESC,task_id DESC LIMIT 1",
+                (user_id, recipe_key),
+            )
+        else:
+            row = uow.query_one(
+                "SELECT task_id FROM mixelixir_refine_tasks "
+                "WHERE user_id=? AND status='ready' ORDER BY created_at DESC,task_id DESC LIMIT 1",
+                (user_id,),
+            )
         return None if row is None else str(row["task_id"])
 
     def claim(self, operation_id: str, user_id: str, task_id: str, max_goods_num: int) -> MixelixirRefineRewardResult:

@@ -20,7 +20,7 @@ from ..xiuxian_config import XiuConfig, convert_rank
 from ..xiuxian_utils.data_source import jsondata
 from ..xiuxian_utils.lay_out import assign_bot, Cooldown
 from ..xiuxian_utils.player_fight import Player_fight
-from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, get_user_profile, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
+from ..xiuxian_utils.utils import check_user, check_user_type, get_msg_pic, get_user_profile, get_user_display_profiles_by_ids, handle_send, log_message, number_to, send_msg_handler, update_statistics_value, send_help_message
 from ..xiuxian_utils.xiuxian2_handle import (
     XIUXIAN_IMPART_BUFF,
     OtherSet,
@@ -28,6 +28,7 @@ from ..xiuxian_utils.xiuxian2_handle import (
     UserBuffDate,
     XiuxianDateManage,
 )
+from ..xiuxian_utils.shared_read_cache import process_read_cache, shared_snapshot_key
 from .mentor_exp_cd import mentor_exp_cd
 from .transaction_service import MentorBindService
 from .transaction_service import MentorApplicationService
@@ -50,6 +51,7 @@ from .transaction_service import PartnerUnbindService
 from .partner_storage import (
     PLAYERSDATA,
     bind_partner_storage,
+    get_display_apprentice_ids,
     load_mentor,
     load_partner,
     save_mentor,
@@ -323,8 +325,9 @@ def _relation_operation_id(event, action, *user_ids):
     return f"relation:{action}:{event_id or runtime_ids.new_id()}:{suffix}"
 
 
-def _relation_power(user_info, new_exp):
-    root_rate = _sql_message().get_root_rate(user_info["root_type"], user_info["user_id"])
+def _relation_power(user_info, new_exp, *, root_rate=None):
+    if root_rate is None:
+        root_rate = _sql_message().get_root_rate(user_info["root_type"], user_info["user_id"])
     # new_exp / rates may exceed SQLite INTEGER; service binds via number_count
     return round(safe_int(new_exp) * root_rate * jsondata.level_data()[user_info["level"]]["spend"], 0)
 
@@ -641,8 +644,10 @@ async def direct_two_exp(
     impart_two_exp_1 = impart_data_1["impart_two_exp"] if impart_data_1 else 0
     impart_two_exp_2 = impart_data_2["impart_two_exp"] if impart_data_2 else 0
 
-    main_two_data_1 = UserBuffDate(user_id_1).get_user_main_buff_data()
-    main_two_data_2 = UserBuffDate(user_id_2).get_user_main_buff_data()
+    user_buff_data_1 = UserBuffDate(user_id_1)
+    user_buff_data_2 = UserBuffDate(user_id_2)
+    main_two_data_1 = user_buff_data_1.get_user_main_buff_data()
+    main_two_data_2 = user_buff_data_2.get_user_main_buff_data()
 
     main_two_1 = main_two_data_1["two_buff"] if main_two_data_1 else 0
     main_two_2 = main_two_data_2["two_buff"] if main_two_data_2 else 0
@@ -700,14 +705,20 @@ async def direct_two_exp(
     # 关键：临时修为，用于多次双修逐次重新计算上限（兼容科学计数法 TEXT）
     temp_exp_1 = safe_int(user_1["exp"])
     temp_exp_2 = safe_int(user_2["exp"])
+    # No await or write occurs in these rounds; settlement rechecks live exp/usage.
+    buff_inputs = (
+        main_two_data_1, main_two_data_2,
+        user_buff_data_1.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_1.BuffInfo else 0,
+        user_buff_data_2.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_2.BuffInfo else 0,
+    )
 
     for _ in range(actual_count):
-        exp_1, exp_2, event_desc = await process_two_exp(
-            user_id_1,
-            user_id_2,
+        exp_1, exp_2, event_desc = _process_two_exp_from_profiles(
+            user_1, user_2, user_1, user_2,
             is_partner=is_partner,
             current_exp_1=temp_exp_1,
-            current_exp_2=temp_exp_2
+            current_exp_2=temp_exp_2,
+            buff_inputs=buff_inputs,
         )
 
         # 双方都无法获得修为时停止
@@ -756,7 +767,10 @@ async def direct_two_exp(
         user_id_1, user_id_2,
         expected_exp_1=safe_int(user_1["exp"]), expected_exp_2=safe_int(user_2["exp"]),
         exp_1=total_exp_1, exp_2=total_exp_2, used_count=actual_used_count,
-        power_1=_relation_power(user_1, new_exp_1), power_2=_relation_power(user_2, new_exp_2),
+        power_1=_relation_power(user_1, new_exp_1, root_rate=_sql_message().get_root_rate(
+            user_1["root_type"], user_id_1, root_level=user_1.get("root_level", 0))),
+        power_2=_relation_power(user_2, new_exp_2, root_rate=_sql_message().get_root_rate(
+            user_2["root_type"], user_id_2, root_level=user_2.get("root_level", 0))),
         hp_1=hp_1, mp_1=mp_1, atk_1=atk_1, hp_2=hp_2, mp_2=mp_2, atk_2=atk_2,
         level_rate_1=special_count * 2, level_rate_2=special_count * 2,
         expected_affection_1=safe_int(partner_data_1.get("affection"), 0) if valid_partner else None,
@@ -851,6 +865,16 @@ async def process_two_exp(
     if not user_mes_1 or not user_mes_2:
         return 0, 0, f"{'发起人' if not user_mes_1 else '受邀人'}的修炼资料不存在，请联系管理员检查角色资料。"
 
+    return _process_two_exp_from_profiles(
+        user_1, user_2, user_mes_1, user_mes_2,
+        is_partner=is_partner, current_exp_1=current_exp_1, current_exp_2=current_exp_2,
+    )
+
+
+def _process_two_exp_from_profiles(
+    user_1, user_2, user_mes_1, user_mes_2, *, is_partner=False,
+    current_exp_1=None, current_exp_2=None, buff_inputs=None,
+):
     level_1 = user_mes_1["level"]
     level_2 = user_mes_2["level"]
 
@@ -873,26 +897,23 @@ async def process_two_exp(
             limits.append(f"受邀人{user_2['user_name']}修为{calc_exp_2}/本境上限{max_exp_2_limit}")
         return 0, 0, "；".join(limits) + "，已达上限，请先突破境界。"
 
-    user_buff_data_1 = UserBuffDate(user_id_1)
-    user_buff_data_2 = UserBuffDate(user_id_2)
-
-    mainbuffdata_1 = user_buff_data_1.get_user_main_buff_data()
-    mainbuffdata_2 = user_buff_data_2.get_user_main_buff_data()
+    if buff_inputs is None:
+        user_buff_data_1 = UserBuffDate(user_mes_1["user_id"])
+        user_buff_data_2 = UserBuffDate(user_mes_2["user_id"])
+        buff_inputs = (
+            user_buff_data_1.get_user_main_buff_data(),
+            user_buff_data_2.get_user_main_buff_data(),
+            user_buff_data_1.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_1.BuffInfo else 0,
+            user_buff_data_2.BuffInfo["blessed_spot"] * 0.5 if user_buff_data_2.BuffInfo else 0,
+        )
+    (mainbuffdata_1, mainbuffdata_2,
+     user_blessed_spot_data_1, user_blessed_spot_data_2) = buff_inputs
 
     mainbuffratebuff_1 = mainbuffdata_1["ratebuff"] if mainbuffdata_1 else 0
     mainbuffcloexp_1 = mainbuffdata_1["clo_exp"] if mainbuffdata_1 else 0
 
     mainbuffratebuff_2 = mainbuffdata_2["ratebuff"] if mainbuffdata_2 else 0
     mainbuffcloexp_2 = mainbuffdata_2["clo_exp"] if mainbuffdata_2 else 0
-
-    user_blessed_spot_data_1 = (
-        user_buff_data_1.BuffInfo["blessed_spot"] * 0.5
-        if user_buff_data_1.BuffInfo else 0
-    )
-    user_blessed_spot_data_2 = (
-        user_buff_data_2.BuffInfo["blessed_spot"] * 0.5
-        if user_buff_data_2.BuffInfo else 0
-    )
 
     # 基础修为计算使用当前临时修为
     exp_base = int((calc_exp_1 + calc_exp_2) * 0.005)
@@ -1420,41 +1441,43 @@ def get_affection_level(affection):
     return affection_level
 
 @my_partner.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的道侣")
 async def my_partner_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """查看我的道侣信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
+    if isUser:
+        partner_data = load_partner(user_info['user_id'])
+        partner_info = (
+            get_user_profile(partner_data["partner_id"], raise_errors=True)
+            if partner_data and partner_data.get('partner_id') is not None else None
+        )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_partner.finish()
-    
-    user_id = user_info['user_id']
-    
-    # 获取道侣数据
-    partner_data = load_partner(user_id)
     
     if not partner_data or partner_data.get('partner_id') is None:
         msg = "你还没有道侣！"
         await handle_send(bot, event, msg, md_type="buff", k1="绑定", v1="绑定道侣", k2="解除", v2="断绝关系", k3="道侣", v3="我的道侣")
         await my_partner.finish()
     
-    partner_user_id = partner_data["partner_id"]
-    partner_info = get_user_profile(partner_user_id)
+    if partner_info is None:
+        await handle_send(bot, event, "道侣档案不存在，无法显示道侣信息。")
+        await my_partner.finish()
     
     bind_time = partner_data["bind_time"]
     affection = partner_data["affection"]
     bind_at = _parse_datetime(bind_time)
     bound_days = (runtime_clock.now() - bind_at).days if bind_at is not None else 0
     affection_level = get_affection_level(affection)
-    partner_user_info = _sql_message().get_user_info_with_id(partner_user_id)
     msg = f"""**我的道侣**
 ---
 道侣
 > {partner_info['user_name']}
 境界
-> {partner_user_info['level']}
+> {partner_info['level']}
 修为
-> {number_to(partner_user_info['exp'])}
+> {number_to(partner_info['exp'])}
 
 **结契信息**
 - 绑定时间
@@ -1530,11 +1553,11 @@ def _format_pending_mentor_applicants(mentor_id, limit=5):
 
 
 def _count_pending_mentor_invites(mentor_id):
-    return len(_get_pending_mentor_invites(mentor_id))
+    return _mentor_application_service().count_pending(mentor_id)
 
 
-def _cooldown_remaining(user_id, field):
-    data = load_mentor(user_id)
+def _cooldown_remaining(user_id, field, *, mentor_data=None):
+    data = load_mentor(user_id) if mentor_data is None else mentor_data
     until = _parse_datetime(data.get(field))
     if until is None:
         return 0
@@ -2230,35 +2253,40 @@ async def reject_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEven
 
 
 @my_mentor.handle(parameterless=[Cooldown(cd_time=0)])
+@guard_command("我的师徒")
 async def my_mentor_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, command: tuple = Command()):
     """查看师徒信息"""
     bot, send_group_id = await assign_bot(bot=bot, event=event)
     isUser, user_info, msg = check_user(event)
+    if isUser:
+        user_id = str(user_info["user_id"])
+        mentor_data = load_mentor(user_id)
+        mentor_id = mentor_data.get("mentor_id")
+        apprentice_ids = get_display_apprentice_ids(user_id, mentor_data)
+        profiles = get_user_display_profiles_by_ids(
+            ([mentor_id] if mentor_id else []) + apprentice_ids
+        )
     if not isUser:
         await handle_send(bot, event, msg, md_type="我要修仙")
         await my_mentor.finish()
 
-    user_id = str(user_info["user_id"])
-    mentor_data = load_mentor(user_id)
-    mentor_id = mentor_data.get("mentor_id")
-
     if mentor_id:
-        mentor_info = get_user_profile(mentor_id)
+        mentor_info = profiles.get(mentor_id)
         bind_time = mentor_data.get("bind_time") or "未知"
         mentor_line = f"{mentor_info['user_name']}（{mentor_info['level']}，拜师时间：{bind_time}）" if mentor_info else "数据异常"
     else:
         mentor_line = "无"
 
     apprentice_lines = []
-    for apprentice_id in get_valid_apprentices(user_id):
-        apprentice_info = get_user_profile(apprentice_id)
+    for apprentice_id in apprentice_ids:
+        apprentice_info = profiles.get(apprentice_id)
         if apprentice_info:
             apprentice_lines.append(f"- {apprentice_info['user_name']}（{apprentice_info['level']}）")
 
     apprentice_msg = "\n".join(apprentice_lines) if apprentice_lines else "无"
 
-    mentor_cd = _cooldown_remaining(user_id, "mentor_cd_until")
-    apprentice_cd = _cooldown_remaining(user_id, "apprentice_cd_until")
+    mentor_cd = _cooldown_remaining(user_id, "mentor_cd_until", mentor_data=mentor_data)
+    apprentice_cd = _cooldown_remaining(user_id, "apprentice_cd_until", mentor_data=mentor_data)
     cd_lines = []
     if mentor_cd > 0:
         cd_lines.append(f"收徒冷却：{_format_seconds(mentor_cd)}")
@@ -2356,48 +2384,99 @@ async def mentor_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
         await handle_send(bot, event, msg, md_type="我要修仙")
         await mentor_rank.finish()
 
-    all_stats = _player_data_manager().get_all_records("statistics")
-    rank_rows = []
-    for stats in all_stats:
-        user_id = str(stats.get("user_id", ""))
-        if not user_id:
-            continue
-        user_real_info = get_user_profile(user_id)
-        if not user_real_info:
-            continue
-        apprentice_count = len(get_valid_apprentices(user_id))
-        graduate_count = safe_int(stats.get("培养出师徒弟"))
-        transmission_count = safe_int(stats.get("师徒传功次数"))
-        receive_count = safe_int(stats.get("接受传功次数"))
-        score = graduate_count * 1000 + apprentice_count * 100 + transmission_count
-        if score <= 0 and apprentice_count <= 0:
-            continue
-        rank_rows.append({
-            "user_name": user_real_info["user_name"],
-            "level": user_real_info["level"],
-            "apprentice_count": apprentice_count,
-            "graduate_count": graduate_count,
-            "transmission_count": transmission_count,
-            "receive_count": receive_count,
-            "score": score,
-        })
+    player_data = _player_data_manager()
 
-    rank_rows.sort(
-        key=lambda row: (
-            row["graduate_count"],
-            row["apprentice_count"],
-            row["transmission_count"],
-            row["receive_count"],
+    def load_display_rows():
+        all_stats = player_data.get_all_fields(
+            "statistics", ("培养出师徒弟", "师徒传功次数", "接受传功次数")
+        )
+        all_mentor_rows = player_data.get_all_fields(
+            "mentor", ("mentor_id", "apprentice_ids")
+        )
+        mentor_by_id = {
+            str(row.get("user_id") or ""): row
+            for row in all_mentor_rows
+            if row.get("user_id") is not None
+        }
+        rank_rows = []
+        for stats in all_stats:
+            user_id = str(stats.get("user_id", ""))
+            if not user_id:
+                continue
+            mentor_data = mentor_by_id.get(user_id, {})
+            apprentice_ids = _normalize_id_list(mentor_data.get("apprentice_ids"))
+            apprentice_count = sum(
+                1
+                for apprentice_id in apprentice_ids
+                if apprentice_id in mentor_by_id
+                and not _is_none_like(mentor_by_id[apprentice_id].get("mentor_id"))
+                and str(mentor_by_id[apprentice_id].get("mentor_id")) == user_id
+            )
+            graduate_count = safe_int(stats.get("培养出师徒弟"))
+            transmission_count = safe_int(stats.get("师徒传功次数"))
+            receive_count = safe_int(stats.get("接受传功次数"))
+            score = graduate_count * 1000 + apprentice_count * 100 + transmission_count
+            if score <= 0 and apprentice_count <= 0:
+                continue
+            rank_rows.append({
+                "user_id": user_id,
+                "apprentice_count": apprentice_count,
+                "graduate_count": graduate_count,
+                "transmission_count": transmission_count,
+                "receive_count": receive_count,
+                "score": score,
+            })
+
+        rank_rows.sort(
+            key=lambda row: (
+                row["graduate_count"],
+                row["apprentice_count"],
+                row["transmission_count"],
+                row["receive_count"],
+            ),
+            reverse=True,
+        )
+        display_rows = []
+        for offset in range(0, len(rank_rows), 400):
+            batch = rank_rows[offset : offset + 400]
+            user_profiles = _sql_message().get_user_display_profiles_by_ids(
+                [row["user_id"] for row in batch]
+            )
+            for row in batch:
+                profile = user_profiles.get(row["user_id"])
+                if profile is None:
+                    continue
+                display_rows.append({
+                    **row,
+                    "user_name": profile["user_name"],
+                    "level": profile["level"],
+                })
+                if len(display_rows) == 20:
+                    break
+            if len(display_rows) == 20:
+                break
+        return display_rows
+
+    display_rows = process_read_cache.get_or_load(
+        shared_snapshot_key(
+            player_data.database_path,
+            "mentor-rank-display-v1",
+            20,
+            shared_snapshot_key(get_paths().game_db, "file-identity"),
         ),
-        reverse=True,
+        database_path=player_data.database_path,
+        ttl=60 * 60,
+        loader=load_display_rows,
+        snapshot=True,
+        dependency_databases=(get_paths().game_db,),
     )
 
-    if not rank_rows:
+    if not display_rows:
         await handle_send(bot, event, "暂无师徒榜数据。", md_type="buff", k1="师徒", v1="我的师徒", k2="拜师", v2="拜师", k3="关系", v3="关系帮助")
         await mentor_rank.finish()
 
     lines = ["【师徒排行榜】"]
-    for idx, row in enumerate(rank_rows[:20], start=1):
+    for idx, row in enumerate(display_rows, start=1):
         lines.append(
             f"{idx}. {row['user_name']}（{row['level']}）\n"
             f"   徒弟：{row['apprentice_count']} | 出师：{row['graduate_count']} | 传功：{row['transmission_count']}"
@@ -2697,23 +2776,58 @@ async def partner_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent
         await handle_send(bot, event, msg, md_type="我要修仙")
         await partner_rank.finish()
 
-    # 获取所有用户的affection数据
-    all_user_integral = _player_data_manager().get_all_field_data("partner", "affection")
-    
-    # 排序数据
-    sorted_integral = sorted(all_user_integral, key=lambda x: safe_int(x[1]), reverse=True)
+    player_data = _player_data_manager()
+
+    def load_partner_rank_rows():
+        affection_rows = player_data.get_all_field_data(
+            "partner", "affection", cache_ttl=0
+        )
+        top_affection = sorted(
+            affection_rows, key=lambda row: safe_int(row[1]), reverse=True
+        )[:50]
+        partner_records = player_data.get_fields_by_ids(
+            "partner", [user_id for user_id, _ in top_affection], ("partner_id",)
+        )
+        return [
+            {
+                "user_id": str(user_id),
+                "partner_id": (partner_records.get(str(user_id)) or {}).get("partner_id"),
+                "affection": affection,
+            }
+            for user_id, affection in top_affection
+        ]
+
+    rank_rows = process_read_cache.get_or_load(
+        shared_snapshot_key(player_data.database_path, "partner-rank-display-v1", 50),
+        database_path=player_data.database_path,
+        ttl=60 * 60,
+        loader=load_partner_rank_rows,
+        snapshot=True,
+    )
+    user_profiles = _sql_message().get_user_display_profiles_by_ids(
+        [
+            value
+            for row in rank_rows
+            for value in (
+                row["user_id"],
+                row.get("partner_id"),
+            )
+            if value is not None
+        ]
+    )
     
     # 生成排行榜
     rank_lines = ["【道侣排行榜】"]
-    for i, (user_id, affection) in enumerate(sorted_integral[:50], start=1):
-        user_info = _sql_message().get_user_info_with_id(user_id)
-        partner_id = _player_data_manager().get_field_data(str(user_id), "partner", "partner_id")
-        partner_info = _sql_message().get_user_info_with_id(partner_id)
-        if partner_info is None:
+    for i, row in enumerate(rank_rows, start=1):
+        user_id = row["user_id"]
+        partner_id = row.get("partner_id")
+        user_info = user_profiles.get(user_id)
+        partner_info = user_profiles.get(str(partner_id)) if partner_id is not None else None
+        if user_info is None or partner_info is None:
             continue
         rank_lines.append(
             f"{i}. {user_info['user_name']} & {partner_info['user_name']}\n"
-            f"   亲密度：{number_to(affection)}"
+            f"   亲密度：{number_to(row['affection'])}"
         )
     
     if len(rank_lines) == 1:

@@ -209,7 +209,9 @@ def _closing_reward_inputs(user_id, user_mes, user_cd_message):
     exp_time = elapsed_minutes_from_cd_time(
         user_cd_message.get("create_time"), on_error=0
     )
-    level_rate = _sql_message().get_root_rate(user_mes["root_type"], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_mes["root_type"], user_id, root_level=user_mes.get("root_level", 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]
     user_buff_data = UserBuffDate(user_id)
     blessed_rate = user_buff_data.BuffInfo["blessed_spot"] * 0.5
@@ -521,7 +523,7 @@ async def qc_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, args: Me
         give_qq = give_info['user_id'] if give_info else None
 
     # Raw profile rows seed CAS values; dynamic attributes are only an availability check.
-    base1 = _sql_message().get_user_info_with_id(user_id)
+    base1 = dict(user_info)
     base2 = _sql_message().get_user_info_with_id(give_qq) if give_qq else None
     user1 = get_player_attributes(user_id)
     user2 = get_player_attributes(give_qq) if give_qq else None
@@ -629,7 +631,7 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="我要修仙")
         await up_exp.finish()
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = dict(user_info)
     level = user_mes['level']
     use_exp = user_mes['exp']
 
@@ -647,10 +649,12 @@ async def up_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await handle_send(bot, event, msg, md_type="0", k2="修仙帮助", v2="修仙帮助", k3="重置修炼", v3="重置修炼状态")
         await up_exp.finish()
     else:
-        level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)  # 灵根倍率
+        level_rate = _sql_message().get_root_rate(
+            user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+        )
         realm_rate = jsondata.level_data()[level]["spend"]  # 境界倍率
         user_buff_data = UserBuffDate(user_id)
-        user_blessed_spot_data = UserBuffDate(user_id).BuffInfo['blessed_spot'] * 0.5
+        user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5
         mainbuffdata = user_buff_data.get_user_main_buff_data()
         mainbuffratebuff = mainbuffdata['ratebuff'] if mainbuffdata != None else 0  # 功法修炼倍率
         mainbuffcloexp = mainbuffdata['clo_exp'] if mainbuffdata != None else 0  # 功法闭关经验
@@ -736,7 +740,7 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await handle_send(bot, event, msg, md_type="我要修仙")
         await stone_exp.finish()
     user_id = user_info['user_id']
-    user_mes = _sql_message().get_user_info_with_id(user_id)  # 获取用户信息
+    user_mes = user_info
     level = user_mes['level']
     use_exp = user_mes['exp']
     use_stone = user_mes['stone']
@@ -760,7 +764,9 @@ async def stone_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, a
         await stone_exp.finish()
     stone_num = int(stone_num[0])
     # 先 settle：成功后灵石减少，前置“灵石不足”会挡住同事件重放。
-    level_rate = _sql_message().get_root_rate(user_mes['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_mes['root_type'], user_id, root_level=user_mes.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[level]["spend"]
     stone_op_id = _stone_training_operation_id(event, user_id)
     outcome = buff_application.stone_training(
@@ -865,7 +871,7 @@ async def out_closing_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent)
             v3="我的修为",
         )
         await out_closing.finish()
-    user_mes = _sql_message().get_user_info_with_id(user_id)
+    user_mes = dict(user_info)
     user_cd_message = _sql_message().get_user_cd(user_id)
     is_type, msg = check_user_type(user_id, 1)
     if not is_type or not user_cd_message:
@@ -962,12 +968,13 @@ async def mind_state_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     }
     current_status_display = status_map.get(current_status, "🔒 关闭")
 
-    level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+    level_rate = _sql_message().get_root_rate(
+        user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+    )
     realm_rate = jsondata.level_data()[user_info['level']]["spend"]
     user_blessed_spot_data = user_buff_data.BuffInfo['blessed_spot'] * 0.5 if user_buff_data.BuffInfo else 0
     main_buff_data = user_buff_data.get_user_main_buff_data()
 
-    impart_data = xiuxian_impart.get_user_impart_info_with_id(user_id)
     boss_damage_bonus = float(final_attr.get("boss_damage_bonus", 0) * 100)
 
     main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
@@ -1129,7 +1136,7 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
 
     try:
         user_id = user_info['user_id']
-        user_msg = _sql_message().get_user_info_with_id(user_id) or user_info
+        user_msg = user_info
         user_buff_data = UserBuffDate(user_id)
         level_name = user_msg.get('level') or user_info.get('level') or '未知'
         leveluprate = as_int_like(user_msg.get('level_up_rate', 0))
@@ -1137,11 +1144,13 @@ async def my_exp_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         main_buff_number_buff = main_buff_data['number'] if main_buff_data is not None else 0
         main_buff_rate_buff = main_buff_data['ratebuff'] if main_buff_data is not None else 0
         main_buff_clo_exp = main_buff_data['clo_exp'] if main_buff_data is not None else 0
-        level_rate = _sql_message().get_root_rate(user_info['root_type'], user_id)
+        level_rate = _sql_message().get_root_rate(
+            user_info['root_type'], user_id, root_level=user_info.get('root_level', 0)
+        )
         realm_rate = jsondata.level_data()[user_info['level']]["spend"]
         blessed = 0.0
         try:
-            blessed = float(UserBuffDate(user_id).BuffInfo.get('blessed_spot') or 0) * 0.5
+            blessed = float(user_buff_data.BuffInfo.get('blessed_spot') or 0) * 0.5
         except Exception:
             blessed = 0.0
         levels = OtherSet().level
@@ -1220,31 +1229,33 @@ async def buffinfo_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         await buffinfo.finish()
 
     user_id = user_info['user_id']
-    mainbuffdata = UserBuffDate(user_id).get_user_main_buff_data()
+    buff_reader = UserBuffDate(user_id)
+    buff_info = buff_reader.BuffInfo
+    mainbuffdata = buff_reader.get_user_main_buff_data()
     if mainbuffdata != None:
-        s, mainbuffmsg = get_main_info_msg(str(get_user_buff(user_id)['main_buff']))
+        s, mainbuffmsg = get_main_info_msg(str(buff_info['main_buff']))
     else:
         mainbuffmsg = ''
         
-    subbuffdata = UserBuffDate(user_id).get_user_sub_buff_data()#辅修功法13
+    subbuffdata = buff_reader.get_user_sub_buff_data()#辅修功法13
     if subbuffdata != None:
-        sub, subbuffmsg = get_sub_info_msg(str(get_user_buff(user_id)['sub_buff']))
+        sub, subbuffmsg = get_sub_info_msg(str(buff_info['sub_buff']))
     else:
         subbuffmsg = ''
         
-    effect1buffdata = UserBuffDate(user_id).get_user_effect1_buff_data()
+    effect1buffdata = buff_reader.get_user_effect1_buff_data()
     if effect1buffdata != None:
-        effect1, effect1buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect1_buff']))
+        effect1, effect1buffmsg = get_effect_info_msg(str(buff_info['effect1_buff']))
     else:
         effect1buffmsg = ''
         
-    effect2buffdata = UserBuffDate(user_id).get_user_effect2_buff_data()
+    effect2buffdata = buff_reader.get_user_effect2_buff_data()
     if effect2buffdata != None:
-        effect2, effect2buffmsg = get_effect_info_msg(str(get_user_buff(user_id)['effect2_buff']))
+        effect2, effect2buffmsg = get_effect_info_msg(str(buff_info['effect2_buff']))
     else:
         effect2buffmsg = ''
         
-    secbuffdata = UserBuffDate(user_id).get_user_sec_buff_data()
+    secbuffdata = buff_reader.get_user_sec_buff_data()
     secbuffmsg = get_sec_msg(secbuffdata) if get_sec_msg(secbuffdata) != '无' else ''
     msg = f"""
 **我的功法**

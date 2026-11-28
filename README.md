@@ -58,7 +58,7 @@ https://raw.githubusercontent.com/liyw0205/nonebot_plugin_xiuxian_2_pmv/main/scr
 安装器默认下载最新正式版，资产名为 `project.tar.gz`。如需固定版本，设置
 `XIUXIAN_RELEASE_TAG=vX.Y.Z`。下载时会尝试测速通过的加速源（`gh-proxy.com`、
 `ghfast.top`、`ghproxy.vip`、`gh-proxy.org`），校验归档后再安装；加速源不可用时回退
-GitHub 直连。两种方式都失败时安装会停止，不会修改运行数据。最新正式版为 `v1.3.21`。
+GitHub 直连。两种方式都失败时安装会停止，不会修改运行数据。最新正式版为 `v1.3.22`。
 
 ## 最小配置
 

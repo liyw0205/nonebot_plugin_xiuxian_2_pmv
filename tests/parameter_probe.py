@@ -88,8 +88,11 @@ class Probe:
             return connection.execute(sql, params).fetchall()
 
     def seed(self, database, sql, params=()):
-        from nonebot_plugin_xiuxian_2.core.numeric import adapt_sqlite_params
+        from nonebot_plugin_xiuxian_2.core.numeric import adapt_sqlite_params, register_numeric_functions
         with sqlite3.connect(database) as connection:
+            # Startup migrations add exact-rank expression indexes over the
+            # project's numeric UDFs; writes to those tables need them too.
+            register_numeric_functions(connection)
             connection.execute(sql, adapt_sqlite_params(params))
 
     def impart(self, uid="900001", **values):

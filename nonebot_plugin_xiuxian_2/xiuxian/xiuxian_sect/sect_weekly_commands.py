@@ -274,8 +274,8 @@ async def sect_weekly_claim_(
 async def sect_weekly_rank_(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     """宗门周常排行"""
     bot, _ = await assign_bot(bot=bot, event=event)
-    rows = sect_weekly_goal_manager.weekly_rank(limit=10)
     week_key = sect_weekly_goal_manager.current_week_key()
+    rows = sect_weekly_goal_manager.weekly_rank(limit=10, week_key=week_key)
     if not rows:
         msg = f"【宗门周常排行】\n周期：{week_key}\n暂无宗门周常进度。"
     else:

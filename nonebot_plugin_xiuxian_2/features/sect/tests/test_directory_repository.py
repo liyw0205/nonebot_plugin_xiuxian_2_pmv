@@ -9,6 +9,37 @@ from ..application import SectApplication
 
 
 class SectDirectoryRepositoryTests(unittest.TestCase):
+    def test_public_power_snapshot_and_personal_composite_scale_read_freshness(self):
+        from ....xiuxian.xiuxian_utils.shared_read_cache import process_read_cache
+
+        process_read_cache.clear()
+        self.addCleanup(process_read_cache.clear)
+        with tempfile.TemporaryDirectory() as temp:
+            database = Path(temp) / "sect.db"
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute(
+                    "CREATE TABLE sects(sect_id INTEGER PRIMARY KEY,sect_name TEXT,"
+                    "sect_scale INTEGER,sect_owner TEXT,combat_power INTEGER)"
+                )
+                uow.execute("INSERT INTO sects VALUES(1,'青云',100,'owner',300)")
+
+            first = SectApplication(database)
+            second = SectApplication(database)
+            self.assertEqual([(1, "青云", 100)], first.list_sect_scale_rank())
+            self.assertEqual([(1, "青云", 300)], first.list_sect_combat_power_rank())
+            self.assertEqual(1, process_read_cache.stats()["misses"])
+
+            with DatabaseUnitOfWork(database) as uow:
+                uow.execute(
+                    "UPDATE sects SET sect_scale=200,combat_power=500 WHERE sect_id=1"
+                )
+            self.assertEqual([(1, "青云", 200)], second.list_sect_scale_rank())
+            self.assertEqual([(1, "青云", 300)], second.list_sect_combat_power_rank())
+            self.assertEqual(1, process_read_cache.stats()["hits"])
+
+            process_read_cache.invalidate_snapshot_database(database)
+            self.assertEqual([(1, "青云", 500)], second.list_sect_combat_power_rank())
+
     def test_lists_all_sects_with_owner_name_and_member_count(self):
         with tempfile.TemporaryDirectory() as temp:
             database = Path(temp) / "sect.db"

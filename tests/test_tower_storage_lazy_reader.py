@@ -13,8 +13,12 @@ class TowerStorageLazyReaderTests(unittest.TestCase):
             Path(__file__).parents[1]
             / "nonebot_plugin_xiuxian_2/xiuxian/xiuxian_tower/tower_limit.py"
         ).read_text(encoding="utf-8")
-        self.assertIn("tower_limit.ranking(", source)
-        self.assertIn("return state_application.ranking(field, limit)", limit)
+        self.assertIn("tower_limit.ranking_snapshot_with_rank(", source)
+        self.assertIn("return state_application.ranking_snapshot(field, limit)", limit)
+        self.assertIn(
+            "return state_application.ranking_snapshot_with_rank(user_id, field, limit)",
+            limit,
+        )
         self.assertIn("_state_application_instance = None", limit)
         self.assertIn("if _state_application_instance is None:", limit)
         self.assertIn("_state_application_instance = TowerStateApplication(", limit)
